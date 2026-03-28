@@ -1,0 +1,285 @@
+{
+  "template": {
+    "mappings": {
+      "properties": {
+        "os": {
+          "properties": {
+            "type": {
+              "type": "keyword",
+              "ignore_above": 32
+            },
+            "distro": {
+              "type": "keyword",
+              "ignore_above": 64
+            },
+            "version": {
+              "type": "keyword",
+              "ignore_above": 64
+            },
+            "kernel": {
+              "type": "keyword",
+              "ignore_above": 64
+            },
+            "desktop": {
+              "type": "keyword",
+              "ignore_above": 64
+            }
+          }
+        },
+        "compatibility": {
+          "properties": {
+            "proton_version": {
+              "type": "keyword",
+              "ignore_above": 32
+            },
+            "wine_version": {
+              "type": "keyword",
+              "ignore_above": 32
+            },
+            "dxvk_version": {
+              "type": "keyword",
+              "ignore_above": 32
+            },
+            "vkd3d_proton_version": {
+              "type": "keyword",
+              "ignore_above": 32
+            },
+            "gamescope_version": {
+              "type": "keyword",
+              "ignore_above": 32
+            }
+          }
+        },
+        "hardware": {
+          "properties": {
+            "cpu": {
+              "properties": {
+                "model": {
+                  "type": "text",
+                  "fields": {
+                    "keyword": {
+                      "type": "keyword",
+                      "ignore_above": 128
+                    }
+                  }
+                },
+                "cores": {
+                  "type": "integer"
+                },
+                "threads": {
+                  "type": "integer"
+                },
+                "base_clock_mhz": {
+                  "type": "integer"
+                },
+                "boost_clock_mhz": {
+                  "type": "integer"
+                }
+              }
+            },
+            "gpu": {
+              "properties": {
+                "model": {
+                  "type": "text",
+                  "fields": {
+                    "keyword": {
+                      "type": "keyword",
+                      "ignore_above": 128
+                    }
+                  }
+                },
+                "vendor": {
+                  "type": "keyword",
+                  "ignore_above": 32
+                },
+                "vram_mb": {
+                  "type": "integer"
+                },
+                "driver_version": {
+                  "type": "keyword",
+                  "ignore_above": 64
+                },
+                "mesa_version": {
+                  "type": "keyword",
+                  "ignore_above": 32
+                },
+                "vulkan_driver": {
+                  "type": "keyword",
+                  "ignore_above": 64
+                },
+                "pcie_gen": {
+                  "type": "byte"
+                },
+                "pcie_width": {
+                  "type": "byte"
+                }
+              }
+            },
+            "ram": {
+              "properties": {
+                "total_mb": {
+                  "type": "integer"
+                },
+                "speed_mhz": {
+                  "type": "integer"
+                },
+                "type": {
+                  "type": "keyword",
+                  "ignore_above": 16
+                }
+              }
+            },
+            "storage": {
+              "properties": {
+                "game_drive": {
+                  "properties": {
+                    "type": {
+                      "type": "keyword",
+                      "ignore_above": 16
+                    },
+                    "model": {
+                      "type": "text",
+                      "fields": {
+                        "keyword": {
+                          "type": "keyword",
+                          "ignore_above": 128
+                        }
+                      }
+                    },
+                    "firmware": {
+                      "type": "keyword",
+                      "ignore_above": 32
+                    },
+                    "interface": {
+                      "type": "keyword",
+                      "ignore_above": 16
+                    },
+                    "nvme_spec": {
+                      "type": "keyword",
+                      "ignore_above": 8
+                    },
+                    "capacity_gb": {
+                      "type": "integer"
+                    },
+                    "free_gb": {
+                      "type": "integer"
+                    },
+                    "free_pct": {
+                      "type": "float"
+                    },
+                    "temperature_c": {
+                      "type": "float"
+                    },
+                    "smart_health": {
+                      "type": "keyword",
+                      "ignore_above": 16
+                    },
+                    "encrypted": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "game_filesystem": {
+                  "properties": {
+                    "type": {
+                      "type": "keyword",
+                      "ignore_above": 16
+                    },
+                    "mount_options": {
+                      "type": "keyword",
+                      "ignore_above": 64
+                    },
+                    "compression": {
+                      "type": "keyword",
+                      "ignore_above": 16
+                    },
+                    "compression_level": {
+                      "type": "byte"
+                    },
+                    "block_size": {
+                      "type": "integer"
+                    },
+                    "trim_enabled": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "io_scheduler": {
+                  "type": "keyword",
+                  "ignore_above": 16
+                },
+                "read_ahead_kb": {
+                  "type": "integer"
+                },
+                "additional_drives": {
+                  "type": "nested",
+                  "properties": {
+                    "type": {
+                      "type": "keyword",
+                      "ignore_above": 16
+                    },
+                    "model": {
+                      "type": "text",
+                      "fields": {
+                        "keyword": {
+                          "type": "keyword",
+                          "ignore_above": 128
+                        }
+                      }
+                    },
+                    "interface": {
+                      "type": "keyword",
+                      "ignore_above": 16
+                    },
+                    "speed_class": {
+                      "type": "keyword",
+                      "ignore_above": 16
+                    },
+                    "capacity_gb": {
+                      "type": "integer"
+                    },
+                    "free_gb": {
+                      "type": "integer"
+                    },
+                    "filesystem": {
+                      "type": "keyword",
+                      "ignore_above": 16
+                    }
+                  }
+                }
+              }
+            },
+            "device": {
+              "properties": {
+                "type": {
+                  "type": "keyword",
+                  "ignore_above": 32
+                },
+                "model": {
+                  "type": "text",
+                  "fields": {
+                    "keyword": {
+                      "type": "keyword",
+                      "ignore_above": 64
+                    }
+                  }
+                },
+                "power_source": {
+                  "type": "keyword",
+                  "ignore_above": 16
+                },
+                "tdp_watts": {
+                  "type": "float"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "_meta": {
+    "description": "Host environment snapshot captured once per session. Covers OS, compatibility layers (Proton/Wine/DXVK), hardware specs (CPU, GPU, RAM, storage), and device info.",
+    "version": "1.0.0"
+  }
+}
