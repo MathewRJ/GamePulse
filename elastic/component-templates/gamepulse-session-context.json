@@ -1,0 +1,67 @@
+{
+  "template": {
+    "mappings": {
+      "properties": {
+        "session_id": {
+          "type": "keyword",
+          "ignore_above": 64
+        },
+        "agent_version": {
+          "type": "keyword",
+          "ignore_above": 32
+        },
+        "user_id": {
+          "type": "keyword",
+          "ignore_above": 64
+        },
+        "opt_in_public": {
+          "type": "boolean"
+        },
+        "game": {
+          "properties": {
+            "name": {
+              "type": "text",
+              "fields": {
+                "keyword": {
+                  "type": "keyword",
+                  "ignore_above": 256
+                }
+              }
+            },
+            "steam_app_id": {
+              "type": "long"
+            },
+            "version": {
+              "type": "keyword",
+              "ignore_above": 64
+            },
+            "launch_args": {
+              "type": "keyword",
+              "ignore_above": 256
+            },
+            "graphics_api": {
+              "type": "keyword",
+              "ignore_above": 32
+            },
+            "upscaler": {
+              "properties": {
+                "type": {
+                  "type": "keyword",
+                  "ignore_above": 32
+                },
+                "quality": {
+                  "type": "keyword",
+                  "ignore_above": 32
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "_meta": {
+    "description": "Shared session context fields included in every GamePulse data stream. Contains session identification, game metadata, and agent version.",
+    "version": "1.0.0"
+  }
+}
