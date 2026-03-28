@@ -1,0 +1,38 @@
+{
+  "template": {
+    "mappings": {
+      "properties": {
+        "fps": {
+          "properties": {
+            "current": {
+              "type": "integer"
+            },
+            "avg_1s": {
+              "type": "float"
+            },
+            "low_1pct": {
+              "type": "integer"
+            },
+            "low_01pct": {
+              "type": "integer"
+            },
+            "frametime_ms": {
+              "type": "float"
+            },
+            "frametime_variance": {
+              "type": "float"
+            },
+            "present_mode": {
+              "type": "keyword",
+              "ignore_above": 32
+            }
+          }
+        }
+      }
+    }
+  },
+  "_meta": {
+    "description": "Frame performance metrics collected at 1-second intervals. Includes current FPS, 1-second average, 1% and 0.1% lows, frame time, variance, and present mode.",
+    "version": "1.0.0"
+  }
+}
