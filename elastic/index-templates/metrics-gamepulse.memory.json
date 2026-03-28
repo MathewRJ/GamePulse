@@ -1,0 +1,19 @@
+{
+  "index_patterns": ["metrics-gamepulse.memory-*"],
+  "data_stream": {},
+  "composed_of": [
+    "gamepulse-session-context",
+    "gamepulse-memory-mappings"
+  ],
+  "priority": 200,
+  "template": {
+    "settings": {
+      "index.lifecycle.name": "metrics-gamepulse",
+      "number_of_replicas": 1
+    }
+  },
+  "_meta": {
+    "description": "Index template for the metrics-gamepulse.memory-default data stream.",
+    "version": "1.0.0"
+  }
+}

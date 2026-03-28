@@ -1,0 +1,19 @@
+{
+  "index_patterns": ["metrics-gamepulse.ebpf-*"],
+  "data_stream": {},
+  "composed_of": [
+    "gamepulse-session-context",
+    "gamepulse-ebpf-mappings"
+  ],
+  "priority": 200,
+  "template": {
+    "settings": {
+      "index.lifecycle.name": "metrics-gamepulse",
+      "number_of_replicas": 1
+    }
+  },
+  "_meta": {
+    "description": "Index template for the metrics-gamepulse.ebpf-default data stream. eBPF deep telemetry with histogram and nested types.",
+    "version": "1.0.0"
+  }
+}
