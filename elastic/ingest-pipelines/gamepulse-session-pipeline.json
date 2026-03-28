@@ -1,0 +1,44 @@
+{
+  "description": "Ingest pipeline for session documents. Validates required fields and normalises hardware vendor strings.",
+  "processors": [
+    {
+      "pipeline": {
+        "name": "gamepulse-shared-enrichment"
+      }
+    },
+    {
+      "script": {
+        "description": "Validate session documents have required identification fields",
+        "lang": "painless",
+        "source": "if (ctx.session_id == null || ctx.session_id.isEmpty()) { throw new Exception('session_id is required'); } if (ctx.game?.name == null || ctx.game.name.isEmpty()) { throw new Exception('game.name is required'); }"
+      }
+    },
+    {
+      "lowercase": {
+        "field": "hardware.gpu.vendor",
+        "ignore_missing": true,
+        "description": "Normalise GPU vendor (AMD, amd, Amd -> amd)"
+      }
+    },
+    {
+      "set": {
+        "field": "data_stream.dataset",
+        "value": "gamepulse.session"
+      }
+    }
+  ],
+  "on_failure": [
+    {
+      "set": {
+        "field": "_ingest.pipeline_error",
+        "value": "{{ _ingest.on_failure_message }}"
+      }
+    },
+    {
+      "set": {
+        "field": "_ingest.failed_pipeline",
+        "value": "gamepulse-session-pipeline"
+      }
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "description": "Ingest pipeline for frame performance metrics. Validates ranges and derives stutter flag from frametime variance.",
+  "processors": [
+    {
+      "pipeline": {
+        "name": "gamepulse-shared-enrichment",
+        "description": "Run shared enrichment first"
+      }
+    },
+    {
+      "script": {
+        "description": "Validate FPS values are non-negative",
+        "lang": "painless",
+        "source": "if (ctx.fps?.current != null && ctx.fps.current < 0) { throw new Exception('fps.current must be >= 0, got: ' + ctx.fps.current); } if (ctx.fps?.frametime_ms != null && ctx.fps.frametime_ms < 0) { throw new Exception('fps.frametime_ms must be >= 0'); }"
+      }
+    },
+    {
+      "script": {
+        "description": "Derive stutter flag when frametime variance exceeds threshold (> 8ms indicates micro-stutter)",
+        "lang": "painless",
+        "source": "if (ctx.fps?.frametime_variance != null) { ctx.fps.stutter_detected = ctx.fps.frametime_variance > 8.0; } else { ctx.fps.stutter_detected = false; }"
+      }
+    },
+    {
+      "set": {
+        "field": "data_stream.dataset",
+        "value": "gamepulse.frame"
+      }
+    }
+  ],
+  "on_failure": [
+    {
+      "set": {
+        "field": "_ingest.pipeline_error",
+        "value": "{{ _ingest.on_failure_message }}"
+      }
+    },
+    {
+      "set": {
+        "field": "_ingest.failed_pipeline",
+        "value": "gamepulse-frame-pipeline"
+      }
+    }
+  ]
+}

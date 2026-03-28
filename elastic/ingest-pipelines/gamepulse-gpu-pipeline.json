@@ -1,0 +1,44 @@
+{
+  "description": "Ingest pipeline for GPU metrics. Validates temperature and utilisation ranges, derives thermal throttle warning.",
+  "processors": [
+    {
+      "pipeline": {
+        "name": "gamepulse-shared-enrichment"
+      }
+    },
+    {
+      "script": {
+        "description": "Validate GPU utilisation is 0-100% and temperature is reasonable",
+        "lang": "painless",
+        "source": "if (ctx.gpu?.utilisation_pct != null && (ctx.gpu.utilisation_pct < 0 || ctx.gpu.utilisation_pct > 100)) { throw new Exception('gpu.utilisation_pct must be 0-100, got: ' + ctx.gpu.utilisation_pct); } if (ctx.gpu?.temperature_c != null && (ctx.gpu.temperature_c < -10 || ctx.gpu.temperature_c > 150)) { throw new Exception('gpu.temperature_c out of plausible range: ' + ctx.gpu.temperature_c); }"
+      }
+    },
+    {
+      "script": {
+        "description": "Derive thermal throttle warning when junction temp exceeds 95C",
+        "lang": "painless",
+        "source": "def temp = ctx.gpu?.hotspot_c != null ? ctx.gpu.hotspot_c : ctx.gpu?.temperature_c; if (temp != null) { ctx.gpu.thermal_throttle_warning = temp > 95.0; } else { ctx.gpu.thermal_throttle_warning = false; }"
+      }
+    },
+    {
+      "set": {
+        "field": "data_stream.dataset",
+        "value": "gamepulse.gpu"
+      }
+    }
+  ],
+  "on_failure": [
+    {
+      "set": {
+        "field": "_ingest.pipeline_error",
+        "value": "{{ _ingest.on_failure_message }}"
+      }
+    },
+    {
+      "set": {
+        "field": "_ingest.failed_pipeline",
+        "value": "gamepulse-gpu-pipeline"
+      }
+    }
+  ]
+}
