@@ -1,0 +1,44 @@
+{
+  "description": "Ingest pipeline for CPU metrics. Validates utilisation range and derives thermal warning.",
+  "processors": [
+    {
+      "pipeline": {
+        "name": "gamepulse-shared-enrichment"
+      }
+    },
+    {
+      "script": {
+        "description": "Validate CPU utilisation is 0-100%",
+        "lang": "painless",
+        "source": "if (ctx.cpu?.total_utilisation_pct != null && (ctx.cpu.total_utilisation_pct < 0 || ctx.cpu.total_utilisation_pct > 100)) { throw new Exception('cpu.total_utilisation_pct must be 0-100'); }"
+      }
+    },
+    {
+      "script": {
+        "description": "Derive CPU thermal warning when temperature exceeds 90C",
+        "lang": "painless",
+        "source": "if (ctx.cpu?.temperature_c != null) { ctx.cpu.thermal_warning = ctx.cpu.temperature_c > 90.0; } else { ctx.cpu.thermal_warning = false; }"
+      }
+    },
+    {
+      "set": {
+        "field": "data_stream.dataset",
+        "value": "gamepulse.cpu"
+      }
+    }
+  ],
+  "on_failure": [
+    {
+      "set": {
+        "field": "_ingest.pipeline_error",
+        "value": "{{ _ingest.on_failure_message }}"
+      }
+    },
+    {
+      "set": {
+        "field": "_ingest.failed_pipeline",
+        "value": "gamepulse-cpu-pipeline"
+      }
+    }
+  ]
+}

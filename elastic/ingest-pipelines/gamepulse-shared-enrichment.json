@@ -1,0 +1,75 @@
+{
+  "description": "Shared enrichment pipeline for all GamePulse data streams. Sets @timestamp if missing, adds ingest metadata, and normalises common fields.",
+  "processors": [
+    {
+      "set": {
+        "field": "@timestamp",
+        "value": "{{{_ingest.timestamp}}}",
+        "if": "ctx['@timestamp'] == null",
+        "description": "Set @timestamp to ingest time if not provided by the agent"
+      }
+    },
+    {
+      "set": {
+        "field": "data_stream.type",
+        "value": "metrics"
+      }
+    },
+    {
+      "set": {
+        "field": "data_stream.dataset",
+        "value": "gamepulse",
+        "if": "ctx.data_stream?.dataset == null"
+      }
+    },
+    {
+      "set": {
+        "field": "data_stream.namespace",
+        "value": "default",
+        "if": "ctx.data_stream?.namespace == null"
+      }
+    },
+    {
+      "set": {
+        "field": "_ingest.gamepulse_version",
+        "value": "1.0.0",
+        "description": "Tag pipeline version for debugging"
+      }
+    },
+    {
+      "lowercase": {
+        "field": "game.graphics_api",
+        "ignore_missing": true,
+        "description": "Normalise graphics API strings (Vulkan, vulkan, VULKAN -> vulkan)"
+      }
+    },
+    {
+      "lowercase": {
+        "field": "os.type",
+        "ignore_missing": true,
+        "description": "Normalise OS type (Linux, linux, LINUX -> linux)"
+      }
+    },
+    {
+      "trim": {
+        "field": "game.name",
+        "ignore_missing": true,
+        "description": "Strip leading/trailing whitespace from game names"
+      }
+    }
+  ],
+  "on_failure": [
+    {
+      "set": {
+        "field": "_ingest.pipeline_error",
+        "value": "{{ _ingest.on_failure_message }}"
+      }
+    },
+    {
+      "set": {
+        "field": "_ingest.failed_pipeline",
+        "value": "gamepulse-shared-enrichment"
+      }
+    }
+  ]
+}

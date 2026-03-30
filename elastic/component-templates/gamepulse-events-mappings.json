@@ -1,0 +1,69 @@
+{
+  "template": {
+    "mappings": {
+      "properties": {
+        "event": {
+          "properties": {
+            "type": {
+              "type": "keyword",
+              "ignore_above": 64
+            },
+            "severity": {
+              "type": "keyword",
+              "ignore_above": 16
+            },
+            "message": {
+              "type": "text"
+            },
+            "duration_ms": {
+              "type": "float"
+            },
+            "shader_compile": {
+              "properties": {
+                "pipeline_hash": {
+                  "type": "keyword",
+                  "ignore_above": 64
+                },
+                "duration_ms": {
+                  "type": "float"
+                },
+                "cache_hit": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "stutter": {
+              "properties": {
+                "frametime_spike_ms": {
+                  "type": "float"
+                },
+                "dropped_frames": {
+                  "type": "integer"
+                }
+              }
+            },
+            "crash": {
+              "properties": {
+                "signal": {
+                  "type": "keyword",
+                  "ignore_above": 16
+                },
+                "exit_code": {
+                  "type": "integer"
+                },
+                "module": {
+                  "type": "keyword",
+                  "ignore_above": 128
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "_meta": {
+    "description": "Discrete game events: shader compilations, stutter events, crashes, and other notable occurrences with severity, duration, and event-specific detail fields.",
+    "version": "1.0.0"
+  }
+}

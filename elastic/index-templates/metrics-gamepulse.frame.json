@@ -1,0 +1,19 @@
+{
+  "index_patterns": ["metrics-gamepulse.frame-*"],
+  "data_stream": {},
+  "composed_of": [
+    "gamepulse-session-context",
+    "gamepulse-frame-mappings"
+  ],
+  "priority": 200,
+  "template": {
+    "settings": {
+      "index.lifecycle.name": "metrics-gamepulse",
+      "number_of_replicas": 1
+    }
+  },
+  "_meta": {
+    "description": "Index template for the metrics-gamepulse.frame-default data stream. Composes session context and frame performance mappings.",
+    "version": "1.0.0"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "template": {
+    "mappings": {
+      "properties": {
+        "network": {
+          "properties": {
+            "rtt_ms": {
+              "type": "float"
+            },
+            "packets_sent": {
+              "type": "long"
+            },
+            "packets_received": {
+              "type": "long"
+            },
+            "packet_loss_pct": {
+              "type": "float"
+            },
+            "bandwidth_utilisation_mbps": {
+              "type": "float"
+            },
+            "connection_type": {
+              "type": "keyword",
+              "ignore_above": 16
+            }
+          }
+        }
+      }
+    }
+  },
+  "_meta": {
+    "description": "Network telemetry: round-trip time, packets sent/received, packet loss, bandwidth utilisation, and connection type (WiFi/Ethernet).",
+    "version": "1.0.0"
+  }
+}

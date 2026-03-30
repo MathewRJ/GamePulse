@@ -1,0 +1,19 @@
+{
+  "index_patterns": ["metrics-gamepulse.gpu-*"],
+  "data_stream": {},
+  "composed_of": [
+    "gamepulse-session-context",
+    "gamepulse-gpu-mappings"
+  ],
+  "priority": 200,
+  "template": {
+    "settings": {
+      "index.lifecycle.name": "metrics-gamepulse",
+      "number_of_replicas": 1
+    }
+  },
+  "_meta": {
+    "description": "Index template for the metrics-gamepulse.gpu-default data stream. Composes session context and GPU telemetry mappings.",
+    "version": "1.0.0"
+  }
+}
