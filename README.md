@@ -2,7 +2,7 @@
 
 An open gaming telemetry platform. A lightweight agent collects gaming performance metrics — FPS, frame times, GPU/CPU temperatures, storage I/O, memory pressure, and more — from Linux and Windows gaming PCs and ships them to Elasticsearch for analysis in Kibana.
 
-**Current status: Phase 0 complete** — Elasticsearch infrastructure (templates, ingest pipelines, transforms, watcher) and Kibana dashboard are ready to deploy. The Python collector (Phase 1) and Rust production agent (Phase 4) are in development.
+**Current status: Phases 0 and 1 complete** — Elasticsearch infrastructure and Python collector are both ready. Install the collector, point it at an Elasticsearch instance, and data starts flowing immediately. The Rust production agent (Phase 4) is planned.
 
 ---
 
@@ -26,11 +26,17 @@ GamePulse ships structured telemetry to Elasticsearch, enabling cross-session, c
 | Elasticsearch component templates (12) | Done |
 | Index templates for all 11 data streams | Done |
 | Ingest pipelines (enrichment, validation, derived fields) | Done |
-| Kibana dashboard (7 panels) | Done — import `kibana/gamepulse-dashboard.ndjson` |
+| Kibana dashboard (7 panels, field names validated) | Done — import `kibana/gamepulse-dashboard.ndjson` |
 | Community analytics transform | Done |
 | FPS regression watcher | Done |
 | Synthetic data generator | Done — `elastic/synthetic-data/generate.py` |
-| Python collector (Phase 1) | In development |
+| **Python collector — CPU, memory, storage** | **Done** |
+| **Python collector — AMD GPU (sysfs)** | **Done** |
+| **Python collector — NVIDIA GPU (nvidia-smi)** | **Done** |
+| **Python collector — frame timing (MangoHud)** | **Done** |
+| **Python collector — network, power/battery, audio** | **Done** |
+| **Steam game detection (Proton/DXVK/VKD3D)** | **Done** |
+| **Session environment snapshot (OS, hardware, drivers)** | **Done** |
 | Kibana dashboard polish (Phase 2) | In development |
 | Windows support (Phase 3) | Planned |
 | Rust production agent (Phase 4) | Planned |
@@ -215,6 +221,70 @@ See [docs/configuration.md](docs/configuration.md) for the full reference includ
 
 ---
 
+## Running the collector
+
+### Install
+
+```bash
+cd collector
+pip install -e .
+```
+
+Dependencies: Python 3.11+, `httpx`, `psutil`. No root required for basic metrics; eBPF (Phase 5) will need `CAP_BPF`.
+
+### Quick test — no Elasticsearch needed
+
+```bash
+gamepulse-collector --debug --once
+```
+
+Output (one line per data stream, per tick):
+
+```
+[00001] CPU:12.4% GPU:0%/45°C MEM:9842MB FPS:-- IO:R0.01/W0.00MB/s
+```
+
+Continuous debug mode — launch a Steam game and watch detection kick in:
+
+```bash
+gamepulse-collector --debug
+```
+
+### Ship to Elasticsearch
+
+```bash
+gamepulse-collector --es-endpoint https://my-deployment.es.region.cloud.es.io \
+                    --es-api-key YOUR_API_KEY
+```
+
+Or put credentials in `~/.config/gamepulse/gamepulse.toml` (see [config reference](docs/configuration.md)) and run:
+
+```bash
+gamepulse-collector
+```
+
+### As a systemd service
+
+```bash
+# User-level (Steam Deck, no root)
+mkdir -p ~/.config/systemd/user
+cat > ~/.config/systemd/user/gamepulse-collector.service <<EOF
+[Unit]
+Description=GamePulse telemetry collector
+After=network.target
+
+[Service]
+ExecStart=%h/.local/bin/gamepulse-collector
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+EOF
+
+systemctl --user enable --now gamepulse-collector
+```
+
 ## Frame timing setup
 
 The collector reads FPS and frame time data from MangoHud's CSV log. Add this to Steam launch options for each game:
@@ -296,7 +366,7 @@ GamePulse/
 | Phase | Scope | Status |
 |-------|-------|--------|
 | **0 — Elasticsearch Foundation** | Component templates, index templates, ingest pipelines, synthetic data generator, Kibana dashboard | **Complete** |
-| **1 — Python Collector MVP** | Linux collector: CPU, GPU (AMD + NVIDIA), memory, storage, MangoHud frame timing, game detection | In development |
+| **1 — Python Collector MVP** | Linux collector: CPU, GPU (AMD + NVIDIA), memory, storage, network, power, audio, MangoHud frame timing, Steam game + Proton detection | **Complete** |
 | **2 — Kibana Dashboards** | Session overview, hardware comparison, system health, game library matrix, cross-platform comparison, storage analysis | In development |
 | **3 — Windows Support** | PresentMon frame timing, NVML GPU metrics, WMI/PDH system metrics | Planned |
 | **4 — Rust Production Agent** | Single binary, <0.5% CPU, <30 MB RAM, Elastic Agent integration | Planned |
