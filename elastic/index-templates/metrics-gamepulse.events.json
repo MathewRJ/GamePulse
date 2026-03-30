@@ -1,17 +1,13 @@
 {
-  "index_patterns": ["metrics-gamepulse.events-*"],
+  "index_patterns": [
+    "metrics-gamepulse.events-*"
+  ],
   "data_stream": {},
   "composed_of": [
     "gamepulse-session-context",
     "gamepulse-events-mappings"
   ],
   "priority": 200,
-  "template": {
-    "settings": {
-      "index.lifecycle.name": "metrics-gamepulse",
-      "number_of_replicas": 1
-    }
-  },
   "_meta": {
     "description": "Index template for the metrics-gamepulse.events-default data stream. Discrete events: shader compiles, stutter, crashes.",
     "version": "1.0.0"

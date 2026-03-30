@@ -1,17 +1,13 @@
 {
-  "index_patterns": ["metrics-gamepulse.network-*"],
+  "index_patterns": [
+    "metrics-gamepulse.network-*"
+  ],
   "data_stream": {},
   "composed_of": [
     "gamepulse-session-context",
     "gamepulse-network-mappings"
   ],
   "priority": 200,
-  "template": {
-    "settings": {
-      "index.lifecycle.name": "metrics-gamepulse",
-      "number_of_replicas": 1
-    }
-  },
   "_meta": {
     "description": "Index template for the metrics-gamepulse.network-default data stream.",
     "version": "1.0.0"

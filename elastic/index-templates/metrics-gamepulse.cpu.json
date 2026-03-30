@@ -1,17 +1,13 @@
 {
-  "index_patterns": ["metrics-gamepulse.cpu-*"],
+  "index_patterns": [
+    "metrics-gamepulse.cpu-*"
+  ],
   "data_stream": {},
   "composed_of": [
     "gamepulse-session-context",
     "gamepulse-cpu-mappings"
   ],
   "priority": 200,
-  "template": {
-    "settings": {
-      "index.lifecycle.name": "metrics-gamepulse",
-      "number_of_replicas": 1
-    }
-  },
   "_meta": {
     "description": "Index template for the metrics-gamepulse.cpu-default data stream.",
     "version": "1.0.0"

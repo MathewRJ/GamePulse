@@ -7,7 +7,7 @@ The full project scope, data model, metric inventory, and implementation plan li
 
 Always read this before making architectural decisions. It contains the agreed data model, field names, data stream naming conventions, and phasing.
 
-Current phase: Phase 0 — Elasticsearch Foundation
+Current phase: Phase 1 complete — collector running, data flowing to ES
 We are building the Elasticsearch infrastructure first:
 
 Component templates (reusable field mapping building blocks)
@@ -66,3 +66,39 @@ NVIDIA support for other cards will rely on community contributions
 MVP focuses on Steam games only (no GOG/Epic detection initially)
 Priority order: 1) Polished dashboards, 2) Cross-platform parity, 3) Deep metrics, 4) eBPF
 Collection frequency is 1/second — Python prototype overhead is acceptable
+
+Remote Access
+Elastic Cloud Serverless
+Elasticsearch endpoint: environment variable ES_URL (use for template management, queries, and data ingestion)
+API key: environment variable ES_API_KEY — use in header: Authorization: ApiKey $ES_API_KEY
+High-volume bulk ingestion endpoint: ES_INGEST_URL (ES_URL works for development)
+Version: Elasticsearch 9.4.0 serverless, build_flavor: serverless
+
+CachyOS Gaming PC (SSH)
+SSH alias: ssh gamingpc
+OS: CachyOS (Arch-based Linux)
+GPU: AMD — sysfs at /sys/class/drm/card0/device/hwmon/
+Steam installed with games; MangoHud installed
+Python 3.x available
+No ES credentials on the gaming PC yet — all Elastic API calls happen from the MacBook
+Credentials will be added to the gaming PC when the collector is ready for real gameplay testing
+No repo clone on gaming PC — all code stays on the MacBook
+Use scp or ssh with piped commands to push scripts for execution
+
+Use the gaming PC for: reading real sysfs/procfs data, testing collectors against real hardware, running gaming sessions with MangoHud, validating GPU/CPU/storage metrics
+
+Example commands:
+  # Deploy a component template
+  curl -X PUT "$ES_URL/_component_template/gamepulse-session-context" \
+    -H "Authorization: ApiKey $ES_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d @elastic/component-templates/gamepulse-session-context.json
+
+  # Read GPU temp from gaming PC
+  ssh gamingpc "cat /sys/class/drm/card0/device/hwmon/hwmon*/temp1_input"
+
+  # Pipe a local script to the gaming PC
+  cat collector/gamepulse/collectors/gpu/amd_linux.py | ssh gamingpc "python3 -"
+
+  # Copy a script and run it
+  scp collector/gamepulse/cli.py gamingpc:/tmp/ && ssh gamingpc "python3 /tmp/cli.py"
