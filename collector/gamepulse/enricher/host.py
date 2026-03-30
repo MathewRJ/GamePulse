@@ -84,66 +84,102 @@ def _cpu_info() -> dict[str, Any]:
 
 def _gpu_info() -> dict[str, Any]:
     info: dict[str, Any] = {}
+
+    # Determine vendor from DRM sysfs
+    vendor_id: str | None = None
     for card in sorted(glob.glob("/sys/class/drm/card[0-9]")):
         device = f"{card}/device"
-        vendor = _read_str(f"{device}/vendor")
-        if vendor == "0x1002":
-            info["vendor"] = "amd"
-        elif vendor == "0x10de":
-            info["vendor"] = "nvidia"
-        elif vendor == "0x8086":
-            info["vendor"] = "intel"
-        else:
-            continue
+        v = _read_str(f"{device}/vendor")
+        if v in ("0x1002", "0x10de", "0x8086"):
+            vendor_id = v
+            # AMD-specific: VRAM total from sysfs
+            if v == "0x1002":
+                info["vendor"] = "amd"
+                vram = _read_int(f"{device}/mem_info_vram_total")
+                if vram:
+                    info["vram_mb"] = vram // 1_048_576
+            elif v == "0x10de":
+                info["vendor"] = "nvidia"
+            elif v == "0x8086":
+                info["vendor"] = "intel"
+            break
 
-        # GPU model from device label or uevent
-        uevent = _read_str(f"{device}/uevent") or ""
-        for line in uevent.splitlines():
-            if line.startswith("DRIVER="):
-                info["driver"] = line.split("=", 1)[1]
-
-        # VRAM total (bytes → MB)
-        vram = _read_int(f"{device}/mem_info_vram_total")
-        if vram:
-            info["vram_mb"] = vram // 1_048_576
-
-        # Mesa/driver version from vulkaninfo
-        try:
-            out = subprocess.check_output(
-                ["vulkaninfo", "--summary"], stderr=subprocess.DEVNULL, timeout=3
-            ).decode(errors="replace")
-            m = re.search(r"driverVersion\s*=\s*(\S+)", out)
-            if m:
-                info["driver_version"] = m.group(1)
-            m = re.search(r"driverName\s*=\s*(\S+)", out)
-            if m:
-                info["vulkan_driver"] = m.group(1).lower()
-        except (OSError, subprocess.SubprocessError):
-            pass
-
-        # Mesa version
-        try:
-            out = subprocess.check_output(
-                ["mesa-overlay-control.py", "--version"],
-                stderr=subprocess.STDOUT,
-                timeout=2,
-            ).decode(errors="replace")
-        except (OSError, subprocess.SubprocessError):
-            pass
-        try:
-            # Try glxinfo as fallback
-            out = subprocess.check_output(
-                ["glxinfo", "-B"], stderr=subprocess.DEVNULL, timeout=3
-            ).decode(errors="replace")
-            m = re.search(r"Mesa (\S+)", out)
-            if m:
-                info["mesa_version"] = m.group(1)
-        except (OSError, subprocess.SubprocessError):
-            pass
-
-        break  # first GPU only
+    # NVIDIA: use nvidia-smi for model, VRAM, and driver version
+    if vendor_id == "0x10de" or (vendor_id is None and _nvidia_smi_present()):
+        _enrich_nvidia(info)
+    elif vendor_id == "0x1002":
+        _enrich_amd(info)
 
     return info
+
+
+def _nvidia_smi_present() -> bool:
+    import shutil
+    return shutil.which("nvidia-smi") is not None
+
+
+def _enrich_nvidia(info: dict[str, Any]) -> None:
+    """Fill GPU info fields from nvidia-smi."""
+    query = "name,memory.total,driver_version,pci.bus_id"
+    try:
+        out = subprocess.check_output(
+            ["nvidia-smi", f"--query-gpu={query}", "--format=csv,noheader,nounits"],
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+        ).decode().strip().splitlines()[0]  # first GPU
+    except (OSError, subprocess.SubprocessError, IndexError):
+        return
+
+    parts = [p.strip() for p in out.split(",")]
+    if len(parts) < 3:
+        return
+
+    name, vram_mib, driver_ver = parts[0], parts[1], parts[2]
+    if name:
+        info["model"] = name
+    try:
+        info["vram_mb"] = int(vram_mib)
+    except ValueError:
+        pass
+    if driver_ver:
+        info["driver_version"] = driver_ver
+
+    # Vulkan driver name for NVIDIA is always "NVIDIA"
+    info["vulkan_driver"] = "nvidia"
+
+    # nvidia-smi gives Linux driver version; also query nvidia-settings for more detail
+    # but driver_version from nvidia-smi is sufficient for the session document
+
+
+def _enrich_amd(info: dict[str, Any]) -> None:
+    """Fill AMD GPU info fields from vulkaninfo and glxinfo."""
+    # GPU model from vulkaninfo (most reliable)
+    try:
+        out = subprocess.check_output(
+            ["vulkaninfo", "--summary"], stderr=subprocess.DEVNULL, timeout=4
+        ).decode(errors="replace")
+        m = re.search(r"deviceName\s*=\s*(.+)", out)
+        if m:
+            info["model"] = m.group(1).strip()
+        m = re.search(r"driverVersion\s*=\s*(\S+)", out)
+        if m:
+            info["driver_version"] = m.group(1)
+        m = re.search(r"driverName\s*=\s*(\S+)", out)
+        if m:
+            info["vulkan_driver"] = m.group(1).lower()
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+    # Mesa version
+    try:
+        out = subprocess.check_output(
+            ["glxinfo", "-B"], stderr=subprocess.DEVNULL, timeout=3
+        ).decode(errors="replace")
+        m = re.search(r"Mesa (\S+)", out)
+        if m:
+            info["mesa_version"] = m.group(1)
+    except (OSError, subprocess.SubprocessError):
+        pass
 
 
 def _ram_info() -> dict[str, Any]:

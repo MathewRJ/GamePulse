@@ -22,6 +22,7 @@ from typing import Any
 
 from gamepulse import __version__
 from gamepulse import config as config_mod
+from gamepulse.collectors.audio import AudioCollector
 from gamepulse.collectors.cpu import CpuCollector
 from gamepulse.collectors.frame.mangohud import MangoHudCollector
 from gamepulse.collectors.gpu.detect import make_gpu_collector
@@ -97,7 +98,8 @@ def run(cfg: config_mod.Config, debug: bool, once: bool) -> None:
     storage = StorageCollector()
     gpu = make_gpu_collector() if cfg.collection.gpu else None
     network = NetworkCollector() if cfg.collection.network else None
-    power = PowerCollector() if True else None  # always attempt; returns None if no battery/power data
+    power = PowerCollector()   # always attempt; returns None if no battery/power data
+    audio = AudioCollector()   # always attempt; at minimum records backend name
     frame = MangoHudCollector() if cfg.collection.frame_timing else None
     detector = GameDetector() if cfg.collection.game_detection else None
 
@@ -205,6 +207,9 @@ def run(cfg: config_mod.Config, debug: bool, once: bool) -> None:
             if power:
                 if r := power.collect():
                     docs.append((power.data_stream, {**base, **r}))
+
+            if r := audio.collect():
+                docs.append((audio.data_stream, {**base, **r}))
 
             # Ship or print
             if debug:
