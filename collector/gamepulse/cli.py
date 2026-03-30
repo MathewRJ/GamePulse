@@ -24,8 +24,10 @@ from gamepulse import __version__
 from gamepulse import config as config_mod
 from gamepulse.collectors.cpu import CpuCollector
 from gamepulse.collectors.frame.mangohud import MangoHudCollector
-from gamepulse.collectors.gpu.amd_linux import AmdGpuCollector
+from gamepulse.collectors.gpu.detect import make_gpu_collector
 from gamepulse.collectors.memory import MemoryCollector
+from gamepulse.collectors.network import NetworkCollector
+from gamepulse.collectors.power import PowerCollector
 from gamepulse.collectors.storage import StorageCollector
 from gamepulse.detector.game import GameDetector
 from gamepulse.enricher.host import HostEnricher
@@ -64,6 +66,15 @@ def _print_debug(tick: int, docs: list[tuple[str, dict[str, Any]]]) -> None:
         if "storage" in doc:
             s = doc["storage"]
             parts.append(f"IO:R{s.get('read_mbps', '?')}/W{s.get('write_mbps', '?')}MB/s")
+        if "network" in doc:
+            n = doc["network"]
+            parts.append(f"NET:{n.get('rx_mbps', '?')}/{n.get('tx_mbps', '?')}MB/s")
+        if "power" in doc:
+            p = doc["power"]
+            if "battery_pct" in p:
+                parts.append(f"BAT:{p['battery_pct']}%")
+            if "tdp_current_w" in p:
+                parts.append(f"TDP:{p['tdp_current_w']}W")
 
     game_doc = next((d for _, d in docs if "game" in d), None)
     game_str = f" [{game_doc['game']['name']}]" if game_doc else ""
@@ -84,7 +95,9 @@ def run(cfg: config_mod.Config, debug: bool, once: bool) -> None:
     cpu = CpuCollector()
     mem = MemoryCollector()
     storage = StorageCollector()
-    gpu = AmdGpuCollector() if cfg.collection.gpu else None
+    gpu = make_gpu_collector() if cfg.collection.gpu else None
+    network = NetworkCollector() if cfg.collection.network else None
+    power = PowerCollector() if True else None  # always attempt; returns None if no battery/power data
     frame = MangoHudCollector() if cfg.collection.frame_timing else None
     detector = GameDetector() if cfg.collection.game_detection else None
 
@@ -184,6 +197,14 @@ def run(cfg: config_mod.Config, debug: bool, once: bool) -> None:
             if frame and cfg.collection.frame_timing:
                 if r := frame.collect():
                     docs.append((frame.data_stream, {**base, **r}))
+
+            if network and cfg.collection.network:
+                if r := network.collect():
+                    docs.append((network.data_stream, {**base, **r}))
+
+            if power:
+                if r := power.collect():
+                    docs.append((power.data_stream, {**base, **r}))
 
             # Ship or print
             if debug:
