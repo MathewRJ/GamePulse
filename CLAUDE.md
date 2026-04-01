@@ -7,14 +7,14 @@ The full project scope, data model, metric inventory, and implementation plan li
 
 Always read this before making architectural decisions. It contains the agreed data model, field names, data stream naming conventions, and phasing.
 
-Current phase: Phase 1 complete — collector running, data flowing to ES
-We are building the Elasticsearch infrastructure first:
+Current phase: Phase 1 complete (Python collector) — next focus is Phase 2 polish and real hardware testing
 
-Component templates (reusable field mapping building blocks)
-Index templates (composing component templates per data stream)
-Ingest pipelines (enrichment, validation, derived fields)
-Synthetic data generator (Python script producing realistic gaming session data)
-Data stream lifecycle configuration
+Completed phases:
+- Phase 0: Elasticsearch infrastructure — component templates, index templates, ingest pipelines, synthetic data generator, lifecycle config
+- Phase 1 (initial): Python collector — CPU, GPU (AMD + NVIDIA), memory, storage, network, power, audio, MangoHud frame timing, Steam/Proton detection, session enrichment
+- Phase 2 (initial): Kibana dashboard — 12 Lens panels (FPS timeline, frame time, GPU util/temp, GPU VRAM/clock, CPU util/temp, memory, storage, sessions table, 4 metric tiles), 3 filter controls (Game, Session ID, OS). Dashboard is in kibana/gamepulse-dashboard.ndjson — see docs/kibana-lens-ndjson-reference.md before making any dashboard changes programmatically.
+
+IMPORTANT: Do NOT attempt to hand-author Kibana NDJSON from scratch. The correct workflow is: build/edit in Kibana UI → export → commit. See docs/kibana-lens-ndjson-reference.md for the full structural reference and Serverless constraints.
 Technology stack
 Elasticsearch target: Elastic Cloud Serverless (Enterprise licence)
 Data model: Data streams, not traditional indices. Naming: metrics-gamepulse.<dataset>-default
