@@ -31,13 +31,38 @@ def _read_str(path: str) -> str | None:
 
 
 def _find_amd_card() -> str | None:
-    """Return the sysfs path to the first AMD DRM card device."""
+    """Return the sysfs path to the best AMD DRM card device.
+
+    Scores each AMD card to prefer the discrete GPU over an iGPU:
+    - +10 if the hwmon has fan1_input (discrete GPU with a fan)
+    - +5  if the hwmon has power1_average (GPU-level power sensor)
+    - +2  if the hwmon has temp2_input (hotspot sensor = discrete GPU)
+    - +1  if a hwmon directory exists at all
+    Falls back to the first AMD card found if none score above -1.
+    """
+    best_device: str | None = None
+    best_score = -1
+
     for card in sorted(glob.glob("/sys/class/drm/card[0-9]")):
-        vendor_path = f"{card}/device/vendor"
-        vendor = _read_str(vendor_path)
-        if vendor == "0x1002":  # AMD PCI vendor ID
-            return f"{card}/device"
-    return None
+        vendor = _read_str(f"{card}/device/vendor")
+        if vendor != "0x1002":
+            continue
+        device = f"{card}/device"
+        hwmon = _find_hwmon(device)
+        score = 0
+        if hwmon:
+            score += 1
+            if Path(f"{hwmon}/fan1_input").exists():
+                score += 10
+            if Path(f"{hwmon}/power1_average").exists():
+                score += 5
+            if Path(f"{hwmon}/temp2_input").exists():
+                score += 2
+        if score > best_score:
+            best_score = score
+            best_device = device
+
+    return best_device
 
 
 def _find_hwmon(device_path: str) -> str | None:
@@ -130,10 +155,9 @@ class AmdGpuCollector(Collector):
             if fan_rpm is not None and fan_max and fan_max > 0:
                 gpu["fan_pct"] = round(fan_rpm / fan_max * 100.0, 1)
 
-            # Voltage (mV)
-            volts_mv = _read_int(f"{hw}/in0_input")
-            if volts_mv is not None:
-                gpu["voltage"] = round(volts_mv / 1000.0, 3)
+            # Voltage: in0_input is unreliable on many AMD GPU generations
+            # (reports non-GPU voltages or near-zero when clock-gated).
+            # Omitted until a reliable source is confirmed per GPU model.
 
         if not gpu:
             return None
