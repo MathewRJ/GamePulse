@@ -7,12 +7,20 @@ The full project scope, data model, metric inventory, and implementation plan li
 
 Always read this before making architectural decisions. It contains the agreed data model, field names, data stream naming conventions, and phasing.
 
-Current phase: Phase 1 complete (Python collector) — next focus is Phase 2 polish and real hardware testing
+Current phase: Phase 1 core collectors validated on real CachyOS hardware (AMD Ryzen + RX 7900 XTX). Next milestones: game session detection, MangoHud frame timing, environment fingerprinting, then full gaming session test.
 
 Completed phases:
 - Phase 0: Elasticsearch infrastructure — component templates, index templates, ingest pipelines, synthetic data generator, lifecycle config
-- Phase 1 (initial): Python collector — CPU, GPU (AMD + NVIDIA), memory, storage, network, power, audio, MangoHud frame timing, Steam/Proton detection, session enrichment
+- Phase 1 (core): Python collector — GPU (AMD + NVIDIA), CPU (k10temp/coretemp), memory (/proc/meminfo), storage (/proc/diskstats). All four validated end-to-end on real CachyOS hardware with data flowing to Elasticsearch. Remaining Phase 1 collectors (network, power, audio, MangoHud frame timing, Steam/Proton detection, session enrichment) are implemented but not yet hardware-validated.
 - Phase 2 (initial): Kibana dashboard — 12 Lens panels (FPS timeline, frame time, GPU util/temp, GPU VRAM/clock, CPU util/temp, memory, storage, sessions table, 4 metric tiles), 3 filter controls (Game, Session ID, OS). Dashboard is in kibana/gamepulse-dashboard.ndjson — see docs/kibana-lens-ndjson-reference.md before making any dashboard changes programmatically.
+
+Hardware-validated details (CachyOS, AMD Ryzen, RX 7900 XTX):
+- AMD GPU: discrete card is card1 (not card0); hwmon3; scoring heuristic selects it correctly
+- CPU temps: k10temp hwmon5; temp1=Tctl (primary), temp3=Tccd1
+- RAPL power: permission-denied without root — collector returns None gracefully
+- amd-pstate-epp driver; cpufreq paths at /sys/bus/cpu/devices/cpu*/cpufreq/
+- Storage: 3x NVMe (nvme0n1/nvme1n1/nvme2n1); /games ext4 (Steam library); collector detects nvme1n1p6
+- venv at /tmp/gp-venv with httpx installed; bash scripts via "bash /tmp/script.sh" (fish shell default)
 
 IMPORTANT: Do NOT attempt to hand-author Kibana NDJSON from scratch. The correct workflow is: build/edit in Kibana UI → export → commit. See docs/kibana-lens-ndjson-reference.md for the full structural reference and Serverless constraints.
 Technology stack
@@ -80,8 +88,7 @@ OS: CachyOS (Arch-based Linux)
 GPU: AMD — sysfs at /sys/class/drm/card0/device/hwmon/
 Steam installed with games; MangoHud installed
 Python 3.x available
-No ES credentials on the gaming PC yet — all Elastic API calls happen from the MacBook
-Credentials will be added to the gaming PC when the collector is ready for real gameplay testing
+ES credentials are passed via ES_URL and ES_API_KEY environment variables when running the collector on the gaming PC (see scripts/run-gaming-test.sh)
 No repo clone on gaming PC — all code stays on the MacBook
 Use scp or ssh with piped commands to push scripts for execution
 
