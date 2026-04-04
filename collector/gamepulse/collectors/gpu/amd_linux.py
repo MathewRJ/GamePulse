@@ -31,13 +31,23 @@ def _read_str(path: str) -> str | None:
 
 
 def _find_amd_card() -> str | None:
-    """Return the sysfs path to the first AMD DRM card device."""
+    """Return the sysfs path to the AMD DRM card device with the most VRAM.
+
+    On systems with both an APU/iGPU and a discrete AMD GPU the driver
+    creates multiple card nodes.  Picking the one with the largest
+    mem_info_vram_total reliably selects the discrete GPU.
+    """
+    best_path: str | None = None
+    best_vram: int = -1
     for card in sorted(glob.glob("/sys/class/drm/card[0-9]")):
-        vendor_path = f"{card}/device/vendor"
-        vendor = _read_str(vendor_path)
-        if vendor == "0x1002":  # AMD PCI vendor ID
-            return f"{card}/device"
-    return None
+        if _read_str(f"{card}/device/vendor") != "0x1002":
+            continue
+        device = f"{card}/device"
+        vram = _read_int(f"{device}/mem_info_vram_total") or 0
+        if vram > best_vram:
+            best_vram = vram
+            best_path = device
+    return best_path
 
 
 def _find_hwmon(device_path: str) -> str | None:
