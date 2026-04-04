@@ -129,6 +129,14 @@ def run(cfg: config_mod.Config, debug: bool, once: bool) -> None:
     tick = 0
     prev_game_pid: int | None = None
 
+    # Session-level accumulators for end-of-session summary document
+    session_start = time.monotonic()
+    fps_samples: list[float] = []
+    stutter_total: int = 0
+    peak_gpu_temp: float | None = None
+    peak_cpu_temp: float | None = None
+    bottleneck_counts: dict[str, int] = {"gpu": 0, "cpu": 0, "balanced": 0}
+
     try:
         while not _SHUTDOWN:
             tick_start = time.monotonic()
@@ -211,6 +219,36 @@ def run(cfg: config_mod.Config, debug: bool, once: bool) -> None:
             if r := audio.collect():
                 docs.append((audio.data_stream, {**base, **r}))
 
+            # Update session accumulators and inject per-tick bottleneck
+            tick_gpu_util: float | None = None
+            tick_cpu_util: float | None = None
+            for ds, d in docs:
+                if "gpu" in d:
+                    tick_gpu_util = d["gpu"].get("utilisation_pct")
+                    t = d["gpu"].get("temperature_c")
+                    if t is not None:
+                        peak_gpu_temp = t if peak_gpu_temp is None else max(peak_gpu_temp, t)
+                if "cpu" in d:
+                    tick_cpu_util = d["cpu"].get("total_utilisation_pct")
+                    t = d["cpu"].get("temperature_c")
+                    if t is not None:
+                        peak_cpu_temp = t if peak_cpu_temp is None else max(peak_cpu_temp, t)
+                if "fps" in d:
+                    fps_samples.append(d["fps"]["avg_1s"])
+                    stutter_total += d["fps"].get("stutter_count", 0)
+
+            if tick_gpu_util is not None and tick_cpu_util is not None:
+                tick_bn = (
+                    "gpu" if tick_gpu_util > 90
+                    else "cpu" if tick_cpu_util > 90
+                    else "balanced"
+                )
+                bottleneck_counts[tick_bn] += 1
+                for ds, d in docs:
+                    if frame and ds == frame.data_stream:
+                        d["performance"] = {"bottleneck": tick_bn}
+                        break
+
             # Ship or print
             if debug:
                 _print_debug(tick, docs)
@@ -230,6 +268,36 @@ def run(cfg: config_mod.Config, debug: bool, once: bool) -> None:
     except KeyboardInterrupt:
         pass
     finally:
+        if shipper and tick > 0:
+            duration_s = round(time.monotonic() - session_start)
+            close_summary: dict[str, Any] = {
+                "ended": True,
+                "duration_s": duration_s,
+                "stutter_count": stutter_total,
+            }
+            if fps_samples:
+                _sorted = sorted(fps_samples)
+                close_summary["avg_fps"] = round(sum(fps_samples) / len(fps_samples), 1)
+                close_summary["low_1pct_fps"] = int(
+                    _sorted[max(0, int(len(_sorted) * 0.01) - 1)]
+                )
+            if peak_gpu_temp is not None:
+                close_summary["peak_gpu_temp_c"] = peak_gpu_temp
+            if peak_cpu_temp is not None:
+                close_summary["peak_cpu_temp_c"] = peak_cpu_temp
+            if any(bottleneck_counts.values()):
+                close_summary["bottleneck_dominant"] = max(
+                    bottleneck_counts, key=lambda k: bottleneck_counts[k]
+                )
+            close_doc: dict[str, Any] = {
+                "@timestamp": _timestamp(),
+                **session.base_doc(__version__, cfg.privacy.opt_in_public),
+                **enricher.snapshot,
+                "summary": close_summary,
+            }
+            shipper.queue("metrics-gamepulse.session-default", close_doc)
+            shipper.flush()
+            log.info("Session %s ended after %ds", session.id, duration_s)
         if shipper:
             shipper.close()
         log.info("Collector stopped after %d ticks", tick)

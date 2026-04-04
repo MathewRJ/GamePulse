@@ -171,9 +171,9 @@ class MangoHudCollector(Collector):
                 continue
 
             fps_values.append(fps_v)
-            # Only pair the frametime from the same row, and cap at 1000ms
-            # (anything slower than 1fps in ms units is a degenerate value).
-            if ft_v is not None and 0 < ft_v <= 1000.0:
+            # Cap at 200ms — anything above that is a loading screen or menu
+            # pause, not a gameplay frame, and corrupts the histogram.
+            if ft_v is not None and 0 < ft_v <= 200.0:
                 ft_values.append(ft_v)
 
         if not fps_values:
@@ -193,12 +193,15 @@ class MangoHudCollector(Collector):
             }
         }
 
+        stutter_count = 0
         if ft_values:
             avg_ft = round(sum(ft_values) / len(ft_values), 3)
             variance = round(
                 sum((x - avg_ft) ** 2 for x in ft_values) / len(ft_values), 3
             )
+            stutter_count = sum(1 for ft in ft_values if ft > 2.0 * avg_ft)
             doc["fps"]["frametime_ms"] = avg_ft
             doc["fps"]["frametime_variance"] = variance
+        doc["fps"]["stutter_count"] = stutter_count
 
         return doc

@@ -17,6 +17,35 @@
         "opt_in_public": {
           "type": "boolean"
         },
+        "summary": {
+          "properties": {
+            "ended": {
+              "type": "boolean"
+            },
+            "duration_s": {
+              "type": "integer"
+            },
+            "avg_fps": {
+              "type": "float"
+            },
+            "low_1pct_fps": {
+              "type": "integer"
+            },
+            "peak_gpu_temp_c": {
+              "type": "float"
+            },
+            "peak_cpu_temp_c": {
+              "type": "float"
+            },
+            "stutter_count": {
+              "type": "integer"
+            },
+            "bottleneck_dominant": {
+              "type": "keyword",
+              "ignore_above": 16
+            }
+          }
+        },
         "game": {
           "properties": {
             "name": {
