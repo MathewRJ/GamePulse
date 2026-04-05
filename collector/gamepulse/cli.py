@@ -49,61 +49,77 @@ def _timestamp() -> str:
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
 
+def _merge_docs(*docs: dict[str, Any]) -> dict[str, Any]:
+    """Recursively deep-merge multiple dicts.
+
+    Later dicts win on scalar conflicts; nested dicts are merged rather than
+    replaced. This is needed because all sources now contribute to the same
+    top-level 'gamepulse' key and naive ** unpacking would clobber earlier values.
+    """
+    result: dict[str, Any] = {}
+    for doc in docs:
+        for k, v in doc.items():
+            if k in result and isinstance(result[k], dict) and isinstance(v, dict):
+                result[k] = _merge_docs(result[k], v)
+            else:
+                result[k] = v
+    return result
+
+
+def _gp(doc: dict[str, Any]) -> dict[str, Any]:
+    """Return the gamepulse sub-dict from a document (empty dict if absent)."""
+    return doc.get("gamepulse", {})
+
+
 def _print_debug(tick: int, docs: list[tuple[str, dict[str, Any]]]) -> None:
     parts = []
     for _index, doc in docs:
-        if "cpu" in doc:
-            parts.append(f"CPU:{doc['cpu'].get('total_utilisation_pct', '?')}%")
-        if "gpu" in doc:
-            g = doc["gpu"]
+        gp = _gp(doc)
+        if cpu := gp.get("cpu"):
+            parts.append(f"CPU:{cpu.get('total_utilisation_pct', '?')}%")
+        if g := gp.get("gpu"):
             parts.append(
                 f"GPU:{g.get('utilisation_pct', '?')}%/{g.get('temperature_c', '?')}°C"
             )
-        if "memory" in doc:
-            parts.append(f"MEM:{doc['memory'].get('system_used_mb', '?')}MB")
-        if "fps" in doc:
-            f = doc["fps"]
-            parts.append(f"FPS:{f.get('current', '?')} (1%:{f.get('low_1pct', '?')})")
-        if "storage" in doc:
-            s = doc["storage"]
+        if mem := gp.get("memory"):
+            parts.append(f"MEM:{mem.get('system_used_mb', '?')}MB")
+        if fps := gp.get("fps"):
+            parts.append(f"FPS:{fps.get('current', '?')} (1%:{fps.get('low_1pct', '?')})")
+        if s := gp.get("storage"):
             parts.append(f"IO:R{s.get('read_mbps', '?')}/W{s.get('write_mbps', '?')}MB/s")
-        if "network" in doc:
-            n = doc["network"]
-            parts.append(f"NET:{n.get('rx_mbps', '?')}/{n.get('tx_mbps', '?')}MB/s")
-        if "power" in doc:
-            p = doc["power"]
+        if n := gp.get("network"):
+            parts.append(
+                f"NET:{n.get('rx_mbps', '?')}/{n.get('tx_mbps', '?')}MB/s"
+            )
+        if p := gp.get("power"):
             if "battery_pct" in p:
                 parts.append(f"BAT:{p['battery_pct']}%")
             if "tdp_current_w" in p:
                 parts.append(f"TDP:{p['tdp_current_w']}W")
 
-    game_doc = next((d for _, d in docs if "game" in d), None)
-    game_str = f" [{game_doc['game']['name']}]" if game_doc else ""
+    game = _gp(next((d for _, d in docs), {})).get("game", {})
+    game_str = f" [{game.get('name', '')}]" if game else ""
     print(f"[{tick:05d}] {' '.join(parts)}{game_str}")
 
 
 def run(cfg: config_mod.Config, debug: bool, once: bool) -> None:
     global _SHUTDOWN
 
-    # Session identity
     session = Session(id=str(uuid.uuid4()))
 
-    # Static host snapshot
     log.info("Collecting host environment snapshot…")
     enricher = HostEnricher()
 
-    # Collectors
     cpu = CpuCollector()
     mem = MemoryCollector()
     storage = StorageCollector()
     gpu = make_gpu_collector() if cfg.collection.gpu else None
     network = NetworkCollector() if cfg.collection.network else None
-    power = PowerCollector()   # always attempt; returns None if no battery/power data
-    audio = AudioCollector()   # always attempt; at minimum records backend name
+    power = PowerCollector()
+    audio = AudioCollector()
     frame = MangoHudCollector() if cfg.collection.frame_timing else None
     detector = GameDetector() if cfg.collection.game_detection else None
 
-    # Shipper
     shipper: ElasticsearchShipper | None = None
     if not debug:
         es = cfg.elasticsearch
@@ -115,12 +131,11 @@ def run(cfg: config_mod.Config, debug: bool, once: bool) -> None:
             batch_size=es.batch_size,
             flush_interval_secs=es.flush_interval_secs,
         )
-        # Ship the session document immediately
-        session_doc: dict[str, Any] = {
-            "@timestamp": _timestamp(),
-            **session.base_doc(__version__, cfg.privacy.opt_in_public),
-            **enricher.snapshot,
-        }
+        session_doc = _merge_docs(
+            {"@timestamp": _timestamp()},
+            session.base_doc(__version__, cfg.privacy.opt_in_public),
+            enricher.snapshot,
+        )
         shipper.queue("metrics-gamepulse.session-default", session_doc)
         shipper.flush()
         log.info("Session %s started", session.id)
@@ -129,7 +144,6 @@ def run(cfg: config_mod.Config, debug: bool, once: bool) -> None:
     tick = 0
     prev_game_pid: int | None = None
 
-    # Session-level accumulators for end-of-session summary document
     session_start = time.monotonic()
     fps_samples: list[float] = []
     stutter_total: int = 0
@@ -143,7 +157,6 @@ def run(cfg: config_mod.Config, debug: bool, once: bool) -> None:
             tick += 1
             ts = _timestamp()
 
-            # Game detection
             if detector:
                 game = detector.detect()
                 if game and (prev_game_pid is None or game.pid != prev_game_pid):
@@ -153,25 +166,28 @@ def run(cfg: config_mod.Config, debug: bool, once: bool) -> None:
                         pid=game.pid,
                         graphics_api=game.graphics_api,
                         uses_proton=game.uses_proton,
+                        proton_version=getattr(game, "proton_version", None),
+                        dxvk_version=getattr(game, "dxvk_version", None),
+                        vkd3d_version=getattr(game, "vkd3d_version", None),
                     )
                     mem.set_game_pid(game.pid)
                     prev_game_pid = game.pid
                     log.info("Detected game: %s (pid %d)", game.name, game.pid)
 
-                    # Ship updated session doc with game info
                     if shipper:
-                        updated = {
-                            "@timestamp": ts,
-                            **session.base_doc(__version__, cfg.privacy.opt_in_public),
-                            **enricher.snapshot,
-                            "compatibility": {
-                                k: v for k, v in {
-                                    "proton_version": game.proton_version,
-                                    "dxvk_version": game.dxvk_version,
-                                    "vkd3d_proton_version": game.vkd3d_version,
-                                }.items() if v is not None
-                            },
+                        compat: dict[str, Any] = {
+                            k: v for k, v in {
+                                "proton_version": getattr(game, "proton_version", None),
+                                "dxvk_version": getattr(game, "dxvk_version", None),
+                                "vkd3d_proton_version": getattr(game, "vkd3d_version", None),
+                            }.items() if v is not None
                         }
+                        updated = _merge_docs(
+                            {"@timestamp": ts},
+                            session.base_doc(__version__, cfg.privacy.opt_in_public),
+                            enricher.snapshot,
+                            {"gamepulse": {"compatibility": compat}} if compat else {},
+                        )
                         shipper.queue("metrics-gamepulse.session-default", updated)
 
                 elif game is None and prev_game_pid is not None:
@@ -180,62 +196,63 @@ def run(cfg: config_mod.Config, debug: bool, once: bool) -> None:
                     mem.set_game_pid(None)
                     prev_game_pid = None
 
-            # Collect metrics
-            base = {
-                "@timestamp": ts,
-                **session.base_doc(__version__, cfg.privacy.opt_in_public),
-            }
+            # Build the base fields included in every per-tick document
+            base = _merge_docs(
+                {"@timestamp": ts},
+                session.base_doc(__version__, cfg.privacy.opt_in_public),
+            )
 
             docs: list[tuple[str, dict[str, Any]]] = []
 
             if cfg.collection.cpu:
                 if r := cpu.collect():
-                    docs.append((cpu.data_stream, {**base, **r}))
+                    docs.append((cpu.data_stream, _merge_docs(base, r)))
 
             if cfg.collection.memory:
                 if r := mem.collect():
-                    docs.append((mem.data_stream, {**base, **r}))
+                    docs.append((mem.data_stream, _merge_docs(base, r)))
 
             if cfg.collection.storage:
                 if r := storage.collect():
-                    docs.append((storage.data_stream, {**base, **r}))
+                    docs.append((storage.data_stream, _merge_docs(base, r)))
 
             if gpu and cfg.collection.gpu:
                 if r := gpu.collect():
-                    docs.append((gpu.data_stream, {**base, **r}))
+                    docs.append((gpu.data_stream, _merge_docs(base, r)))
 
             if frame and cfg.collection.frame_timing:
                 if r := frame.collect():
-                    docs.append((frame.data_stream, {**base, **r}))
+                    docs.append((frame.data_stream, _merge_docs(base, r)))
 
             if network and cfg.collection.network:
                 if r := network.collect():
-                    docs.append((network.data_stream, {**base, **r}))
+                    docs.append((network.data_stream, _merge_docs(base, r)))
 
             if power:
                 if r := power.collect():
-                    docs.append((power.data_stream, {**base, **r}))
+                    docs.append((power.data_stream, _merge_docs(base, r)))
 
             if r := audio.collect():
-                docs.append((audio.data_stream, {**base, **r}))
+                docs.append((audio.data_stream, _merge_docs(base, r)))
 
             # Update session accumulators and inject per-tick bottleneck
             tick_gpu_util: float | None = None
             tick_cpu_util: float | None = None
             for ds, d in docs:
-                if "gpu" in d:
-                    tick_gpu_util = d["gpu"].get("utilisation_pct")
-                    t = d["gpu"].get("temperature_c")
+                gp = _gp(d)
+                if gpu_d := gp.get("gpu"):
+                    tick_gpu_util = gpu_d.get("utilisation_pct")
+                    t = gpu_d.get("temperature_c")
                     if t is not None:
                         peak_gpu_temp = t if peak_gpu_temp is None else max(peak_gpu_temp, t)
-                if "cpu" in d:
-                    tick_cpu_util = d["cpu"].get("total_utilisation_pct")
-                    t = d["cpu"].get("temperature_c")
+                if cpu_d := gp.get("cpu"):
+                    tick_cpu_util = cpu_d.get("total_utilisation_pct")
+                    t = cpu_d.get("temperature_c")
                     if t is not None:
                         peak_cpu_temp = t if peak_cpu_temp is None else max(peak_cpu_temp, t)
-                if "fps" in d:
-                    fps_samples.append(d["fps"]["avg_1s"])
-                    stutter_total += d["fps"].get("stutter_count", 0)
+                if fps_d := gp.get("fps"):
+                    fps_samples.append(fps_d["avg_1s"])
+                    stutter_total += fps_d.get("stutter_count", 0)
 
             if tick_gpu_util is not None and tick_cpu_util is not None:
                 tick_bn = (
@@ -244,12 +261,15 @@ def run(cfg: config_mod.Config, debug: bool, once: bool) -> None:
                     else "balanced"
                 )
                 bottleneck_counts[tick_bn] += 1
-                for ds, d in docs:
-                    if frame and ds == frame.data_stream:
-                        d["performance"] = {"bottleneck": tick_bn}
-                        break
+                # Inject per-tick bottleneck into the frame document
+                if frame:
+                    for i, (ds, d) in enumerate(docs):
+                        if ds == frame.data_stream:
+                            docs[i] = (ds, _merge_docs(
+                                d, {"gamepulse": {"performance": {"bottleneck": tick_bn}}}
+                            ))
+                            break
 
-            # Ship or print
             if debug:
                 _print_debug(tick, docs)
             elif shipper:
@@ -260,41 +280,39 @@ def run(cfg: config_mod.Config, debug: bool, once: bool) -> None:
             if once:
                 break
 
-            # Sleep remainder of interval
             elapsed = time.monotonic() - tick_start
-            sleep_time = max(0.0, interval - elapsed)
-            time.sleep(sleep_time)
+            time.sleep(max(0.0, interval - elapsed))
 
     except KeyboardInterrupt:
         pass
     finally:
         if shipper and tick > 0:
             duration_s = round(time.monotonic() - session_start)
-            close_summary: dict[str, Any] = {
+            summary: dict[str, Any] = {
                 "ended": True,
                 "duration_s": duration_s,
                 "stutter_count": stutter_total,
             }
             if fps_samples:
                 _sorted = sorted(fps_samples)
-                close_summary["avg_fps"] = round(sum(fps_samples) / len(fps_samples), 1)
-                close_summary["low_1pct_fps"] = int(
+                summary["avg_fps"] = round(sum(fps_samples) / len(fps_samples), 1)
+                summary["low_1pct_fps"] = int(
                     _sorted[max(0, int(len(_sorted) * 0.01) - 1)]
                 )
             if peak_gpu_temp is not None:
-                close_summary["peak_gpu_temp_c"] = peak_gpu_temp
+                summary["peak_gpu_temp_c"] = peak_gpu_temp
             if peak_cpu_temp is not None:
-                close_summary["peak_cpu_temp_c"] = peak_cpu_temp
+                summary["peak_cpu_temp_c"] = peak_cpu_temp
             if any(bottleneck_counts.values()):
-                close_summary["bottleneck_dominant"] = max(
+                summary["bottleneck_dominant"] = max(
                     bottleneck_counts, key=lambda k: bottleneck_counts[k]
                 )
-            close_doc: dict[str, Any] = {
-                "@timestamp": _timestamp(),
-                **session.base_doc(__version__, cfg.privacy.opt_in_public),
-                **enricher.snapshot,
-                "summary": close_summary,
-            }
+            close_doc = _merge_docs(
+                {"@timestamp": _timestamp()},
+                session.base_doc(__version__, cfg.privacy.opt_in_public),
+                enricher.snapshot,
+                {"gamepulse": {"summary": summary}},
+            )
             shipper.queue("metrics-gamepulse.session-default", close_doc)
             shipper.flush()
             log.info("Session %s ended after %ds", session.id, duration_s)
@@ -328,7 +346,6 @@ def main() -> None:
 
     cfg = config_mod.load(args.config)
 
-    # CLI overrides
     if args.es_endpoint:
         cfg.elasticsearch.endpoint = args.es_endpoint
     if args.es_api_key:

@@ -1,0 +1,10 @@
+# GamePulse collector agent input configuration.
+# The GamePulse collector ships data directly to Elasticsearch via the Bulk API.
+# This template is a placeholder for future Elastic Agent managed-binary integration
+# (Phase 4 — Closed Beta & Internal Distribution).
+#
+# When Elastic Agent integration is implemented, this will configure the Agent
+# to start/stop/monitor the GamePulse collector binary as a managed process.
+type: logfile
+paths:
+  - /tmp/gamepulse/{{data_stream.dataset}}.ndjson

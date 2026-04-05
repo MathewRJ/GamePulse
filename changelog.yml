@@ -1,0 +1,9 @@
+- version: "0.1.0"
+  changes:
+    - description: >
+        Initial integration package scaffolding. Defines 11 data streams (10 TSDS metrics,
+        1 logs) with ECS-compliant gamepulse.* field mappings, TSDS mode, metric_type/unit
+        annotations, and per-data-stream ingest pipelines. Migrated from freestyle ES
+        component templates to elastic-package format.
+      type: enhancement
+      link: https://github.com/MathewRJ/GamePulse/issues/1

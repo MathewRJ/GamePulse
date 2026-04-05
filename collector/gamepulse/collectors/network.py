@@ -116,13 +116,16 @@ class NetworkCollector(Collector):
         self._prev_retransmits = retransmits_total
 
         return {
-            "network": {
-                "rx_mbps": round(rx_bps / 1_048_576, 3),
-                "tx_mbps": round(tx_bps / 1_048_576, 3),
-                "rx_packets_per_sec": round(rx_pps, 1),
-                "tx_packets_per_sec": round(tx_pps, 1),
-                "tcp_retransmits_per_sec": round(retransmits_per_sec, 2),
-                "connection_type": _connection_type(iface),
-                "interface": iface,
+            "gamepulse": {
+                "network": {
+                    "rx_mbps": round(rx_bps / 1_048_576, 3),
+                    "tx_mbps": round(tx_bps / 1_048_576, 3),
+                    "rx_packets_per_sec": round(rx_pps, 1),
+                    "tx_packets_per_sec": round(tx_pps, 1),
+                    "tcp_retransmits_per_sec": round(retransmits_per_sec, 2),
+                    "bandwidth_utilisation_mbps": round((rx_bps + tx_bps) / 1_048_576, 3),
+                    "connection_type": _connection_type(iface),
+                    "interface": iface,
+                }
             }
         }

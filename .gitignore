@@ -1,0 +1,19 @@
+# Python
+collector/.venv/
+collector/__pycache__/
+collector/**/__pycache__/
+collector/**/*.pyc
+collector/.pytest_cache/
+collector/dist/
+collector/*.egg-info/
+
+# elastic-package build output
+build/
+
+# macOS
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+*.swp

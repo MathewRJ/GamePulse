@@ -135,4 +135,4 @@ class PowerCollector(Collector):
         if not power:
             return None
 
-        return {"power": power}
+        return {"gamepulse": {"power": power}}

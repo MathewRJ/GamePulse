@@ -133,4 +133,4 @@ class AudioCollector(Collector):
                     audio["sample_rate_hz"] = stats["sample_rate_hz"]
 
         # Always return the backend even if we couldn't read stats
-        return {"audio": audio}
+        return {"gamepulse": {"audio": audio}}

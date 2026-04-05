@@ -204,4 +204,4 @@ class MangoHudCollector(Collector):
             doc["fps"]["frametime_variance"] = variance
         doc["fps"]["stutter_count"] = stutter_count
 
-        return doc
+        return {"gamepulse": doc}

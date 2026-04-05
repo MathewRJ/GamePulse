@@ -1,0 +1,80 @@
+{
+  "@timestamp": "2026-04-04T20:00:01.000Z",
+  "data_stream": {
+    "type": "metrics",
+    "dataset": "gamepulse.ebpf",
+    "namespace": "default"
+  },
+  "host": {
+    "name": "cachyos-pc"
+  },
+  "gamepulse": {
+    "session": {
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "agent_version": "0.1.0"
+    },
+    "game": {
+      "name": "Cyberpunk 2077",
+      "steam_app_id": 1091500
+    },
+    "ebpf": {
+      "scheduler_latency_us": {
+        "values": [50, 100, 200, 500, 1000, 2000],
+        "counts": [1204, 892, 341, 87, 12, 2]
+      },
+      "cpu_migrations": 142,
+      "ccx_migrations": 18,
+      "wakeup_latency_us": {
+        "values": [10, 50, 100, 500, 1000],
+        "counts": [8420, 3210, 892, 124, 14]
+      },
+      "io_latency_us": {
+        "values": [50, 100, 250, 500, 1000, 5000],
+        "counts": [2840, 1230, 480, 120, 28, 4]
+      },
+      "file_io_patterns": [
+        {
+          "path": "/home/cachyos/.steam/steam/steamapps/common/Cyberpunk 2077/archive/pc/basegame_3_nightcity.archive",
+          "latency_us": 142,
+          "size_bytes": 524288,
+          "operation": "read"
+        }
+      ],
+      "gpu_fence_wait_us": {
+        "values": [100, 500, 1000, 5000, 11000],
+        "counts": [8920, 2340, 480, 42, 3]
+      },
+      "gpu_submit_latency_us": {
+        "values": [10, 50, 100, 250],
+        "counts": [15400, 4200, 820, 95]
+      },
+      "page_fault_distribution": {
+        "values": [1, 5, 10, 50, 100],
+        "counts": [28400, 8920, 2340, 480, 42]
+      },
+      "memory_allocation": {
+        "mmap_count": 284,
+        "brk_count": 12,
+        "total_allocated_bytes": 15728640000
+      },
+      "futex_contention": 48,
+      "irq_latency_us": {
+        "values": [1, 5, 10, 50, 100],
+        "counts": [48200, 12400, 3200, 480, 42]
+      },
+      "softirq_latency_us": {
+        "values": [1, 5, 10, 50, 100],
+        "counts": [28400, 8920, 2340, 480, 42]
+      },
+      "syscall_latency_us": {
+        "values": [1, 5, 10, 50, 100, 500],
+        "counts": [124000, 48200, 12400, 2840, 480, 28]
+      },
+      "syscall_count": 184230,
+      "shader_compilation_duration_ms": 0.0,
+      "shader_compilations": 0,
+      "tcp_retransmits": 0,
+      "tcp_rtt_ms": 18.4
+    }
+  }
+}

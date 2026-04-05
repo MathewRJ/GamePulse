@@ -162,4 +162,4 @@ class CpuCollector(Collector):
             result["cpu"]["governor"] = gov
         result["cpu"]["boost_state"] = _boost_enabled()
 
-        return result
+        return {"gamepulse": result}

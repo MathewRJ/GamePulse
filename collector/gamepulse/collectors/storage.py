@@ -142,16 +142,18 @@ class StorageCollector(Collector):
         self._prev_time = now
 
         return {
-            "storage": {
-                "read_mbps": read_mbps,
-                "write_mbps": write_mbps,
-                "read_iops": read_iops,
-                "write_iops": write_iops,
-                "io_latency_read_us": {"avg": read_lat_us},
-                "io_latency_write_us": {"avg": write_lat_us},
-                "queue_depth_current": queue_depth,
-                "io_wait_pct": io_wait_pct,
-                "merged_reads": int(d_read_merges / dt),
-                "merged_writes": int(d_write_merges / dt),
+            "gamepulse": {
+                "storage": {
+                    "read_mbps": read_mbps,
+                    "write_mbps": write_mbps,
+                    "read_iops": read_iops,
+                    "write_iops": write_iops,
+                    "io_latency_read_us": {"avg": read_lat_us},
+                    "io_latency_write_us": {"avg": write_lat_us},
+                    "queue_depth_current": queue_depth,
+                    "io_wait_pct": io_wait_pct,
+                    "merged_reads": int(d_read_merges / dt),
+                    "merged_writes": int(d_write_merges / dt),
+                }
             }
         }

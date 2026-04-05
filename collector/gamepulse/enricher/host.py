@@ -5,7 +5,8 @@ Reads OS info, hardware specs, and compatibility layer versions once
 at startup and builds the session document that goes to
 metrics-gamepulse.session-default.
 
-Field names match gamepulse-host-environment component template exactly.
+Emits ECS host.os.* fields at the document root and all GamePulse-specific
+hardware fields under gamepulse.hardware.*.
 """
 
 from __future__ import annotations
@@ -57,10 +58,8 @@ def _cpu_info() -> dict[str, Any]:
                 except ValueError:
                     pass
 
-        # Thread count = number of "processor" entries
         info["threads"] = cpuinfo.count("processor\t:")
 
-        # Clock speeds from cpufreq
         max_freqs = []
         for p in glob.glob("/sys/bus/cpu/devices/cpu*/cpufreq/cpuinfo_max_freq"):
             v = _read_int(p)
@@ -85,14 +84,12 @@ def _cpu_info() -> dict[str, Any]:
 def _gpu_info() -> dict[str, Any]:
     info: dict[str, Any] = {}
 
-    # Determine vendor from DRM sysfs
     vendor_id: str | None = None
     for card in sorted(glob.glob("/sys/class/drm/card[0-9]")):
         device = f"{card}/device"
         v = _read_str(f"{device}/vendor")
         if v in ("0x1002", "0x10de", "0x8086"):
             vendor_id = v
-            # AMD-specific: VRAM total from sysfs
             if v == "0x1002":
                 info["vendor"] = "amd"
                 vram = _read_int(f"{device}/mem_info_vram_total")
@@ -104,7 +101,6 @@ def _gpu_info() -> dict[str, Any]:
                 info["vendor"] = "intel"
             break
 
-    # NVIDIA: use nvidia-smi for model, VRAM, and driver version
     if vendor_id == "0x10de" or (vendor_id is None and _nvidia_smi_present()):
         _enrich_nvidia(info)
     elif vendor_id == "0x1002":
@@ -119,14 +115,13 @@ def _nvidia_smi_present() -> bool:
 
 
 def _enrich_nvidia(info: dict[str, Any]) -> None:
-    """Fill GPU info fields from nvidia-smi."""
     query = "name,memory.total,driver_version,pci.bus_id"
     try:
         out = subprocess.check_output(
             ["nvidia-smi", f"--query-gpu={query}", "--format=csv,noheader,nounits"],
             stderr=subprocess.DEVNULL,
             timeout=5,
-        ).decode().strip().splitlines()[0]  # first GPU
+        ).decode().strip().splitlines()[0]
     except (OSError, subprocess.SubprocessError, IndexError):
         return
 
@@ -143,17 +138,10 @@ def _enrich_nvidia(info: dict[str, Any]) -> None:
         pass
     if driver_ver:
         info["driver_version"] = driver_ver
-
-    # Vulkan driver name for NVIDIA is always "NVIDIA"
     info["vulkan_driver"] = "nvidia"
-
-    # nvidia-smi gives Linux driver version; also query nvidia-settings for more detail
-    # but driver_version from nvidia-smi is sufficient for the session document
 
 
 def _enrich_amd(info: dict[str, Any]) -> None:
-    """Fill AMD GPU info fields from vulkaninfo and glxinfo."""
-    # GPU model from vulkaninfo (most reliable)
     try:
         out = subprocess.check_output(
             ["vulkaninfo", "--summary"], stderr=subprocess.DEVNULL, timeout=4
@@ -170,7 +158,6 @@ def _enrich_amd(info: dict[str, Any]) -> None:
     except (OSError, subprocess.SubprocessError):
         pass
 
-    # Mesa version
     try:
         out = subprocess.check_output(
             ["glxinfo", "-B"], stderr=subprocess.DEVNULL, timeout=3
@@ -193,7 +180,6 @@ def _ram_info() -> dict[str, Any]:
     except (OSError, ValueError):
         pass
 
-    # RAM type/speed from DMI (may require root)
     try:
         out = subprocess.check_output(
             ["dmidecode", "-t", "17"], stderr=subprocess.DEVNULL, timeout=3
@@ -203,7 +189,7 @@ def _ram_info() -> dict[str, Any]:
             info["speed_mhz"] = int(m.group(1))
         m = re.search(r"Type:\s+(\S+)", out)
         if m and m.group(1) not in ("Unknown", "Other"):
-            info["type"] = m.group(1)
+            info["type"] = m.group(1).lower()
     except (OSError, subprocess.SubprocessError):
         pass
 
@@ -213,26 +199,23 @@ def _ram_info() -> dict[str, Any]:
 def _device_info() -> dict[str, Any]:
     info: dict[str, Any] = {}
 
-    # DMI chassis type: 8=laptop, 9=notebook, 11=handheld, 3=desktop
     chassis = _read_str("/sys/class/dmi/id/chassis_type")
     if chassis:
         try:
             ct = int(chassis)
             if ct == 11:
-                info["device_type"] = "handheld"
+                info["type"] = "handheld"
             elif ct in (8, 9, 10, 14):
-                info["device_type"] = "laptop"
+                info["type"] = "laptop"
             else:
-                info["device_type"] = "desktop"
+                info["type"] = "desktop"
         except ValueError:
             pass
 
-    # Device model
     product = _read_str("/sys/class/dmi/id/product_name")
     if product:
         info["model"] = product
 
-    # Power source
     for supply in glob.glob("/sys/class/power_supply/AC*") + glob.glob(
         "/sys/class/power_supply/ADP*"
     ):
@@ -244,35 +227,30 @@ def _device_info() -> dict[str, Any]:
     return info
 
 
-def _desktop_env() -> str | None:
-    import os
-    return (
-        os.environ.get("XDG_CURRENT_DESKTOP")
-        or os.environ.get("DESKTOP_SESSION")
-        or None
-    )
-
-
 class HostEnricher:
-    """Collects the static host environment snapshot for the session document."""
+    """Collects the static host environment snapshot for the session document.
+
+    Returns ECS fields under host.os.* and GamePulse-specific hardware
+    info under gamepulse.hardware.*.
+    """
 
     def __init__(self) -> None:
         self._snapshot: dict[str, Any] = self._build()
 
     def _build(self) -> dict[str, Any]:
         os_rel = _os_release()
-        doc: dict[str, Any] = {
-            "os": {
-                "type": "linux",
-                "distro": os_rel.get("NAME") or os_rel.get("ID"),
-                "version": os_rel.get("VERSION_ID") or os_rel.get("BUILD_ID"),
-                "kernel": platform.release(),
-            }
-        }
 
-        desktop = _desktop_env()
-        if desktop:
-            doc["os"]["desktop"] = desktop
+        # ECS host.os.* fields
+        host_os: dict[str, Any] = {
+            "type": "linux",
+            "kernel": platform.release(),
+        }
+        if name := (os_rel.get("NAME") or os_rel.get("PRETTY_NAME")):
+            host_os["name"] = name
+        if version := (os_rel.get("VERSION_ID") or os_rel.get("BUILD_ID")):
+            host_os["version"] = version
+        if platform_id := os_rel.get("ID"):
+            host_os["platform"] = platform_id
 
         cpu = _cpu_info()
         gpu = _gpu_info()
@@ -289,8 +267,11 @@ class HostEnricher:
         if device:
             hardware["device"] = device
 
+        doc: dict[str, Any] = {
+            "host": {"os": host_os},
+        }
         if hardware:
-            doc["hardware"] = hardware
+            doc["gamepulse"] = {"hardware": hardware}
 
         return doc
 

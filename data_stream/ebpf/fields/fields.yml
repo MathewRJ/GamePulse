@@ -1,0 +1,159 @@
+# ECS fields used in this data stream
+- name: host.name
+  type: keyword
+  dimension: true
+  description: "Hostname of the gaming PC"
+
+# Session context
+- name: gamepulse
+  type: group
+  fields:
+    - name: session
+      type: group
+      fields:
+        - name: id
+          type: keyword
+          dimension: true
+          description: "Unique session identifier (UUID)"
+        - name: agent_version
+          type: keyword
+          description: "Version of the GamePulse collector agent"
+
+    - name: game
+      type: group
+      fields:
+        - name: name
+          type: keyword
+          description: "Game title"
+        - name: steam_app_id
+          type: long
+          description: "Steam application ID"
+
+    # eBPF-specific metrics — kernel-level telemetry
+    # All histograms are pre-aggregated over the 1-second collection interval
+    - name: ebpf
+      type: group
+      fields:
+        # Scheduler probes (sched/sched_switch, sched_migrate_task, sched_wakeup)
+        - name: scheduler_latency_us
+          type: histogram
+          description: >
+            Runqueue wait time distribution per game thread in microseconds.
+            Measures time from when the thread became runnable to when it started executing.
+        - name: cpu_migrations
+          type: long
+          metric_type: counter
+          description: "Cumulative cross-core CPU migrations for game threads"
+        - name: ccx_migrations
+          type: long
+          metric_type: counter
+          description: "Cumulative cross-CCX migrations on AMD Zen CPUs — high values cause cache miss storms"
+        - name: wakeup_latency_us
+          type: histogram
+          description: >
+            Thread wakeup latency distribution in microseconds (time from wakeup event
+            to the thread first getting CPU time).
+
+        # I/O tracer (block/block_rq_issue, block_rq_complete, vfs_read/write kprobes)
+        - name: io_latency_us
+          type: histogram
+          description: "Block I/O latency distribution in microseconds for game-related I/O"
+        - name: file_io_patterns
+          type: nested
+          description: "Per-file I/O access patterns during the collection interval"
+          fields:
+            - name: path
+              type: keyword
+              description: "File path accessed (truncated to 512 chars)"
+            - name: latency_us
+              type: long
+              description: "Latency of this I/O operation in microseconds"
+            - name: size_bytes
+              type: long
+              description: "I/O operation size in bytes"
+            - name: operation
+              type: keyword
+              description: "Operation type (read, write)"
+
+        # GPU fence/sync observer (amdgpu tracepoints: amdgpu_cs_ioctl, dma_fence_wait)
+        - name: gpu_fence_wait_us
+          type: histogram
+          description: >
+            GPU fence wait time distribution in microseconds.
+            Measures CPU time spent waiting for GPU work to complete.
+        - name: gpu_submit_latency_us
+          type: histogram
+          description: "GPU command submission latency distribution in microseconds"
+
+        # Memory tracker (kmem tracepoints, page fault tracepoints)
+        - name: page_fault_distribution
+          type: histogram
+          description: "Page fault latency distribution in microseconds"
+        - name: memory_allocation
+          type: group
+          fields:
+            - name: mmap_count
+              type: long
+              metric_type: counter
+              description: "Cumulative mmap() calls by the game process"
+            - name: brk_count
+              type: long
+              metric_type: counter
+              description: "Cumulative brk() calls by the game process"
+            - name: total_allocated_bytes
+              type: long
+              metric_type: counter
+              unit: byte
+              description: "Cumulative bytes allocated by the game process"
+
+        # Futex/lock contention (syscalls/sys_enter_futex)
+        - name: futex_contention
+          type: long
+          metric_type: counter
+          description: "Cumulative futex contention events — threads blocked waiting for a mutex/condvar"
+
+        # IRQ/softirq latency (irq/irq_handler_entry/exit, softirq_entry/exit)
+        - name: irq_latency_us
+          type: histogram
+          description: "Hardware interrupt handler duration distribution in microseconds"
+        - name: softirq_latency_us
+          type: histogram
+          description: "Soft interrupt handler duration distribution in microseconds"
+
+        # Syscall profiler (raw_syscalls/sys_enter, sys_exit)
+        - name: syscall_latency_us
+          type: histogram
+          description: "Syscall latency distribution in microseconds for game process syscalls"
+        - name: syscall_count
+          type: long
+          metric_type: counter
+          description: "Cumulative syscall count by the game process in this interval"
+
+        # Shader compilation tracer (uprobe on Mesa shader compiler)
+        - name: shader_compilation_duration_ms
+          type: float
+          metric_type: gauge
+          unit: ms
+          description: "Total time spent in shader compilation during this interval in milliseconds"
+        - name: shader_compilations
+          type: integer
+          metric_type: counter
+          description: "Number of shader compilations triggered during this interval"
+
+        # Wine/Proton translation overhead (stretch goal)
+        - name: wine_proton_translation_overhead_us
+          type: histogram
+          description: >
+            Wine/Proton syscall translation overhead distribution in microseconds.
+            Measures the cost of translating Windows API calls to Linux syscalls.
+
+        # TCP metrics (network stack probes)
+        - name: tcp_retransmits
+          type: long
+          metric_type: counter
+          description: "Cumulative TCP retransmission events (game network connection)"
+        - name: tcp_rtt_ms
+          type: float
+          metric_type: gauge
+          unit: ms
+          description: "Measured TCP round-trip time to game server in milliseconds"

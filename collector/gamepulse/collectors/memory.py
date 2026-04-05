@@ -90,4 +90,4 @@ class MemoryCollector(Collector):
                 doc["memory"]["page_faults_major"] = major
                 doc["memory"]["page_faults_minor"] = minor
 
-        return doc
+        return {"gamepulse": doc}

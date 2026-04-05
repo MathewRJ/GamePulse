@@ -118,4 +118,4 @@ class NvidiaGpuCollector(Collector):
         if not gpu:
             return None
 
-        return {"gpu": gpu}
+        return {"gamepulse": {"gpu": gpu}}
