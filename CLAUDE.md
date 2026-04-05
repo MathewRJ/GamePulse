@@ -1,104 +1,115 @@
-GamePulse — Project Context for Claude Code
-What is this project?
-GamePulse is an open gaming telemetry platform. A lightweight agent collects gaming performance metrics (FPS, GPU/CPU temps, frame times, storage I/O, etc.) on Linux and Windows gaming PCs and ships them to Elasticsearch for visualisation in Kibana dashboards.
+# GamePulse — Claude Code Project Instructions
 
-Authoritative scope document
-The full project scope, data model, metric inventory, and implementation plan lives in: docs/GamePulse — Project Scope & Implementation Plan v2.0
+## What this project is
 
-Always read this before making architectural decisions. It contains the agreed data model, field names, data stream naming conventions, and phasing.
+GamePulse is an open-source gaming performance telemetry platform.
+It collects, ships, and visualises real-world gaming metrics to Elasticsearch.
 
-Current phase: Phase 1 complete — collector running, data flowing to ES
-We are building the Elasticsearch infrastructure first:
+The target audience is game developers, journalists, Proton/Wine/Mesa maintainers,
+and package maintainers who need real-world performance data.
 
-Component templates (reusable field mapping building blocks)
-Index templates (composing component templates per data stream)
-Ingest pipelines (enrichment, validation, derived fields)
-Synthetic data generator (Python script producing realistic gaming session data)
-Data stream lifecycle configuration
-Technology stack
-Elasticsearch target: Elastic Cloud Serverless (Enterprise licence)
-Data model: Data streams, not traditional indices. Naming: metrics-gamepulse.<dataset>-default
-Prototype collector: Python 3.11+ (Phase 1)
-Production agent: Rust (Phase 4)
-eBPF: Rust/Aya (Phase 5)
-Dashboards: Kibana Lens primarily, TSVB for complex time-series
-Data streams
-metrics-gamepulse.frame-default
-metrics-gamepulse.gpu-default
-metrics-gamepulse.cpu-default
-metrics-gamepulse.memory-default
-metrics-gamepulse.storage-default
-metrics-gamepulse.network-default
-metrics-gamepulse.power-default
-metrics-gamepulse.audio-default
-metrics-gamepulse.session-default
-metrics-gamepulse.ebpf-default
-metrics-gamepulse.events-default
-Repository structure (target)
-gamepulse/
-├── CLAUDE.md                         # This file
-├── README.md
-├── docs/                             # Scope, architecture, data model docs
-├── elastic/
-│   ├── component-templates/          # Reusable field mapping templates (JSON)
-│   ├── index-templates/              # Per-data-stream templates (JSON)
-│   ├── ingest-pipelines/             # Enrichment, validation pipelines (JSON)
-│   ├── lifecycle-policies/           # Data stream lifecycle config (JSON)
-│   ├── kibana/
-│   │   ├── dashboards/              # NDJSON exports
-│   │   ├── saved-searches/
-│   │   └── visualisations/
-│   └── synthetic-data/              # Python test data generator
-├── collector/                        # Python prototype (Phase 1)
-├── agent/                            # Rust production agent (Phase 4)
-├── ebpf/                             # eBPF programs (Phase 5)
-└── tools/                            # Utilities (Steam AppID resolver, etc.)
-Conventions
-All Elasticsearch templates use JSON files deployable via Kibana Dev Tools or the ES API
-Field names use the gamepulse.* namespace with ECS alignment where possible
-Component templates are named gamepulse-<purpose> (e.g., gamepulse-session-context)
-Index templates are named metrics-gamepulse.<dataset> matching data stream names
-Python code uses pyproject.toml, type hints, and async where appropriate
-Commit messages: imperative mood, concise
-Key context
-Owner has AMD GPU Linux desktop, Windows 11 AMD desktop, Steam Deck, GTX 1080 Ti, RTX 2080
-NVIDIA support for other cards will rely on community contributions
-MVP focuses on Steam games only (no GOG/Epic detection initially)
-Priority order: 1) Polished dashboards, 2) Cross-platform parity, 3) Deep metrics, 4) eBPF
-Collection frequency is 1/second — Python prototype overhead is acceptable
+## Current state (as of last session)
 
-Remote Access
-Elastic Cloud Serverless
-Elasticsearch endpoint: environment variable ES_URL (use for template management, queries, and data ingestion)
-API key: environment variable ES_API_KEY — use in header: Authorization: ApiKey $ES_API_KEY
-High-volume bulk ingestion endpoint: ES_INGEST_URL (ES_URL works for development)
-Version: Elasticsearch 9.4.0 serverless, build_flavor: serverless
+### What is built and working
 
-CachyOS Gaming PC (SSH)
-SSH alias: ssh gamingpc
-OS: CachyOS (Arch-based Linux)
-GPU: AMD — sysfs at /sys/class/drm/card0/device/hwmon/
-Steam installed with games; MangoHud installed
-Python 3.x available
-No ES credentials on the gaming PC yet — all Elastic API calls happen from the MacBook
-Credentials will be added to the gaming PC when the collector is ready for real gameplay testing
-No repo clone on gaming PC — all code stays on the MacBook
-Use scp or ssh with piped commands to push scripts for execution
+- **Python collector** (Phase 1): All metric collectors implemented and running on CachyOS gaming PC — CPU, GPU (AMD), memory, storage, network, audio, frame (MangoHud), power. Outputs `gamepulse.*` namespaced docs.
+- **Elastic Agent integration scaffold** (Phase 0.5): `elastic-package check` and `elastic-package test static` both pass (11/11). Package builds to `gamepulse-0.1.0.zip`. 11 data streams defined with TSDS manifests, field mappings, ingest pipelines, and sample events.
+- **Ingest pipelines deployed**: 11 pipelines live on Elastic Cloud Serverless (`metrics-gamepulse.<dataset>-default`). All index templates wired with `default_pipeline`. Pipeline simulation verified.
+- **Scope document**: `docs/GamePulse-Scope-v3_2.md`
 
-Use the gaming PC for: reading real sysfs/procfs data, testing collectors against real hardware, running gaming sessions with MangoHud, validating GPU/CPU/storage metrics
+### What is not yet started
 
-Example commands:
-  # Deploy a component template
-  curl -X PUT "$ES_URL/_component_template/gamepulse-session-context" \
-    -H "Authorization: ApiKey $ES_API_KEY" \
-    -H "Content-Type: application/json" \
-    -d @elastic/component-templates/gamepulse-session-context.json
+- **Rust production agent** (Phase 4): `src/`, `Cargo.toml`, `gamepulse-ebpf/` do not exist. The Python collector is the only working implementation.
+- **eBPF daemon** (Phase 2 per v3.2): Not started.
+- **Kibana dashboards**: Not built.
 
-  # Read GPU temp from gaming PC
-  ssh gamingpc "cat /sys/class/drm/card0/device/hwmon/hwmon*/temp1_input"
+### Pending work (in priority order)
 
-  # Pipe a local script to the gaming PC
-  cat collector/gamepulse/collectors/gpu/amd_linux.py | ssh gamingpc "python3 -"
+1. Real gameplay test on gamingpc — ES credentials not yet configured there.
+2. Delete old unused pipelines on Elastic Cloud:
+   `gamepulse-frame`, `gamepulse-gpu`, `gamepulse-cpu`, `gamepulse-session`,
+   `gamepulse-shared-enrichment`, `gamepulse-metrics-pipeline`
+3. Fix package bloat — `collector/.venv` in zip ≈ 12 MB, needs exclusion.
+4. Pipeline/system tests — need local ES or Docker environment.
+5. Phase 2: eBPF daemon design (Rust/Aya).
+6. Kibana dashboards from scratch using current field names.
+7. Phase 4: Rust production agent replacing Python collector.
 
-  # Copy a script and run it
-  scp collector/gamepulse/cli.py gamingpc:/tmp/ && ssh gamingpc "python3 /tmp/cli.py"
+## Stack
+
+- **Collector (current)**: Python 3.11+ prototype
+- **Collector (target)**: Rust + Aya framework for eBPF (Phase 4, not started)
+- **Storage / visualisation**: Elasticsearch Serverless (Elastic Enterprise), Kibana
+- **Hardware target**: AMD GPU primary (Linux); NVIDIA via community; Steam Deck
+- **Packaging target**: Debian, RPM, AUR (not yet built)
+- **CI/CD target**: GitHub Actions (not yet configured)
+- **Key Linux interfaces**: sysfs/hwmon, /proc filesystem, MangoHud log
+
+## Remote access
+
+- **Elasticsearch**: `$ES_URL` / `$ES_API_KEY` — Elastic Cloud Serverless
+- **Gaming PC**: `ssh gamingpc` (CachyOS, AMD GPU, MangoHud installed)
+
+## Protected files — never edit without explicit task assignment
+
+These files are integration-critical. Errors in them are silent until package validation:
+
+- `manifest.yml`
+- `tools/deploy_pipelines.py`
+- `tools/wire_pipelines.py`
+- `docs/GamePulse-Scope-v3_2.md`
+- Any file under `_dev/`
+- Any file under `packaging/`
+- Ingest pipeline YAML/JSON files (any path matching `*pipeline*`)
+- Index template JSON files
+- ILM policy JSON files
+
+## Validation commands (the only approved test commands)
+
+```
+elastic-package check
+elastic-package test static
+elastic-package test system   # requires local ES or Docker
+cargo check                   # only once Rust src/ exists
+cargo clippy -- -D warnings   # only once Rust src/ exists
+cargo test                    # only once Rust src/ exists
+cargo build --release         # only once Rust src/ exists
+```
+
+Do not run any other commands that modify the repo, network, or filesystem
+without explicit user approval.
+
+## Workflow rules
+
+1. One task at a time. No opportunistic refactors.
+2. No dependency version changes unless the task explicitly requires it.
+3. No changes to protected files without a planner-assigned task targeting them.
+4. After any pipeline/manifest change: run `elastic-package check` before declaring done.
+5. After any Rust code change (once src/ exists): run `cargo check` before declaring done.
+6. Reviewer must approve before tester runs.
+7. Progress auditor runs at every milestone boundary, not every task.
+
+## Key file locations
+
+### Python collector (current implementation)
+
+- `collector/gamepulse/cli.py` — main loop, `_merge_docs()` deep-merge, bulk shipper
+- `collector/gamepulse/session.py` — session lifecycle, `base_doc()` output
+- `collector/gamepulse/enricher/host.py` — host OS enrichment
+- `collector/gamepulse/collectors/` — per-subsystem collectors
+- `tools/deploy_pipelines.py` — pipeline deployment tool
+- `tools/wire_pipelines.py` — pipeline wiring tool
+
+### Integration package
+
+- `data_stream/` — 11 data streams (manifest, fields, pipeline, sample_event)
+- `manifest.yml` — package root
+- `docs/GamePulse-Scope-v3_2.md` — canonical scope document
+
+### Rust agent (target, not yet created)
+
+- `src/main.rs` — entry point and main loop (future)
+- `src/collectors/` — hardware and system collectors (future)
+- `src/ebpf/` — eBPF probe manager (future)
+- `src/shipper/` — Elasticsearch bulk API shipper (future)
+- `gamepulse-ebpf/` — BPF kernel programs via Aya (future)
