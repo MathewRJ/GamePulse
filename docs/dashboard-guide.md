@@ -116,12 +116,16 @@ importing a dashboard. They are included in the export if you check
 This is the highest-value next dashboard given current data availability.
 
 Panels to build:
-1. Filter controls: Game, OS, Proton version, GPU driver
+1. Filter controls:
+   - Game: `gamepulse.game.name.keyword`
+   - OS: `host.os.type.keyword`
+   - Proton version: `gamepulse.compatibility.proton_version` (NOT `gamepulse.compat.*` — verified 2026-04-06)
+   - Skip GPU driver filter — `gamepulse.gpu.driver_version` not collected by host enricher yet
 2. FPS distribution histogram — split by gamepulse.game.name.keyword
    - XY → Bar (histogram) on gamepulse.fps.avg_1s
 3. Frame time variance by session
    - Datatable: rows = session.id, columns = avg fps, p95 frametime, stutter count
-4. GPU util vs CPU util scatter (when Lens supports it) or dual-line XY
+4. GPU util vs CPU util over time — dual-line XY (split by data_stream or use separate series)
 5. Metric tiles: sessions compared, games compared, date range
 
 ES|QL validation queries for this dashboard:
