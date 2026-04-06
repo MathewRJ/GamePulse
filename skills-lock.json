@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "skills": {
+    "cloud-network-security": {
+      "source": "elastic/agent-skills",
+      "sourceType": "github",
+      "computedHash": "fe0869f8a0c853cf8bf52fbd4fe7c71712bdb398ec82f3ef7495ab765fe316e8"
+    },
+    "elasticsearch-esql": {
+      "source": "elastic/agent-skills",
+      "sourceType": "github",
+      "computedHash": "ae1c320cfc6c0e7832aee20ef005d0e403dac46972a94a77c67c8664d64d567e"
+    },
+    "elasticsearch-file-ingest": {
+      "source": "elastic/agent-skills",
+      "sourceType": "github",
+      "computedHash": "2cd6eae497dce24a84389c9feef88ac92bd24e1cae6e07a089a5aecfdb9f51da"
+    },
+    "elasticsearch-onboarding": {
+      "source": "elastic/agent-skills",
+      "sourceType": "github",
+      "computedHash": "d32d10af05f060864e824c74fd7b21fc7328a424f0bda2a4c285c88352363dcb"
+    },
+    "kibana-connectors": {
+      "source": "elastic/agent-skills",
+      "sourceType": "github",
+      "computedHash": "6b7a94b267e85e9c0e8a70c5a75b519e334e380855cfc15e2c59a6d1a7a1c2f4"
+    },
+    "kibana-dashboards": {
+      "source": "elastic/agent-skills",
+      "sourceType": "github",
+      "computedHash": "6eec6c6f90eaa2871ef8297888240b0294db459040e8084b8f6829dbf22d24f8"
+    },
+    "kibana-streams": {
+      "source": "elastic/agent-skills",
+      "sourceType": "github",
+      "computedHash": "e8563c18ab531d3858431be311d54a8ab09d9c35687de9c17313f8fcac621a39"
+    },
+    "kibana-vega": {
+      "source": "elastic/agent-skills",
+      "sourceType": "github",
+      "computedHash": "8cf145ff4af5347926f02bd883e1d835ff42723e9a8fc3c4c2aa298d9139e8b8"
+    },
+    "observability-logs-search": {
+      "source": "elastic/agent-skills",
+      "sourceType": "github",
+      "computedHash": "f57c543c1d1a35e993a894aac5af471e855c22b05e9e6e1633f9cb8aac786283"
+    },
+    "observability-manage-slos": {
+      "source": "elastic/agent-skills",
+      "sourceType": "github",
+      "computedHash": "01999d334fa05c88d1970b2108db4b110ca06c2f80cefc31b84f212b8702f788"
+    },
+    "observability-service-health": {
+      "source": "elastic/agent-skills",
+      "sourceType": "github",
+      "computedHash": "3c3f3013b134ee12b126dd085056ab95bed262a3796143a86a14c4c1041c6cd2"
+    }
+  }
+}
