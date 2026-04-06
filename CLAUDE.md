@@ -22,19 +22,18 @@ and package maintainers who need real-world performance data.
 
 - **Rust production agent** (Phase 4): `src/`, `Cargo.toml`, `gamepulse-ebpf/` do not exist. The Python collector is the only working implementation.
 - **eBPF daemon** (Phase 2 per v3.2): Not started.
-- **Kibana dashboards**: Not built.
+- **Kibana dashboards**: Baseline built (`kibana/gamepulse-dashboard.ndjson`). Phase 3 dashboards not yet built.
 
 ### Pending work (in priority order)
 
 1. Fix package bloat — `collector/.venv` in zip ≈ 12 MB, needs exclusion.
-2. Collector never writes session-end summary doc — `summary.*` fields always empty. Fix needed in collector.
-3. Pipeline/system tests — need local ES or Docker environment.
-4. Phase 2: eBPF daemon design (Rust/Aya).
-5. Kibana dashboards from scratch using current field names.
+2. Pipeline/system tests — need local ES or Docker environment.
+3. Phase 3: Kibana dashboards — baseline exists (`kibana/gamepulse-dashboard.ndjson`).
+   Next: Configuration Comparison dashboard (see `docs/dashboard-guide.md` for spec).
    > **Note**: Do not hand-author NDJSON. Correct workflow: build/edit in
-   > Kibana UI → export → commit. See `docs/kibana-lens-ndjson-reference.md`
-   > for the full structural reference and Serverless constraints.
-6. Phase 4: Rust production agent replacing Python collector.
+   > Kibana UI → export → commit.
+4. Phase 2: eBPF daemon design (Rust/Aya).
+5. Phase 4: Rust production agent replacing Python collector.
 
 ## Stack
 
