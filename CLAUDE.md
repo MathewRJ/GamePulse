@@ -46,6 +46,129 @@ and package maintainers who need real-world performance data.
 - **CI/CD target**: GitHub Actions (not yet configured)
 - **Key Linux interfaces**: sysfs/hwmon, /proc filesystem, MangoHud log
 
+## Kibana dashboards
+
+### Current state
+The working baseline dashboard is `kibana/gamepulse-dashboard.ndjson`
+("GamePulse - Manual Creation v2"). It covers the surface metrics
+available from Phase 1 data: FPS timeline, frame time distribution,
+GPU utilisation/temp/VRAM, CPU utilisation/temp, memory, storage I/O,
+plus four metric tiles (Median FPS, Max GPU Temp, Max CPU Temp, Unique
+Sessions) and three filter controls (Game, Session ID, OS).
+
+This is a baseline only. The full dashboard scope per
+`docs/GamePulse-Scope-v3_2.md` Phase 3 is significantly larger.
+
+### Planned dashboards (Phase 3)
+These must be built in Kibana UI and exported — never generated
+programmatically (see workflow rules below).
+
+1. **Session Deep-Dive** — exists as baseline, needs expansion:
+   - Add frame time percentile overlays (p95, p99)
+   - Add stutter event annotations
+   - Add environment badge bar (game, OS, kernel, GPU driver, Proton)
+   - Add GPU fence wait overlay (Phase 2 data, placeholder for now)
+   - Target data streams: frame, gpu, cpu, memory, storage, session
+
+2. **Scheduler Analysis** (Phase 2 data required):
+   - Runqueue latency distribution per thread
+   - CPU migration frequency / CCX boundary crossings
+   - Comparison: CFS vs SCHED_FIFO for same game
+   - IRQ latency overlay
+   - Target data stream: ebpf
+
+3. **Storage & I/O Analysis**:
+   - Per-drive-type performance (NVMe vs SD card vs SATA)
+   - File access pattern / I/O stall correlation with frame time
+   - Filesystem comparison (btrfs vs ext4)
+   - Target data stream: storage
+
+4. **Configuration Comparison**:
+   - Filter by: game, GPU, driver, Proton, kernel, filesystem, scheduler policy
+   - Side-by-side FPS distributions as histograms
+   - Scheduler behaviour diff
+   - Target data streams: frame, session, ebpf
+
+5. **System Health**:
+   - Thermal headroom, power draw, clock speed correlation
+   - Target data streams: gpu, cpu, power
+
+6. **Game Library**:
+   - Game × metrics heatmap with trend sparklines
+   - Target data streams: frame, session
+
+### Dashboard workflow (mandatory — do not deviate)
+- NEVER generate dashboard NDJSON programmatically. It is version-sensitive
+  and will fail to import on Elastic Serverless.
+- Always build panels in the Kibana UI → export via Stack Management →
+  Saved Objects → Export → commit to `kibana/`
+- Claude Code's role is: (a) planning panel structure and field paths
+  before you open Kibana, and (b) reviewing exported NDJSON field paths
+  for correctness after export.
+- Dashboard files live in `kibana/` at the repo root (not `data_stream/`).
+- When the integration matures to Phase 6, dashboards move into
+  `kibana/dashboard/` inside the integration package structure per the
+  elastic-package spec.
+
+### Elastic compliance rules (required for elastic/integrations submission)
+- All visualizations must be defined by value (part of the dashboard),
+  not saved to the Visualize library.
+- Every panel must include a `data_stream.dataset` filter to avoid hitting
+  all `metrics-*` indices. Example for frame data:
+  `data_stream.dataset: "gamepulse.frame"`
+- Visualization titles must not include the package name. Use "FPS Timeline"
+  not "[GamePulse] FPS Timeline".
+- Use Kibana Lens only — no TSVB, no Vega, no legacy aggregation-based panels.
+- TSDS note: counter-type metric fields do not support `avg()` in Kibana.
+  Use `max()` or `rate()` instead.
+- Build against stable Kibana (Serverless current), never SNAPSHOT.
+
+### Field paths reference (verified from live data)
+These are confirmed working from the Cyberpunk 2077 session:
+
+Frame data (`data_stream.dataset: gamepulse.frame`):
+- `gamepulse.fps.avg_1s`, `gamepulse.fps.low_1pct`, `gamepulse.fps.low_01pct`
+- `gamepulse.fps.frametime_ms`, `gamepulse.fps.stutter_count`
+- `gamepulse.session.id.keyword` (use for split-by and session filter control)
+
+GPU data (`data_stream.dataset: gamepulse.gpu`):
+- `gamepulse.gpu.utilisation_pct`, `gamepulse.gpu.temperature_c`
+- `gamepulse.gpu.hotspot_c`, `gamepulse.gpu.memory_temperature_c`
+- `gamepulse.gpu.power_w`, `gamepulse.gpu.memory_used_mb`, `gamepulse.gpu.clock_mhz`
+
+CPU data (`data_stream.dataset: gamepulse.cpu`):
+- `gamepulse.cpu.total_utilisation_pct`, `gamepulse.cpu.temperature_c`
+- `gamepulse.cpu.clock_mhz_avg`
+
+Memory data (`data_stream.dataset: gamepulse.memory`):
+- `gamepulse.memory.system_used_mb`, `gamepulse.memory.swap_used_mb`
+- `gamepulse.memory.game_rss_mb` (unreliable under Proton — tracks launcher, not game)
+
+Storage data (`data_stream.dataset: gamepulse.storage`):
+- `gamepulse.storage.read_mbps`, `gamepulse.storage.write_mbps`
+- `gamepulse.storage.queue_depth_current`
+
+Session data (`data_stream.dataset: gamepulse.session`):
+- `gamepulse.game.name.keyword`, `gamepulse.game.steam_app_id`
+- `gamepulse.game.graphics_api`, `gamepulse.session.id.keyword`
+- `host.name`, `host.os.name.keyword`, `host.os.type.keyword`
+
+Filter controls (use `metrics-gamepulse.*` wildcard data view):
+- Game: `gamepulse.game.name.keyword`
+- Session ID: `gamepulse.session.id.keyword`
+- OS: `host.os.type.keyword`
+
+### Elastic Agent Skills
+The Elastic official Claude Code skills are installed in `.claude/skills/`.
+These give Claude Code enhanced knowledge of ES|QL, Kibana, and
+Elasticsearch. Install via:
+```
+npx skills add elastic/agent-skills -a claude-code
+```
+When planning dashboard panels, ask Claude Code to use ES|QL queries
+for validation — ES|QL bypasses data view field list issues and
+confirms fields exist before building Lens panels.
+
 ## Hardware notes (gaming PC)
 
 Hardware-validated details for CachyOS (AMD Ryzen + RX 7900 XTX):
