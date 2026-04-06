@@ -14,7 +14,8 @@ and package maintainers who need real-world performance data.
 
 - **Python collector** (Phase 1): All metric collectors implemented and running on CachyOS gaming PC — CPU, GPU (AMD), memory, storage, network, audio, frame (MangoHud), power. Outputs `gamepulse.*` namespaced docs.
 - **Elastic Agent integration scaffold** (Phase 0.5): `elastic-package check` and `elastic-package test static` both pass (11/11). Package builds to `gamepulse-0.1.0.zip`. 11 data streams defined with TSDS manifests, field mappings, ingest pipelines, and sample events.
-- **Ingest pipelines deployed**: 11 pipelines live on Elastic Cloud Serverless (`metrics-gamepulse.<dataset>-default`). All index templates wired with `default_pipeline`. Pipeline simulation verified.
+- **Ingest pipelines deployed**: 11 pipelines live on Elastic Cloud Serverless (`metrics-gamepulse.<dataset>-default`). All index templates wired with `default_pipeline`. Pipeline simulation verified. 6 stale legacy pipelines deleted.
+- **Live gameplay test passed**: Full session verified end-to-end (Cyberpunk 2077, Proton, MangoHud, all 8 streams, game detection working).
 - **Scope document**: `docs/GamePulse-Scope-v3_2.md`
 
 ### What is not yet started
@@ -25,15 +26,12 @@ and package maintainers who need real-world performance data.
 
 ### Pending work (in priority order)
 
-1. Real gameplay test on gamingpc — ES credentials not yet configured there.
-2. Delete old unused pipelines on Elastic Cloud:
-   `gamepulse-frame`, `gamepulse-gpu`, `gamepulse-cpu`, `gamepulse-session`,
-   `gamepulse-shared-enrichment`, `gamepulse-metrics-pipeline`
-3. Fix package bloat — `collector/.venv` in zip ≈ 12 MB, needs exclusion.
-4. Pipeline/system tests — need local ES or Docker environment.
-5. Phase 2: eBPF daemon design (Rust/Aya).
-6. Kibana dashboards from scratch using current field names.
-7. Phase 4: Rust production agent replacing Python collector.
+1. Fix package bloat — `collector/.venv` in zip ≈ 12 MB, needs exclusion.
+2. Collector never writes session-end summary doc — `summary.*` fields always empty. Fix needed in collector.
+3. Pipeline/system tests — need local ES or Docker environment.
+4. Phase 2: eBPF daemon design (Rust/Aya).
+5. Kibana dashboards from scratch using current field names.
+6. Phase 4: Rust production agent replacing Python collector.
 
 ## Stack
 
