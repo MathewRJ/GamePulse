@@ -90,6 +90,13 @@ cargo build --release         # only once Rust src/ exists
 Do not run any other commands that modify the repo, network, or filesystem
 without explicit user approval.
 
+## Session hygiene
+
+- Always run `git pull` before starting any work in a session.
+- Always run `git push` immediately after every commit.
+- Never start implementation work if `git status` shows unpushed commits or if the branch is behind `origin/main`.
+- If the branch has diverged, stop and flag it to the user before doing anything else.
+
 ## Workflow rules
 
 1. One task at a time. No opportunistic refactors.
