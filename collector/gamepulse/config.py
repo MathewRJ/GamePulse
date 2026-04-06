@@ -1,7 +1,13 @@
-"""Configuration loading — reads gamepulse.toml from standard locations."""
+"""Configuration loading — reads gamepulse.toml from standard locations.
+
+Environment variable overrides (highest priority):
+  ES_URL       → elasticsearch.endpoint
+  ES_API_KEY   → elasticsearch.api_key
+"""
 
 from __future__ import annotations
 
+import os
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -94,5 +100,11 @@ def load(path: Path | None = None) -> Config:
             share_ebpf=priv.get("share_ebpf", cfg.privacy.share_ebpf),
             share_network=priv.get("share_network", cfg.privacy.share_network),
         )
+
+    # Environment variable overrides — highest priority
+    if env_url := os.environ.get("ES_URL"):
+        cfg.elasticsearch.endpoint = env_url
+    if env_key := os.environ.get("ES_API_KEY"):
+        cfg.elasticsearch.api_key = env_key
 
     return cfg

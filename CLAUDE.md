@@ -31,6 +31,9 @@ and package maintainers who need real-world performance data.
 3. Pipeline/system tests — need local ES or Docker environment.
 4. Phase 2: eBPF daemon design (Rust/Aya).
 5. Kibana dashboards from scratch using current field names.
+   > **Note**: Do not hand-author NDJSON. Correct workflow: build/edit in
+   > Kibana UI → export → commit. See `docs/kibana-lens-ndjson-reference.md`
+   > for the full structural reference and Serverless constraints.
 6. Phase 4: Rust production agent replacing Python collector.
 
 ## Stack
@@ -42,6 +45,16 @@ and package maintainers who need real-world performance data.
 - **Packaging target**: Debian, RPM, AUR (not yet built)
 - **CI/CD target**: GitHub Actions (not yet configured)
 - **Key Linux interfaces**: sysfs/hwmon, /proc filesystem, MangoHud log
+
+## Hardware notes (gaming PC)
+
+Hardware-validated details for CachyOS (AMD Ryzen + RX 7900 XTX):
+
+- AMD GPU: discrete card is **card1** (not card0); hwmon at hwmon3; scoring heuristic selects it correctly
+- CPU temps: k10temp at hwmon5; temp1=Tctl (primary), temp3=Tccd1
+- RAPL power: permission-denied without root — collector returns None gracefully
+- CPU driver: amd-pstate-epp; cpufreq paths at `/sys/bus/cpu/devices/cpu*/cpufreq/`
+- Storage: 3× NVMe (nvme0n1/nvme1n1/nvme2n1); `/games` ext4 (Steam library); collector detects nvme1n1p6
 
 ## Remote access
 
@@ -103,6 +116,12 @@ without explicit user approval.
 - `data_stream/` — 11 data streams (manifest, fields, pipeline, sample_event)
 - `manifest.yml` — package root
 - `docs/GamePulse-Scope-v3_2.md` — canonical scope document
+
+### Kibana dashboards
+
+- `kibana/gamepulse-dashboard.ndjson` — working dashboard (MacBook-built, import via Kibana UI)
+- `dashboards/gamepulse-session-performance.ndjson` — session performance dashboard (local build)
+- `docs/kibana-lens-ndjson-reference.md` — structural reference for Lens NDJSON and Serverless constraints
 
 ### Rust agent (target, not yet created)
 
