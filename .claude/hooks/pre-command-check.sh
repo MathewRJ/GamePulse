@@ -77,8 +77,6 @@ for prefix in "${ALLOWED_PREFIXES[@]}"; do
   fi
 done
 
-# Not in allowed list — ask rather than block outright
-# Exit code 1 causes Claude Code to prompt the user for approval
-echo "Command not in GamePulse approved list: $TRIMMED" >&2
-echo "Approved commands: cargo check/clippy/test/build, elastic-package check/test static, git diff/status/log, grep, find, cat, ls" >&2
-exit 1
+# Not explicitly blocked — allow it.
+# Hook exit code contract: 0 = allow, 2 = block, anything else = hook error.
+exit 0
