@@ -28,10 +28,10 @@ and package maintainers who need real-world performance data.
 
 1. Fix package bloat — `collector/.venv` in zip ≈ 12 MB, needs exclusion.
 2. Pipeline/system tests — need local ES or Docker environment.
-3. Phase 3: Kibana dashboards — baseline exists (`kibana/gamepulse-dashboard.ndjson`).
-   Next: Configuration Comparison dashboard (see `docs/dashboard-guide.md` for spec).
-   > **Note**: Do not hand-author NDJSON. Correct workflow: build/edit in
-   > Kibana UI → export → commit.
+3. Phase 3: Kibana dashboards — two built:
+   - `kibana/gamepulse-dashboard.ndjson` (baseline, UI-exported)
+   - `kibana/config-comparison-dashboard.json` (API-built, ID: 21b663d6-de42-46c6-aeaf-e6c48e46ecec)
+   Next: expand Session Deep-Dive dashboard (frame time percentiles, stutter annotations).
 4. Phase 2: eBPF daemon design (Rust/Aya).
 5. Phase 4: Rust production agent replacing Python collector.
 
@@ -96,18 +96,39 @@ programmatically (see workflow rules below).
    - Game × metrics heatmap with trend sparklines
    - Target data streams: frame, session
 
-### Dashboard workflow (mandatory — do not deviate)
-- NEVER generate dashboard NDJSON programmatically. It is version-sensitive
-  and will fail to import on Elastic Serverless.
-- Always build panels in the Kibana UI → export via Stack Management →
-  Saved Objects → Export → commit to `kibana/`
-- Claude Code's role is: (a) planning panel structure and field paths
-  before you open Kibana, and (b) reviewing exported NDJSON field paths
-  for correctness after export.
-- Dashboard files live in `kibana/` at the repo root (not `data_stream/`).
-- When the integration matures to Phase 6, dashboards move into
-  `kibana/dashboard/` inside the integration package structure per the
-  elastic-package spec.
+### Dashboard workflow
+
+Two approved methods — use the kibana-dashboards skill where possible:
+
+**Method A — Kibana Dashboards API (preferred)**
+Use the `kibana-dashboards` agent skill to create and update dashboards
+programmatically. This API (Kibana 9.4+ Serverless) is LLM-friendly and
+not version-sensitive. Workflow:
+1. Validate fields with ES|QL first (`elasticsearch-esql` skill)
+2. Generate dashboard JSON and POST via the skill
+3. Retrieve the result and save definition to `kibana/<name>.json`
+4. Commit and push
+
+API schema notes (verified 2026-04-06 against Serverless 9.4.0):
+- `options_list_control`: use `field_name` (snake_case), `data_view_id`
+- `xy` terms x-axis: `{operation:"terms", fields:[...]}` — no `size`
+- `breakdown_by` terms: `{operation:"terms", fields:[...]}` — no `size`
+- Datatable type is `data_table` (not `datatable`), rows terms: no `size`
+- ES|QL dataset (`type:"esql"`) not supported in inline panel attributes;
+  use `type:"dataView"` or `type:"index"` instead
+
+**Method B — Manual Kibana UI export (fallback)**
+Use when the API doesn't support a needed panel type, or for complex
+multi-layer visualizations. Workflow:
+Build in Kibana UI → export via Stack Management → Saved Objects →
+commit to `kibana/` as `.ndjson`
+
+**Never do**: hand-author NDJSON files — these are version-sensitive and
+will fail to import on Serverless.
+
+Dashboard files live in `kibana/` at the repo root (not `data_stream/`).
+When the integration matures to Phase 6, dashboards move into
+`kibana/dashboard/` inside the integration package structure.
 
 ### Elastic compliance rules (required for elastic/integrations submission)
 - All visualizations must be defined by value (part of the dashboard),
