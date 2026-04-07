@@ -114,8 +114,15 @@ not version-sensitive. Workflow:
 3. Retrieve the result and save definition to `kibana/<name>.json`
 4. Commit and push
 
-API schema notes (verified 2026-04-06 against Serverless 9.4.0):
+API schema notes (verified 2026-04-07 against Serverless 9.4.0):
 - `options_list_control`: use `field_name` (snake_case), `data_view_id`
+- `options_list_control` field_name MUST use `.keyword` sub-field for text fields
+  (e.g. `gamepulse.game.name.keyword`, `gamepulse.session.id.keyword`, `host.os.name.keyword`)
+  Using the bare text field silently produces a non-functional filter control
+- OS filter control: use `host.os.name.keyword` (not `host.os.type` or `host.os.type.keyword`)
+- `data_table` `last_value` metrics for text fields also need `.keyword` sub-field
+  (e.g. `host.os.kernel.keyword`, `gamepulse.hardware.gpu.model.keyword`)
+- `data_table` rows and x-axis `terms` fields need `.keyword` for text fields
 - `xy` terms x-axis: `{operation:"terms", fields:[...]}` — no `size`
 - `breakdown_by` terms: `{operation:"terms", fields:[...]}` — no `size`
 - Datatable type is `data_table` (not `datatable`), rows terms: no `size`
