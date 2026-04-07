@@ -240,6 +240,17 @@ without explicit user approval.
 - Never start implementation work if `git status` shows unpushed commits or if the branch is behind `origin/main`.
 - If the branch has diverged, stop and flag it to the user before doing anything else.
 
+## Cross-session continuity
+
+Two files maintain context across sessions:
+- `docs/claude-chat-context.md` — maintained by claude.ai (web planning sessions).
+  Update and commit at the end of every planning session.
+- `CLAUDE.md` (this file) — maintained by Claude Code (implementation sessions).
+  Update the "Current state" section at the end of every Claude Code session.
+
+Claude Code must never edit `docs/claude-chat-context.md`.
+claude.ai must never directly edit `CLAUDE.md`.
+
 ## Workflow rules
 
 1. One task at a time. No opportunistic refactors.
