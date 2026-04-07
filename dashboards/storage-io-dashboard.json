@@ -1,0 +1,313 @@
+{
+  "id": "f8a9d960-130e-43db-8554-6033f45e8a9c",
+  "kibana_url": "https://gamepulse-af41f9.kb.us-central1.gcp.elastic.cloud/app/dashboards#/view/f8a9d960-130e-43db-8554-6033f45e8a9c",
+  "created": "2026-04-07",
+  "api_version": "Elastic-Api-Version: 1",
+  "notes": [
+    "Created via Kibana Dashboards API (kibana-dashboards skill).",
+    "All field paths validated via ES|QL before building.",
+    "Panels use dataView ID 18dd83e8-6f88-474f-b434-a4b6c14a04a2 (metrics-gamepulse.* wildcard).",
+    "gamepulse.storage.* fields confirmed live: read_mbps avg=0.77, write_mbps avg=0.36, io_wait_pct avg=0.59, read_iops avg=12.2, write_iops avg=23.2",
+    "Read latency avg=273µs, write latency avg=1389µs, drive temp avg=41°C, game_process_read_mb avg=82MB",
+    "Latency p95/p99 fields are from storage.io_latency_* (not gamepulse.storage.*) — both exist in live data.",
+    "16 panels: 3 filter controls, 6 metric tiles, throughput timeline, IOPS timeline, I/O wait+queue, read latency, write latency, game process I/O, drive temp."
+  ],
+  "data": {
+    "title": "GamePulse - Storage & I/O Analysis",
+    "description": "Per-session storage throughput, IOPS, I/O wait, queue depth, read/write latency percentiles, game process I/O, and drive temperature",
+    "time_range": { "from": "now-7d", "to": "now" },
+    "panels": [
+      {
+        "type": "options_list_control",
+        "uid": "ctrl-game",
+        "grid": { "x": 0, "y": 0, "w": 16, "h": 4 },
+        "config": {
+          "title": "Game",
+          "data_view_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2",
+          "field_name": "gamepulse.game.name"
+        }
+      },
+      {
+        "type": "options_list_control",
+        "uid": "ctrl-session",
+        "grid": { "x": 16, "y": 0, "w": 16, "h": 4 },
+        "config": {
+          "title": "Session ID",
+          "data_view_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2",
+          "field_name": "gamepulse.session.id"
+        }
+      },
+      {
+        "type": "options_list_control",
+        "uid": "ctrl-os",
+        "grid": { "x": 32, "y": 0, "w": 16, "h": 4 },
+        "config": {
+          "title": "OS",
+          "data_view_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2",
+          "field_name": "host.os.type"
+        }
+      },
+      {
+        "type": "lens",
+        "uid": "metric-read-mbps",
+        "grid": { "x": 0, "y": 4, "w": 8, "h": 6 },
+        "config": {
+          "attributes": {
+            "title": "Avg Read (MB/s)",
+            "type": "metric",
+            "dataset": { "type": "dataView", "id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2" },
+            "metrics": [{ "type": "primary", "operation": "average", "field": "gamepulse.storage.read_mbps", "label": "Avg read MB/s" }]
+          }
+        }
+      },
+      {
+        "type": "lens",
+        "uid": "metric-write-mbps",
+        "grid": { "x": 8, "y": 4, "w": 8, "h": 6 },
+        "config": {
+          "attributes": {
+            "title": "Avg Write (MB/s)",
+            "type": "metric",
+            "dataset": { "type": "dataView", "id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2" },
+            "metrics": [{ "type": "primary", "operation": "average", "field": "gamepulse.storage.write_mbps", "label": "Avg write MB/s" }]
+          }
+        }
+      },
+      {
+        "type": "lens",
+        "uid": "metric-read-iops",
+        "grid": { "x": 16, "y": 4, "w": 8, "h": 6 },
+        "config": {
+          "attributes": {
+            "title": "Avg Read IOPS",
+            "type": "metric",
+            "dataset": { "type": "dataView", "id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2" },
+            "metrics": [{ "type": "primary", "operation": "average", "field": "gamepulse.storage.read_iops", "label": "Avg read IOPS" }]
+          }
+        }
+      },
+      {
+        "type": "lens",
+        "uid": "metric-write-iops",
+        "grid": { "x": 24, "y": 4, "w": 8, "h": 6 },
+        "config": {
+          "attributes": {
+            "title": "Avg Write IOPS",
+            "type": "metric",
+            "dataset": { "type": "dataView", "id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2" },
+            "metrics": [{ "type": "primary", "operation": "average", "field": "gamepulse.storage.write_iops", "label": "Avg write IOPS" }]
+          }
+        }
+      },
+      {
+        "type": "lens",
+        "uid": "metric-iowait",
+        "grid": { "x": 32, "y": 4, "w": 8, "h": 6 },
+        "config": {
+          "attributes": {
+            "title": "Avg I/O Wait %",
+            "type": "metric",
+            "dataset": { "type": "dataView", "id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2" },
+            "metrics": [{ "type": "primary", "operation": "average", "field": "gamepulse.storage.io_wait_pct", "label": "Avg I/O wait %" }]
+          }
+        }
+      },
+      {
+        "type": "lens",
+        "uid": "metric-drive-temp",
+        "grid": { "x": 40, "y": 4, "w": 8, "h": 6 },
+        "config": {
+          "attributes": {
+            "title": "Avg Drive Temp (\u00b0C)",
+            "type": "metric",
+            "dataset": { "type": "dataView", "id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2" },
+            "metrics": [{ "type": "primary", "operation": "average", "field": "storage.drive_temperature_c", "label": "Avg drive temp \u00b0C" }]
+          }
+        }
+      },
+      {
+        "type": "lens",
+        "uid": "throughput-timeline",
+        "grid": { "x": 0, "y": 10, "w": 48, "h": 12 },
+        "config": {
+          "attributes": {
+            "title": "Read & Write Throughput (MB/s)",
+            "type": "xy",
+            "axis": {
+              "x": { "title": { "visible": false } },
+              "left": { "title": { "visible": false } }
+            },
+            "layers": [
+              {
+                "type": "line",
+                "dataset": { "type": "dataView", "id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2" },
+                "x": { "operation": "date_histogram", "field": "@timestamp" },
+                "y": [
+                  { "operation": "average", "field": "gamepulse.storage.read_mbps", "label": "Read MB/s" },
+                  { "operation": "average", "field": "gamepulse.storage.write_mbps", "label": "Write MB/s" }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "lens",
+        "uid": "iops-timeline",
+        "grid": { "x": 0, "y": 22, "w": 24, "h": 12 },
+        "config": {
+          "attributes": {
+            "title": "Read & Write IOPS",
+            "type": "xy",
+            "axis": {
+              "x": { "title": { "visible": false } },
+              "left": { "title": { "visible": false } }
+            },
+            "layers": [
+              {
+                "type": "area",
+                "dataset": { "type": "dataView", "id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2" },
+                "x": { "operation": "date_histogram", "field": "@timestamp" },
+                "y": [
+                  { "operation": "average", "field": "gamepulse.storage.read_iops", "label": "Read IOPS" },
+                  { "operation": "average", "field": "gamepulse.storage.write_iops", "label": "Write IOPS" }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "lens",
+        "uid": "iowait-queue-timeline",
+        "grid": { "x": 24, "y": 22, "w": 24, "h": 12 },
+        "config": {
+          "attributes": {
+            "title": "I/O Wait % & Queue Depth",
+            "type": "xy",
+            "axis": {
+              "x": { "title": { "visible": false } },
+              "left": { "title": { "visible": false } }
+            },
+            "layers": [
+              {
+                "type": "line",
+                "dataset": { "type": "dataView", "id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2" },
+                "x": { "operation": "date_histogram", "field": "@timestamp" },
+                "y": [
+                  { "operation": "average", "field": "gamepulse.storage.io_wait_pct", "label": "I/O wait %" },
+                  { "operation": "average", "field": "gamepulse.storage.queue_depth_current", "label": "Queue depth" }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "lens",
+        "uid": "read-latency-timeline",
+        "grid": { "x": 0, "y": 34, "w": 24, "h": 12 },
+        "config": {
+          "attributes": {
+            "title": "Read Latency (avg, p95, p99 \u00b5s)",
+            "type": "xy",
+            "axis": {
+              "x": { "title": { "visible": false } },
+              "left": { "title": { "visible": false } }
+            },
+            "layers": [
+              {
+                "type": "line",
+                "dataset": { "type": "dataView", "id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2" },
+                "x": { "operation": "date_histogram", "field": "@timestamp" },
+                "y": [
+                  { "operation": "average", "field": "gamepulse.storage.io_latency_read_us.avg", "label": "Avg read latency \u00b5s" },
+                  { "operation": "max", "field": "storage.io_latency_read_us.p95", "label": "p95 read latency \u00b5s" },
+                  { "operation": "max", "field": "storage.io_latency_read_us.p99", "label": "p99 read latency \u00b5s" }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "lens",
+        "uid": "write-latency-timeline",
+        "grid": { "x": 24, "y": 34, "w": 24, "h": 12 },
+        "config": {
+          "attributes": {
+            "title": "Write Latency (avg, p95, p99 \u00b5s)",
+            "type": "xy",
+            "axis": {
+              "x": { "title": { "visible": false } },
+              "left": { "title": { "visible": false } }
+            },
+            "layers": [
+              {
+                "type": "line",
+                "dataset": { "type": "dataView", "id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2" },
+                "x": { "operation": "date_histogram", "field": "@timestamp" },
+                "y": [
+                  { "operation": "average", "field": "gamepulse.storage.io_latency_write_us.avg", "label": "Avg write latency \u00b5s" },
+                  { "operation": "max", "field": "storage.io_latency_write_us.p95", "label": "p95 write latency \u00b5s" },
+                  { "operation": "max", "field": "storage.io_latency_write_us.p99", "label": "p99 write latency \u00b5s" }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "lens",
+        "uid": "game-process-io",
+        "grid": { "x": 0, "y": 46, "w": 24, "h": 12 },
+        "config": {
+          "attributes": {
+            "title": "Game Process I/O (MB)",
+            "type": "xy",
+            "axis": {
+              "x": { "title": { "visible": false } },
+              "left": { "title": { "visible": false } }
+            },
+            "layers": [
+              {
+                "type": "area",
+                "dataset": { "type": "dataView", "id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2" },
+                "x": { "operation": "date_histogram", "field": "@timestamp" },
+                "y": [
+                  { "operation": "average", "field": "storage.game_process_read_mb", "label": "Game read (MB)" },
+                  { "operation": "average", "field": "storage.game_process_write_mb", "label": "Game write (MB)" }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "lens",
+        "uid": "drive-temp-timeline",
+        "grid": { "x": 24, "y": 46, "w": 24, "h": 12 },
+        "config": {
+          "attributes": {
+            "title": "Drive Temperature (\u00b0C)",
+            "type": "xy",
+            "axis": {
+              "x": { "title": { "visible": false } },
+              "left": { "title": { "visible": false } }
+            },
+            "layers": [
+              {
+                "type": "line",
+                "dataset": { "type": "dataView", "id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2" },
+                "x": { "operation": "date_histogram", "field": "@timestamp" },
+                "y": [
+                  { "operation": "average", "field": "storage.drive_temperature_c", "label": "Drive temp \u00b0C" }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}
