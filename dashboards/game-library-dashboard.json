@@ -1,0 +1,197 @@
+{
+  "id": "e7d878d0-e2d6-454b-9a95-d93a4aeb70a8",
+  "kibana_url": "https://gamepulse-af41f9.kb.us-central1.gcp.elastic.cloud/app/dashboards#/view/e7d878d0-e2d6-454b-9a95-d93a4aeb70a8",
+  "created": "2026-04-07",
+  "api_version": "Elastic-Api-Version: 1",
+  "notes": [
+    "Created via Kibana Dashboards API (kibana-dashboards skill).",
+    "All field paths validated via ES|QL before building.",
+    "Panels use dataView ID 18dd83e8-6f88-474f-b434-a4b6c14a04a2 (metrics-gamepulse.* wildcard).",
+    "Frame fields confirmed: avg_1s, low_1pct, low_01pct, frametime_ms, stutter_count all live.",
+    "Session fields confirmed: gamepulse.game.name.keyword, gamepulse.game.steam_app_id, host.os.name.keyword.",
+    "GPU fields confirmed: utilisation_pct, power_w available in gpu stream.",
+    "8 panels: 2 filter controls, avg FPS bar, 1% low FPS bar, FPS timeline by game, GPU util by game, GPU power by game, performance summary table.",
+    "Default time range set to now-30d to capture multiple sessions.",
+    "stutter_count uses MAX (TSDS counter field — never avg/sum)."
+  ],
+  "data": {
+    "title": "GamePulse - Game Library",
+    "description": "Per-game performance summary: FPS, frame time, stutter, session count, and GPU/CPU load broken out by game title",
+    "time_range": { "from": "now-30d", "to": "now" },
+    "panels": [
+      {
+        "type": "options_list_control",
+        "uid": "ctrl-game",
+        "grid": { "x": 0, "y": 0, "w": 16, "h": 4 },
+        "config": {
+          "title": "Game",
+          "data_view_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2",
+          "field_name": "gamepulse.game.name"
+        }
+      },
+      {
+        "type": "options_list_control",
+        "uid": "ctrl-os",
+        "grid": { "x": 16, "y": 0, "w": 16, "h": 4 },
+        "config": {
+          "title": "OS",
+          "data_view_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2",
+          "field_name": "host.os.type"
+        }
+      },
+      {
+        "type": "lens",
+        "uid": "game-fps-bar",
+        "grid": { "x": 0, "y": 4, "w": 24, "h": 14 },
+        "config": {
+          "attributes": {
+            "title": "Avg FPS by Game",
+            "type": "xy",
+            "axis": {
+              "x": { "title": { "visible": false } },
+              "left": { "title": { "visible": false } }
+            },
+            "layers": [
+              {
+                "type": "bar_horizontal",
+                "dataset": { "type": "dataView", "id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2" },
+                "x": { "operation": "terms", "fields": ["gamepulse.game.name.keyword"] },
+                "y": [
+                  { "operation": "average", "field": "gamepulse.fps.avg_1s", "label": "Avg FPS" }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "lens",
+        "uid": "game-fps-lows-bar",
+        "grid": { "x": 24, "y": 4, "w": 24, "h": 14 },
+        "config": {
+          "attributes": {
+            "title": "1% Low FPS by Game",
+            "type": "xy",
+            "axis": {
+              "x": { "title": { "visible": false } },
+              "left": { "title": { "visible": false } }
+            },
+            "layers": [
+              {
+                "type": "bar_horizontal",
+                "dataset": { "type": "dataView", "id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2" },
+                "x": { "operation": "terms", "fields": ["gamepulse.game.name.keyword"] },
+                "y": [
+                  { "operation": "average", "field": "gamepulse.fps.low_1pct", "label": "1% low FPS" }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "lens",
+        "uid": "fps-timeline-by-game",
+        "grid": { "x": 0, "y": 18, "w": 48, "h": 12 },
+        "config": {
+          "attributes": {
+            "title": "FPS Over Time by Game",
+            "type": "xy",
+            "axis": {
+              "x": { "title": { "visible": false } },
+              "left": { "title": { "visible": false } }
+            },
+            "layers": [
+              {
+                "type": "line",
+                "dataset": { "type": "dataView", "id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2" },
+                "x": { "operation": "date_histogram", "field": "@timestamp" },
+                "y": [
+                  { "operation": "average", "field": "gamepulse.fps.avg_1s", "label": "Avg FPS" }
+                ],
+                "breakdown_by": { "operation": "terms", "fields": ["gamepulse.game.name.keyword"] }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "lens",
+        "uid": "gpu-util-by-game",
+        "grid": { "x": 0, "y": 30, "w": 24, "h": 12 },
+        "config": {
+          "attributes": {
+            "title": "Avg GPU Utilisation % by Game",
+            "type": "xy",
+            "axis": {
+              "x": { "title": { "visible": false } },
+              "left": { "title": { "visible": false } }
+            },
+            "layers": [
+              {
+                "type": "line",
+                "dataset": { "type": "dataView", "id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2" },
+                "x": { "operation": "date_histogram", "field": "@timestamp" },
+                "y": [
+                  { "operation": "average", "field": "gamepulse.gpu.utilisation_pct", "label": "GPU util %" }
+                ],
+                "breakdown_by": { "operation": "terms", "fields": ["gamepulse.game.name.keyword"] }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "lens",
+        "uid": "gpu-power-by-game",
+        "grid": { "x": 24, "y": 30, "w": 24, "h": 12 },
+        "config": {
+          "attributes": {
+            "title": "Avg GPU Power (W) by Game",
+            "type": "xy",
+            "axis": {
+              "x": { "title": { "visible": false } },
+              "left": { "title": { "visible": false } }
+            },
+            "layers": [
+              {
+                "type": "line",
+                "dataset": { "type": "dataView", "id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2" },
+                "x": { "operation": "date_histogram", "field": "@timestamp" },
+                "y": [
+                  { "operation": "average", "field": "gamepulse.gpu.power_w", "label": "GPU power W" }
+                ],
+                "breakdown_by": { "operation": "terms", "fields": ["gamepulse.game.name.keyword"] }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "lens",
+        "uid": "game-summary-table",
+        "grid": { "x": 0, "y": 42, "w": 48, "h": 14 },
+        "config": {
+          "attributes": {
+            "title": "Game Performance Summary",
+            "type": "data_table",
+            "dataset": { "type": "dataView", "id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2" },
+            "metrics": [
+              { "operation": "average", "field": "gamepulse.fps.avg_1s", "label": "Avg FPS" },
+              { "operation": "average", "field": "gamepulse.fps.low_1pct", "label": "1% Low FPS" },
+              { "operation": "average", "field": "gamepulse.fps.low_01pct", "label": "0.1% Low FPS" },
+              { "operation": "average", "field": "gamepulse.fps.frametime_ms", "label": "Avg Frame Time (ms)" },
+              { "operation": "max", "field": "gamepulse.fps.stutter_count", "label": "Max Stutter Count" },
+              { "operation": "average", "field": "gamepulse.gpu.utilisation_pct", "label": "Avg GPU Util %" },
+              { "operation": "average", "field": "gamepulse.gpu.power_w", "label": "Avg GPU Power W" },
+              { "operation": "unique_count", "field": "gamepulse.session.id.keyword", "label": "Sessions" }
+            ],
+            "rows": [
+              { "operation": "terms", "fields": ["gamepulse.game.name.keyword"] }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

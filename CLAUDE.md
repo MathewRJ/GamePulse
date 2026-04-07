@@ -17,24 +17,25 @@ and package maintainers who need real-world performance data.
 - **Ingest pipelines deployed**: 11 pipelines live on Elastic Cloud Serverless (`metrics-gamepulse.<dataset>-default`). All index templates wired with `default_pipeline`. Pipeline simulation verified. 6 stale legacy pipelines deleted.
 - **Live gameplay test passed**: Full session verified end-to-end (Cyberpunk 2077, Proton, MangoHud, all 8 streams, game detection working).
 - **Scope document**: `docs/GamePulse-Scope-v3_2.md`
-- **Kibana dashboards** (Phase 3, partial):
+- **Kibana dashboards** (Phase 3, complete):
   - `dashboards/gamepulse-dashboard.ndjson` — baseline dashboard (UI-exported)
   - `dashboards/config-comparison-dashboard.json` — Configuration Comparison, 16 panels (ID: 21b663d6-de42-46c6-aeaf-e6c48e46ecec)
   - `dashboards/session-deep-dive-dashboard.json` — Session Deep-Dive, 17 panels (ID: b68f1178-6923-4e92-819b-33eb595197a9)
+  - `dashboards/storage-io-dashboard.json` — Storage & I/O Analysis, 16 panels (ID: f8a9d960-130e-43db-8554-6033f45e8a9c)
+  - `dashboards/system-health-dashboard.json` — System Health, 15 panels (ID: 1b2a1b70-a315-4ed4-91c4-11aa0abe5e1d)
+  - `dashboards/game-library-dashboard.json` — Game Library, 8 panels (ID: e7d878d0-e2d6-454b-9a95-d93a4aeb70a8)
 
 ### What is not yet started
 
 - **Rust production agent** (Phase 4): `src/`, `Cargo.toml`, `gamepulse-ebpf/` do not exist. The Python collector is the only working implementation.
 - **eBPF daemon** (Phase 2 per v3.2): Not started.
-- **Remaining Phase 3 dashboards**: Storage & I/O Analysis, System Health, Game Library, Scheduler Analysis (Phase 2 data).
+- **Scheduler Analysis dashboard**: Requires Phase 2 eBPF data stream.
 
 ### Pending work (in priority order)
 
 1. Fix package bloat — `collector/.venv` in zip ≈ 12 MB, needs exclusion.
-2. Add `driver_version` field to session data stream fields.yml and run `elastic-package check`.
-3. Phase 3: Remaining dashboards — Storage & I/O Analysis, System Health, Game Library.
-4. Phase 2: eBPF daemon design (Rust/Aya).
-5. Phase 4: Rust production agent replacing Python collector.
+2. Phase 2: eBPF daemon design (Rust/Aya).
+3. Phase 4: Rust production agent replacing Python collector.
 
 ## Stack
 
@@ -61,9 +62,9 @@ with proper NDJSON saved objects). Until then, all dashboard JSON files live in
 | Session Deep-Dive | ✅ built | `dashboards/session-deep-dive-dashboard.json` (ID: b68f1178-6923-4e92-819b-33eb595197a9) |
 | Configuration Comparison | ✅ built | `dashboards/config-comparison-dashboard.json` (ID: 21b663d6-de42-46c6-aeaf-e6c48e46ecec) |
 | Baseline (UI export) | ✅ reference | `dashboards/gamepulse-dashboard.ndjson` |
-| Storage & I/O Analysis | planned | — |
-| System Health | planned | — |
-| Game Library | planned | — |
+| Storage & I/O Analysis | ✅ built | `dashboards/storage-io-dashboard.json` (ID: f8a9d960-130e-43db-8554-6033f45e8a9c) |
+| System Health | ✅ built | `dashboards/system-health-dashboard.json` (ID: 1b2a1b70-a315-4ed4-91c4-11aa0abe5e1d) |
+| Game Library | ✅ built | `dashboards/game-library-dashboard.json` (ID: e7d878d0-e2d6-454b-9a95-d93a4aeb70a8) |
 | Scheduler Analysis | Phase 2 data required | needs eBPF stream |
 
 **Session Deep-Dive** (`dashboards/session-deep-dive-dashboard.json`):
@@ -76,23 +77,25 @@ session config table (Game, OS, Kernel, GPU, driver, Proton).
 **Configuration Comparison** (`dashboards/config-comparison-dashboard.json`):
 16 panels — 4 filter controls, 3 metrics, 9 charts, 1 session config table.
 
-**Remaining planned dashboards:**
+**Storage & I/O Analysis** (`dashboards/storage-io-dashboard.json`):
+16 panels — 3 filter controls (Game/Session/OS), 6 metric tiles (read/write MB/s,
+read/write IOPS, I/O wait %, drive temp), throughput timeline, IOPS area chart,
+I/O wait + queue depth, read/write latency (avg/p95/p99), game process I/O, drive temp.
 
-1. **Storage & I/O Analysis**:
-   - Per-drive-type performance (NVMe vs SD card vs SATA)
-   - File access pattern / I/O stall correlation with frame time
-   - Filesystem comparison (btrfs vs ext4)
-   - Target data stream: storage
+**System Health** (`dashboards/system-health-dashboard.json`):
+15 panels — 3 filter controls, 6 metric tiles (GPU temp/hotspot, CPU temp, GPU
+power/clock, CPU clock), GPU thermals timeline (die/hotspot/VRAM), CPU thermals
++ util, GPU power+clock, CPU clock+util, GPU VRAM+util, system TDP.
+Note: `gamepulse.power.tdp_current_w` is the only power stream field; GPU power
+comes from `gamepulse.gpu.power_w` in the gpu stream.
 
-2. **System Health**:
-   - Thermal headroom, power draw, clock speed correlation
-   - Target data streams: gpu, cpu, power
+**Game Library** (`dashboards/game-library-dashboard.json`):
+8 panels — 2 filter controls (Game/OS), avg FPS by game (bar), 1% low FPS by
+game (bar), FPS over time broken out by game, GPU util and GPU power timelines
+by game, and a performance summary data table (avg/1%/0.1% FPS, frame time,
+max stutter, GPU util/power, session count per game). Default range: now-30d.
 
-3. **Game Library**:
-   - Game × metrics heatmap with trend sparklines
-   - Target data streams: frame, session
-
-4. **Scheduler Analysis** (Phase 2 data required):
+**Scheduler Analysis** (Phase 2 data required):
    - Runqueue latency distribution per thread
    - CPU migration frequency / CCX boundary crossings
    - Comparison: CFS vs SCHED_FIFO for same game
