@@ -8,7 +8,7 @@ It collects, ships, and visualises real-world gaming metrics to Elasticsearch.
 The target audience is game developers, journalists, Proton/Wine/Mesa maintainers,
 and package maintainers who need real-world performance data.
 
-## Current state (as of last session)
+## Current state (as of 2026-04-07)
 
 ### What is built and working
 
@@ -17,21 +17,22 @@ and package maintainers who need real-world performance data.
 - **Ingest pipelines deployed**: 11 pipelines live on Elastic Cloud Serverless (`metrics-gamepulse.<dataset>-default`). All index templates wired with `default_pipeline`. Pipeline simulation verified. 6 stale legacy pipelines deleted.
 - **Live gameplay test passed**: Full session verified end-to-end (Cyberpunk 2077, Proton, MangoHud, all 8 streams, game detection working).
 - **Scope document**: `docs/GamePulse-Scope-v3_2.md`
+- **Kibana dashboards** (Phase 3, partial):
+  - `kibana/gamepulse-dashboard.ndjson` — baseline dashboard (UI-exported)
+  - `kibana/config-comparison-dashboard.json` — Configuration Comparison, 16 panels (ID: 21b663d6-de42-46c6-aeaf-e6c48e46ecec)
+  - `kibana/session-deep-dive-dashboard.json` — Session Deep-Dive, 17 panels (ID: b68f1178-6923-4e92-819b-33eb595197a9)
 
 ### What is not yet started
 
 - **Rust production agent** (Phase 4): `src/`, `Cargo.toml`, `gamepulse-ebpf/` do not exist. The Python collector is the only working implementation.
 - **eBPF daemon** (Phase 2 per v3.2): Not started.
-- **Kibana dashboards**: Baseline built (`kibana/gamepulse-dashboard.ndjson`). Phase 3 dashboards not yet built.
+- **Remaining Phase 3 dashboards**: Storage & I/O Analysis, System Health, Game Library, Scheduler Analysis (Phase 2 data).
 
 ### Pending work (in priority order)
 
 1. Fix package bloat — `collector/.venv` in zip ≈ 12 MB, needs exclusion.
-2. Pipeline/system tests — need local ES or Docker environment.
-3. Phase 3: Kibana dashboards — two built:
-   - `kibana/gamepulse-dashboard.ndjson` (baseline, UI-exported)
-   - `kibana/config-comparison-dashboard.json` (API-built, ID: 21b663d6-de42-46c6-aeaf-e6c48e46ecec)
-   Next: expand Session Deep-Dive dashboard (frame time percentiles, stutter annotations).
+2. Add `driver_version` field to session data stream fields.yml and run `elastic-package check`.
+3. Phase 3: Remaining dashboards — Storage & I/O Analysis, System Health, Game Library.
 4. Phase 2: eBPF daemon design (Rust/Aya).
 5. Phase 4: Rust production agent replacing Python collector.
 
@@ -59,42 +60,47 @@ This is a baseline only. The full dashboard scope per
 `docs/GamePulse-Scope-v3_2.md` Phase 3 is significantly larger.
 
 ### Planned dashboards (Phase 3)
-These must be built in Kibana UI and exported — never generated
-programmatically (see workflow rules below).
 
-1. **Session Deep-Dive** — exists as baseline, needs expansion:
-   - Add frame time percentile overlays (p95, p99)
-   - Add stutter event annotations
-   - Add environment badge bar (game, OS, kernel, GPU driver, Proton)
-   - Add GPU fence wait overlay (Phase 2 data, placeholder for now)
-   - Target data streams: frame, gpu, cpu, memory, storage, session
+| Dashboard | Status | Location |
+|-----------|--------|----------|
+| Session Deep-Dive | ✅ built | `kibana/session-deep-dive-dashboard.json` (ID: b68f1178-6923-4e92-819b-33eb595197a9) |
+| Configuration Comparison | ✅ built | `kibana/config-comparison-dashboard.json` (ID: 21b663d6-de42-46c6-aeaf-e6c48e46ecec) |
+| Storage & I/O Analysis | planned | — |
+| System Health | planned | — |
+| Game Library | planned | — |
+| Scheduler Analysis | Phase 2 data required | needs eBPF stream |
 
-2. **Scheduler Analysis** (Phase 2 data required):
-   - Runqueue latency distribution per thread
-   - CPU migration frequency / CCX boundary crossings
-   - Comparison: CFS vs SCHED_FIFO for same game
-   - IRQ latency overlay
-   - Target data stream: ebpf
+**Session Deep-Dive** (`kibana/session-deep-dive-dashboard.json`):
+17 panels — 3 filter controls (Game/Session/OS), 6 metric tiles (Median FPS,
+1% Low, 0.1% Low, Median frame time, Peak stutter/tick, Avg GPU temp), FPS
+timeline (avg + 1%/0.1% lows), frame time with p95/p99 overlays, stutter
+events area chart, GPU util/temp + power/VRAM, CPU util/temp, memory, and
+session config table (Game, OS, Kernel, GPU, driver, Proton).
 
-3. **Storage & I/O Analysis**:
+**Configuration Comparison** (`kibana/config-comparison-dashboard.json`):
+16 panels — 4 filter controls, 3 metrics, 9 charts, 1 session config table.
+
+**Remaining planned dashboards:**
+
+1. **Storage & I/O Analysis**:
    - Per-drive-type performance (NVMe vs SD card vs SATA)
    - File access pattern / I/O stall correlation with frame time
    - Filesystem comparison (btrfs vs ext4)
    - Target data stream: storage
 
-4. **Configuration Comparison**:
-   - Filter by: game, GPU, driver, Proton, kernel, filesystem, scheduler policy
-   - Side-by-side FPS distributions as histograms
-   - Scheduler behaviour diff
-   - Target data streams: frame, session, ebpf
-
-5. **System Health**:
+2. **System Health**:
    - Thermal headroom, power draw, clock speed correlation
    - Target data streams: gpu, cpu, power
 
-6. **Game Library**:
+3. **Game Library**:
    - Game × metrics heatmap with trend sparklines
    - Target data streams: frame, session
+
+4. **Scheduler Analysis** (Phase 2 data required):
+   - Runqueue latency distribution per thread
+   - CPU migration frequency / CCX boundary crossings
+   - Comparison: CFS vs SCHED_FIFO for same game
+   - Target data stream: ebpf
 
 ### Dashboard workflow
 
