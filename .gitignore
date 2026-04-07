@@ -20,3 +20,9 @@ build/
 
 # Claude Code local settings (not for commit)
 .claude/settings.local.json
+
+# Claude Code skill symlinks — directory symlinks that break elastic-package build.
+# Claude Code agent skills — dev tooling, not part of the integration package.
+# Recreate with: npx skills add elastic/agent-skills -a claude-code
+.claude/skills/
+.agents/

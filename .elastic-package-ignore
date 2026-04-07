@@ -1,0 +1,18 @@
+# Exclude Python virtual environment from package build
+collector/.venv
+collector/.venv/
+collector/.venv/**
+
+# Exclude Claude Code agent harness and skills (directory symlinks cause build failures)
+.claude
+.claude/
+.claude/**
+.agents
+.agents/
+.agents/**
+
+# Exclude development-only files
+tools
+scripts
+Makefile
+CONTRIBUTING.md
