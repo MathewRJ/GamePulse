@@ -18,9 +18,9 @@ and package maintainers who need real-world performance data.
 - **Live gameplay test passed**: Full session verified end-to-end (Cyberpunk 2077, Proton, MangoHud, all 8 streams, game detection working).
 - **Scope document**: `docs/GamePulse-Scope-v3_2.md`
 - **Kibana dashboards** (Phase 3, partial):
-  - `kibana/gamepulse-dashboard.ndjson` — baseline dashboard (UI-exported)
-  - `kibana/config-comparison-dashboard.json` — Configuration Comparison, 16 panels (ID: 21b663d6-de42-46c6-aeaf-e6c48e46ecec)
-  - `kibana/session-deep-dive-dashboard.json` — Session Deep-Dive, 17 panels (ID: b68f1178-6923-4e92-819b-33eb595197a9)
+  - `dashboards/gamepulse-dashboard.ndjson` — baseline dashboard (UI-exported)
+  - `dashboards/config-comparison-dashboard.json` — Configuration Comparison, 16 panels (ID: 21b663d6-de42-46c6-aeaf-e6c48e46ecec)
+  - `dashboards/session-deep-dive-dashboard.json` — Session Deep-Dive, 17 panels (ID: b68f1178-6923-4e92-819b-33eb595197a9)
 
 ### What is not yet started
 
@@ -49,35 +49,31 @@ and package maintainers who need real-world performance data.
 ## Kibana dashboards
 
 ### Current state
-The working baseline dashboard is `kibana/gamepulse-dashboard.ndjson`
-("GamePulse - Manual Creation v2"). It covers the surface metrics
-available from Phase 1 data: FPS timeline, frame time distribution,
-GPU utilisation/temp/VRAM, CPU utilisation/temp, memory, storage I/O,
-plus four metric tiles (Median FPS, Max GPU Temp, Max CPU Temp, Unique
-Sessions) and three filter controls (Game, Session ID, OS).
-
-This is a baseline only. The full dashboard scope per
-`docs/GamePulse-Scope-v3_2.md` Phase 3 is significantly larger.
+Dashboard files live in `dashboards/` (not `kibana/`). The `kibana/` directory
+is reserved for the Phase 6 integration package format (`kibana/dashboard/`
+with proper NDJSON saved objects). Until then, all dashboard JSON files live in
+`dashboards/`.
 
 ### Planned dashboards (Phase 3)
 
 | Dashboard | Status | Location |
 |-----------|--------|----------|
-| Session Deep-Dive | ✅ built | `kibana/session-deep-dive-dashboard.json` (ID: b68f1178-6923-4e92-819b-33eb595197a9) |
-| Configuration Comparison | ✅ built | `kibana/config-comparison-dashboard.json` (ID: 21b663d6-de42-46c6-aeaf-e6c48e46ecec) |
+| Session Deep-Dive | ✅ built | `dashboards/session-deep-dive-dashboard.json` (ID: b68f1178-6923-4e92-819b-33eb595197a9) |
+| Configuration Comparison | ✅ built | `dashboards/config-comparison-dashboard.json` (ID: 21b663d6-de42-46c6-aeaf-e6c48e46ecec) |
+| Baseline (UI export) | ✅ reference | `dashboards/gamepulse-dashboard.ndjson` |
 | Storage & I/O Analysis | planned | — |
 | System Health | planned | — |
 | Game Library | planned | — |
 | Scheduler Analysis | Phase 2 data required | needs eBPF stream |
 
-**Session Deep-Dive** (`kibana/session-deep-dive-dashboard.json`):
+**Session Deep-Dive** (`dashboards/session-deep-dive-dashboard.json`):
 17 panels — 3 filter controls (Game/Session/OS), 6 metric tiles (Median FPS,
 1% Low, 0.1% Low, Median frame time, Peak stutter/tick, Avg GPU temp), FPS
 timeline (avg + 1%/0.1% lows), frame time with p95/p99 overlays, stutter
 events area chart, GPU util/temp + power/VRAM, CPU util/temp, memory, and
 session config table (Game, OS, Kernel, GPU, driver, Proton).
 
-**Configuration Comparison** (`kibana/config-comparison-dashboard.json`):
+**Configuration Comparison** (`dashboards/config-comparison-dashboard.json`):
 16 panels — 4 filter controls, 3 metrics, 9 charts, 1 session config table.
 
 **Remaining planned dashboards:**
@@ -286,9 +282,20 @@ claude.ai must never directly edit `CLAUDE.md`.
 
 ### Kibana dashboards
 
-- `kibana/gamepulse-dashboard.ndjson` — working dashboard (MacBook-built, import via Kibana UI)
-- `dashboards/gamepulse-session-performance.ndjson` — session performance dashboard (local build)
+- `dashboards/` — all dashboard files live here (not `kibana/`):
+  - `dashboards/gamepulse-dashboard.ndjson` — baseline (MacBook-built, import via Kibana UI)
+  - `dashboards/config-comparison-dashboard.json` — API-built, live ID: 21b663d6-de42-46c6-aeaf-e6c48e46ecec
+  - `dashboards/session-deep-dive-dashboard.json` — API-built, live ID: b68f1178-6923-4e92-819b-33eb595197a9
 - `docs/kibana-lens-ndjson-reference.md` — structural reference for Lens NDJSON and Serverless constraints
+
+### Elastic Agent skills (Claude Code)
+Skills are in `.agents/skills/` and `.claude/skills/` (symlinks). These are
+excluded from git — recreate on a fresh clone with:
+```
+npx skills add elastic/agent-skills -a claude-code
+```
+Note: `.claude/skills/` directory symlinks and `.agents/` are in `.gitignore`
+because `elastic-package build` (v0.122.0) cannot handle directory symlinks.
 
 ### Rust agent (target, not yet created)
 
