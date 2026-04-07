@@ -31,11 +31,21 @@ and package maintainers who need real-world performance data.
 - **eBPF daemon** (Phase 2 per v3.2): Not started.
 - **Scheduler Analysis dashboard**: Requires Phase 2 eBPF data stream.
 
+### Package build
+
+Use `bash scripts/build-package.sh` instead of `elastic-package build` directly.
+This stashes `.agents/` and `collector/.venv/` to `/tmp` before building (restores
+on exit). Produces a lean 345KB zip vs 18MB when built raw.
+
+`elastic-package check` and `elastic-package test static` can still be run directly.
+
+Background: `elastic-package-ignore` v0.122.0 only applies during lint, not the build
+copy step. Long-term fix is moving the integration to a `package/` subdirectory (Phase 6).
+
 ### Pending work (in priority order)
 
-1. Fix package bloat — `collector/.venv` in zip ≈ 12 MB, needs exclusion.
-2. Phase 2: eBPF daemon design (Rust/Aya).
-3. Phase 4: Rust production agent replacing Python collector.
+1. Phase 2: eBPF daemon design (Rust/Aya).
+2. Phase 4: Rust production agent replacing Python collector.
 
 ## Stack
 
