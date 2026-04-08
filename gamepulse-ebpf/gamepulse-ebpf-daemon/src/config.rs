@@ -100,5 +100,15 @@ impl Config {
 }
 
 fn dirs_or_home() -> Option<PathBuf> {
+    // When running via sudo, HOME is /root but the config lives in the
+    // invoking user's home. Prefer SUDO_USER → /home/<user> over HOME.
+    if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        if !sudo_user.is_empty() {
+            let path = PathBuf::from("/home").join(&sudo_user);
+            if path.exists() {
+                return Some(path);
+            }
+        }
+    }
     std::env::var("HOME").ok().map(PathBuf::from)
 }
