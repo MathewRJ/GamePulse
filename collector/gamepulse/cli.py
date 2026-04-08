@@ -146,9 +146,11 @@ def run(cfg: config_mod.Config, debug: bool, once: bool) -> None:
 
     session_start = time.monotonic()
     fps_samples: list[float] = []
+    frametime_samples: list[float] = []
     stutter_total: int = 0
     peak_gpu_temp: float | None = None
     peak_cpu_temp: float | None = None
+    peak_gpu_power: float | None = None
     bottleneck_counts: dict[str, int] = {"gpu": 0, "cpu": 0, "balanced": 0}
 
     try:
@@ -245,6 +247,9 @@ def run(cfg: config_mod.Config, debug: bool, once: bool) -> None:
                     t = gpu_d.get("temperature_c")
                     if t is not None:
                         peak_gpu_temp = t if peak_gpu_temp is None else max(peak_gpu_temp, t)
+                    p = gpu_d.get("power_w")
+                    if p is not None:
+                        peak_gpu_power = p if peak_gpu_power is None else max(peak_gpu_power, p)
                 if cpu_d := gp.get("cpu"):
                     tick_cpu_util = cpu_d.get("total_utilisation_pct")
                     t = cpu_d.get("temperature_c")
@@ -253,6 +258,8 @@ def run(cfg: config_mod.Config, debug: bool, once: bool) -> None:
                 if fps_d := gp.get("fps"):
                     fps_samples.append(fps_d["avg_1s"])
                     stutter_total += fps_d.get("stutter_count", 0)
+                    if ft := fps_d.get("frametime_ms"):
+                        frametime_samples.append(ft)
 
             if tick_gpu_util is not None and tick_cpu_util is not None:
                 tick_bn = (
@@ -299,10 +306,18 @@ def run(cfg: config_mod.Config, debug: bool, once: bool) -> None:
                 summary["low_1pct_fps"] = int(
                     _sorted[max(0, int(len(_sorted) * 0.01) - 1)]
                 )
+                summary["total_frames"] = round(sum(fps_samples) * interval)
+            if frametime_samples:
+                _ft_sorted = sorted(frametime_samples)
+                summary["p99_frametime_ms"] = round(
+                    _ft_sorted[max(0, int(len(_ft_sorted) * 0.99) - 1)], 2
+                )
             if peak_gpu_temp is not None:
                 summary["peak_gpu_temp_c"] = peak_gpu_temp
             if peak_cpu_temp is not None:
                 summary["peak_cpu_temp_c"] = peak_cpu_temp
+            if peak_gpu_power is not None:
+                summary["peak_gpu_power_w"] = peak_gpu_power
             if any(bottleneck_counts.values()):
                 summary["bottleneck_dominant"] = max(
                     bottleneck_counts, key=lambda k: bottleneck_counts[k]

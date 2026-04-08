@@ -261,3 +261,16 @@
         - name: bottleneck_dominant
           type: keyword
           description: "Most frequent bottleneck classification during the session"
+        - name: p99_frametime_ms
+          type: float
+          metric_type: gauge
+          unit: ms
+          description: "99th-percentile frame time during the session (approximated from sampled data)"
+        - name: peak_gpu_power_w
+          type: float
+          metric_type: gauge
+          description: "Peak GPU power draw during the session in watts"
+        - name: total_frames
+          type: integer
+          metric_type: gauge
+          description: "Approximate total frames rendered during the session"

@@ -8,7 +8,7 @@ It collects, ships, and visualises real-world gaming metrics to Elasticsearch.
 The target audience is game developers, journalists, Proton/Wine/Mesa maintainers,
 and package maintainers who need real-world performance data.
 
-## Current state (as of 2026-04-07)
+## Current state (as of 2026-04-08)
 
 ### What is built and working
 
@@ -17,6 +17,8 @@ and package maintainers who need real-world performance data.
 - **Ingest pipelines deployed**: 11 pipelines live on Elastic Cloud Serverless (`metrics-gamepulse.<dataset>-default`). All index templates wired with `default_pipeline`. Pipeline simulation verified. 6 stale legacy pipelines deleted.
 - **Live gameplay test passed**: Full session verified end-to-end (Cyberpunk 2077, Proton, MangoHud, all 8 streams, game detection working).
 - **Scope document**: `docs/GamePulse-Scope-v3_2.md`
+- **Session summary document complete**: `cli.py` finally block ships a session-end doc to the session data stream with `ended`, `duration_s`, `avg_fps`, `low_1pct_fps`, `p99_frametime_ms`, `peak_gpu_temp_c`, `peak_cpu_temp_c`, `peak_gpu_power_w`, `total_frames`, `stutter_count`, `bottleneck_dominant`. New fields added to `data_stream/session/fields/fields.yml`.
+- **GPU driver version in session stream**: `gamepulse.hardware.gpu.driver_version` wired through `enricher/host.py` (AMD via vulkaninfo, NVIDIA via nvidia-smi) and defined in `data_stream/session/fields/fields.yml`.
 - **Kibana dashboards** (Phase 3, complete):
   - `dashboards/gamepulse-dashboard.ndjson` — baseline dashboard (UI-exported)
   - `dashboards/config-comparison-dashboard.json` — Configuration Comparison, 16 panels (ID: 21b663d6-de42-46c6-aeaf-e6c48e46ecec)
