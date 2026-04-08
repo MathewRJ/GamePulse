@@ -5,12 +5,34 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
-## Session: 2026-04-08 (end-to-end test + session.json path fix)
+## Session: 2026-04-08 (HANDOFF.md + code red + end-to-end test + path fix)
 
 ### Context coming in
-Sprint 1 complete. session.json handoff just wired. First real end-to-end test run.
+Sprint 1 complete. session.json handoff just wired (collector writes, daemon watches).
+First real end-to-end test run. Also: user requested persistent session continuity docs
+and an emergency git save mechanism triggered by typing "code red" in any message.
 
-### What happened
+### What was built this session
+
+#### HANDOFF.md system (this file)
+- `docs/HANDOFF.md` created — detailed session log, newest entry at top
+- Each code red (or session end) prepends a new entry: decisions, dead ends, commits, next steps
+- Distinct from memory: HANDOFF.md is narrative/detailed; memory is compressed facts
+- Committed at `2eb2175`
+
+#### Code red emergency save hook (updated)
+Updated `.claude/hooks/code-red-save.sh` to:
+1. `git add -A && git commit --allow-empty && git push` immediately
+2. Inject `additionalContext` instructing Claude to:
+   - Update `docs/HANDOFF.md` (prepend new session entry)
+   - Update memory `project_state.md`
+   - `git add + commit + push` those files
+- Hook registered in `.claude/settings.local.json` as UserPromptSubmit
+
+#### Memory compacted
+`project_state.md` trimmed from 169 → ~110 lines. Removed redundancy now covered
+by HANDOFF.md. Rule going forward: update memory after each logical task, not just
+milestones. HANDOFF.md carries the detailed narrative.
 
 #### End-to-end test: partial success
 Collector ran cleanly (Cyberpunk 2077, session `04f65f95`, 294s, 88 ticks, all
