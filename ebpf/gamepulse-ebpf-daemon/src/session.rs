@@ -128,8 +128,12 @@ pub fn spawn_watcher(
         let mut s = state.lock().unwrap();
         *s = initial_state.clone();
     }
-    // Ignore error if no receiver is ready yet
-    let _ = tx.try_send(initial_state);
+    // Only send initial state if a session was already active when the daemon
+    // started. An inactive initial state would trigger a spurious "session ended"
+    // log in the main loop on every startup.
+    if initial_state.active {
+        let _ = tx.try_send(initial_state);
+    }
 
     let state_clone = Arc::clone(&state);
     let watch_dir = session_path

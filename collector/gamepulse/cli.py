@@ -42,10 +42,12 @@ _SHUTDOWN = False
 
 
 def _session_json_path() -> Path:
-    """Canonical path for the session handoff file read by the eBPF daemon."""
-    xdg = os.environ.get("XDG_RUNTIME_DIR")
-    base = Path(xdg) if xdg else Path("/tmp")
-    return base / "gamepulse" / "session.json"
+    """Canonical path for the session handoff file read by the eBPF daemon.
+
+    Always uses /tmp — the daemon runs as root (sudo strips XDG_RUNTIME_DIR)
+    so /tmp is the only path both processes agree on.
+    """
+    return Path("/tmp/gamepulse/session.json")
 
 
 def _write_session_json(session_id: str, game_pid: int, game_name: str,
