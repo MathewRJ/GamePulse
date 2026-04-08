@@ -29,8 +29,8 @@ and package maintainers who need real-world performance data.
 
 ### What is not yet started
 
-- **Rust production agent** (Phase 4): `src/`, `Cargo.toml`, `gamepulse-ebpf/` do not exist. The Python collector is the only working implementation.
-- **eBPF daemon** (Phase 2 per v3.2): Not started.
+- **Rust production agent** (Phase 4): `src/`, `Cargo.toml` do not exist. The Python collector is the only working implementation.
+- **eBPF daemon** (Phase 2 per v3.2): Sprint 1 complete (`ebpf/`). End-to-end test pending.
 - **Scheduler Analysis dashboard**: Requires Phase 2 eBPF data stream.
 
 ### Package build
@@ -325,4 +325,4 @@ because `elastic-package build` (v0.122.0) cannot handle directory symlinks.
 - `src/collectors/` — hardware and system collectors (future)
 - `src/ebpf/` — eBPF probe manager (future)
 - `src/shipper/` — Elasticsearch bulk API shipper (future)
-- `gamepulse-ebpf/` — BPF kernel programs via Aya (future)
+- `ebpf/` — BPF kernel programs via Aya (Phase 2 Sprint 1 complete)

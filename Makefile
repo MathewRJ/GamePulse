@@ -21,12 +21,9 @@ release-static:
 # ─── eBPF ────────────────────────────────────────────────────────────────────
 
 ebpf:
-	cd gamepulse-ebpf && \
-	cargo +nightly build \
-		--target bpfel-unknown-none \
-		-Z build-std=core \
-		--release
-	@echo "eBPF programs built in gamepulse-ebpf/target/bpfel-unknown-none/release/"
+	cd ebpf && \
+	cargo xtask build-ebpf
+	@echo "eBPF programs built in ebpf/target/bpfel-unknown-none/release/"
 
 # ─── Test ────────────────────────────────────────────────────────────────────
 

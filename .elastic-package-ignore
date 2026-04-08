@@ -11,6 +11,10 @@ collector/.venv/**
 .agents/
 .agents/**
 
+# Exclude eBPF Rust workspace
+ebpf
+ebpf/
+
 # Exclude development-only files
 tools
 scripts

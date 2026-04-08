@@ -13,6 +13,7 @@ import argparse
 import datetime
 import json
 import logging
+import os
 import signal
 import sys
 import time
@@ -38,6 +39,33 @@ from gamepulse.shipper.elasticsearch import ElasticsearchShipper
 log = logging.getLogger("gamepulse")
 
 _SHUTDOWN = False
+
+
+def _session_json_path() -> Path:
+    """Canonical path for the session handoff file read by the eBPF daemon."""
+    xdg = os.environ.get("XDG_RUNTIME_DIR")
+    base = Path(xdg) if xdg else Path("/tmp")
+    return base / "gamepulse" / "session.json"
+
+
+def _write_session_json(session_id: str, game_pid: int, game_name: str,
+                        steam_app_id: int | None) -> None:
+    path = _session_json_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    doc = {"session_id": session_id, "game_pid": game_pid, "game_name": game_name}
+    if steam_app_id is not None:
+        doc["steam_app_id"] = steam_app_id
+    path.write_text(json.dumps(doc))
+    log.debug("wrote session.json: %s", path)
+
+
+def _remove_session_json() -> None:
+    path = _session_json_path()
+    try:
+        path.unlink()
+        log.debug("removed session.json")
+    except FileNotFoundError:
+        pass
 
 
 def _handle_sigterm(sig: int, frame: Any) -> None:
@@ -175,6 +203,9 @@ def run(cfg: config_mod.Config, debug: bool, once: bool) -> None:
                     mem.set_game_pid(game.pid)
                     prev_game_pid = game.pid
                     log.info("Detected game: %s (pid %d)", game.name, game.pid)
+                    _write_session_json(
+                        session.id, game.pid, game.name, game.steam_app_id
+                    )
 
                     if shipper:
                         compat: dict[str, Any] = {
@@ -197,6 +228,7 @@ def run(cfg: config_mod.Config, debug: bool, once: bool) -> None:
                     session.game = None
                     mem.set_game_pid(None)
                     prev_game_pid = None
+                    _remove_session_json()
 
             # Build the base fields included in every per-tick document
             base = _merge_docs(
@@ -331,6 +363,7 @@ def run(cfg: config_mod.Config, debug: bool, once: bool) -> None:
             shipper.queue("metrics-gamepulse.session-default", close_doc)
             shipper.flush()
             log.info("Session %s ended after %ds", session.id, duration_s)
+        _remove_session_json()
         if shipper:
             shipper.close()
         log.info("Collector stopped after %d ticks", tick)

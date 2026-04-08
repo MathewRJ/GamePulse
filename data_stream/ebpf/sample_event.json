@@ -1,80 +1,52 @@
 {
-  "@timestamp": "2026-04-04T20:00:01.000Z",
+  "@timestamp": "2026-04-08T20:00:01.000Z",
   "data_stream": {
     "type": "metrics",
     "dataset": "gamepulse.ebpf",
     "namespace": "default"
   },
   "host": {
-    "name": "cachyos-pc"
+    "name": "cachyos-pc",
+    "os": {
+      "kernel": "6.19.11-1-cachyos-deckify"
+    }
   },
   "gamepulse": {
     "session": {
-      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-      "agent_version": "0.1.0"
-    },
-    "game": {
-      "name": "Cyberpunk 2077",
-      "steam_app_id": 1091500
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
     },
     "ebpf": {
-      "scheduler_latency_us": {
-        "values": [50, 100, 200, 500, 1000, 2000],
-        "counts": [1204, 892, 341, 87, 12, 2]
+      "probe": "schedlatency",
+      "runqueue": {
+        "latency_histogram": {
+          "values": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768],
+          "counts": [0, 124, 892, 1204, 841, 341, 87, 22, 8, 3, 1, 0, 0, 0, 0, 0]
+        },
+        "latency_min_us": 1.4,
+        "latency_max_us": 892.1,
+        "latency_avg_us": 18.7,
+        "event_count": 3523
       },
-      "cpu_migrations": 142,
-      "ccx_migrations": 18,
-      "wakeup_latency_us": {
-        "values": [10, 50, 100, 500, 1000],
-        "counts": [8420, 3210, 892, 124, 14]
+      "migration": {
+        "total_count": 142,
+        "ccx_cross_count": 0
       },
-      "io_latency_us": {
-        "values": [50, 100, 250, 500, 1000, 5000],
-        "counts": [2840, 1230, 480, 120, 28, 4]
-      },
-      "file_io_patterns": [
+      "thread_breakdown": [
         {
-          "path": "/home/cachyos/.steam/steam/steamapps/common/Cyberpunk 2077/archive/pc/basegame_3_nightcity.archive",
-          "latency_us": 142,
-          "size_bytes": 524288,
-          "operation": "read"
+          "comm": "Cyberpunk2077",
+          "tid": 12345,
+          "runqueue_avg_us": 16.2,
+          "switch_count": 1892,
+          "migration_count": 48
+        },
+        {
+          "comm": "render_thread",
+          "tid": 12346,
+          "runqueue_avg_us": 22.4,
+          "switch_count": 841,
+          "migration_count": 31
         }
-      ],
-      "gpu_fence_wait_us": {
-        "values": [100, 500, 1000, 5000, 11000],
-        "counts": [8920, 2340, 480, 42, 3]
-      },
-      "gpu_submit_latency_us": {
-        "values": [10, 50, 100, 250],
-        "counts": [15400, 4200, 820, 95]
-      },
-      "page_fault_distribution": {
-        "values": [1, 5, 10, 50, 100],
-        "counts": [28400, 8920, 2340, 480, 42]
-      },
-      "memory_allocation": {
-        "mmap_count": 284,
-        "brk_count": 12,
-        "total_allocated_bytes": 15728640000
-      },
-      "futex_contention": 48,
-      "irq_latency_us": {
-        "values": [1, 5, 10, 50, 100],
-        "counts": [48200, 12400, 3200, 480, 42]
-      },
-      "softirq_latency_us": {
-        "values": [1, 5, 10, 50, 100],
-        "counts": [28400, 8920, 2340, 480, 42]
-      },
-      "syscall_latency_us": {
-        "values": [1, 5, 10, 50, 100, 500],
-        "counts": [124000, 48200, 12400, 2840, 480, 28]
-      },
-      "syscall_count": 184230,
-      "shader_compilation_duration_ms": 0.0,
-      "shader_compilations": 0,
-      "tcp_retransmits": 0,
-      "tcp_rtt_ms": 18.4
+      ]
     }
   }
 }
