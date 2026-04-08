@@ -5,6 +5,52 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-08 (end-to-end test + session.json path fix)
+
+### Context coming in
+Sprint 1 complete. session.json handoff just wired. First real end-to-end test run.
+
+### What happened
+
+#### End-to-end test: partial success
+Collector ran cleanly (Cyberpunk 2077, session `04f65f95`, 294s, 88 ticks, all
+HTTP 200s to ES). eBPF daemon started, loaded probes, but immediately logged:
+`session ended — clearing PID filter` and never picked up the game session.
+
+#### Root cause: XDG_RUNTIME_DIR stripped by sudo
+- Daemon runs as `sudo` → `sudo` strips `XDG_RUNTIME_DIR` from environment
+- Daemon: `XDG_RUNTIME_DIR` not set → falls back to `/tmp/gamepulse/session.json`
+- Collector: `XDG_RUNTIME_DIR=/run/user/1000` → writes to `/run/user/1000/gamepulse/session.json`
+- Two processes watching/writing **different paths** → daemon never got inotify notification
+
+#### Fix (commit `4c652f1`)
+- `collector/gamepulse/cli.py`: `_session_json_path()` now always returns
+  `/tmp/gamepulse/session.json`. Removed XDG_RUNTIME_DIR logic.
+  **Rationale**: session.json is cross-privilege IPC (user↔root). /tmp is the
+  canonical place for that. XDG_RUNTIME_DIR is per-user ephemeral storage, not
+  suitable when the reader runs as root.
+- `ebpf/gamepulse-ebpf-daemon/src/session.rs`: `spawn_watcher` no longer sends
+  the initial inactive state to the channel. Previously this caused "session ended"
+  to log on every startup (confusing, looked like a real session-end event).
+
+### Current state
+- Session.json path is now consistent: both use `/tmp/gamepulse/session.json`
+- Daemon binary rebuilt successfully
+- End-to-end test needs to be re-run to confirm sched docs land in ES
+
+### Next step
+Re-run with both processes:
+```bash
+# Terminal 1
+gamepulse-collector
+
+# Terminal 2 (pre-build done)
+sudo ebpf/target/debug/gamepulse-ebpf
+```
+Expect to see "session started — updating PID filter" in daemon log when game launches.
+
+---
+
 ## Session: 2026-04-08 (Sprint 1 completion + integration wiring)
 
 ### Context coming in
