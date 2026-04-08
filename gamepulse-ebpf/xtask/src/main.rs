@@ -58,25 +58,25 @@ fn build_ebpf(workspace: &Path, release: bool) -> Result<()> {
 
     check_bpf_linker()?;
 
+    // Linker flags and linker selection are in .cargo/config.toml:
+    //   [target.bpfel-unknown-none]
+    //   linker = "bpf-linker"
+    //   rustflags = ["-C", "link-arg=--target=bpf", ...]
     let mut args = vec![
-        "+nightly".to_string(),
-        "build".to_string(),
-        "-p".to_string(),
-        "gamepulse-ebpf-probes".to_string(),
-        "--target".to_string(),
-        "bpfel-unknown-none".to_string(),
-        "-Z".to_string(),
-        "build-std=core".to_string(),
+        "+nightly",
+        "build",
+        "-p", "gamepulse-ebpf-probes",
+        "--target", "bpfel-unknown-none",
+        "-Z", "build-std=core",
     ];
 
     if release {
-        args.push("--release".to_string());
+        args.push("--release");
     }
 
     let status = Command::new("cargo")
         .current_dir(workspace)
         .args(&args)
-        .env("CARGO_ENCODED_RUSTFLAGS", rustflags_for_bpf())
         .status()
         .context("running cargo build for BPF probes")?;
 
@@ -125,19 +125,6 @@ fn build_daemon(workspace: &Path, release: bool) -> Result<()> {
 
     println!("daemon built: {}", out.display());
     Ok(())
-}
-
-fn rustflags_for_bpf() -> String {
-    // Flags passed to rustc when compiling BPF programs:
-    //   --target=bpf     — tell LLVM to emit BPF bytecode
-    //   -O2              — optimise (verifier prefers fewer instructions)
-    //   --btf-vmlinux    — include BTF from running kernel for CO-RE
-    let btf_path = "/sys/kernel/btf/vmlinux";
-    format!(
-        "-C link-arg=--target=bpf\x1f\
-         -C link-arg=-O2\x1f\
-         -C link-arg=--btf-vmlinux={btf_path}"
-    )
 }
 
 fn check_bpf_linker() -> Result<()> {
