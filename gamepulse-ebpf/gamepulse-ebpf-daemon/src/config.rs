@@ -15,7 +15,7 @@ pub struct Config {
 
 #[derive(Debug, Deserialize)]
 pub struct ElasticsearchConfig {
-    pub url: String,
+    pub endpoint: String,
     pub api_key: String,
 }
 

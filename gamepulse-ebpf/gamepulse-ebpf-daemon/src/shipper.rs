@@ -18,14 +18,14 @@ pub struct EsShipper {
 }
 
 impl EsShipper {
-    pub fn new(url: &str, api_key: &str) -> Result<Self> {
+    pub fn new(endpoint: &str, api_key: &str) -> Result<Self> {
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(10))
             .build()
             .context("building HTTP client")?;
 
         // The ES bulk endpoint for the eBPF data stream.
-        let endpoint = format!("{}/metrics-gamepulse.ebpf-default/_bulk", url.trim_end_matches('/'));
+        let endpoint = format!("{}/metrics-gamepulse.ebpf-default/_bulk", endpoint.trim_end_matches('/'));
 
         Ok(EsShipper {
             client,

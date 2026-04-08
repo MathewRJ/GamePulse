@@ -71,7 +71,7 @@ async fn main() -> Result<()> {
     info!("BPF probe path: {}", probe_path.display());
     info!(
         "ES endpoint: {}",
-        config.elasticsearch.url
+        config.elasticsearch.endpoint
     );
 
     // Host metadata (filled once at startup)
@@ -115,7 +115,7 @@ async fn main() -> Result<()> {
 
     // ES shipper
     let mut shipper = EsShipper::new(
-        &config.elasticsearch.url,
+        &config.elasticsearch.endpoint,
         &config.elasticsearch.api_key,
     )
     .context("creating ES shipper")?;
