@@ -215,9 +215,9 @@ confirms fields exist before building Lens panels.
 
 ## Hardware notes (gaming PC)
 
-Hardware-validated details for CachyOS (AMD Ryzen + RX 7900 XTX):
+Hardware-validated details for CachyOS (AMD Ryzen + RX 9070 XT):
 
-- AMD GPU: discrete card is **card1** (not card0); hwmon at hwmon3; scoring heuristic selects it correctly
+- AMD GPU: **RX 9070 XT** (RADV GFX1201), Mesa 26.0.4, driver 26.0.4. Discrete card is **card1** (not card0); scoring heuristic selects it correctly
 - CPU temps: k10temp at hwmon5; temp1=Tctl (primary), temp3=Tccd1
 - RAPL power: permission-denied without root — collector returns None gracefully
 - CPU driver: amd-pstate-epp; cpufreq paths at `/sys/bus/cpu/devices/cpu*/cpufreq/`
