@@ -41,18 +41,22 @@ pub struct EbpfConfig {
 }
 
 fn default_probe_path() -> PathBuf {
-    // Resolve relative to the location of the compiled daemon binary.
-    // After `cargo xtask build-ebpf`, the ELF lands at:
-    //   <workspace>/target/bpfel-unknown-none/release/gamepulse-ebpf-probes
+    // Walk up from the daemon binary to find the workspace root (the directory
+    // that contains gamepulse-ebpf-daemon/ as a child).
     let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("."));
-    // exe is typically <workspace>/target/release/gamepulse-ebpf
-    // Walk up to workspace root and resolve the BPF target path.
     let workspace = exe
         .ancestors()
-        .find(|p| p.join("Cargo.toml").exists())
+        .find(|p| p.join("gamepulse-ebpf-daemon").exists())
         .unwrap_or_else(|| exe.parent().unwrap_or(std::path::Path::new(".")));
+
+    // Match the BPF probe profile to the daemon profile so `cargo xtask build-ebpf`
+    // (debug, default) and `cargo xtask build-ebpf --release` both work without
+    // needing --probe-path.
+    let profile = if cfg!(debug_assertions) { "debug" } else { "release" };
     workspace
-        .join("target/bpfel-unknown-none/release/gamepulse-ebpf-probes")
+        .join("target/bpfel-unknown-none")
+        .join(profile)
+        .join("gamepulse-ebpf-probes")
 }
 
 fn default_enabled_probes() -> Vec<String> {
