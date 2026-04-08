@@ -63,7 +63,8 @@ pub fn load_probes(
                 active.push(probe);
             }
             Err(e) => {
-                warn!("failed to attach probe '{}': {}", probe.name(), e);
+                // {e:#} prints the full anyhow error chain (cause by cause).
+                warn!("failed to attach probe '{}': {e:#}", probe.name());
                 skipped += 1;
             }
         }

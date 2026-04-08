@@ -71,7 +71,7 @@ fn is_game_tid(tid: u32) -> bool {
 //   offset 28: int prio
 //   offset 32: int target_cpu
 // ---------------------------------------------------------------------------
-#[tracepoint]
+#[tracepoint(name = "sched_wakeup", category = "sched")]
 pub fn sched_wakeup(ctx: TracePointContext) -> u32 {
     let tid: i32 = match unsafe { ctx.read_at(24) } {
         Ok(v) => v,
@@ -98,7 +98,7 @@ pub fn sched_wakeup(ctx: TracePointContext) -> u32 {
 //   offset 56: pid_t next_pid
 //   offset 60: int next_prio
 // ---------------------------------------------------------------------------
-#[tracepoint]
+#[tracepoint(name = "sched_switch", category = "sched")]
 pub fn sched_switch(ctx: TracePointContext) -> u32 {
     let next_tid: i32 = match unsafe { ctx.read_at(56) } {
         Ok(v) => v,
@@ -148,7 +148,7 @@ pub fn sched_switch(ctx: TracePointContext) -> u32 {
 //   offset 32: int orig_cpu
 //   offset 36: int dest_cpu
 // ---------------------------------------------------------------------------
-#[tracepoint]
+#[tracepoint(name = "sched_migrate_task", category = "sched")]
 pub fn sched_migrate_task(ctx: TracePointContext) -> u32 {
     let tid: i32 = match unsafe { ctx.read_at(24) } {
         Ok(v) => v,
