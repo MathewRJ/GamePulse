@@ -43,6 +43,13 @@ Last updated: April 2026
   Live-validated 2026-04-08: session doc confirmed in ES with all fields populated
   (RX 9070 XT, Ryzen 7 9800X3D, 506s session, avg 145.9 FPS).
 - **Zero TODO/FIXME debt**: confirmed by progress-auditor 2026-04-08.
+- **Phase 2 eBPF architecture design doc**: complete at
+  `docs/ebpf-architecture.md`. Covers full daemon design — probe architecture,
+  BPF map strategy, ring buffer sizing, PID filtering (including Proton process
+  trees), GPU tracing across three layers (DRM scheduler uAPI → DMA fence →
+  vendor-specific kprobes), userspace aggregation, ES data model with histogram
+  fields, stutter correlation events, build system, systemd deployment, and
+  phased implementation plan (5 sprints). Ready for Claude Code implementation.
 
 ### Git state (end of last Claude Code session)
 
@@ -53,6 +60,10 @@ Key recent commits:
   fields + `fields.yml` definitions, fixed invalid `w` unit enum
 - (driver_version and dashboards were already committed in prior sessions)
 
+**Pending commit (from this planning session):**
+- `docs/ebpf-architecture.md` — Phase 2 eBPF design doc (new file)
+- `docs/claude-chat-context.md` — this file (updated)
+
 ### Hardware confirmed in live session (2026-04-08)
 
 - GPU: AMD Radeon RX 9070 XT (RADV GFX1201), driver 26.0.4, Mesa 26.0.4-arch2.2
@@ -61,16 +72,64 @@ Key recent commits:
 - OS: CachyOS Linux, kernel 6.19.11-1-cachyos-deckify
 - Vulkan driver: radv
 
+### CPU topology verified (2026-04-08)
+
+- Single CCD, single CCX — all 16 logical CPUs share L3 index 0 (`shared_cpu_list: 0-15`)
+- `ccx_cross_count` eBPF metric will always be zero on this chip (expected; metric
+  is architecturally correct for multi-CCD chips like 7950X/9950X)
+- Core-to-core migrations within the single CCX are still tracked by
+  `migration.total_count`
+
 ---
 
 ## Priorities (in order)
 
-1. **Phase 2: eBPF daemon** — architecture design doc being written in this
-   session (claude.ai / Opus). Claude Code implementation follows from that doc.
-2. **Scheduler Analysis dashboard** — blocked on Phase 2 eBPF data stream.
+1. **Phase 2: eBPF daemon** — design doc complete (`docs/ebpf-architecture.md`).
+   Claude Code implementation follows from that doc. Implementation order:
+   - Sprint 1: Scaffold Aya project + `schedlatency` probe end-to-end
+   - Sprint 2: `bio`, `gpu_sched`, `mem` probes + stutter correlation
+   - Sprint 3: `gpu_fence`, `gpu_submit`, `futex`, `irq`, `vfs` probes
+   - Sprint 4: Integration package updates (`fields.yml`, pipeline), Scheduler
+     Analysis dashboard, packaging (AUR, systemd)
+   - Sprint 5 (stretch): `syscall`, `shader`, `proton` probes
+2. **Scheduler Analysis dashboard** — blocked on Sprint 2+ eBPF data.
 3. **Pipeline/system tests** — require local ES or Docker setup.
 4. **Phase 6: move integration to `package/` subdirectory** — long-term fix for
    `elastic-package-ignore` not applying during build copy step.
+
+---
+
+## eBPF design decisions (summary for quick reference)
+
+Key decisions made in this planning session — see `docs/ebpf-architecture.md`
+for full rationale:
+
+- **Separate binary**, not embedded in Python collector (capability isolation,
+  language boundary, lifecycle independence). Merges into Phase 4 Rust agent.
+- **Session correlation** via `$XDG_RUNTIME_DIR/gamepulse/session.json` (fallback
+  `/tmp/gamepulse/session.json`). Python collector writes, eBPF daemon watches
+  via inotify. No IPC, no shared memory.
+- **GPU tracing in three layers**: DRM scheduler tracepoints (vendor-neutral
+  stable uAPI, ships first) → `dma_fence_default_wait` kprobe (vendor-neutral) →
+  `amdgpu_cs_ioctl` kprobe (AMD-specific). Layered approach gives useful data on
+  any GPU vendor from day one.
+- **Ring buffers** for event-driven probes, **HashMaps** for in-kernel aggregation
+  of high-frequency probes (syscall, futex, irq, mem).
+- **Log2 μs-scale histogram buckets** uniformly across all probes (16 buckets,
+  1μs to 33ms+). Fine-grained at collection, coarsen at query time in Kibana.
+- **Graceful degradation**: every probe is independent. Missing tracepoints or
+  capabilities skip that probe, log the reason, and continue.
+- **Stutter correlation events** emitted to `logs-gamepulse.events-default` when
+  eBPF thresholds are crossed (sched p99 > 5ms, bio p99 > 10ms, fence > 16.6ms).
+- **Capabilities**: `CAP_BPF` + `CAP_PERFMON` + `CAP_SYS_ADMIN` +
+  `CAP_DAC_READ_SEARCH` (systemd service with `AmbientCapabilities`).
+- **Build**: Cargo workspace, xtask for BPF compilation, BPF bytecode embedded
+  in binary at compile time (no runtime `.o` loading).
+
+### Open questions (to resolve during implementation)
+
+1. ES `histogram` field type support on Serverless in TSDS mode — test early.
+2. Mesa shader compiler uprobe target path discovery at runtime (Sprint 5).
 
 ---
 
@@ -135,6 +194,15 @@ Key recent commits:
 2. Paste the latest `CLAUDE.md` if anything major changed
 3. Share any Claude Code session output relevant to current state
 4. Ask: "what should we work on?" — claude.ai will reconcile and advise
+
+## How to start Phase 2 implementation (Claude Code)
+
+1. `git pull` on the gaming PC
+2. Ensure `docs/ebpf-architecture.md` is committed and pushed
+3. Point Claude Code at the design doc:
+   "Read `docs/ebpf-architecture.md` and begin Sprint 1: scaffold the Aya project
+   and implement the `schedlatency` probe end-to-end."
+4. Claude Code should update `CLAUDE.md` current state when done
 
 ## How to update this file
 
