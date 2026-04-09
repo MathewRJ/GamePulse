@@ -5,6 +5,53 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-09d (Sprint 2 gpu_sched fix + mem probe)
+
+### Context coming in
+bio probe passing (2/2 probes). Starting gpu_sched and mem probes.
+
+### What was done this session
+
+#### gpu_sched probe zero-event bug fixed (`92cd994`)
+
+- Root cause: `drm_sched_job_queue` was filtered by GAME_PIDS, but RADV submits GPU
+  jobs via dedicated submission threads (not game threads) — they're not in GAME_PIDS.
+- Fix: removed GAME_PIDS filter from `drm_sched_job_queue` entirely (system-wide, same
+  pattern as bio's kworker fix). `drm_sched_job_finish` was already unfiltered.
+- Verified: 1,500–10,925 GPU jobs/s during Cyberpunk/Wolfenstein gameplay.
+- Tracepoint offsets used: `drm_sched_job_queue` seqno at offset 32 (u64),
+  `drm_sched_job_finish` seqno at offset 8 (u64), elapsed at offset 16 (u64 ns).
+
+#### mem probe implemented and passing (`92cd994`)
+
+- BPF kernel: `page_fault_user` (GAME_PIDS filtered) + `mm_vmscan_direct_reclaim_begin`
+  (system-wide — direct reclaim is a pressure signal regardless of who triggered it).
+- Tracepoint offsets verified from kernel 6.19.11 format files:
+  - `page_fault_user`: common_pid at offset 4 (int), error_code at offset 24 (u64)
+    - error_code bit 0 = P (page present), bit 1 = W (write fault)
+  - `mm_vmscan_direct_reclaim_begin`: common_pid at offset 4 (not used)
+- MemSnapshot fields: `page_fault_count`, `page_fault_write`, `direct_reclaim_count`
+- Test result (Starfield, ~5 min): 4/4 probes load; zero mem events during steady-state.
+  Zero is expected — working set is already resident in RAM during gameplay.
+  Would see events during loading screens or under actual memory pressure.
+
+### Current state
+- Working tree clean. `92cd994` pushed.
+- 4/4 probes active: schedlatency + bio + gpu_sched + mem.
+- All Sprint 2 instrumentation probes done.
+
+### Next step: stutter correlation (Sprint 2 final item)
+
+Cross-probe latency spike correlation: when sched runqueue latency spikes,
+check if bio or gpu_sched latency spikes within the same 1s window.
+Would require timestamp-aligned aggregation across probes in the daemon.
+
+### Open (Sprint 2 remaining)
+1. Stutter correlation (correlate sched/bio/gpu spikes across probes)
+2. Scheduler Analysis dashboard (blocked on Sprint 2 data stream being fully verified)
+
+---
+
 ## Session: 2026-04-09c (Sprint 2 bio probe + code red)
 
 ### Context coming in
