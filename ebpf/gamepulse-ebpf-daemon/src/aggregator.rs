@@ -2,8 +2,8 @@
 /// and computes 1-second snapshots ready for Elasticsearch.
 use crate::es_model::{
     BlockIoSnapshot, DataStream, EbpfMetricDoc, EbpfPayload, GamePulseFields, GpuSchedSnapshot,
-    HostFields, LatencyHistogram, MigrationSnapshot, OsFields, RunqueueSnapshot, SessionRef,
-    ThreadStat,
+    HostFields, LatencyHistogram, MemSnapshot, MigrationSnapshot, OsFields, RunqueueSnapshot,
+    SessionRef, ThreadStat,
 };
 use chrono::Utc;
 use std::collections::HashMap;
@@ -159,6 +159,7 @@ impl SchedAggregator {
                     probe: "schedlatency",
                     bio: None,
                     gpu_sched: None,
+                    mem: None,
                     runqueue: Some(RunqueueSnapshot {
                         latency_histogram: histogram,
                         latency_min_us: if min_wait_ns == u64::MAX {
@@ -327,6 +328,7 @@ impl BioAggregator {
                     migration: None,
                     thread_breakdown: None,
                     gpu_sched: None,
+                    mem: None,
                     bio: Some(BlockIoSnapshot {
                         latency_histogram: histogram,
                         latency_min_us: if min_latency_ns == u64::MAX {
@@ -424,6 +426,100 @@ impl GpuAggregator {
                         latency_max_us: max_ns as f64 / 1000.0,
                         latency_avg_us: avg_us,
                         event_count,
+                    }),
+                    mem: None,
+                },
+            },
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Memory pressure aggregator
+// ---------------------------------------------------------------------------
+
+pub const MEM_FAULT: u8 = 0;
+pub const MEM_RECLAIM: u8 = 1;
+
+/// Raw mem event as read from the MEM_EVENTS ring buffer.
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct RawMemEvent {
+    pub event_type: u8,
+    pub is_write: u8,
+    pub _pad: [u8; 6],
+}
+
+/// Aggregates MemEvents over a 1-second window.
+pub struct MemAggregator {
+    events: Vec<RawMemEvent>,
+    host_name: String,
+    kernel_version: String,
+}
+
+impl MemAggregator {
+    pub fn new(host_name: String, kernel_version: String) -> Self {
+        MemAggregator {
+            events: Vec::new(),
+            host_name,
+            kernel_version,
+        }
+    }
+
+    pub fn push(&mut self, event: RawMemEvent) {
+        self.events.push(event);
+    }
+
+    /// Returns None if no memory events were observed this interval.
+    pub fn flush(&mut self, session_id: &str) -> Option<EbpfMetricDoc> {
+        let events = std::mem::take(&mut self.events);
+        if events.is_empty() {
+            return None;
+        }
+
+        let mut page_fault_count: u64 = 0;
+        let mut page_fault_write: u64 = 0;
+        let mut direct_reclaim_count: u64 = 0;
+
+        for ev in &events {
+            match ev.event_type {
+                MEM_FAULT => {
+                    page_fault_count += 1;
+                    if ev.is_write != 0 {
+                        page_fault_write += 1;
+                    }
+                }
+                MEM_RECLAIM => {
+                    direct_reclaim_count += 1;
+                }
+                _ => {}
+            }
+        }
+
+        Some(EbpfMetricDoc {
+            timestamp: chrono::Utc::now(),
+            data_stream: DataStream::default(),
+            host: HostFields {
+                name: self.host_name.clone(),
+                os: OsFields {
+                    kernel: self.kernel_version.clone(),
+                },
+            },
+            gamepulse: GamePulseFields {
+                session: SessionRef {
+                    id: session_id.to_string(),
+                },
+                ebpf: EbpfPayload {
+                    probe: "mem",
+                    runqueue: None,
+                    migration: None,
+                    thread_breakdown: None,
+                    bio: None,
+                    gpu_sched: None,
+                    mem: Some(MemSnapshot {
+                        page_fault_count,
+                        page_fault_write,
+                        direct_reclaim_count,
                     }),
                 },
             },

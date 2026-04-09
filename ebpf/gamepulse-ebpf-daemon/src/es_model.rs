@@ -80,6 +80,9 @@ pub struct EbpfPayload {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gpu_sched: Option<GpuSchedSnapshot>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mem: Option<MemSnapshot>,
 }
 
 /// 1-second runqueue latency snapshot from the schedlatency probe.
@@ -132,6 +135,18 @@ pub struct BlockIoSnapshot {
 
     /// Total bytes transferred across all observed I/O operations.
     pub bytes_total: u64,
+}
+
+/// 1-second memory pressure snapshot from the mem probe.
+#[derive(Debug, Serialize)]
+pub struct MemSnapshot {
+    /// Total user-space page faults observed from game threads this second.
+    pub page_fault_count: u64,
+    /// Write faults (COW, new allocation) — subset of page_fault_count.
+    pub page_fault_write: u64,
+    /// Direct reclaim events (system-wide) — game thread stalled waiting for memory.
+    /// Non-zero values indicate memory pressure; high values mean stutter risk.
+    pub direct_reclaim_count: u64,
 }
 
 /// 1-second GPU scheduling latency snapshot from the gpu_sched probe.
