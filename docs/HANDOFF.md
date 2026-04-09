@@ -5,6 +5,65 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-09 (all_pids expansion + session resume)
+
+### Context coming in
+Previous session ended with a code red mid-test. Working tree had uncommitted
+changes to `cli.py`, `detector/game.py`, and `session.rs`. These were the
+`all_pids` expansion changes — made last session but never committed due to code red.
+
+### What was done this session
+
+#### Resumed from code red — committed all_pids expansion (`1271b1e`)
+Three files had uncommitted modifications (were in working tree, not staged):
+- `collector/gamepulse/detector/game.py`: Refactored `detect()` to collect ALL
+  PIDs with `SteamAppId` into `all_pids_by_appid`. Previously the helper-process
+  skip loop returned early, discarding non-representative PIDs. Now ALL matching
+  PIDs are collected; representative is chosen separately for metadata. `DetectedGame`
+  gets a new `all_pids: list[int]` field (default = `[pid]`).
+- `collector/gamepulse/cli.py`: `_write_session_json()` now accepts `all_pids`
+  and writes `game_pids: [...]` to session.json. Log message updated to show pids.
+- `ebpf/gamepulse-ebpf-daemon/src/session.rs`:
+  - `SessionInfo` gets `game_pids: Vec<u32>` field (back-compat: falls back to
+    `[game_pid]` if absent)
+  - `collect_game_tids()` now takes `&[u32]` and walks each root PID's tree
+  - `/tmp/gamepulse/` set to mode 1777 at startup so unprivileged collector can
+    write into root-created directory
+  - Log emits `pid_count` alongside `tid_count`
+
+**Motivation for all_pids fix**: Sprint 1 end-to-end test produced only 1 doc for
+a 3.5-min session. Root cause: only Proton root PID was in GAME_PIDS → only 8
+infrastructure TIDs tracked → those threads barely context-switch → aggregator
+gets no events → `flush()` returns None → no doc shipped. With all_pids, the
+daemon will capture wine64/wineserver/DX worker threads, generating sched events
+every second.
+
+**Daemon built clean** after commit. Ready to re-test.
+
+### Current state
+- Working tree clean. Branch up to date with origin/main.
+- All prior Sprint 1 + end-to-end fixes are committed and pushed.
+- Ready for re-test with Starfield (or any Steam/Proton game).
+
+### Next step
+```bash
+# Terminal 1
+gamepulse-collector
+
+# Terminal 2
+sudo ebpf/target/debug/gamepulse-ebpf
+```
+Expect: `pid_count=N` (>1), `tid_count=M` (>>8), sched docs every ~1s in ES.
+
+### Open questions (carried forward)
+1. Aggregator flush interval: confirmed 1s default. Returns None if no events.
+   Once actual game threads are in GAME_PIDS, should see docs every second.
+2. SIGTERM handler: `kill` bypasses `finally` → session.json not cleaned up.
+   Low priority.
+3. Sprint 2 probes: bio, gpu_sched, mem, stutter correlation. Design pending.
+
+---
+
 ## Session: 2026-04-08 (HANDOFF.md + code red + end-to-end test + path fix)
 
 ### Context coming in
