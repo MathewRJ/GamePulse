@@ -8,6 +8,7 @@ use aya::Ebpf;
 
 use crate::es_model::EbpfMetricDoc;
 
+pub mod bio;
 pub mod sched;
 
 /// Requirements that must be met for a probe to load.

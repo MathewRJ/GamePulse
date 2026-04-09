@@ -63,7 +63,7 @@ pub struct SessionRef {
 /// Probe-specific payload — only one variant is populated per document.
 #[derive(Debug, Serialize)]
 pub struct EbpfPayload {
-    /// Probe name discriminant (e.g. "schedlatency")
+    /// Probe name discriminant (e.g. "schedlatency", "bio")
     pub probe: &'static str,
 
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -74,6 +74,9 @@ pub struct EbpfPayload {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thread_breakdown: Option<Vec<ThreadStat>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bio: Option<BlockIoSnapshot>,
 }
 
 /// 1-second runqueue latency snapshot from the schedlatency probe.
@@ -109,6 +112,23 @@ pub struct ThreadStat {
     pub runqueue_avg_us: f64,
     pub switch_count: u32,
     pub migration_count: u32,
+}
+
+/// 1-second block I/O latency snapshot from the bio probe.
+#[derive(Debug, Serialize)]
+pub struct BlockIoSnapshot {
+    /// Log2 histogram of I/O latencies — same 16-bucket layout as runqueue.
+    pub latency_histogram: LatencyHistogram,
+
+    pub latency_min_us: f64,
+    pub latency_max_us: f64,
+    pub latency_avg_us: f64,
+
+    /// Number of I/O completions observed this second.
+    pub event_count: u64,
+
+    /// Total bytes transferred across all observed I/O operations.
+    pub bytes_total: u64,
 }
 
 /// Compact histogram representation — matches the ES `histogram` field type.

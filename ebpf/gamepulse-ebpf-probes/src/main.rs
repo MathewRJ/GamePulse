@@ -5,6 +5,7 @@
 #[allow(unused_imports)]
 use aya_log_ebpf as _;
 
+mod bio;
 mod sched;
 
 /// Panic handler required for no_std BPF programs.

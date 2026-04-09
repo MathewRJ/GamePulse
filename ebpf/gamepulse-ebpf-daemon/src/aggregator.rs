@@ -1,8 +1,8 @@
 /// In-memory aggregator — accumulates raw SchedEvents from the ring buffer
 /// and computes 1-second snapshots ready for Elasticsearch.
 use crate::es_model::{
-    EbpfMetricDoc, EbpfPayload, GamePulseFields, HostFields, LatencyHistogram, MigrationSnapshot,
-    OsFields, RunqueueSnapshot, SessionRef, ThreadStat, DataStream,
+    BlockIoSnapshot, DataStream, EbpfMetricDoc, EbpfPayload, GamePulseFields, HostFields,
+    LatencyHistogram, MigrationSnapshot, OsFields, RunqueueSnapshot, SessionRef, ThreadStat,
 };
 use chrono::Utc;
 use std::collections::HashMap;
@@ -156,6 +156,7 @@ impl SchedAggregator {
                 },
                 ebpf: EbpfPayload {
                     probe: "schedlatency",
+                    bio: None,
                     runqueue: Some(RunqueueSnapshot {
                         latency_histogram: histogram,
                         latency_min_us: if min_wait_ns == u64::MAX {
@@ -245,4 +246,98 @@ fn build_ccx_map() -> HashMap<u32, u32> {
     // If all CPUs share the same CCX, the map is technically correct but
     // ccx_cross_count will always be 0 (e.g. Ryzen 9800X3D — single CCX).
     map
+}
+
+// ---------------------------------------------------------------------------
+// Bio aggregator
+// ---------------------------------------------------------------------------
+
+/// Raw bio event as read from the BIO_EVENTS ring buffer (mirrors BioEvent in BPF).
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct RawBioEvent {
+    pub latency_ns: u64,
+    pub bytes: u32,
+    pub _pad: u32,
+}
+
+/// Aggregates BioEvents over a 1-second window, then produces an EbpfMetricDoc.
+pub struct BioAggregator {
+    events: Vec<RawBioEvent>,
+    host_name: String,
+    kernel_version: String,
+}
+
+impl BioAggregator {
+    pub fn new(host_name: String, kernel_version: String) -> Self {
+        BioAggregator {
+            events: Vec::new(),
+            host_name,
+            kernel_version,
+        }
+    }
+
+    pub fn push(&mut self, event: RawBioEvent) {
+        self.events.push(event);
+    }
+
+    /// Consume buffered events and produce a document for the current second.
+    /// Returns None if no I/O was observed this interval.
+    pub fn flush(&mut self, session_id: &str) -> Option<EbpfMetricDoc> {
+        let events = std::mem::take(&mut self.events);
+        if events.is_empty() {
+            return None;
+        }
+
+        let mut histogram = LatencyHistogram::new();
+        let mut total_latency_ns: u64 = 0;
+        let mut min_latency_ns: u64 = u64::MAX;
+        let mut max_latency_ns: u64 = 0;
+        let mut bytes_total: u64 = 0;
+        let event_count = events.len() as u64;
+
+        for ev in &events {
+            histogram.record_ns(ev.latency_ns);
+            total_latency_ns = total_latency_ns.saturating_add(ev.latency_ns);
+            min_latency_ns = min_latency_ns.min(ev.latency_ns);
+            max_latency_ns = max_latency_ns.max(ev.latency_ns);
+            bytes_total = bytes_total.saturating_add(ev.bytes as u64);
+        }
+
+        let avg_latency_us = (total_latency_ns as f64 / 1000.0) / event_count as f64;
+
+        Some(EbpfMetricDoc {
+            timestamp: chrono::Utc::now(),
+            data_stream: DataStream::default(),
+            host: HostFields {
+                name: self.host_name.clone(),
+                os: OsFields {
+                    kernel: self.kernel_version.clone(),
+                },
+            },
+            gamepulse: GamePulseFields {
+                session: SessionRef {
+                    id: session_id.to_string(),
+                },
+                ebpf: EbpfPayload {
+                    probe: "bio",
+                    runqueue: None,
+                    migration: None,
+                    thread_breakdown: None,
+                    bio: Some(BlockIoSnapshot {
+                        latency_histogram: histogram,
+                        latency_min_us: if min_latency_ns == u64::MAX {
+                            0.0
+                        } else {
+                            min_latency_ns as f64 / 1000.0
+                        },
+                        latency_max_us: max_latency_ns as f64 / 1000.0,
+                        latency_avg_us: avg_latency_us,
+                        event_count,
+                        bytes_total,
+                    }),
+                },
+            },
+        })
+    }
 }
