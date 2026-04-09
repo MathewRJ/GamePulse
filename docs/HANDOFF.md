@@ -5,6 +5,51 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-09c (Sprint 2 bio probe + code red)
+
+### Context coming in
+Sprint 1 end-to-end passing. Moving to Sprint 2.
+
+### What was done this session
+
+#### bio probe implemented and passing (`270a448`)
+
+- BPF kernel: `block_rq_issue` (record sector→ktime_ns) + `block_rq_complete` (emit BioEvent)
+- Key finding: buffered page-cache I/O is submitted by kworker threads, NOT game threads.
+  PID filter on block_rq_issue silently dropped everything. Fix: track all block I/O system-wide.
+  The main loop already skips collect() when no session active, so no non-game data shipped.
+- Tracepoint offsets verified from kernel 6.19.11 format file:
+  - `block_rq_issue`: sector at offset 16 (4-byte padding after dev_t at 8), bytes at 28
+  - `block_rq_complete`: sector at offset 16, nr_sector at 24 (compute bytes = nr_sector*512)
+- Test result: 1-421 bio events/s; spikes on asset loads confirm I/O stutter signal working.
+- No doc on idle seconds (flush returns None) — correct behaviour.
+
+#### Session interrupted (code red)
+
+Was about to start gpu_sched probe planning when user called code red.
+
+### Current state
+- Working tree clean. `270a448` pushed.
+- 2/2 probes active: schedlatency + bio.
+
+### Next step: gpu_sched probe (Sprint 2)
+
+Check available GPU scheduler tracepoints before designing:
+```bash
+ls /sys/kernel/tracing/events/gpu_scheduler/ 2>/dev/null
+ls /sys/kernel/tracing/events/drm/ 2>/dev/null
+ls /sys/kernel/tracing/events/amdgpu/ 2>/dev/null
+```
+Then read format files for any `drm_sched_job` / `drm_sched_process_job` tracepoints
+to get exact field offsets before implementing the probe.
+
+### Open (Sprint 2 remaining)
+1. gpu_sched probe (job submit→execute latency)
+2. mem probe (page faults, swap pressure)
+3. Stutter correlation (correlate sched/bio/gpu spikes)
+
+---
+
 ## Session: 2026-04-09b (Sprint 1 end-to-end PASSED)
 
 ### Context coming in
