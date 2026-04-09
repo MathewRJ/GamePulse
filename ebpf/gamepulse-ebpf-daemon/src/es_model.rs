@@ -77,6 +77,9 @@ pub struct EbpfPayload {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bio: Option<BlockIoSnapshot>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gpu_sched: Option<GpuSchedSnapshot>,
 }
 
 /// 1-second runqueue latency snapshot from the schedlatency probe.
@@ -129,6 +132,20 @@ pub struct BlockIoSnapshot {
 
     /// Total bytes transferred across all observed I/O operations.
     pub bytes_total: u64,
+}
+
+/// 1-second GPU scheduling latency snapshot from the gpu_sched probe.
+#[derive(Debug, Serialize)]
+pub struct GpuSchedSnapshot {
+    /// Log2 histogram of GPU job scheduling latencies — same 16-bucket layout.
+    pub latency_histogram: LatencyHistogram,
+
+    pub latency_min_us: f64,
+    pub latency_max_us: f64,
+    pub latency_avg_us: f64,
+
+    /// Number of GPU jobs observed this second (across all rings: gfx, comp, sdma).
+    pub event_count: u64,
 }
 
 /// Compact histogram representation — matches the ES `histogram` field type.

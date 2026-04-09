@@ -6,6 +6,7 @@
 use aya_log_ebpf as _;
 
 mod bio;
+mod gpu_sched;
 mod sched;
 
 /// Panic handler required for no_std BPF programs.

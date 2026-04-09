@@ -25,6 +25,7 @@ use tracing_subscriber::EnvFilter;
 use config::Config;
 use loader::load_probes;
 use probes::bio::BioProbe;
+use probes::gpu_sched::GpuSchedProbe;
 use probes::sched::SchedProbe;
 use session::{session_file_path, spawn_watcher};
 use shipper::EsShipper;
@@ -89,6 +90,7 @@ async fn main() -> Result<()> {
     let candidates: Vec<Box<dyn probes::Probe>> = vec![
         Box::new(SchedProbe::new(host_name.clone(), kernel_version.clone())),
         Box::new(BioProbe::new(host_name.clone(), kernel_version.clone())),
+        Box::new(GpuSchedProbe::new(host_name.clone(), kernel_version.clone())),
     ];
 
     // Load probes (does capability + BTF checks, attaches tracepoints)

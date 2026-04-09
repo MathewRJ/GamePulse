@@ -1,8 +1,9 @@
 /// In-memory aggregator — accumulates raw SchedEvents from the ring buffer
 /// and computes 1-second snapshots ready for Elasticsearch.
 use crate::es_model::{
-    BlockIoSnapshot, DataStream, EbpfMetricDoc, EbpfPayload, GamePulseFields, HostFields,
-    LatencyHistogram, MigrationSnapshot, OsFields, RunqueueSnapshot, SessionRef, ThreadStat,
+    BlockIoSnapshot, DataStream, EbpfMetricDoc, EbpfPayload, GamePulseFields, GpuSchedSnapshot,
+    HostFields, LatencyHistogram, MigrationSnapshot, OsFields, RunqueueSnapshot, SessionRef,
+    ThreadStat,
 };
 use chrono::Utc;
 use std::collections::HashMap;
@@ -157,6 +158,7 @@ impl SchedAggregator {
                 ebpf: EbpfPayload {
                     probe: "schedlatency",
                     bio: None,
+                    gpu_sched: None,
                     runqueue: Some(RunqueueSnapshot {
                         latency_histogram: histogram,
                         latency_min_us: if min_wait_ns == u64::MAX {
@@ -324,6 +326,7 @@ impl BioAggregator {
                     runqueue: None,
                     migration: None,
                     thread_breakdown: None,
+                    gpu_sched: None,
                     bio: Some(BlockIoSnapshot {
                         latency_histogram: histogram,
                         latency_min_us: if min_latency_ns == u64::MAX {
@@ -335,6 +338,92 @@ impl BioAggregator {
                         latency_avg_us: avg_latency_us,
                         event_count,
                         bytes_total,
+                    }),
+                },
+            },
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// GPU scheduler aggregator
+// ---------------------------------------------------------------------------
+
+/// Raw GPU scheduler event from GPU_SCHED_EVENTS ring buffer.
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct RawGpuSchedEvent {
+    pub latency_ns: u64,
+    pub _pad: u64,
+}
+
+/// Aggregates GpuSchedEvents over a 1-second window.
+pub struct GpuAggregator {
+    events: Vec<RawGpuSchedEvent>,
+    host_name: String,
+    kernel_version: String,
+}
+
+impl GpuAggregator {
+    pub fn new(host_name: String, kernel_version: String) -> Self {
+        GpuAggregator {
+            events: Vec::new(),
+            host_name,
+            kernel_version,
+        }
+    }
+
+    pub fn push(&mut self, event: RawGpuSchedEvent) {
+        self.events.push(event);
+    }
+
+    /// Returns None if no GPU jobs were observed this interval.
+    pub fn flush(&mut self, session_id: &str) -> Option<EbpfMetricDoc> {
+        let events = std::mem::take(&mut self.events);
+        if events.is_empty() {
+            return None;
+        }
+
+        let mut histogram = LatencyHistogram::new();
+        let mut total_ns: u64 = 0;
+        let mut min_ns: u64 = u64::MAX;
+        let mut max_ns: u64 = 0;
+        let event_count = events.len() as u64;
+
+        for ev in &events {
+            histogram.record_ns(ev.latency_ns);
+            total_ns = total_ns.saturating_add(ev.latency_ns);
+            min_ns = min_ns.min(ev.latency_ns);
+            max_ns = max_ns.max(ev.latency_ns);
+        }
+
+        let avg_us = (total_ns as f64 / 1000.0) / event_count as f64;
+
+        Some(EbpfMetricDoc {
+            timestamp: chrono::Utc::now(),
+            data_stream: DataStream::default(),
+            host: HostFields {
+                name: self.host_name.clone(),
+                os: OsFields {
+                    kernel: self.kernel_version.clone(),
+                },
+            },
+            gamepulse: GamePulseFields {
+                session: SessionRef {
+                    id: session_id.to_string(),
+                },
+                ebpf: EbpfPayload {
+                    probe: "gpu_sched",
+                    runqueue: None,
+                    migration: None,
+                    thread_breakdown: None,
+                    bio: None,
+                    gpu_sched: Some(GpuSchedSnapshot {
+                        latency_histogram: histogram,
+                        latency_min_us: if min_ns == u64::MAX { 0.0 } else { min_ns as f64 / 1000.0 },
+                        latency_max_us: max_ns as f64 / 1000.0,
+                        latency_avg_us: avg_us,
+                        event_count,
                     }),
                 },
             },
