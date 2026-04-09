@@ -5,15 +5,16 @@
 ///   sched/sched_switch
 ///   sched/sched_migrate_task
 ///
-/// Maintains a SchedAggregator that consumes raw ring-buffer events and
-/// produces EbpfMetricDocs at the configured interval.
+/// Drains the SCHED_EVENTS ring buffer synchronously on every collect() call
+/// (once per aggregation interval). This avoids the AsyncFd/EPOLLET race
+/// where events written between the last rb.next()==None and clear_ready()
+/// would be silently dropped, causing the drain task to hang indefinitely.
 use anyhow::{Context, Result};
 use aya::{
     maps::{HashMap as AyaHashMap, MapData, RingBuf},
     programs::TracePoint,
     Ebpf,
 };
-use tokio::io::unix::AsyncFd;
 use tracing::{debug, warn};
 
 use super::{Probe, ProbeRequirements};
@@ -22,18 +23,15 @@ use crate::es_model::EbpfMetricDoc;
 
 pub struct SchedProbe {
     aggregator: SchedAggregator,
-    /// Channel from the async drain task to this probe's collect().
-    event_rx: Option<tokio::sync::mpsc::UnboundedReceiver<RawSchedEvent>>,
-    /// Drain task handle (kept alive until detach).
-    _drain_handle: Option<tokio::task::JoinHandle<()>>,
+    /// Ring buffer held here and drained synchronously in collect().
+    ring_buf: Option<RingBuf<MapData>>,
 }
 
 impl SchedProbe {
     pub fn new(host_name: String, kernel_version: String) -> Self {
         SchedProbe {
             aggregator: SchedAggregator::new(host_name, kernel_version),
-            event_rx: None,
-            _drain_handle: None,
+            ring_buf: None,
         }
     }
 
@@ -97,32 +95,43 @@ impl Probe for SchedProbe {
         attach(ebpf, "sched_switch",       "sched", "sched_switch")?;
         attach(ebpf, "sched_migrate_task", "sched", "sched_migrate_task")?;
 
-        // Spawn the async ring-buffer drain task.
+        // Take the ring buffer map and hold it here for synchronous draining in collect().
         let ring_buf = RingBuf::try_from(
             ebpf.take_map("SCHED_EVENTS")
                 .context("SCHED_EVENTS map not found")?,
         )
         .context("SCHED_EVENTS map type mismatch")?;
 
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<RawSchedEvent>();
-
-        let handle = tokio::spawn(async move {
-            if let Err(e) = drain_ring_buf(ring_buf, tx).await {
-                warn!("sched ring buffer drain error: {e}");
-            }
-        });
-
-        self.event_rx = Some(rx);
-        self._drain_handle = Some(handle);
+        self.ring_buf = Some(ring_buf);
         Ok(())
     }
 
     fn collect(&mut self, session_id: &str) -> Result<Vec<EbpfMetricDoc>> {
+        use std::mem::size_of;
+        let event_size = size_of::<RawSchedEvent>();
+        let mut event_count = 0usize;
+
         // Drain all events that arrived since the last collect() call.
-        if let Some(rx) = &mut self.event_rx {
-            while let Ok(event) = rx.try_recv() {
+        // Synchronous drain avoids the AsyncFd/EPOLLET race: rb.next() is
+        // non-blocking and returns None immediately when the buffer is empty.
+        if let Some(rb) = &mut self.ring_buf {
+            while let Some(item) = rb.next() {
+                let bytes: &[u8] = &*item;
+                if bytes.len() < event_size {
+                    warn!("ring buf item too small: {} < {}", bytes.len(), event_size);
+                    continue;
+                }
+                // SAFETY: RawSchedEvent is repr(C), size verified above.
+                let event = unsafe {
+                    std::ptr::read_unaligned(bytes.as_ptr() as *const RawSchedEvent)
+                };
                 self.aggregator.push(event);
+                event_count += 1;
             }
+        }
+
+        if event_count > 0 {
+            debug!("drained {} sched events from ring buffer", event_count);
         }
 
         let doc = self.aggregator.flush(session_id);
@@ -130,43 +139,8 @@ impl Probe for SchedProbe {
     }
 
     fn detach(&mut self) -> Result<()> {
-        if let Some(handle) = self._drain_handle.take() {
-            handle.abort();
-        }
-        self.event_rx = None;
+        // Drop the ring buffer, releasing the map fd.
+        self.ring_buf = None;
         Ok(())
-    }
-}
-
-/// Async task: drain the ring buffer and forward events to the channel.
-async fn drain_ring_buf(
-    ring_buf: RingBuf<MapData>,
-    tx: tokio::sync::mpsc::UnboundedSender<RawSchedEvent>,
-) -> Result<()> {
-    use std::mem::size_of;
-
-    let mut async_fd = AsyncFd::new(ring_buf).context("creating AsyncFd for ring buffer")?;
-    let event_size = size_of::<RawSchedEvent>();
-
-    loop {
-        let mut guard = async_fd.readable_mut().await.context("awaiting ring buf")?;
-        {
-            let rb = guard.get_inner_mut();
-            while let Some(item) = rb.next() {
-                let bytes: &[u8] = &*item;
-                if bytes.len() < event_size {
-                    warn!("ring buf item too small: {} < {}", bytes.len(), event_size);
-                    continue;
-                }
-                // SAFETY: SchedEvent is repr(C), size verified above.
-                let event = unsafe {
-                    std::ptr::read_unaligned(bytes.as_ptr() as *const RawSchedEvent)
-                };
-                if tx.send(event).is_err() {
-                    return Ok(()); // Receiver dropped — daemon shutting down
-                }
-            }
-        }
-        guard.clear_ready();
     }
 }

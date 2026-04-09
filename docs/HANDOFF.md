@@ -5,6 +5,59 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-09b (Sprint 1 end-to-end PASSED)
+
+### Context coming in
+Previous session had committed all_pids expansion (`1271b1e`) and was ready to re-test.
+
+### What was done this session
+
+#### Root cause diagnosis — why eBPF produced zero docs in first re-test
+
+Three compounding bugs found in the async ring buffer drain:
+
+**Bug 1 — AsyncFd + EPOLLET race (primary cause, zero events)**
+`drain_ring_buf` used `AsyncFd<RingBuf<MapData>>` with Tokio's edge-triggered epoll (EPOLLET).
+The drain loop called `rb.next()` until None, then `guard.clear_ready()`. If new events arrived
+between the last `next()==None` and `clear_ready()`, there was no edge transition (fd already
+readable), so EPOLLET never fired again. Drain task hung indefinitely → no events → no docs.
+Fix: removed async drain task entirely; drain ring buffer synchronously in `collect()` on each
+1-second tick. `rb.next()` is non-blocking (returns None immediately when buffer empty).
+
+**Bug 2 — GAME_PIDS at 100% capacity**
+`GAME_PIDS` had `max_entries=64` and we were inserting exactly 64 TIDs. BPF hash maps at
+100% load can fail inserts due to hash collisions (hash table has no overflow headroom).
+Fix: increased `max_entries` to 256 in probe; TID cap to 256 in daemon `collect_game_tids`.
+
+**Bug 3 — 30-second GAME_PIDS thrash**
+Session watcher's `recv_timeout(30s)` path unconditionally re-read the session file and
+re-sent state every 30 seconds even when a session was already active, causing unnecessary
+GAME_PIDS clear+repopulate cycles.
+Fix: timeout path now only acts when `active == false` (truly missed event).
+
+#### Test results (Starfield, Proton, 305s session)
+
+- Ring buffer: ~5,462 sched events/second drained
+- ES docs: 231 docs shipped to `metrics-gamepulse.ebpf-default`
+- Latency histogram: avg 1.47μs, max 107μs (healthy gaming system)
+- Thread breakdown: wineserver (459 sw/s), xalia.exe (324), Thread Pool Workers, MangoHud
+- Migration: total_count=0, ccx_cross=0 (expected: single-CCX 9800X3D)
+- Session lifecycle: detect → active → game exited → clear — all clean
+- No 30s re-detection noise
+
+**Phase 2 Sprint 1 end-to-end test: COMPLETE AND PASSING.**
+
+### Commits
+- `fix(ebpf): fix ring buffer drain race + GAME_PIDS capacity + 30s thrash`
+
+### What is NOT done (next priorities)
+1. **Sprint 2**: bio (block I/O latency), gpu_sched, mem probes + stutter correlation
+2. **Phase 4 Rust agent**: not started
+3. **SIGTERM handler**: kill bypasses finally → session.json not cleaned up (low priority)
+4. **Scheduler Analysis dashboard**: blocked until Sprint 2 ebpf data
+
+---
+
 ## Session: 2026-04-09 (all_pids expansion + session resume)
 
 ### Context coming in

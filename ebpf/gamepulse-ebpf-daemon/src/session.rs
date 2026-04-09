@@ -56,7 +56,7 @@ pub fn collect_game_tids(root_pids: &[u32]) -> Vec<u32> {
 }
 
 fn collect_tids_recursive(pid: u32, tids: &mut Vec<u32>, depth: u8) {
-    if depth > 4 || tids.len() >= 64 {
+    if depth > 4 || tids.len() >= 256 {
         return;
     }
 
@@ -194,8 +194,11 @@ pub fn spawn_watcher(
             let event = match notify_rx.recv_timeout(Duration::from_secs(30)) {
                 Ok(e) => e,
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                    // Periodic re-read to catch missed events
-                    if session_path.exists() {
+                    // Safety-net: catch missed inotify events (e.g. session started
+                    // while watcher wasn't ready). Only act if we don't already have
+                    // an active session — avoids re-populating GAME_PIDS every 30 s.
+                    let already_active = state_clone.lock().unwrap().active;
+                    if !already_active && session_path.exists() {
                         if let Ok((info, tids)) = read_session(&session_path) {
                             let new_state = SessionState {
                                 active: true,

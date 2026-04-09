@@ -20,8 +20,10 @@ const RING_BUF_BYTES: u32 = 256 * 1024;
 
 /// TIDs that belong to the tracked game process tree.
 /// Populated by userspace daemon from /proc/<pid>/task/ every 5 s.
+/// 256 entries: Proton/Wine games spawn 50-100 threads; 256 gives safe headroom
+/// and avoids BPF hash map collision failures at 100% load.
 #[map]
-static GAME_PIDS: HashMap<u32, u8> = HashMap::with_max_entries(64, 0);
+static GAME_PIDS: HashMap<u32, u8> = HashMap::with_max_entries(256, 0);
 
 /// Wakeup timestamp (ktime_get_ns) indexed by TID.
 /// Written on sched_wakeup; consumed and deleted on sched_switch.
