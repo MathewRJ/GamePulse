@@ -21,6 +21,10 @@ pub struct SessionInfo {
     pub game_name: String,
     #[serde(default)]
     pub steam_app_id: Option<u32>,
+    /// All PIDs associated with the game (includes wine/Proton subprocesses).
+    /// Falls back to [game_pid] if absent (older collector versions).
+    #[serde(default)]
+    pub game_pids: Vec<u32>,
 }
 
 /// Shared session state — updated by the watcher task, read by the aggregator.
@@ -42,10 +46,12 @@ pub fn session_file_path() -> PathBuf {
 }
 
 /// Walk /proc/<pid>/task/ and /proc/<pid>/children recursively (bounded depth)
-/// to collect all TIDs in the process tree rooted at `root_pid`.
-pub fn collect_game_tids(root_pid: u32) -> Vec<u32> {
+/// to collect all TIDs in the process trees rooted at each of `root_pids`.
+pub fn collect_game_tids(root_pids: &[u32]) -> Vec<u32> {
     let mut tids = Vec::new();
-    collect_tids_recursive(root_pid, &mut tids, 0);
+    for &pid in root_pids {
+        collect_tids_recursive(pid, &mut tids, 0);
+    }
     tids
 }
 
@@ -83,13 +89,18 @@ fn collect_tids_recursive(pid: u32, tids: &mut Vec<u32>, depth: u8) {
 pub fn read_session(path: &Path) -> Result<(SessionInfo, Vec<u32>)> {
     let content = std::fs::read_to_string(path)
         .with_context(|| format!("reading session file: {}", path.display()))?;
-    let info: SessionInfo = serde_json::from_str(&content)
+    let mut info: SessionInfo = serde_json::from_str(&content)
         .with_context(|| "parsing session.json")?;
-    let tids = collect_game_tids(info.game_pid);
+    // Back-compat: if the collector didn't write game_pids, fall back to game_pid.
+    if info.game_pids.is_empty() {
+        info.game_pids = vec![info.game_pid];
+    }
+    let tids = collect_game_tids(&info.game_pids);
     info!(
         session_id = %info.session_id,
         game = %info.game_name,
         game_pid = info.game_pid,
+        pid_count = info.game_pids.len(),
         tid_count = tids.len(),
         "session detected"
     );
@@ -142,8 +153,17 @@ pub fn spawn_watcher(
         .to_path_buf();
 
     // Create the watch directory if it doesn't exist (daemon might start before
-    // the Python collector has run for the first time)
+    // the Python collector has run for the first time).
+    // Mode 1777 (world-writable + sticky) so the unprivileged collector can
+    // write session.json into a directory created by root.
     let _ = std::fs::create_dir_all(&watch_dir);
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(
+            &watch_dir,
+            std::fs::Permissions::from_mode(0o1777),
+        );
+    }
 
     std::thread::spawn(move || {
         let (notify_tx, notify_rx) = std::sync::mpsc::channel();

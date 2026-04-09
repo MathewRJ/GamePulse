@@ -51,14 +51,16 @@ def _session_json_path() -> Path:
 
 
 def _write_session_json(session_id: str, game_pid: int, game_name: str,
-                        steam_app_id: int | None) -> None:
+                        steam_app_id: int | None,
+                        all_pids: list[int] | None = None) -> None:
     path = _session_json_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    doc = {"session_id": session_id, "game_pid": game_pid, "game_name": game_name}
+    doc: dict = {"session_id": session_id, "game_pid": game_pid, "game_name": game_name,
+                 "game_pids": all_pids if all_pids else [game_pid]}
     if steam_app_id is not None:
         doc["steam_app_id"] = steam_app_id
     path.write_text(json.dumps(doc))
-    log.debug("wrote session.json: %s", path)
+    log.debug("wrote session.json: %s (pids: %s)", path, doc["game_pids"])
 
 
 def _remove_session_json() -> None:
@@ -204,9 +206,11 @@ def run(cfg: config_mod.Config, debug: bool, once: bool) -> None:
                     )
                     mem.set_game_pid(game.pid)
                     prev_game_pid = game.pid
-                    log.info("Detected game: %s (pid %d)", game.name, game.pid)
+                    log.info("Detected game: %s (pid %d, all_pids=%s)",
+                             game.name, game.pid, getattr(game, "all_pids", [game.pid]))
                     _write_session_json(
-                        session.id, game.pid, game.name, game.steam_app_id
+                        session.id, game.pid, game.name, game.steam_app_id,
+                        all_pids=getattr(game, "all_pids", None),
                     )
 
                     if shipper:

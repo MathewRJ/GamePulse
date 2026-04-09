@@ -26,6 +26,13 @@ class DetectedGame:
     proton_version: str | None
     dxvk_version: str | None
     vkd3d_version: str | None
+    # All PIDs associated with this game (includes wine/Proton subprocesses).
+    # Used by the eBPF daemon to build a complete TID filter.
+    all_pids: list[int] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.all_pids is None:
+            self.all_pids = [self.pid]
 
 
 def _read_environ(pid: int) -> dict[str, str]:
@@ -165,6 +172,11 @@ class GameDetector:
         except OSError:
             return None
 
+        # First pass: group all PIDs by SteamAppId and find the representative
+        # (non-helper) process for metadata.
+        representative: tuple[int, dict[str, str]] | None = None
+        all_pids_by_appid: dict[int, list[int]] = {}
+
         for pid in pids:
             env = _read_environ(pid)
             if not env:
@@ -182,27 +194,47 @@ class GameDetector:
             if app_id == 0:
                 continue
 
-            # Skip Proton/Wine helper processes (they also have SteamAppId set)
-            exe_path = ""
-            try:
-                exe_path = os.readlink(f"/proc/{pid}/exe")
-            except OSError:
-                pass
-            if any(skip in exe_path for skip in ("proton", "wine", "steam", "reaper")):
-                continue
+            all_pids_by_appid.setdefault(app_id, []).append(pid)
 
-            name = _game_name_from_appid(app_id) or f"App {app_id}"
-            api, uses_proton = _detect_graphics_api(env)
+            # Use the first non-helper process as the representative for metadata.
+            # Wine/Proton subprocesses are valid game PIDs for eBPF filtering but
+            # are not good sources of metadata (graphics_api, proton_version, etc.).
+            if representative is None:
+                exe_path = ""
+                try:
+                    exe_path = os.readlink(f"/proc/{pid}/exe")
+                except OSError:
+                    pass
+                if not any(skip in exe_path for skip in ("proton", "wine", "steam", "reaper")):
+                    representative = (pid, env)
 
-            return DetectedGame(
-                name=name,
-                steam_app_id=app_id,
-                pid=pid,
-                graphics_api=api,
-                uses_proton=uses_proton,
-                proton_version=_proton_version(env),
-                dxvk_version=_dxvk_version(env),
-                vkd3d_version=_vkd3d_version(env),
+        if not all_pids_by_appid:
+            return None
+
+        # If every process was a helper (no representative found), use the first pid.
+        if representative is None:
+            app_id = next(iter(all_pids_by_appid))
+            first_pid = all_pids_by_appid[app_id][0]
+            representative = (first_pid, _read_environ(first_pid))
+        else:
+            app_id = int(
+                representative[1].get("SteamAppId")
+                or representative[1].get("STEAM_APP_ID")
+                or 0
             )
 
-        return None
+        pid, env = representative
+        name = _game_name_from_appid(app_id) or f"App {app_id}"
+        api, uses_proton = _detect_graphics_api(env)
+
+        return DetectedGame(
+            name=name,
+            steam_app_id=app_id,
+            pid=pid,
+            graphics_api=api,
+            uses_proton=uses_proton,
+            proton_version=_proton_version(env),
+            dxvk_version=_dxvk_version(env),
+            vkd3d_version=_vkd3d_version(env),
+            all_pids=all_pids_by_appid.get(app_id, [pid]),
+        )
