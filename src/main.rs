@@ -82,7 +82,21 @@ async fn main() -> Result<()> {
             None => tracing::info!("Power collector: no sources available on this hardware"),
         }
 
-        tracing::info!("GamePulse agent ready — 5 collectors loaded");
+        // Audio: instantaneous — always returns Some (backend always present).
+        let mut aud = collectors::audio::AudioCollector::new();
+        match aud.collect()? {
+            Some(doc) => tracing::info!("Audio sample:\n{}", serde_json::to_string_pretty(&doc)?),
+            None => tracing::warn!("Audio collector returned None (unexpected)"),
+        }
+
+        // MangoHud: file-tail — returns None when no log present.
+        let mut mhud = collectors::mangohud::MangoHudCollector::new();
+        match mhud.collect()? {
+            Some(doc) => tracing::info!("MangoHud sample:\n{}", serde_json::to_string_pretty(&doc)?),
+            None => tracing::info!("MangoHud collector: no log file present (game not running)"),
+        }
+
+        tracing::info!("GamePulse agent ready — 7 collectors loaded");
         return Ok(());
     }
 

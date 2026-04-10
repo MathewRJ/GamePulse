@@ -1,7 +1,9 @@
 use anyhow::Result;
 use serde_json::Value;
 
+pub mod audio;
 pub mod cpu;
+pub mod mangohud;
 pub mod memory;
 pub mod network;
 pub mod power;
