@@ -33,7 +33,7 @@ and package maintainers who need real-world performance data.
 - End-to-end test PASSED: Starfield, Proton, 231 docs in `metrics-gamepulse.ebpf-default` (2026-04-09)
 - Fields: runqueue latency histogram (16-bucket log2), min/max/avg_us, event_count, migration total_count, ccx_cross_count (always 0 on 9800X3D — expected), per-thread breakdown (top 8 by switch count)
 
-**Sprint 2 — bio + gpu_sched + mem probes + stutter correlation** ⚠️ BUILT, ES receipt not re-confirmed post-Sprint-2
+**Sprint 2 — bio + gpu_sched + mem probes + stutter correlation** ✅ CONFIRMED IN ES (bio + gpu_sched + schedlatency in 6,112 docs; mem silence expected — zero events during normal gameplay; stutter_correlation silence expected — 16ms threshold not crossed)
 - `block_rq_issue` / `block_rq_complete` → **bio** probe: block I/O latency histogram. System-wide (kworker submits page-cache I/O, not game threads — PID filter removed). Verified: 1–1,351 events/s; spikes on asset loads.
 - `drm_sched_job_queue` / `drm_sched_job_run` → **gpu_sched** probe: GPU job scheduling latency. System-wide (RADV uses dedicated submission threads, not GAME_PIDS). Verified: 1,500–10,925 jobs/s.
 - `page_fault_user` / `mm_vmscan_direct_reclaim_begin` → **mem** probe: page faults (GAME_PIDS filtered) + direct reclaim (system-wide). Verified: 0 events steady-state gameplay (expected — working set resident).

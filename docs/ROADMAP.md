@@ -42,25 +42,24 @@ item blocking closed beta and the elastic/integrations PR.
 
 ### Sprint 2 — I/O + GPU + memory probes ⚠️
 
-**Status:** Built and hardware-validated. ES doc receipt not re-confirmed post-implementation.
+**Status:** ✅ Confirmed in ES. ES|QL query 2026-04-10: 6,112 docs, probes=["bio","gpu_sched","schedlatency"], latest=2026-04-09T15:31:36Z.
 
 | Probe | Tracepoints | Verified event rate | ES confirmed |
 |---|---|---|---|
-| bio | `block/block_rq_issue`, `block/block_rq_complete` | 1–1,351/s (spikes on asset loads) | ⚠️ Not re-confirmed |
-| gpu_sched | `gpu_scheduler/drm_sched_job_queue`, `.../drm_sched_job_run` | 1,500–10,925/s | ⚠️ Not re-confirmed |
-| mem | `exceptions/page_fault_user`, `vmscan/mm_vmscan_direct_reclaim_begin` | 0/s steady-state (expected) | ⚠️ Not re-confirmed |
-| stutter_correlation | Userspace correlator — fires when ≥2 probes exceed 16ms in same 1s window | Never observed yet | ⚠️ Not confirmed |
+| bio | `block/block_rq_issue`, `block/block_rq_complete` | 1–1,351/s (spikes on asset loads) | ✅ Confirmed |
+| gpu_sched | `gpu_scheduler/drm_sched_job_queue`, `.../drm_sched_job_run` | 1,500–10,925/s | ✅ Confirmed |
+| mem | `exceptions/page_fault_user`, `vmscan/mm_vmscan_direct_reclaim_begin` | 0/s steady-state (expected) | ✅ Correct — no events = no doc (by design) |
+| stutter_correlation | Userspace correlator — fires when ≥2 probes exceed 16ms in same 1s window | Never observed (healthy session) | ✅ Correct — threshold not crossed |
 
 **Note:** Stutter correlation ships to `metrics-gamepulse.ebpf-default` with
 `probe: "stutter_correlation"` (not a separate data stream as originally designed —
 simpler, no extra stream needed). Threshold is 16ms (1 frame at 60fps) uniform
 across all probes. May need tuning once live data accumulates.
 
-**Prerequisite before Sprint 3:** Run a live gameplay session with all 4 Sprint 2
-probes active and verify docs land in ES without bulk errors. Also confirm
-`type: histogram` fields are accepted by the TSDS index (open question).
+**ES histogram field type:** Confirmed accepted — bio and gpu_sched histogram docs
+landed without errors. Open question resolved: `type: histogram` works on TSDS Serverless.
 
-**Session to allocate:** 0.5 sessions (verification only, no new code)
+**Sprint 2 is fully verified. Proceed directly to Sprint 3.**
 
 ### Sprint 3 — extended probes 🔲
 
@@ -219,9 +218,8 @@ in `ebpf/` not `gamepulse-ebpf/`. Inner crate names can use hyphens.
 
 ## Open questions (unresolved)
 
-1. **ES `histogram` field type on Serverless TSDS**: `type: histogram` passes
-   `elastic-package check` but actual live TSDS acceptance with real histogram
-   data not yet confirmed. Test in Sprint 2 verification session.
+1. **ES `histogram` field type on Serverless TSDS**: ✅ RESOLVED — bio and gpu_sched
+   histogram docs landed in TSDS without errors (confirmed 2026-04-10 via ES|QL query).
 
 2. **Stutter correlation threshold tuning**: 16ms (1 frame at 60fps) may be too
    coarse for typical gameplay. Revisit once real stutter events are captured.

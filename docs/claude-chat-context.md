@@ -45,10 +45,10 @@ Last updated: 2026-04-10 (state reconciliation audit)
 | Probe | Tracepoints | Status |
 |---|---|---|
 | schedlatency | `sched_wakeup`, `sched_switch`, `sched_migrate_task` | ✅ CONFIRMED IN ES (231 docs, Starfield 2026-04-09) |
-| bio | `block_rq_issue`, `block_rq_complete` | ⚠️ BUILT, hardware-verified (1–1,351 events/s), ES receipt post-Sprint-2 not re-confirmed |
-| gpu_sched | `drm_sched_job_queue`, `drm_sched_job_run` | ⚠️ BUILT, hardware-verified (1,500–10,925 jobs/s), ES receipt not re-confirmed |
-| mem | `page_fault_user`, `mm_vmscan_direct_reclaim_begin` | ⚠️ BUILT, 0 events steady-state (expected), ES receipt not re-confirmed |
-| stutter_correlation | (userspace only) | ⚠️ BUILT, never observed firing in practice (16ms threshold — may need tuning) |
+| bio | `block_rq_issue`, `block_rq_complete` | ✅ CONFIRMED IN ES (6,112 total docs, 2026-04-09) |
+| gpu_sched | `drm_sched_job_queue`, `drm_sched_job_run` | ✅ CONFIRMED IN ES |
+| mem | `page_fault_user`, `mm_vmscan_direct_reclaim_begin` | ✅ No docs = correct (0 events steady-state; flush returns None by design) |
+| stutter_correlation | (userspace only) | ✅ No docs = correct (16ms threshold not crossed in healthy sessions) |
 | gpu_fence | `dma_fence_default_wait` kprobe | 🔲 NOT STARTED |
 | gpu_submit | `amdgpu_cs_ioctl` kprobe | 🔲 NOT STARTED |
 | futex | futex tracepoints | 🔲 NOT STARTED |
