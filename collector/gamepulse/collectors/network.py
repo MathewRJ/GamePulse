@@ -2,7 +2,6 @@
 Network collector — delta reads from /proc/net/dev and /proc/net/snmp.
 
 Fields match gamepulse-network-mappings component template exactly.
-Disabled by default in config (network = false); enable for multiplayer.
 """
 
 from __future__ import annotations

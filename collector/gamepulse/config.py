@@ -31,7 +31,7 @@ class CollectionConfig:
     memory: bool = True
     gpu: bool = True
     storage: bool = True
-    network: bool = False
+    network: bool = True
     ebpf: bool = False
     frame_timing: bool = True
     game_detection: bool = True
