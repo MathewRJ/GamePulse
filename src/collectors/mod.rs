@@ -3,6 +3,7 @@ use serde_json::Value;
 
 pub mod audio;
 pub mod cpu;
+pub mod gpu_amd;
 pub mod mangohud;
 pub mod memory;
 pub mod network;

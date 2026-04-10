@@ -96,7 +96,14 @@ async fn main() -> Result<()> {
             None => tracing::info!("MangoHud collector: no log file present (game not running)"),
         }
 
-        tracing::info!("GamePulse agent ready — 7 collectors loaded");
+        // AMD GPU: instantaneous — logs discovered card/hwmon paths at init.
+        let mut gpu = collectors::gpu_amd::GpuAmdCollector::new(None);
+        match gpu.collect()? {
+            Some(doc) => tracing::info!("AMD GPU sample:\n{}", serde_json::to_string_pretty(&doc)?),
+            None => tracing::warn!("AMD GPU collector returned None — no AMD card found"),
+        }
+
+        tracing::info!("GamePulse agent ready — 8 collectors loaded");
         return Ok(());
     }
 
