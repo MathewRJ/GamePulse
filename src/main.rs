@@ -1,5 +1,5 @@
 // Entry point for the GamePulse production agent.
-// Phase 6: CPU + memory collectors added. Remaining collectors added one per session.
+// Phase 6: CPU + memory + storage collectors added. Remaining collectors added one per session.
 
 mod collectors;
 mod config;
@@ -57,7 +57,16 @@ async fn main() -> Result<()> {
             None => tracing::warn!("Memory collector returned None on second tick"),
         }
 
-        tracing::info!("GamePulse agent ready — 2 collectors loaded");
+        // Storage: delta-based — first tick returns None, second returns data.
+        let mut stor = collectors::storage::StorageCollector::new();
+        let _ = stor.collect();
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        match stor.collect()? {
+            Some(doc) => tracing::info!("Storage sample:\n{}", serde_json::to_string_pretty(&doc)?),
+            None => tracing::warn!("Storage collector returned None on second tick"),
+        }
+
+        tracing::info!("GamePulse agent ready — 3 collectors loaded");
         return Ok(());
     }
 

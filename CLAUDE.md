@@ -67,7 +67,7 @@ and package maintainers who need real-world performance data.
 ### Rust agent (src/) — Phase 6
 
 **Last updated:** 2026-04-10  
-**Status:** CPU + memory collectors complete. 2/8 collectors implemented.
+**Status:** CPU + memory + storage collectors complete. 3/8 collectors implemented.
 
 | Component | Status |
 |---|---|
@@ -77,7 +77,8 @@ and package maintainers who need real-world performance data.
 | ES shipper (`src/shipper.rs`) | ✅ — `ping()` + `ship()`, matches Python auth/index format |
 | CPU collector (`src/collectors/cpu.rs`) | ✅ — `/proc/stat` delta, hwmon temp, cpufreq clock, RAPL power (Intel only), governor, boost |
 | Memory collector (`src/collectors/memory.rs`) | ✅ — `/proc/meminfo`, `/proc/<pid>/status` VmRSS/VmSize, `/proc/<pid>/stat` page faults |
-| Storage collector (`src/collectors/storage.rs`) | 🔲 — next session |
+| Storage collector (`src/collectors/storage.rs`) | ✅ — `/proc/diskstats` delta, Steam path device detection, latency/IOPS/throughput |
+| Network collector (`src/collectors/network.rs`) | 🔲 — next session |
 | eBPF integration | 🔲 — Sprint 4 |
 
 **Notes:**
@@ -103,8 +104,8 @@ copy step. Long-term fix is moving the integration to a `package/` subdirectory 
 
 ### Pending work (in priority order)
 
-1. **Phase 6 storage collector**: `src/collectors/storage.rs`. Read `/proc/diskstats` and `/sys/block/`. Output `gamepulse.storage.*` matching Python exactly. Reference: `collector/gamepulse/collectors/storage.py`.
-2. **Phase 6 remaining collectors** (one per session): network, power, audio, AMD GPU (needs gaming PC online), MangoHud frame.
+1. **Phase 6 network collector**: `src/collectors/network.rs`. Read `/proc/net/dev`. Output `gamepulse.network.*` matching Python exactly. Reference: `collector/gamepulse/collectors/network.py`. Note: recently fixed (commit `7435cc3`) — the Python version is now correct.
+2. **Phase 6 remaining collectors** (one per session): power, audio, AMD GPU (needs gaming PC online), MangoHud frame.
 3. **Scheduler Analysis dashboard**: Sprint 3 data confirmed — ready to build.
 4. **Packaging**: systemd unit, AUR PKGBUILD, .deb/.rpm.
 
