@@ -8,30 +8,50 @@ It collects, ships, and visualises real-world gaming metrics to Elasticsearch.
 The target audience is game developers, journalists, Proton/Wine/Mesa maintainers,
 and package maintainers who need real-world performance data.
 
-## Current state (as of 2026-04-08)
+## Current state — last reconciled 2026-04-10
 
-### What is built and working
+### What is built and verified ✅
 
-- **Python collector** (Phase 1): All metric collectors implemented and running on CachyOS gaming PC — CPU, GPU (AMD), memory, storage, network, audio, frame (MangoHud), power. Outputs `gamepulse.*` namespaced docs.
-- **Elastic Agent integration scaffold** (Phase 0.5): `elastic-package check` and `elastic-package test static` both pass (11/11). Package builds to `gamepulse-0.1.0.zip`. 11 data streams defined with TSDS manifests, field mappings, ingest pipelines, and sample events.
-- **Ingest pipelines deployed**: 11 pipelines live on Elastic Cloud Serverless (`metrics-gamepulse.<dataset>-default`). All index templates wired with `default_pipeline`. Pipeline simulation verified. 6 stale legacy pipelines deleted.
-- **Live gameplay test passed**: Full session verified end-to-end (Cyberpunk 2077, Proton, MangoHud, all 8 streams, game detection working).
-- **Scope document**: `docs/GamePulse-Scope-v3_2.md`
-- **Session summary document complete**: `cli.py` finally block ships a session-end doc to the session data stream with `ended`, `duration_s`, `avg_fps`, `low_1pct_fps`, `p99_frametime_ms`, `peak_gpu_temp_c`, `peak_cpu_temp_c`, `peak_gpu_power_w`, `total_frames`, `stutter_count`, `bottleneck_dominant`. New fields added to `data_stream/session/fields/fields.yml`.
-- **GPU driver version in session stream**: `gamepulse.hardware.gpu.driver_version` wired through `enricher/host.py` (AMD via vulkaninfo, NVIDIA via nvidia-smi) and defined in `data_stream/session/fields/fields.yml`.
-- **Kibana dashboards** (Phase 3, complete):
-  - `dashboards/gamepulse-dashboard.ndjson` — baseline dashboard (UI-exported)
-  - `dashboards/config-comparison-dashboard.json` — Configuration Comparison, 16 panels (ID: 21b663d6-de42-46c6-aeaf-e6c48e46ecec)
-  - `dashboards/session-deep-dive-dashboard.json` — Session Deep-Dive, 17 panels (ID: b68f1178-6923-4e92-819b-33eb595197a9)
-  - `dashboards/storage-io-dashboard.json` — Storage & I/O Analysis, 16 panels (ID: f8a9d960-130e-43db-8554-6033f45e8a9c)
-  - `dashboards/system-health-dashboard.json` — System Health, 15 panels (ID: 1b2a1b70-a315-4ed4-91c4-11aa0abe5e1d)
-  - `dashboards/game-library-dashboard.json` — Game Library, 8 panels (ID: e7d878d0-e2d6-454b-9a95-d93a4aeb70a8)
+- **Python collector** (Phase 1): All 8 metric collectors running on CachyOS gaming PC — CPU, GPU (AMD), memory, storage, network, audio, frame (MangoHud), power. Outputs `gamepulse.*` namespaced docs. SIGTERM now interrupts `time.sleep` immediately via `_ShutdownSignal` and always runs `finally` cleanup (fixed 2026-04-10, commit `8983d27`).
+- **Elastic Agent integration scaffold** (Phase 0.5): `elastic-package check` PASS, `elastic-package test static` 11/11 PASS (confirmed 2026-04-10). Package builds to `gamepulse-0.1.0.zip` via `bash scripts/build-package.sh`.
+- **Ingest pipelines deployed**: 11 pipelines live on Elastic Cloud Serverless. All index templates wired with `default_pipeline`. Pipeline simulation verified.
+- **Live gameplay verified**: Full session end-to-end (Cyberpunk 2077, Proton, MangoHud, all 8 streams, game detection working).
+- **Session summary doc**: `cli.py` `finally` block ships session-end doc. Fields: `ended`, `duration_s`, `avg_fps`, `low_1pct_fps`, `p99_frametime_ms`, `peak_gpu_temp_c`, `peak_cpu_temp_c`, `peak_gpu_power_w`, `total_frames`, `stutter_count`, `bottleneck_dominant`.
+- **GPU driver version**: `gamepulse.hardware.gpu.driver_version` via `enricher/host.py` (AMD: vulkaninfo, NVIDIA: nvidia-smi).
+- **Kibana dashboards** (Phase 3, 6 live dashboards):
+  - `dashboards/gamepulse-dashboard.ndjson` — baseline (UI-exported)
+  - `dashboards/config-comparison-dashboard.json` — 16 panels (ID: 21b663d6-de42-46c6-aeaf-e6c48e46ecec)
+  - `dashboards/session-deep-dive-dashboard.json` — 17 panels (ID: b68f1178-6923-4e92-819b-33eb595197a9)
+  - `dashboards/storage-io-dashboard.json` — 16 panels (ID: f8a9d960-130e-43db-8554-6033f45e8a9c)
+  - `dashboards/system-health-dashboard.json` — 15 panels (ID: 1b2a1b70-a315-4ed4-91c4-11aa0abe5e1d)
+  - `dashboards/game-library-dashboard.json` — 8 panels (ID: e7d878d0-e2d6-454b-9a95-d93a4aeb70a8)
+
+### eBPF daemon (Phase 2)
+
+**Sprint 1 — schedlatency probe** ✅ CONFIRMED IN ES
+- Tracepoints: `sched_wakeup`, `sched_switch`, `sched_migrate_task`
+- End-to-end test PASSED: Starfield, Proton, 231 docs in `metrics-gamepulse.ebpf-default` (2026-04-09)
+- Fields: runqueue latency histogram (16-bucket log2), min/max/avg_us, event_count, migration total_count, ccx_cross_count (always 0 on 9800X3D — expected), per-thread breakdown (top 8 by switch count)
+
+**Sprint 2 — bio + gpu_sched + mem probes + stutter correlation** ⚠️ BUILT, ES receipt not re-confirmed post-Sprint-2
+- `block_rq_issue` / `block_rq_complete` → **bio** probe: block I/O latency histogram. System-wide (kworker submits page-cache I/O, not game threads — PID filter removed). Verified: 1–1,351 events/s; spikes on asset loads.
+- `drm_sched_job_queue` / `drm_sched_job_run` → **gpu_sched** probe: GPU job scheduling latency. System-wide (RADV uses dedicated submission threads, not GAME_PIDS). Verified: 1,500–10,925 jobs/s.
+- `page_fault_user` / `mm_vmscan_direct_reclaim_begin` → **mem** probe: page faults (GAME_PIDS filtered) + direct reclaim (system-wide). Verified: 0 events steady-state gameplay (expected — working set resident).
+- **Stutter correlation**: `correlate()` in `aggregator.rs` — emits `probe: "stutter_correlation"` doc to same data stream when ≥2 probes exceed 16ms threshold in same 1s window. Fields: `contributing_probes[]`, `sched_max_us`, `bio_max_us`, `gpu_sched_max_us`, `mem_pressure`, `severity_score` (2–4).
+- All Sprint 2 fields mapped in `data_stream/ebpf/fields/fields.yml` (bio, gpu_sched, mem, stutter groups). `elastic-package check` PASS.
+
+**Sprint 3 — extended probes** 🔲 NOT STARTED
+- `gpu_fence` (kprobe `dma_fence_default_wait`), `gpu_submit` (`amdgpu_cs_ioctl`), `futex`, `irq`, `vfs` — no code exists.
+
+**Sprint 4–5** 🔲 NOT STARTED
+- Scheduler Analysis dashboard, packaging (systemd, AUR), advanced probes (syscall, shader, proton).
 
 ### What is not yet started
 
-- **Rust production agent** (Phase 4): `src/`, `Cargo.toml` do not exist. The Python collector is the only working implementation.
-- **eBPF daemon** (Phase 2 per v3.2): Sprint 1 complete (`ebpf/`). End-to-end test pending.
-- **Scheduler Analysis dashboard**: Requires Phase 2 eBPF data stream.
+- **Rust production agent** (Phase 6): `src/`, `Cargo.toml` do not exist. Python collector is the only working implementation. This gates closed beta (Phase 4) and the elastic/integrations PR.
+- **Scheduler Analysis dashboard**: blocked — needs Sprint 2+ eBPF data confirmed live in Kibana.
+- **Packaging**: no `.deb`, `.rpm`, AUR PKGBUILD, or systemd service file.
+- **Full elastic-package test suite**: only `test static` passes. `test asset`, `test system`, `test policy` not yet configured.
 
 ### Package build
 
@@ -46,8 +66,11 @@ copy step. Long-term fix is moving the integration to a `package/` subdirectory 
 
 ### Pending work (in priority order)
 
-1. Phase 2: eBPF daemon design (Rust/Aya).
-2. Phase 4: Rust production agent replacing Python collector.
+1. **Sprint 3 eBPF probes**: gpu_fence (`dma_fence_default_wait` kprobe), gpu_submit (`amdgpu_cs_ioctl`), futex, irq, vfs.
+2. **Phase 6 Rust agent scaffold**: `src/Cargo.toml`, CLI, config, ES shipper — `cargo check` only, no collectors yet.
+3. **Phase 6 Rust collectors** (one per session): CPU, memory, storage, network, power, audio, AMD GPU (needs gaming PC online), MangoHud frame.
+4. **Scheduler Analysis dashboard**: build after Sprint 3 data confirmed in ES.
+5. **Packaging**: systemd unit, AUR PKGBUILD, .deb/.rpm.
 
 ## Stack
 

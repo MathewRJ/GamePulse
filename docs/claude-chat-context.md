@@ -9,21 +9,24 @@ Claude Code (implementation sessions).
 - Claude Code: update CLAUDE.md current state section at the end of every session
 - Neither should edit the other's file
 
-Last updated: April 2026
+Last updated: 2026-04-10 (state reconciliation audit)
 
 ---
 
 ## Project status snapshot
 
-### What is built and verified
+### What is built and verified ✅
 
-- **Python collector**: live on CachyOS gaming PC, all 8 metric streams shipping
+- **Python collector**: live on CachyOS gaming PC, all 8 metric streams shipping.
+  SIGTERM fix live (2026-04-10): raises `_ShutdownSignal` to interrupt sleep
+  immediately and guarantee `finally` cleanup runs.
 - **Elastic Agent integration scaffold**: `elastic-package check` + `test static`
-  11/11 passing. Package builds to 346KB via `bash scripts/build-package.sh`.
+  11/11 passing (confirmed 2026-04-10). Package builds to ~345KB via
+  `bash scripts/build-package.sh`.
 - **11 ingest pipelines**: deployed to Elastic Cloud Serverless, index templates
-  wired, `default_pipeline` set. 6 stale legacy pipelines deleted.
+  wired, `default_pipeline` set.
 - **Live session verified**: Cyberpunk 2077 end-to-end (Proton, MangoHud, all 8
-  streams flowing, game detection working)
+  streams flowing, game detection working).
 - **Kibana dashboards (Phase 3 complete)**: all 6 dashboards built and committed:
   - `dashboards/gamepulse-dashboard.ndjson` — baseline (UI-exported)
   - `dashboards/config-comparison-dashboard.json` — 16 panels (ID: 21b663d6)
@@ -31,71 +34,61 @@ Last updated: April 2026
   - `dashboards/storage-io-dashboard.json` — 16 panels (ID: f8a9d960)
   - `dashboards/system-health-dashboard.json` — 15 panels (ID: 1b2a1b70)
   - `dashboards/game-library-dashboard.json` — 8 panels (ID: e7d878d0)
-- **`driver_version` field**: confirmed present at
-  `gamepulse.hardware.gpu.driver_version` (populated via `vulkaninfo` for AMD,
-  `nvidia-smi` for NVIDIA). Was already implemented — the stale note about it
-  being missing referred to the wrong field path.
-- **Session summary document**: fully implemented and live-validated. Ships at
-  session end with: `summary.ended`, `summary.duration_s`, `summary.avg_fps`,
-  `summary.low_1pct_fps`, `summary.p99_frametime_ms`, `summary.total_frames`,
-  `summary.peak_gpu_temp_c`, `summary.peak_cpu_temp_c`, `summary.peak_gpu_power_w`,
-  `summary.stutter_count`, `summary.bottleneck_dominant`.
-  Live-validated 2026-04-08: session doc confirmed in ES with all fields populated
-  (RX 9070 XT, Ryzen 7 9800X3D, 506s session, avg 145.9 FPS).
-- **Zero TODO/FIXME debt**: confirmed by progress-auditor 2026-04-08.
-- **Phase 2 eBPF architecture design doc**: complete at
-  `docs/ebpf-architecture.md`. Covers full daemon design — probe architecture,
-  BPF map strategy, ring buffer sizing, PID filtering (including Proton process
-  trees), GPU tracing across three layers (DRM scheduler uAPI → DMA fence →
-  vendor-specific kprobes), userspace aggregation, ES data model with histogram
-  fields, stutter correlation events, build system, systemd deployment, and
-  phased implementation plan (5 sprints). Ready for Claude Code implementation.
+- **Session summary document**: live-validated. Ships at session end with all
+  summary fields. Live-validated 2026-04-08 (RX 9070 XT, 506s, avg 145.9 FPS).
+- **Zero TODO/FIXME debt**: confirmed 2026-04-10 audit.
+- **Phase 2 eBPF architecture design doc**: `docs/ebpf-architecture-design.md`
+  (not `ebpf-architecture.md` — note corrected filename).
 
-### Git state (end of last Claude Code session)
+### eBPF daemon — per-probe status
+
+| Probe | Tracepoints | Status |
+|---|---|---|
+| schedlatency | `sched_wakeup`, `sched_switch`, `sched_migrate_task` | ✅ CONFIRMED IN ES (231 docs, Starfield 2026-04-09) |
+| bio | `block_rq_issue`, `block_rq_complete` | ⚠️ BUILT, hardware-verified (1–1,351 events/s), ES receipt post-Sprint-2 not re-confirmed |
+| gpu_sched | `drm_sched_job_queue`, `drm_sched_job_run` | ⚠️ BUILT, hardware-verified (1,500–10,925 jobs/s), ES receipt not re-confirmed |
+| mem | `page_fault_user`, `mm_vmscan_direct_reclaim_begin` | ⚠️ BUILT, 0 events steady-state (expected), ES receipt not re-confirmed |
+| stutter_correlation | (userspace only) | ⚠️ BUILT, never observed firing in practice (16ms threshold — may need tuning) |
+| gpu_fence | `dma_fence_default_wait` kprobe | 🔲 NOT STARTED |
+| gpu_submit | `amdgpu_cs_ioctl` kprobe | 🔲 NOT STARTED |
+| futex | futex tracepoints | 🔲 NOT STARTED |
+| irq | irq/softirq tracepoints | 🔲 NOT STARTED |
+| vfs | `vfs_read`/`vfs_write` kprobes | 🔲 NOT STARTED |
+| syscall | syscall tracepoints | 🔲 NOT STARTED |
+| shader | Mesa uprobe | 🔲 NOT STARTED |
+| proton | Wine/ntdll kprobes | 🔲 NOT STARTED |
+
+### Git state (end of last Claude Code session — 2026-04-10)
 
 Branch: `main`, clean, up to date with `origin/main`
 
-Key recent commits:
-- Session summary: added `p99_frametime_ms`, `peak_gpu_power_w`, `total_frames`
-  fields + `fields.yml` definitions, fixed invalid `w` unit enum
-- (driver_version and dashboards were already committed in prior sessions)
+Recent commits:
+- `8983d27` fix(collector): SIGTERM now interrupts sleep and runs finally cleanup
+- `69ba844` feat(ebpf): Sprint 2 stutter correlation probe
+- `92cd994` feat(ebpf): Sprint 2 mem probe
+- `64297a4` feat(ebpf): Sprint 2 bio and gpu_sched probes
 
-**Pending commit (from this planning session):**
-- `docs/ebpf-architecture.md` — Phase 2 eBPF design doc (new file)
-- `docs/claude-chat-context.md` — this file (updated)
+### Hardware confirmed in live session (2026-04-08/09)
 
-### Hardware confirmed in live session (2026-04-08)
-
-- GPU: AMD Radeon RX 9070 XT (RADV GFX1201), driver 26.0.4, Mesa 26.0.4-arch2.2
-- CPU: AMD Ryzen 7 9800X3D, 8c/16t
+- GPU: AMD Radeon RX 9070 XT (RADV GFX1201), driver 26.0.4, Mesa 26.0.4
+- CPU: AMD Ryzen 7 9800X3D, 8c/16t, single CCX (ccx_cross_count always 0 — expected)
 - RAM: 61,910 MB
 - OS: CachyOS Linux, kernel 6.19.11-1-cachyos-deckify
-- Vulkan driver: radv
-
-### CPU topology verified (2026-04-08)
-
-- Single CCD, single CCX — all 16 logical CPUs share L3 index 0 (`shared_cpu_list: 0-15`)
-- `ccx_cross_count` eBPF metric will always be zero on this chip (expected; metric
-  is architecturally correct for multi-CCD chips like 7950X/9950X)
-- Core-to-core migrations within the single CCX are still tracked by
-  `migration.total_count`
 
 ---
 
 ## Priorities (in order)
 
-1. **Phase 2: eBPF daemon** — design doc complete (`docs/ebpf-architecture.md`).
-   Claude Code implementation follows from that doc. Implementation order:
-   - Sprint 1: Scaffold Aya project + `schedlatency` probe end-to-end
-   - Sprint 2: `bio`, `gpu_sched`, `mem` probes + stutter correlation
-   - Sprint 3: `gpu_fence`, `gpu_submit`, `futex`, `irq`, `vfs` probes
-   - Sprint 4: Integration package updates (`fields.yml`, pipeline), Scheduler
-     Analysis dashboard, packaging (AUR, systemd)
-   - Sprint 5 (stretch): `syscall`, `shader`, `proton` probes
-2. **Scheduler Analysis dashboard** — blocked on Sprint 2+ eBPF data.
-3. **Pipeline/system tests** — require local ES or Docker setup.
-4. **Phase 6: move integration to `package/` subdirectory** — long-term fix for
-   `elastic-package-ignore` not applying during build copy step.
+1. **Sprint 3 eBPF probes**: gpu_fence (`dma_fence_default_wait`), gpu_submit
+   (`amdgpu_cs_ioctl`), futex, irq, vfs. One Claude Code session.
+2. **Phase 6 Rust agent scaffold**: `src/Cargo.toml`, CLI, config, ES shipper —
+   `cargo check` only. One session. This gates Phase 4 (closed beta) and the
+   elastic/integrations PR.
+3. **Phase 6 Rust collectors** (one per session): CPU, memory, storage, network,
+   power, audio, AMD GPU (needs gaming PC for live testing), MangoHud frame.
+4. **Scheduler Analysis dashboard**: build after Sprint 3 eBPF data confirmed in ES.
+5. **Packaging**: systemd unit, AUR PKGBUILD, .deb/.rpm.
+6. **Full elastic-package test suite**: asset + system + policy tests (need Docker/local ES).
 
 ---
 
