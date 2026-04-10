@@ -67,7 +67,7 @@ and package maintainers who need real-world performance data.
 ### Rust agent (src/) — Phase 6
 
 **Last updated:** 2026-04-10  
-**Status:** Scaffold only. No collectors implemented yet.
+**Status:** CPU collector complete. 1/8 collectors implemented.
 
 | Component | Status |
 |---|---|
@@ -75,13 +75,15 @@ and package maintainers who need real-world performance data.
 | CLI (clap: --config, --dry-run, --version) | ✅ |
 | Config loader (`src/config.rs`) | ✅ — mirrors Python config.py exactly |
 | ES shipper (`src/shipper.rs`) | ✅ — `ping()` + `ship()`, matches Python auth/index format |
-| Collectors (`src/collectors/mod.rs`) | 🔲 — one per session, CPU first |
+| CPU collector (`src/collectors/cpu.rs`) | ✅ — `/proc/stat` delta, hwmon temp, cpufreq clock, RAPL power (Intel only), governor, boost |
+| Memory collector (`src/collectors/memory.rs`) | 🔲 — next session |
 | eBPF integration | 🔲 — Sprint 4 |
 
 **Notes:**
 - `src/Cargo.toml` has `[[bin]] path = "main.rs"` because source files sit at the `src/` level, not in a `src/src/` subdirectory.
 - Root `Cargo.toml` workspace includes only `["src"]`. The `ebpf/` workspace remains independent (cross-compilation target + xtask cannot merge cleanly into a host workspace).
-- `cargo check` produces only dead-code warnings (expected for scaffold — fields will be used when collectors are added).
+- `cargo check` produces only dead-code warnings (expected — fields will be used when more collectors are added).
+- CPU collector: first `collect()` call always returns `None` (no delta yet — two snapshots required). Second call returns data. `game_pid` stored for future `game_utilisation_pct` field (not yet emitted).
 - **Scheduler Analysis dashboard**: blocked — needs Sprint 2+ eBPF data confirmed live in Kibana.
 - **Packaging**: no `.deb`, `.rpm`, AUR PKGBUILD, or systemd service file.
 - **Full elastic-package test suite**: only `test static` passes. `test asset`, `test system`, `test policy` not yet configured.
@@ -99,8 +101,8 @@ copy step. Long-term fix is moving the integration to a `package/` subdirectory 
 
 ### Pending work (in priority order)
 
-1. **Phase 6 CPU collector**: `src/collectors/cpu.rs`. Read `/proc/stat` and `/proc/loadavg`. Output `gamepulse.cpu.*` fields matching Python collector exactly. Reference: `collector/gamepulse/collectors/cpu.py`.
-2. **Phase 6 remaining collectors** (one per session): memory, storage, network, power, audio, AMD GPU (needs gaming PC online), MangoHud frame.
+1. **Phase 6 memory collector**: `src/collectors/memory.rs`. Read `/proc/meminfo` and `/proc/<pid>/status`. Output `gamepulse.memory.*` matching Python exactly. Reference: `collector/gamepulse/collectors/memory.py`.
+2. **Phase 6 remaining collectors** (one per session): storage, network, power, audio, AMD GPU (needs gaming PC online), MangoHud frame.
 3. **Scheduler Analysis dashboard**: Sprint 3 data confirmed — ready to build.
 4. **Packaging**: systemd unit, AUR PKGBUILD, .deb/.rpm.
 

@@ -17,10 +17,10 @@ Source of truth reconciled: 2026-04-10
 ## Current position
 
 Phase 2 eBPF daemon is fully complete (all 9 probes ES-confirmed). Phase 6 Rust
-production agent scaffold is done (`src/` exists, CLI/config/shipper built, `cargo
-check` passes, `--version` and `--dry-run` work). The active frontier is Phase 6
-collectors — one per session, CPU first. Network collector bug also fixed (was
-disabled by default; now enabled). Next session: `src/collectors/cpu.rs`.
+production agent scaffold is done and the CPU collector is implemented (`src/collectors/cpu.rs`
+— `/proc/stat` delta, hwmon temp, cpufreq clock, governor, boost; verified side-by-side
+against Python output 2026-04-10). The active frontier is Phase 6 collectors — one per
+session. Next session: memory collector (`src/collectors/memory.rs`).
 
 ---
 
@@ -115,8 +115,8 @@ data. The Rust port is translation work, not design work.
 | Step | Deliverable | Notes |
 |---|---|---|
 | 1 | `src/Cargo.toml`, CLI, config, ES shipper — `cargo check` passes | ✅ Done 2026-04-10 |
-| 2 | CPU collector (`/proc/stat`, `/proc/loadavg`, k10temp hwmon) | Simplest — good warm-up |
-| 3 | Memory collector (`/proc/meminfo`, `/proc/<pid>/status`) | |
+| 2 | CPU collector (`/proc/stat`, `/proc/loadavg`, k10temp hwmon) | ✅ Done 2026-04-10 |
+| 3 | Memory collector (`/proc/meminfo`, `/proc/<pid>/status`) | Next session |
 | 4 | Storage collector (`/proc/diskstats`, `/sys/block/`) | |
 | 5 | Network collector (`/proc/net/dev`) | |
 | 6 | Power collector (`/sys/class/power_supply/`, RAPL if available) | RAPL needs root; return None gracefully |

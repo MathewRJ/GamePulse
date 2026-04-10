@@ -1,5 +1,5 @@
 // Entry point for the GamePulse production agent.
-// Phase 6: scaffold only — no collectors yet.
+// Phase 6: CPU collector added. No other collectors yet.
 // Collectors are added one per session in subsequent phases.
 
 mod collectors;
@@ -8,6 +8,7 @@ mod shipper;
 
 use anyhow::Result;
 use clap::Parser;
+use collectors::Collector;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -17,7 +18,7 @@ struct Cli {
     #[arg(short, long, value_name = "PATH")]
     config: Option<PathBuf>,
 
-    /// Skip ES connectivity check and exit 0
+    /// Skip ES connectivity check and exit 0 (runs one CPU sample for validation)
     #[arg(long)]
     dry_run: bool,
 }
@@ -39,11 +40,24 @@ async fn main() -> Result<()> {
 
     if cli.dry_run {
         tracing::info!("dry-run mode, skipping ES connectivity check");
-        tracing::info!("GamePulse agent ready — 0 collectors loaded");
+
+        let mut cpu = collectors::cpu::CpuCollector::new(None);
+        // First tick returns None (no delta yet).
+        let _ = cpu.collect();
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        // Second tick returns data.
+        match cpu.collect()? {
+            Some(doc) => {
+                tracing::info!("CPU sample:\n{}", serde_json::to_string_pretty(&doc)?);
+            }
+            None => tracing::warn!("CPU collector returned None on second tick"),
+        }
+
+        tracing::info!("GamePulse agent ready — 1 collector loaded");
         return Ok(());
     }
 
     shipper::ping(&cfg).await?;
-    tracing::info!("GamePulse agent ready — 0 collectors loaded");
+    tracing::info!("GamePulse agent ready — 1 collector loaded");
     Ok(())
 }
