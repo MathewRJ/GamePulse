@@ -5,6 +5,53 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-10 (Phase 6 CPU collector — code red)
+
+### Context coming in
+Phase 6 Rust agent scaffold complete (CLI, config, shipper, `cargo check` passing).
+CPU collector session in progress — implementation was complete, side-by-side output
+comparison done, but session hit context limit before doc updates and commit.
+
+### What was done this session
+
+#### CPU collector implemented (`0db7253`)
+
+`src/collectors/cpu.rs` — 272 lines, full parity with Python `cpu.py`:
+- `/proc/stat` delta-based utilisation: per-core `(idle, total)` jiffies, 1-decimal rounding
+- `/sys/bus/cpu/devices/cpu*/cpufreq/scaling_cur_freq` → `clock_mhz_avg` (integer MHz, matches Python `int()`)
+- `/sys/class/hwmon` → k10temp/coretemp name search → Tdie/Package/Tctl label priority → `temperature_c`
+- `/sys/class/powercap/intel-rapl/intel-rapl:0/energy_uj` → RAPL power (Intel only; `None` on AMD)
+- `/sys/bus/cpu/devices/cpu0/cpufreq/scaling_governor` → `governor`
+- AMD boost (`/sys/devices/system/cpu/cpufreq/boost`) + Intel no_turbo inverted → `boost_state`
+- Output: `{"gamepulse":{"cpu":{...}}}` — 6 keys, nested under gamepulse.cpu exactly
+
+**Side-by-side verification**: Rust `--dry-run` output matched Python reference structurally:
+same 6 keys, same nesting, same types. Values differ by ~10 pct util (two different time
+windows — expected). `power_w` absent on AMD machine (correct: RAPL path doesn't exist).
+
+**Notes on implementation:**
+- First `collect()` always returns `None` (no delta yet — two snapshots required)
+- `game_pid` stored in struct for future `game_utilisation_pct` field (not yet emitted)
+- `src/collectors/mod.rs` updated with `Collector` trait + `pub mod cpu`
+- `src/main.rs` `--dry-run` mode exercises the CPU collector
+
+**Validation**: `cargo check` 0 errors (dead-code warnings only, expected). `elastic-package check` PASS. `elastic-package test static` 11/11 PASS.
+
+### Current state
+- Working tree clean. `0db7253` pushed.
+- Phase 6 has 1/8 collectors done (CPU).
+- CLAUDE.md and ROADMAP.md updated to mark CPU ✅, memory collector as next.
+
+### Next step: Phase 6 memory collector
+
+`src/collectors/memory.rs`. Reference: `collector/gamepulse/collectors/memory.py`.
+Output `gamepulse.memory.*` matching Python exactly:
+- `system_used_mb`, `system_available_mb`, `swap_used_mb` from `/proc/meminfo`
+- `game_rss_mb` from `/proc/<pid>/status` (VmRSS line), None if no game_pid
+- `cargo check` must pass, side-by-side comparison required before commit
+
+---
+
 ## Session: 2026-04-09d (Sprint 2 gpu_sched fix + mem probe)
 
 ### Context coming in
