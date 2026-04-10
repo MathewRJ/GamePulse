@@ -9,7 +9,7 @@ Claude Code (implementation sessions).
 - Claude Code: update CLAUDE.md current state section at the end of every session
 - Neither should edit the other's file
 
-Last updated: 2026-04-10 (Phase 6 Rust agent: 7/8 collectors complete)
+Last updated: 2026-04-10 (Phase 6 Rust agent: 8/8 collectors complete)
 
 ---
 
@@ -69,17 +69,17 @@ Last updated: 2026-04-10 (Phase 6 Rust agent: 7/8 collectors complete)
 | Power | ✅ Done 2026-04-10 |
 | Audio | ✅ Done 2026-04-10 |
 | MangoHud frame | ✅ Done 2026-04-10 |
-| AMD GPU | 🔲 Requires gaming PC online (RX 9070 XT sysfs validation) |
+| AMD GPU | ✅ Done 2026-04-10 — card1/hwmon3, validated on RX 9070 XT |
 
 ### Git state (end of last Claude Code session — 2026-04-10)
 
 Branch: `main`, clean, up to date with `origin/main` (after push)
 
 Recent commits:
+- `b95e667` feat(agent): Phase 6 AMD GPU collector — sysfs heuristic, RX 9070 XT validated
+- `251d484` docs: audio + MangoHud collectors complete — AMD GPU is final collector
 - `a248244` feat(agent): Phase 6 MangoHud frame collector — log tail, matches Python output
 - `4ee7e8b` feat(agent): Phase 6 audio collector — PipeWire/PulseAudio, matches Python output
-- `e80f784` docs: Sprint 3 complete — 5/5 probes built, ES confirmation pending
-- `0fac78c` feat(ebpf): Sprint 3 — five new probes: futex, irq, vfs, gpu_fence, gpu_submit
 
 ### Hardware confirmed in live session (2026-04-08/09)
 
@@ -92,7 +92,7 @@ Recent commits:
 
 ## Priorities (in order)
 
-1. **Phase 6 AMD GPU collector**: `src/collectors/gpu_amd.rs`. Needs gaming PC online (RX 9070 XT). Reference: `collector/gamepulse/collectors/gpu/` (directory). Must validate card1/hwmon scoring heuristic against live sysfs. Dedicated session.
+1. **Phase 6 main loop integration**: Wire all 8 collectors into the main loop (1s tick), port game detection from Python `session.py`/`cli.py`, write `/tmp/gamepulse/session.json` on game start (eBPF handoff), ship docs via `src/shipper.rs`. Run a full gameplay session and verify all 8 Rust streams in ES. Requires gaming PC online.
 2. **Scheduler Analysis dashboard**: Sprint 3 eBPF data confirmed in ES — ready to build.
 3. **Packaging**: systemd unit, AUR PKGBUILD, .deb/.rpm.
 4. **Full elastic-package test suite**: asset + system + policy tests (need Docker/local ES).

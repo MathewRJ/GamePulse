@@ -67,7 +67,7 @@ and package maintainers who need real-world performance data.
 ### Rust agent (src/) — Phase 6
 
 **Last updated:** 2026-04-10  
-**Status:** CPU + memory + storage + network + power + audio + MangoHud frame collectors complete. 7/8 collectors implemented. AMD GPU is the final collector (requires gaming PC online).
+**Status:** All 8 collectors complete. AMD GPU validated on RX 9070 XT (card1/hwmon3). Next: main loop integration — wire all collectors, game detection, session.json, ES shipping, end-to-end session.
 
 | Component | Status |
 |---|---|
@@ -82,7 +82,7 @@ and package maintainers who need real-world performance data.
 | Power collector (`src/collectors/power.rs`) | ✅ — AMD TDP cap (hwmon), battery, AC, platform profile; None-safe |
 | Audio collector (`src/collectors/audio.rs`) | ✅ — PipeWire/PulseAudio/ALSA backend detection, xruns, latency, sample rate |
 | MangoHud frame collector (`src/collectors/mangohud.rs`) | ✅ — CSV log tail, fps stats, frametime, stutter count |
-| AMD GPU collector (`src/collectors/gpu_amd.rs`) | 🔲 — needs gaming PC online (RX 9070 XT sysfs path validation) |
+| AMD GPU collector (`src/collectors/gpu_amd.rs`) | ✅ — sysfs heuristic, validated on RX 9070 XT (card1/hwmon3) |
 | eBPF integration | 🔲 — Sprint 4 |
 
 **Notes:**
@@ -93,6 +93,8 @@ and package maintainers who need real-world performance data.
 - Memory collector: `collect()` always returns `Some` (no delta needed). Game-pid fields (`game_rss_mb`, `virtual_mb`, `page_faults_major`, `page_faults_minor`) only appear when `game_pid` is set.
 - Audio collector: backend detected once at construction time. `collect()` always returns `Some` (backend always present). xruns only emitted on 2nd+ call (delta). No regex crate — pattern matching via `rfind`-based string helpers.
 - MangoHud collector: stores file byte offset between ticks for incremental CSV read. Re-checks for newer log file every 5s. Returns `None` when no log present or no new data. `stutter_count` always present (0 when no frametime data).
+- AMD GPU collector: discovery runs once at startup (not per-tick). Hwmon found via `{card}/device/hwmon/hwmon*` (device-path traversal, not `/sys/class/hwmon`). On RX 9070 XT: card1/hwmon3. Scoring: card1 scores 18 (fan+power+hotspot+hwmon); card0 iGPU scores 1 (hwmon only). Logs discovered paths at INFO on startup.
+- **Key learnings — AMD GPU sysfs on this hardware (RX 9070 XT, CachyOS)**: card1 = discrete (vendor 0x1002, amdgpu driver); card0 = iGPU. hwmon3 = card1 discrete, hwmon4 = card0 iGPU. Heuristic selects correctly without hardcoding paths.
 - **Scheduler Analysis dashboard**: blocked — needs Sprint 2+ eBPF data confirmed live in Kibana.
 - **Packaging**: no `.deb`, `.rpm`, AUR PKGBUILD, or systemd service file.
 - **Full elastic-package test suite**: only `test static` passes. `test asset`, `test system`, `test policy` not yet configured.
@@ -110,7 +112,7 @@ copy step. Long-term fix is moving the integration to a `package/` subdirectory 
 
 ### Pending work (in priority order)
 
-1. **Phase 6 AMD GPU collector**: `src/collectors/gpu_amd.rs`. Needs gaming PC online (RX 9070 XT) — dedicated session. Reference: `collector/gamepulse/collectors/gpu/` (directory). Must validate card1/hwmon scoring heuristic against live sysfs.
+1. **Phase 6 main loop integration**: Wire all 8 collectors into the main loop with 1s tick. Port game detection from `collector/gamepulse/session.py` and `cli.py`. Write `/tmp/gamepulse/session.json` on game start (eBPF daemon handoff). Ship docs via `src/shipper.rs` bulk API. Run a full gameplay session and verify all 8 Rust data streams appear in `metrics-gamepulse.*-default` alongside the eBPF streams. Requires gaming PC online and a game ready to launch.
 2. **Scheduler Analysis dashboard**: Sprint 3 eBPF data confirmed — ready to build.
 3. **Packaging**: systemd unit, AUR PKGBUILD, .deb/.rpm.
 

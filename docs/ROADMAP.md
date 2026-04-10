@@ -17,9 +17,10 @@ Source of truth reconciled: 2026-04-10
 ## Current position
 
 Phase 2 eBPF daemon is fully complete (all 9 probes ES-confirmed). Phase 6 Rust
-production agent has 7/8 collectors complete: CPU, memory, storage, network, power,
-audio, and MangoHud frame (all verified 2026-04-10). Final collector: AMD GPU — requires
-gaming PC online with RX 9070 XT for live sysfs path validation. Dedicated session needed.
+production agent has all 8 collectors complete: CPU, memory, storage, network, power,
+audio, MangoHud frame, and AMD GPU (all validated 2026-04-10, RX 9070 XT card1/hwmon3).
+Next: main loop integration — wire collectors, game detection, session.json, ES shipping,
+end-to-end session verification.
 
 ---
 
@@ -121,13 +122,32 @@ data. The Rust port is translation work, not design work.
 | 6 | Power collector (`/sys/class/power_supply/`, RAPL/hwmon) | ✅ Done 2026-04-10 |
 | 7 | Audio collector (PipeWire/PulseAudio via `pactl`/`pw-cli`) | ✅ Done 2026-04-10 |
 | 8 | MangoHud frame timing collector (log file tail) | ✅ Done 2026-04-10 |
-| 9 | AMD GPU collector (sysfs/hwmon — card1/hwmon3 heuristic) | **Needs gaming PC online for live testing.** Preserve card-scoring heuristic from Python exactly. |
+| 9 | AMD GPU collector (sysfs/hwmon — card1/hwmon3 heuristic) | ✅ Done 2026-04-10 — validated on RX 9070 XT |
 | 10 | Merge eBPF daemon as feature-flagged module | Fold `ebpf/` into `src/ebpf/` |
 | 11 | Packaging: systemd unit, `.deb`, `.rpm`, AUR PKGBUILD | |
 
-**Biggest risk:** AMD GPU collector sysfs path heuristic is hardware-specific
-(card1 not card0, hwmon3 scoring). Dedicate a full session with the gaming PC
-online for step 8. Do not attempt it without the hardware available for testing.
+**AMD GPU heuristic validated 2026-04-10**: card1 = RX 9070 XT (score 18: fan+power+hotspot+hwmon); card0 = iGPU (score 1). Hwmon discovered via `{card}/device/hwmon/hwmon*` device-path traversal.
+
+### Phase 6 — Main loop integration (next) 🔲
+
+**Status:** Not started. All 8 collectors complete — ready to wire.
+
+Wire all 8 collectors into the main loop with a 1s tick. Port game detection from
+`collector/gamepulse/session.py` and `cli.py`. Write `/tmp/gamepulse/session.json`
+on game start (eBPF daemon handoff). Ship docs via `src/shipper.rs` bulk API. Run
+a full gameplay session and verify all 8 Rust data streams appear in
+`metrics-gamepulse.*-default` alongside the eBPF streams.
+
+Tasks:
+1. Wire all 8 collectors into the main loop with 1s tick
+2. Port game detection from `collector/gamepulse/session.py`
+3. Write `/tmp/gamepulse/session.json` on game start (eBPF daemon handoff)
+4. Ship docs via `src/shipper.rs` bulk API
+5. Run a full gameplay session
+6. Verify all 8 Rust data streams appear in `metrics-gamepulse.*-default`
+
+**Session to allocate:** 1 Claude Code session. Requires gaming PC online and a
+game ready to launch.
 
 ---
 
