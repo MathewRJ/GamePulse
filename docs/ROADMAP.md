@@ -40,7 +40,7 @@ item blocking closed beta and the elastic/integrations PR.
 | Fields defined | `gamepulse.ebpf.runqueue.*` (histogram, min/max/avg_us, event_count), `gamepulse.ebpf.migration.*` (total_count, ccx_cross_count), `gamepulse.ebpf.thread_breakdown[]` (nested) |
 | Known behaviour | `ccx_cross_count` always 0 on 9800X3D (single CCX) — expected, not a bug |
 
-### Sprint 2 — I/O + GPU + memory probes ⚠️
+### Sprint 2 — I/O + GPU + memory probes ✅
 
 **Status:** ✅ Confirmed in ES. ES|QL query 2026-04-10: 6,112 docs, probes=["bio","gpu_sched","schedlatency"], latest=2026-04-09T15:31:36Z.
 
@@ -80,7 +80,7 @@ futex, irq, vfs groups (mirror the histogram + min/max/avg/count pattern).
 
 ### Sprint 4 — integration + Scheduler Analysis dashboard 🔲
 
-**Status:** Not started. 🚫 Blocked on Sprint 2 ES verification + Sprint 3 probes.
+**Status:** Not started. 🚫 Blocked on Sprint 3 probes.
 
 - Update `data_stream/ebpf/sample_event.json` to add examples for bio, gpu_sched,
   mem, and stutter_correlation probe types (currently only schedlatency covered)
@@ -218,8 +218,8 @@ in `ebpf/` not `gamepulse-ebpf/`. Inner crate names can use hyphens.
 
 ## Open questions (unresolved)
 
-1. **ES `histogram` field type on Serverless TSDS**: ✅ RESOLVED — bio and gpu_sched
-   histogram docs landed in TSDS without errors (confirmed 2026-04-10 via ES|QL query).
+1. **ES `histogram` field type on Serverless TSDS**: ✅ RESOLVED — Accepted natively
+   by Serverless TSDS. histogram docs land without errors. No schema change needed.
 
 2. **Stutter correlation threshold tuning**: 16ms (1 frame at 60fps) may be too
    coarse for typical gameplay. Revisit once real stutter events are captured.

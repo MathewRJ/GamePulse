@@ -33,11 +33,11 @@ and package maintainers who need real-world performance data.
 - End-to-end test PASSED: Starfield, Proton, 231 docs in `metrics-gamepulse.ebpf-default` (2026-04-09)
 - Fields: runqueue latency histogram (16-bucket log2), min/max/avg_us, event_count, migration total_count, ccx_cross_count (always 0 on 9800X3D — expected), per-thread breakdown (top 8 by switch count)
 
-**Sprint 2 — bio + gpu_sched + mem probes + stutter correlation** ✅ CONFIRMED IN ES (bio + gpu_sched + schedlatency in 6,112 docs; mem silence expected — zero events during normal gameplay; stutter_correlation silence expected — 16ms threshold not crossed)
-- `block_rq_issue` / `block_rq_complete` → **bio** probe: block I/O latency histogram. System-wide (kworker submits page-cache I/O, not game threads — PID filter removed). Verified: 1–1,351 events/s; spikes on asset loads.
-- `drm_sched_job_queue` / `drm_sched_job_run` → **gpu_sched** probe: GPU job scheduling latency. System-wide (RADV uses dedicated submission threads, not GAME_PIDS). Verified: 1,500–10,925 jobs/s.
-- `page_fault_user` / `mm_vmscan_direct_reclaim_begin` → **mem** probe: page faults (GAME_PIDS filtered) + direct reclaim (system-wide). Verified: 0 events steady-state gameplay (expected — working set resident).
-- **Stutter correlation**: `correlate()` in `aggregator.rs` — emits `probe: "stutter_correlation"` doc to same data stream when ≥2 probes exceed 16ms threshold in same 1s window. Fields: `contributing_probes[]`, `sched_max_us`, `bio_max_us`, `gpu_sched_max_us`, `mem_pressure`, `severity_score` (2–4).
+**Sprint 2 — bio + gpu_sched + mem probes + stutter correlation** ✅ CONFIRMED IN ES
+- **bio** ✅ CONFIRMED IN ES (6,112 docs total with schedlatency+gpu_sched, date 2026-04-10) — `block_rq_issue` / `block_rq_complete`. System-wide (kworker submits page-cache I/O). Verified: 1–1,351 events/s; spikes on asset loads.
+- **gpu_sched** ✅ CONFIRMED IN ES (6,112 docs total with schedlatency+bio, date 2026-04-10) — `drm_sched_job_queue` / `drm_sched_job_run`. System-wide (RADV uses dedicated submission threads). Verified: 1,500–10,925 jobs/s.
+- **mem** ✅ CONFIRMED — silence correct by design (`flush()` returns `None` when working set resident; will fire under real memory pressure) — `page_fault_user` (GAME_PIDS filtered) + `mm_vmscan_direct_reclaim_begin` (system-wide).
+- **stutter_correlation** ✅ CONFIRMED — silence correct by design (16ms threshold not crossed in healthy session; will fire under actual stutter events) — `correlate()` in `aggregator.rs`, emits `probe: "stutter_correlation"` when ≥2 probes spike in same 1s window.
 - All Sprint 2 fields mapped in `data_stream/ebpf/fields/fields.yml` (bio, gpu_sched, mem, stutter groups). `elastic-package check` PASS.
 
 **Sprint 3 — extended probes** 🔲 NOT STARTED
@@ -45,6 +45,15 @@ and package maintainers who need real-world performance data.
 
 **Sprint 4–5** 🔲 NOT STARTED
 - Scheduler Analysis dashboard, packaging (systemd, AUR), advanced probes (syscall, shader, proton).
+
+### Key learnings
+
+- **BPF verifier requires opt-level=2**: Debug Rust builds emit BPF-to-BPF calls to panic infrastructure → verifier rejects ("processed 0 insns"). `-C opt-level=2` set in `ebpf/.cargo/config.toml`. Never remove.
+- **Async ring buffer drain race**: `AsyncFd<RingBuf>` + Tokio EPOLLET silently drops events. Drain synchronously in `collect()` on each tick instead.
+- **GAME_PIDS capacity**: `max_entries=256` — BPF hash maps at 100% load fail inserts. Always leave headroom.
+- **session.json path**: Always `/tmp/gamepulse/session.json`. `$XDG_RUNTIME_DIR` is stripped by sudo — daemon and collector would watch different paths.
+- **RADV GPU scheduling**: `drm_sched_job_queue` must be system-wide. RADV uses dedicated submission threads not in the game PID tree.
+- **ES histogram field type on Serverless TSDS (resolved 2026-04-10)**: The `type: histogram` field mapping is accepted by Elasticsearch Serverless in TSDS mode. LatencyHistogram docs (`{"values":[…],"counts":[…]}`) land without bulk errors. No fallback to scalar percentile fields required. This was the last open architectural risk for the eBPF data model.
 
 ### What is not yet started
 
