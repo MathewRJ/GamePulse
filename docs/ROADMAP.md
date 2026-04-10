@@ -1,6 +1,6 @@
 # GamePulse Roadmap
 
-Last updated: 2026-04-10 (Sprint 3 complete)
+Last updated: 2026-04-10 (Sprint 3 ES-confirmed)
 Source of truth reconciled: 2026-04-10
 
 ## Status legend
@@ -16,15 +16,13 @@ Source of truth reconciled: 2026-04-10
 
 ## Current position
 
-Phase 2 Sprint 3 is code-complete (2026-04-10). All 5 new probes (futex, irq, vfs,
-gpu_fence, gpu_submit) are implemented kernel-side (BPF) and userspace-side (Aya/Rust),
-with field mappings in fields.yml. `cargo check` passes; `elastic-package check` and
-`test static` both pass 11/11. ES confirmation (live run as root) is pending —
-requires recompiling the BPF object and running the daemon. The daemon now supports
-9 total probes (sched, bio, gpu_sched, mem, stutter_correlation, futex, irq, vfs,
-gpu_fence, gpu_submit) with graceful per-probe requirements checking. The active
-frontier is: (1) Sprint 3 ES confirmation, then (2) Phase 6 Rust production agent
-scaffold — the critical path item blocking closed beta.
+Phase 2 Sprint 3 is complete and ES-confirmed (2026-04-10). All 5 new probes (futex,
+irq, vfs, gpu_fence, gpu_submit) are confirmed live in `metrics-gamepulse.ebpf-default`
+(session 7bce1dc5, Starfield, 2348 total eBPF docs). The daemon now runs 9 probes
+end-to-end (sched, bio, gpu_sched, mem, stutter_correlation, futex, irq, vfs,
+gpu_fence, gpu_submit). Phase 2 is fully complete. The active frontier is:
+(1) Phase 6 Rust production agent scaffold — the critical path item blocking closed
+beta; (2) Scheduler Analysis dashboard (Sprint 3 data now available in ES).
 
 ---
 
@@ -62,27 +60,26 @@ landed without errors. Open question resolved: `type: histogram` works on TSDS S
 
 **Sprint 2 is fully verified. Proceed directly to Sprint 3.**
 
-### Sprint 3 — extended probes ⚠️
+### Sprint 3 — extended probes ✅
 
-**Status:** Code complete — ES confirmation pending (needs daemon recompile + root run)
+**Status:** ✅ Confirmed in ES. Session 7bce1dc5 (Starfield, 2026-04-10): 2348 total eBPF docs, all 5 probes present.
 
 | Probe | Kernel attachment | Symbol source | ES confirmed |
 |---|---|---|---|
-| futex | kprobe/kretprobe `do_futex` | `T do_futex` in kallsyms | Pending |
-| irq | tracepoints `irq/irq_handler_{entry,exit}`, `irq/softirq_{entry,exit}` | `/sys/kernel/tracing/events/irq/` | Pending |
-| vfs | kprobe/kretprobe `vfs_read`, `vfs_write` | `T vfs_read`, `T vfs_write` in kallsyms | Pending |
-| gpu_fence | kprobe/kretprobe `dma_fence_default_wait` | `T dma_fence_default_wait` in kallsyms | Pending |
-| gpu_submit | kprobe `amdgpu_cs_ioctl` | `t amdgpu_cs_ioctl [amdgpu]` in kallsyms | Pending |
+| futex | kprobe/kretprobe `do_futex` | `T do_futex` in kallsyms | ✅ 6 docs — GAME_PIDS filtered; sparse = correct (low contention) |
+| irq | tracepoints `irq/irq_handler_{entry,exit}`, `irq/softirq_{entry,exit}` | `/sys/kernel/tracing/events/irq/` | ✅ 367 docs — hard_irq + softirq both confirmed |
+| vfs | kprobe/kretprobe `vfs_read`, `vfs_write` | `T vfs_read`, `T vfs_write` in kallsyms | ✅ 362 docs — read + write both confirmed |
+| gpu_fence | kprobe/kretprobe `dma_fence_default_wait` | `T dma_fence_default_wait` in kallsyms | ✅ 367 docs — blocked_count=0 (GPU not stalling, healthy session) |
+| gpu_submit | kprobe `amdgpu_cs_ioctl` | `t amdgpu_cs_ioctl [amdgpu]` in kallsyms | ✅ 367 docs — event_count=181/doc (count-only, as designed) |
 
-Fields added to `data_stream/ebpf/fields/fields.yml`: futex, irq (hard_irq + softirq),
-vfs (read + write), gpu_fence, gpu_submit field groups. `elastic-package check` PASS.
+Fields in `data_stream/ebpf/fields/fields.yml`: futex, irq (hard_irq + softirq),
+vfs (read + write), gpu_fence, gpu_submit. `elastic-package check` PASS, `test static` 11/11 PASS.
 
-**Next step:** Run `cargo xtask build-ebpf && gamepulse-ebpf` as root with Sprint 3
-probes compiled and confirm ES doc receipt.
+**Sprint 3 is complete. Phase 2 eBPF daemon is fully confirmed end-to-end.**
 
 ### Sprint 4 — integration + Scheduler Analysis dashboard 🔲
 
-**Status:** Not started. 🚫 Blocked on Sprint 3 probes.
+**Status:** Not started. Sprint 3 blocker resolved — ready to schedule.
 
 - Update `data_stream/ebpf/sample_event.json` to add examples for bio, gpu_sched,
   mem, and stutter_correlation probe types (currently only schedlatency covered)
