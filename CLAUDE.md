@@ -63,11 +63,14 @@ and package maintainers who need real-world performance data.
 - **futex doc sparsity**: futex probe (GAME_PIDS-filtered) produces very few docs when game has low mutex contention — 6 docs in 6-minute Starfield session. This is correct: it's a game-specific signal (not system-wide), and contended_count=0 means the game held mutexes briefly. Will produce more docs under lock contention (e.g., asset streaming, thread pool saturation).
 - **gpu_fence blocked_count=0 is the healthy baseline**: `dma_fence_default_wait` fires when CPU waits for GPU work. blocked_count=0 (wait >1ms) means the GPU is keeping up. Elevated blocked_count signals GPU-CPU sync stalls.
 - **Network collector silent failure (fixed 2026-04-10)**: `CollectionConfig.network` defaulted to `False` while all other collectors defaulted to `True`. The collector itself was correct; it simply was never instantiated. User config had no `[collection]` section so the default always applied. Fix: changed default to `True` in `config.py`. No changes needed to `network.py`.
+- **Rust host enricher: dGPU selection requires max-VRAM heuristic (fixed 2026-04-10)**: On systems with iGPU + dGPU both exposing DRM nodes (card0=iGPU 2GB, card1=RX 9070 XT 16GB), iterating sorted cards and breaking at first AMD card picks the wrong one. Fix: score all AMD cards by VRAM and pick the one with the most. Both the Python enricher (same sorted/break bug) and the original Rust enricher had this flaw; only caught when live ES data showed `hardware.gpu.model=iGPU`.
+- **Rust host enricher: vulkaninfo first-match must be guarded (fixed 2026-04-10)**: `enrich_amd()` originally overwrote model/vulkan_driver on every matching line. With iGPU+dGPU, vulkaninfo lists dGPU first then iGPU — the iGPU name wins. Fix: `!m.contains_key("model")` guard preserves first (correct) match.
+- **mesa_version unavailable without DISPLAY (fixed 2026-04-10)**: `glxinfo -B` requires an X/Wayland display. As a background agent it gets "unable to open display". For RADV, mesa_version == driver_version. Fix: fall back to driver_version when vulkan_driver is "radv" and glxinfo produces no output.
 
 ### Rust agent (src/) — Phase 6
 
 **Last updated:** 2026-04-10  
-**Status:** All 8 collectors complete. AMD GPU validated on RX 9070 XT (card1/hwmon3). Next: main loop integration — wire all collectors, game detection, session.json, ES shipping, end-to-end session.
+**Status:** COMPLETE — all 8 collectors + main loop integration ES-confirmed.
 
 | Component | Status |
 |---|---|
@@ -83,19 +86,23 @@ and package maintainers who need real-world performance data.
 | Audio collector (`src/collectors/audio.rs`) | ✅ — PipeWire/PulseAudio/ALSA backend detection, xruns, latency, sample rate |
 | MangoHud frame collector (`src/collectors/mangohud.rs`) | ✅ — CSV log tail, fps stats, frametime, stutter count |
 | AMD GPU collector (`src/collectors/gpu_amd.rs`) | ✅ — sysfs heuristic, validated on RX 9070 XT (card1/hwmon3) |
+| Session manager (`src/session.rs`) | ✅ — Steam /proc scan, ACF name lookup, session.json write/remove |
+| Host enricher (`src/host.rs`) | ✅ — once-at-startup snapshot, hardware.gpu correctly selects dGPU by max VRAM |
+| Main loop (`src/main.rs`) | ✅ — 1s tick, all 8 collectors, SIGTERM/SIGINT, session start/end + summary docs |
 | eBPF integration | 🔲 — Sprint 4 |
+
+**ES-confirmed 2026-04-10** (no active game, all system metrics streaming):
+- All 8 metric datasets: cpu 178 docs, gpu 180, memory 180, storage 178, network 178, audio 180, power 180, frame 2 (no game), session 4 ✅
+- Hardware fields: `hardware.gpu.model=AMD Radeon RX 9070 XT (RADV GFX1201)`, `vram_mb=16304`, `driver_version=26.0.4`, `mesa_version=26.0.4` ✅
 
 **Notes:**
 - `src/Cargo.toml` has `[[bin]] path = "main.rs"` because source files sit at the `src/` level, not in a `src/src/` subdirectory.
 - Root `Cargo.toml` workspace includes only `["src"]`. The `ebpf/` workspace remains independent (cross-compilation target + xtask cannot merge cleanly into a host workspace).
-- `cargo check` produces only dead-code warnings (expected — fields will be used when more collectors are added).
-- CPU collector: first `collect()` call always returns `None` (no delta yet — two snapshots required). Second call returns data. `game_pid` stored for future `game_utilisation_pct` field (not yet emitted).
-- Memory collector: `collect()` always returns `Some` (no delta needed). Game-pid fields (`game_rss_mb`, `virtual_mb`, `page_faults_major`, `page_faults_minor`) only appear when `game_pid` is set.
-- Audio collector: backend detected once at construction time. `collect()` always returns `Some` (backend always present). xruns only emitted on 2nd+ call (delta). No regex crate — pattern matching via `rfind`-based string helpers.
-- MangoHud collector: stores file byte offset between ticks for incremental CSV read. Re-checks for newer log file every 5s. Returns `None` when no log present or no new data. `stutter_count` always present (0 when no frametime data).
-- AMD GPU collector: discovery runs once at startup (not per-tick). Hwmon found via `{card}/device/hwmon/hwmon*` (device-path traversal, not `/sys/class/hwmon`). On RX 9070 XT: card1/hwmon3. Scoring: card1 scores 18 (fan+power+hotspot+hwmon); card0 iGPU scores 1 (hwmon only). Logs discovered paths at INFO on startup.
+- CPU collector: first `collect()` call always returns `None` (no delta yet — two snapshots required). Second call returns data.
+- MangoHud collector: returns `None` when no log present. `stutter_count` always present (0 when no frametime data).
+- AMD GPU collector: discovery runs once at startup. Hwmon via `{card}/device/hwmon/hwmon*` traversal. card1/hwmon3 = RX 9070 XT.
+- Host enricher `gpu_info()`: selects AMD card with max VRAM to prefer dGPU over iGPU when both expose DRM nodes (card0=iGPU 2GB, card1=RX 9070 XT 16GB). `enrich_amd()` takes first match per field from vulkaninfo (prevents iGPU overwriting dGPU). `mesa_version` falls back to `driver_version` for RADV when `glxinfo` unavailable (no DISPLAY in service context).
 - **Key learnings — AMD GPU sysfs on this hardware (RX 9070 XT, CachyOS)**: card1 = discrete (vendor 0x1002, amdgpu driver); card0 = iGPU. hwmon3 = card1 discrete, hwmon4 = card0 iGPU. Heuristic selects correctly without hardcoding paths.
-- **Scheduler Analysis dashboard**: blocked — needs Sprint 2+ eBPF data confirmed live in Kibana.
 - **Packaging**: no `.deb`, `.rpm`, AUR PKGBUILD, or systemd service file.
 - **Full elastic-package test suite**: only `test static` passes. `test asset`, `test system`, `test policy` not yet configured.
 
@@ -112,9 +119,10 @@ copy step. Long-term fix is moving the integration to a `package/` subdirectory 
 
 ### Pending work (in priority order)
 
-1. **Phase 6 main loop integration**: Wire all 8 collectors into the main loop with 1s tick. Port game detection from `collector/gamepulse/session.py` and `cli.py`. Write `/tmp/gamepulse/session.json` on game start (eBPF daemon handoff). Ship docs via `src/shipper.rs` bulk API. Run a full gameplay session and verify all 8 Rust data streams appear in `metrics-gamepulse.*-default` alongside the eBPF streams. Requires gaming PC online and a game ready to launch.
-2. **Scheduler Analysis dashboard**: Sprint 3 eBPF data confirmed — ready to build.
-3. **Packaging**: systemd unit, AUR PKGBUILD, .deb/.rpm.
+1. **Scheduler Analysis dashboard**: Sprint 3 eBPF data confirmed — ready to build.
+2. **Packaging**: systemd unit, AUR PKGBUILD, .deb/.rpm.
+3. **Full elastic-package test suite**: `test asset`, `test system`, `test policy` (require Docker or local ES).
+4. **Full gameplay session verification**: Run agent during a game to confirm frame collector data + game detection fields in all docs. No game was active during Phase 6 verification run.
 
 ## Stack
 

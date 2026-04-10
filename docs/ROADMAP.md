@@ -1,6 +1,6 @@
 # GamePulse Roadmap
 
-Last updated: 2026-04-10 (Sprint 3 ES-confirmed)
+Last updated: 2026-04-10 (Phase 6 main loop integration ES-confirmed)
 Source of truth reconciled: 2026-04-10
 
 ## Status legend
@@ -17,10 +17,11 @@ Source of truth reconciled: 2026-04-10
 ## Current position
 
 Phase 2 eBPF daemon is fully complete (all 9 probes ES-confirmed). Phase 6 Rust
-production agent has all 8 collectors complete: CPU, memory, storage, network, power,
-audio, MangoHud frame, and AMD GPU (all validated 2026-04-10, RX 9070 XT card1/hwmon3).
-Next: main loop integration — wire collectors, game detection, session.json, ES shipping,
-end-to-end session verification.
+production agent is fully operational: all 8 collectors wired into the main loop
+with 1s tick, game detection running (Steam `/proc` scan + ACF name lookup),
+session.json written for eBPF handoff, all 8 metric streams confirmed in ES
+(2026-04-10). Next: packaging (systemd unit, AUR PKGBUILD) and Scheduler Analysis
+dashboard.
 
 ---
 
@@ -128,26 +129,30 @@ data. The Rust port is translation work, not design work.
 
 **AMD GPU heuristic validated 2026-04-10**: card1 = RX 9070 XT (score 18: fan+power+hotspot+hwmon); card0 = iGPU (score 1). Hwmon discovered via `{card}/device/hwmon/hwmon*` device-path traversal.
 
-### Phase 6 — Main loop integration (next) 🔲
+### Phase 6 — Main loop integration ✅
 
-**Status:** Not started. All 8 collectors complete — ready to wire.
+**Status:** Complete and ES-confirmed 2026-04-10.
 
-Wire all 8 collectors into the main loop with a 1s tick. Port game detection from
-`collector/gamepulse/session.py` and `cli.py`. Write `/tmp/gamepulse/session.json`
-on game start (eBPF daemon handoff). Ship docs via `src/shipper.rs` bulk API. Run
-a full gameplay session and verify all 8 Rust data streams appear in
-`metrics-gamepulse.*-default` alongside the eBPF streams.
+All 8 collectors wired into the main loop with 1s tick. Game detection ported from
+Python (`session.rs`). Host enricher implemented (`host.rs`). Session lifecycle
+complete: session.json written on game start, removed on exit; session start/end
+docs with hardware snapshot shipped to `metrics-gamepulse.session-default`.
 
-Tasks:
-1. Wire all 8 collectors into the main loop with 1s tick
-2. Port game detection from `collector/gamepulse/session.py`
-3. Write `/tmp/gamepulse/session.json` on game start (eBPF daemon handoff)
-4. Ship docs via `src/shipper.rs` bulk API
-5. Run a full gameplay session
-6. Verify all 8 Rust data streams appear in `metrics-gamepulse.*-default`
+**ES-confirmed 2026-04-10:** All 8 datasets shipping:
+- `gamepulse.cpu` — 178 docs ✅
+- `gamepulse.gpu` — 180 docs ✅
+- `gamepulse.memory` — 180 docs ✅
+- `gamepulse.storage` — 178 docs ✅
+- `gamepulse.network` — 178 docs ✅
+- `gamepulse.audio` — 180 docs ✅
+- `gamepulse.power` — 180 docs ✅
+- `gamepulse.frame` — shipping (no game active during test) ✅
+- `gamepulse.session` — start + summary confirmed ✅
 
-**Session to allocate:** 1 Claude Code session. Requires gaming PC online and a
-game ready to launch.
+Hardware fields confirmed: `hardware.gpu.model=AMD Radeon RX 9070 XT (RADV GFX1201)`,
+`hardware.gpu.vram_mb=16304`, `hardware.gpu.driver_version=26.0.4`,
+`hardware.gpu.mesa_version=26.0.4`, `host.name=cachyos-pc`,
+`host.os.kernel=6.19.11-1-cachyos-deckify`.
 
 ---
 

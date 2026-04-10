@@ -1,14 +1,27 @@
-// Entry point for the GamePulse production agent.
-// Phase 6: CPU + memory + storage + network + power collectors added.
+// GamePulse production agent — Phase 6 main loop.
+//
+// Wires all 8 collectors into a 1-second tick loop, handles game detection,
+// writes session.json for the eBPF daemon, ships docs to Elasticsearch, and
+// builds a session summary document on shutdown.
+//
+// Mirrors the structure of collector/gamepulse/cli.py exactly.
 
 mod collectors;
 mod config;
+mod host;
+mod session;
 mod shipper;
 
 use anyhow::Result;
+use chrono::Utc;
 use clap::Parser;
 use collectors::Collector;
+use serde_json::{json, Value};
+use session::SessionEvent;
 use std::path::PathBuf;
+use tokio::signal::unix::SignalKind;
+
+// ── CLI ───────────────────────────────────────────────────────────────────────
 
 #[derive(Parser)]
 #[command(name = "gamepulse-agent", version, about = "GamePulse Linux telemetry agent")]
@@ -17,16 +30,341 @@ struct Cli {
     #[arg(short, long, value_name = "PATH")]
     config: Option<PathBuf>,
 
-    /// Skip ES connectivity check and exit 0 (runs one CPU sample for validation)
+    /// Run one collection cycle, print output, exit without shipping to ES
     #[arg(long)]
     dry_run: bool,
 }
+
+// ── Utilities ──────────────────────────────────────────────────────────────────
+
+/// RFC3339 UTC timestamp matching Python's datetime.datetime.now(utc).isoformat()
+fn utc_now() -> String {
+    Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, true)
+}
+
+/// Recursively deep-merge `overlay` into `base`. Later values win on scalar
+/// conflicts; nested objects are merged rather than replaced.
+/// Matches Python _merge_docs() in cli.py exactly.
+fn deep_merge(mut base: Value, overlay: Value) -> Value {
+    match (&mut base, overlay) {
+        (Value::Object(base_map), Value::Object(overlay_map)) => {
+            for (k, v) in overlay_map {
+                match base_map.get_mut(&k) {
+                    Some(existing) if existing.is_object() && v.is_object() => {
+                        let owned = existing.take();
+                        *existing = deep_merge(owned, v);
+                    }
+                    _ => {
+                        base_map.insert(k, v);
+                    }
+                }
+            }
+        }
+        (base, overlay) => *base = overlay,
+    }
+    base
+}
+
+/// Add data_stream routing fields to a doc so the shipper can derive the index.
+fn add_data_stream(doc: &mut Value, dataset: &str) {
+    if let Some(obj) = doc.as_object_mut() {
+        obj.insert(
+            "data_stream".to_string(),
+            json!({
+                "type": "metrics",
+                "dataset": dataset,
+                "namespace": "default",
+            }),
+        );
+    }
+}
+
+// ── Session document builders ─────────────────────────────────────────────────
+
+/// Ship a session-start document when the agent comes online.
+fn build_session_start_doc(
+    session: &session::SessionManager,
+    host_snapshot: &Value,
+    hostname: &str,
+) -> Value {
+    let base = session.base_doc(hostname);
+    let ts = json!({ "@timestamp": utc_now() });
+    let mut doc = deep_merge(deep_merge(ts, base), host_snapshot.clone());
+    add_data_stream(&mut doc, "gamepulse.session");
+    doc
+}
+
+/// Ship an updated session document when a game is first detected.
+fn build_game_detected_doc(
+    session: &session::SessionManager,
+    host_snapshot: &Value,
+    hostname: &str,
+    game: &session::DetectedGame,
+) -> Value {
+    let base = session.base_doc(hostname);
+    let ts = json!({ "@timestamp": utc_now() });
+    let mut compat = serde_json::Map::new();
+    if let Some(v) = &game.proton_version {
+        compat.insert("proton_version".to_string(), Value::String(v.clone()));
+    }
+    if let Some(v) = &game.dxvk_version {
+        compat.insert("dxvk_version".to_string(), Value::String(v.clone()));
+    }
+    let compat_overlay = if compat.is_empty() {
+        json!({})
+    } else {
+        json!({ "gamepulse": { "compatibility": compat } })
+    };
+    let mut doc = deep_merge(
+        deep_merge(deep_merge(ts, base), host_snapshot.clone()),
+        compat_overlay,
+    );
+    add_data_stream(&mut doc, "gamepulse.session");
+    doc
+}
+
+// ── Accumulator helpers ───────────────────────────────────────────────────────
+
+struct SessionAccumulators {
+    fps_samples: Vec<f64>,
+    frametime_samples: Vec<f64>,
+    stutter_total: i64,
+    peak_gpu_temp: Option<f64>,
+    peak_cpu_temp: Option<f64>,
+    peak_gpu_power: Option<f64>,
+    gpu_bottleneck_ticks: i64,
+    cpu_bottleneck_ticks: i64,
+    balanced_ticks: i64,
+}
+
+impl SessionAccumulators {
+    fn new() -> Self {
+        SessionAccumulators {
+            fps_samples: Vec::new(),
+            frametime_samples: Vec::new(),
+            stutter_total: 0,
+            peak_gpu_temp: None,
+            peak_cpu_temp: None,
+            peak_gpu_power: None,
+            gpu_bottleneck_ticks: 0,
+            cpu_bottleneck_ticks: 0,
+            balanced_ticks: 0,
+        }
+    }
+
+    /// Update accumulators from the tick's doc list.
+    fn update(&mut self, docs: &[Value]) {
+        let mut tick_gpu_util: Option<f64> = None;
+        let mut tick_cpu_util: Option<f64> = None;
+
+        for doc in docs {
+            let gp = match doc.get("gamepulse").and_then(|g| g.as_object()) {
+                Some(g) => g,
+                None => continue,
+            };
+
+            if let Some(gpu) = gp.get("gpu").and_then(|g| g.as_object()) {
+                tick_gpu_util = gpu.get("utilisation_pct").and_then(|v| v.as_f64());
+                if let Some(t) = gpu.get("temperature_c").and_then(|v| v.as_f64()) {
+                    self.peak_gpu_temp =
+                        Some(self.peak_gpu_temp.map_or(t, |p: f64| p.max(t)));
+                }
+                if let Some(p) = gpu.get("power_w").and_then(|v| v.as_f64()) {
+                    self.peak_gpu_power =
+                        Some(self.peak_gpu_power.map_or(p, |prev: f64| prev.max(p)));
+                }
+            }
+
+            if let Some(cpu) = gp.get("cpu").and_then(|g| g.as_object()) {
+                tick_cpu_util =
+                    cpu.get("total_utilisation_pct").and_then(|v| v.as_f64());
+                if let Some(t) = cpu.get("temperature_c").and_then(|v| v.as_f64()) {
+                    self.peak_cpu_temp =
+                        Some(self.peak_cpu_temp.map_or(t, |p: f64| p.max(t)));
+                }
+            }
+
+            if let Some(fps) = gp.get("fps").and_then(|g| g.as_object()) {
+                if let Some(avg) = fps.get("avg_1s").and_then(|v| v.as_f64()) {
+                    self.fps_samples.push(avg);
+                }
+                if let Some(sc) = fps.get("stutter_count").and_then(|v| v.as_i64()) {
+                    self.stutter_total += sc;
+                }
+                if let Some(ft) = fps.get("frametime_ms").and_then(|v| v.as_f64()) {
+                    self.frametime_samples.push(ft);
+                }
+            }
+        }
+
+        if let (Some(gpu_util), Some(cpu_util)) = (tick_gpu_util, tick_cpu_util) {
+            if gpu_util > 90.0 {
+                self.gpu_bottleneck_ticks += 1;
+            } else if cpu_util > 90.0 {
+                self.cpu_bottleneck_ticks += 1;
+            } else {
+                self.balanced_ticks += 1;
+            }
+        }
+    }
+
+    fn bottleneck_dominant(&self) -> Option<&'static str> {
+        let total =
+            self.gpu_bottleneck_ticks + self.cpu_bottleneck_ticks + self.balanced_ticks;
+        if total == 0 {
+            return None;
+        }
+        if self.gpu_bottleneck_ticks >= self.cpu_bottleneck_ticks
+            && self.gpu_bottleneck_ticks >= self.balanced_ticks
+        {
+            Some("gpu")
+        } else if self.cpu_bottleneck_ticks >= self.balanced_ticks {
+            Some("cpu")
+        } else {
+            Some("balanced")
+        }
+    }
+}
+
+/// Build the session-end summary document. Matches Python cli.py finally block.
+fn build_summary_doc(
+    session: &session::SessionManager,
+    host_snapshot: &Value,
+    hostname: &str,
+    duration_s: u64,
+    acc: &SessionAccumulators,
+) -> Value {
+    let interval = 1.0_f64; // 1-second collection interval
+
+    let mut summary = serde_json::Map::new();
+    summary.insert("ended".to_string(), Value::Bool(true));
+    summary.insert("duration_s".to_string(), Value::from(duration_s));
+    summary.insert("stutter_count".to_string(), Value::from(acc.stutter_total));
+
+    if !acc.fps_samples.is_empty() {
+        let mut sorted = acc.fps_samples.clone();
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let avg_fps =
+            (acc.fps_samples.iter().sum::<f64>() / acc.fps_samples.len() as f64 * 10.0).round()
+                / 10.0;
+        summary.insert("avg_fps".to_string(), Value::from(avg_fps));
+        let n = sorted.len();
+        let low_idx = (n as f64 * 0.01) as usize;
+        let low_idx = low_idx.saturating_sub(1).min(n - 1);
+        summary.insert(
+            "low_1pct_fps".to_string(),
+            Value::from(sorted[low_idx] as i64),
+        );
+        let total_frames =
+            (acc.fps_samples.iter().sum::<f64>() * interval).round() as i64;
+        summary.insert("total_frames".to_string(), Value::from(total_frames));
+    }
+
+    if !acc.frametime_samples.is_empty() {
+        let mut ft_sorted = acc.frametime_samples.clone();
+        ft_sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let n = ft_sorted.len();
+        let p99_idx = (n as f64 * 0.99) as usize;
+        let p99_idx = p99_idx.saturating_sub(1).min(n - 1);
+        let p99 = (ft_sorted[p99_idx] * 100.0).round() / 100.0;
+        summary.insert("p99_frametime_ms".to_string(), Value::from(p99));
+    }
+
+    if let Some(t) = acc.peak_gpu_temp {
+        summary.insert("peak_gpu_temp_c".to_string(), Value::from(t));
+    }
+    if let Some(t) = acc.peak_cpu_temp {
+        summary.insert("peak_cpu_temp_c".to_string(), Value::from(t));
+    }
+    if let Some(p) = acc.peak_gpu_power {
+        summary.insert("peak_gpu_power_w".to_string(), Value::from(p));
+    }
+    if let Some(bn) = acc.bottleneck_dominant() {
+        summary.insert("bottleneck_dominant".to_string(), Value::String(bn.to_string()));
+    }
+
+    let base = session.base_doc(hostname);
+    let ts = json!({ "@timestamp": utc_now() });
+    let summary_overlay = json!({ "gamepulse": { "summary": summary } });
+    let mut doc = deep_merge(
+        deep_merge(deep_merge(ts, base), host_snapshot.clone()),
+        summary_overlay,
+    );
+    add_data_stream(&mut doc, "gamepulse.session");
+    doc
+}
+
+// ── Dry-run ───────────────────────────────────────────────────────────────────
+
+async fn dry_run() -> Result<()> {
+    tracing::info!("dry-run mode — validating all 8 collectors");
+
+    // CPU: first tick returns None (delta), second returns data.
+    let mut cpu = collectors::cpu::CpuCollector::new(None);
+    let _ = cpu.collect();
+    std::thread::sleep(std::time::Duration::from_secs(1));
+    match cpu.collect()? {
+        Some(doc) => tracing::info!("CPU sample:\n{}", serde_json::to_string_pretty(&doc)?),
+        None => tracing::warn!("CPU collector returned None on second tick"),
+    }
+
+    let mut mem = collectors::memory::MemoryCollector::new(None);
+    let _ = mem.collect();
+    match mem.collect()? {
+        Some(doc) => tracing::info!("Memory sample:\n{}", serde_json::to_string_pretty(&doc)?),
+        None => tracing::warn!("Memory collector returned None"),
+    }
+
+    let mut stor = collectors::storage::StorageCollector::new();
+    let _ = stor.collect();
+    std::thread::sleep(std::time::Duration::from_secs(1));
+    match stor.collect()? {
+        Some(doc) => tracing::info!("Storage sample:\n{}", serde_json::to_string_pretty(&doc)?),
+        None => tracing::warn!("Storage collector returned None"),
+    }
+
+    let mut net = collectors::network::NetworkCollector::new();
+    let _ = net.collect();
+    std::thread::sleep(std::time::Duration::from_secs(1));
+    match net.collect()? {
+        Some(doc) => tracing::info!("Network sample:\n{}", serde_json::to_string_pretty(&doc)?),
+        None => tracing::warn!("Network collector returned None"),
+    }
+
+    let mut pwr = collectors::power::PowerCollector::new();
+    match pwr.collect()? {
+        Some(doc) => tracing::info!("Power sample:\n{}", serde_json::to_string_pretty(&doc)?),
+        None => tracing::info!("Power: no sources on this hardware"),
+    }
+
+    let mut aud = collectors::audio::AudioCollector::new();
+    match aud.collect()? {
+        Some(doc) => tracing::info!("Audio sample:\n{}", serde_json::to_string_pretty(&doc)?),
+        None => tracing::warn!("Audio returned None"),
+    }
+
+    let mut mhud = collectors::mangohud::MangoHudCollector::new();
+    match mhud.collect()? {
+        Some(doc) => tracing::info!("MangoHud sample:\n{}", serde_json::to_string_pretty(&doc)?),
+        None => tracing::info!("MangoHud: no log present (game not running)"),
+    }
+
+    let mut gpu = collectors::gpu_amd::GpuAmdCollector::new(None);
+    match gpu.collect()? {
+        Some(doc) => tracing::info!("AMD GPU sample:\n{}", serde_json::to_string_pretty(&doc)?),
+        None => tracing::warn!("AMD GPU returned None"),
+    }
+
+    tracing::info!("dry-run complete — 8 collectors loaded");
+    Ok(())
+}
+
+// ── Main loop ─────────────────────────────────────────────────────────────────
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    // Initialise tracing — stderr, INFO by default, overridden by GAMEPULSE_LOG.
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_env("GAMEPULSE_LOG")
@@ -38,76 +376,165 @@ async fn main() -> Result<()> {
     let cfg = config::Config::load(cli.config.as_ref())?;
 
     if cli.dry_run {
-        tracing::info!("dry-run mode, skipping ES connectivity check");
-
-        // CPU: first tick returns None (no delta yet), second returns data.
-        let mut cpu = collectors::cpu::CpuCollector::new(None);
-        let _ = cpu.collect();
-        std::thread::sleep(std::time::Duration::from_secs(1));
-        match cpu.collect()? {
-            Some(doc) => tracing::info!("CPU sample:\n{}", serde_json::to_string_pretty(&doc)?),
-            None => tracing::warn!("CPU collector returned None on second tick"),
-        }
-
-        // Memory: no delta required — both ticks return data; discard first, print second.
-        let mut mem = collectors::memory::MemoryCollector::new(None);
-        let _ = mem.collect();
-        match mem.collect()? {
-            Some(doc) => tracing::info!("Memory sample:\n{}", serde_json::to_string_pretty(&doc)?),
-            None => tracing::warn!("Memory collector returned None on second tick"),
-        }
-
-        // Storage: delta-based — first tick returns None, second returns data.
-        let mut stor = collectors::storage::StorageCollector::new();
-        let _ = stor.collect();
-        std::thread::sleep(std::time::Duration::from_secs(1));
-        match stor.collect()? {
-            Some(doc) => tracing::info!("Storage sample:\n{}", serde_json::to_string_pretty(&doc)?),
-            None => tracing::warn!("Storage collector returned None on second tick"),
-        }
-
-        // Network: delta-based — first tick returns None, second returns data.
-        let mut net = collectors::network::NetworkCollector::new();
-        let _ = net.collect();
-        std::thread::sleep(std::time::Duration::from_secs(1));
-        match net.collect()? {
-            Some(doc) => tracing::info!("Network sample:\n{}", serde_json::to_string_pretty(&doc)?),
-            None => tracing::warn!("Network collector returned None on second tick"),
-        }
-
-        // Power: instantaneous — single call returns data (or None if no sources).
-        let mut pwr = collectors::power::PowerCollector::new();
-        match pwr.collect()? {
-            Some(doc) => tracing::info!("Power sample:\n{}", serde_json::to_string_pretty(&doc)?),
-            None => tracing::info!("Power collector: no sources available on this hardware"),
-        }
-
-        // Audio: instantaneous — always returns Some (backend always present).
-        let mut aud = collectors::audio::AudioCollector::new();
-        match aud.collect()? {
-            Some(doc) => tracing::info!("Audio sample:\n{}", serde_json::to_string_pretty(&doc)?),
-            None => tracing::warn!("Audio collector returned None (unexpected)"),
-        }
-
-        // MangoHud: file-tail — returns None when no log present.
-        let mut mhud = collectors::mangohud::MangoHudCollector::new();
-        match mhud.collect()? {
-            Some(doc) => tracing::info!("MangoHud sample:\n{}", serde_json::to_string_pretty(&doc)?),
-            None => tracing::info!("MangoHud collector: no log file present (game not running)"),
-        }
-
-        // AMD GPU: instantaneous — logs discovered card/hwmon paths at init.
-        let mut gpu = collectors::gpu_amd::GpuAmdCollector::new(None);
-        match gpu.collect()? {
-            Some(doc) => tracing::info!("AMD GPU sample:\n{}", serde_json::to_string_pretty(&doc)?),
-            None => tracing::warn!("AMD GPU collector returned None — no AMD card found"),
-        }
-
-        tracing::info!("GamePulse agent ready — 8 collectors loaded");
-        return Ok(());
+        return dry_run().await;
     }
 
+    // ES connectivity check
     shipper::ping(&cfg).await?;
-    tracing::info!("GamePulse agent ready — 1 collector loaded");
+
+    // Collect host info once at startup
+    tracing::info!("Collecting host environment snapshot…");
+    let host_snapshot = host::collect_snapshot();
+    let hostname = host::hostname();
+
+    // Instantiate all 8 collectors
+    let mut cpu = collectors::cpu::CpuCollector::new(None);
+    let mut mem = collectors::memory::MemoryCollector::new(None);
+    let mut stor = collectors::storage::StorageCollector::new();
+    let mut net = collectors::network::NetworkCollector::new();
+    let mut pwr = collectors::power::PowerCollector::new();
+    let mut aud = collectors::audio::AudioCollector::new();
+    let mut mhud = collectors::mangohud::MangoHudCollector::new();
+    let mut gpu = collectors::gpu_amd::GpuAmdCollector::new(None);
+
+    // Session manager
+    let mut session = session::SessionManager::new();
+    tracing::info!("Session {} started", session.session_id);
+
+    // Ship session-start document
+    let start_doc = build_session_start_doc(&session, &host_snapshot, &hostname);
+    if let Err(e) = shipper::ship(&cfg, vec![start_doc]).await {
+        tracing::warn!("Failed to ship session-start doc: {}", e);
+    }
+
+    // Signal handlers
+    let mut sigterm =
+        tokio::signal::unix::signal(SignalKind::terminate()).expect("SIGTERM handler");
+    let mut sigint =
+        tokio::signal::unix::signal(SignalKind::interrupt()).expect("SIGINT handler");
+
+    // Accumulators for summary doc
+    let session_start = std::time::Instant::now();
+    let mut tick: u64 = 0;
+    let mut acc = SessionAccumulators::new();
+
+    // 1-second tick interval; skip missed ticks (don't burst-catch-up).
+    let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+    loop {
+        tokio::select! {
+            _ = interval.tick() => {
+                tick += 1;
+                let ts = utc_now();
+
+                // ── Game detection ────────────────────────────────────────────
+                match session.poll() {
+                    SessionEvent::GameStarted(game) => {
+                        tracing::info!(
+                            "Game detected: {} (pid {}, all_pids={:?})",
+                            game.name, game.pid, game.all_pids
+                        );
+                        cpu.set_game_pid(Some(game.pid));
+                        mem.set_game_pid(Some(game.pid));
+                        mhud.set_game_pid(Some(game.pid));
+                        gpu.set_game_pid(Some(game.pid));
+                        let game_doc = build_game_detected_doc(
+                            &session, &host_snapshot, &hostname, &game,
+                        );
+                        if let Err(e) = shipper::ship(&cfg, vec![game_doc]).await {
+                            tracing::warn!("Failed to ship game-detected doc: {}", e);
+                        }
+                    }
+                    SessionEvent::GameEnded(old) => {
+                        tracing::info!("Game exited: {}", old.name);
+                        cpu.set_game_pid(None);
+                        mem.set_game_pid(None);
+                        mhud.set_game_pid(None);
+                        gpu.set_game_pid(None);
+                    }
+                    SessionEvent::NoChange => {}
+                }
+
+                // ── Build base doc for this tick ──────────────────────────────
+                let base = deep_merge(
+                    json!({ "@timestamp": ts }),
+                    session.base_doc(&hostname),
+                );
+
+                // ── Collect from all 8 collectors ─────────────────────────────
+                let mut tick_docs: Vec<Value> = Vec::with_capacity(8);
+
+                macro_rules! collect {
+                    ($coll:expr, $dataset:literal) => {
+                        match $coll.collect() {
+                            Ok(Some(payload)) => {
+                                let mut doc = deep_merge(base.clone(), payload);
+                                add_data_stream(&mut doc, $dataset);
+                                tick_docs.push(doc);
+                            }
+                            Ok(None) => {}
+                            Err(e) => tracing::warn!(concat!($dataset, " error: {}"), e),
+                        }
+                    };
+                }
+
+                collect!(cpu,  "gamepulse.cpu");
+                collect!(mem,  "gamepulse.memory");
+                collect!(stor, "gamepulse.storage");
+                collect!(net,  "gamepulse.network");
+                collect!(pwr,  "gamepulse.power");
+                collect!(aud,  "gamepulse.audio");
+                collect!(mhud, "gamepulse.frame");
+                collect!(gpu,  "gamepulse.gpu");
+
+                // ── Update session accumulators ───────────────────────────────
+                acc.update(&tick_docs);
+
+                // ── Ship ──────────────────────────────────────────────────────
+                if !tick_docs.is_empty() {
+                    let n = tick_docs.len();
+                    match shipper::ship(&cfg, tick_docs).await {
+                        Ok(r) => {
+                            if r.failed > 0 {
+                                tracing::warn!("Tick {}: {}/{} docs failed", tick, r.failed, n);
+                            } else {
+                                tracing::debug!("Tick {}: shipped {} docs", tick, n);
+                            }
+                        }
+                        Err(e) => tracing::warn!("Tick {} bulk error: {}", tick, e),
+                    }
+                }
+            }
+
+            _ = sigterm.recv() => {
+                tracing::info!("SIGTERM received — shutting down");
+                break;
+            }
+
+            _ = sigint.recv() => {
+                tracing::info!("SIGINT received — shutting down");
+                break;
+            }
+        }
+    }
+
+    // ── Cleanup ───────────────────────────────────────────────────────────────
+    session.remove_session_json();
+
+    if tick > 0 {
+        let duration_s = session_start.elapsed().as_secs();
+        let summary_doc =
+            build_summary_doc(&session, &host_snapshot, &hostname, duration_s, &acc);
+        tracing::info!(
+            "Shipping session summary ({}s, {} ticks)",
+            duration_s, tick
+        );
+        if let Err(e) = shipper::ship(&cfg, vec![summary_doc]).await {
+            tracing::warn!("Failed to ship summary doc: {}", e);
+        }
+    }
+
+    tracing::info!("GamePulse agent stopped after {} ticks", tick);
     Ok(())
 }
