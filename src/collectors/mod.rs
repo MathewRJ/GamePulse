@@ -2,6 +2,7 @@ use anyhow::Result;
 use serde_json::Value;
 
 pub mod cpu;
+pub mod memory;
 
 pub trait Collector: Send {
     /// Returns the data_stream dataset name, e.g. "cpu".

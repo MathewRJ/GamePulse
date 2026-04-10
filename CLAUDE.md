@@ -67,7 +67,7 @@ and package maintainers who need real-world performance data.
 ### Rust agent (src/) — Phase 6
 
 **Last updated:** 2026-04-10  
-**Status:** CPU collector complete. 1/8 collectors implemented.
+**Status:** CPU + memory collectors complete. 2/8 collectors implemented.
 
 | Component | Status |
 |---|---|
@@ -76,7 +76,8 @@ and package maintainers who need real-world performance data.
 | Config loader (`src/config.rs`) | ✅ — mirrors Python config.py exactly |
 | ES shipper (`src/shipper.rs`) | ✅ — `ping()` + `ship()`, matches Python auth/index format |
 | CPU collector (`src/collectors/cpu.rs`) | ✅ — `/proc/stat` delta, hwmon temp, cpufreq clock, RAPL power (Intel only), governor, boost |
-| Memory collector (`src/collectors/memory.rs`) | 🔲 — next session |
+| Memory collector (`src/collectors/memory.rs`) | ✅ — `/proc/meminfo`, `/proc/<pid>/status` VmRSS/VmSize, `/proc/<pid>/stat` page faults |
+| Storage collector (`src/collectors/storage.rs`) | 🔲 — next session |
 | eBPF integration | 🔲 — Sprint 4 |
 
 **Notes:**
@@ -84,6 +85,7 @@ and package maintainers who need real-world performance data.
 - Root `Cargo.toml` workspace includes only `["src"]`. The `ebpf/` workspace remains independent (cross-compilation target + xtask cannot merge cleanly into a host workspace).
 - `cargo check` produces only dead-code warnings (expected — fields will be used when more collectors are added).
 - CPU collector: first `collect()` call always returns `None` (no delta yet — two snapshots required). Second call returns data. `game_pid` stored for future `game_utilisation_pct` field (not yet emitted).
+- Memory collector: `collect()` always returns `Some` (no delta needed). Game-pid fields (`game_rss_mb`, `virtual_mb`, `page_faults_major`, `page_faults_minor`) only appear when `game_pid` is set.
 - **Scheduler Analysis dashboard**: blocked — needs Sprint 2+ eBPF data confirmed live in Kibana.
 - **Packaging**: no `.deb`, `.rpm`, AUR PKGBUILD, or systemd service file.
 - **Full elastic-package test suite**: only `test static` passes. `test asset`, `test system`, `test policy` not yet configured.
@@ -101,8 +103,8 @@ copy step. Long-term fix is moving the integration to a `package/` subdirectory 
 
 ### Pending work (in priority order)
 
-1. **Phase 6 memory collector**: `src/collectors/memory.rs`. Read `/proc/meminfo` and `/proc/<pid>/status`. Output `gamepulse.memory.*` matching Python exactly. Reference: `collector/gamepulse/collectors/memory.py`.
-2. **Phase 6 remaining collectors** (one per session): storage, network, power, audio, AMD GPU (needs gaming PC online), MangoHud frame.
+1. **Phase 6 storage collector**: `src/collectors/storage.rs`. Read `/proc/diskstats` and `/sys/block/`. Output `gamepulse.storage.*` matching Python exactly. Reference: `collector/gamepulse/collectors/storage.py`.
+2. **Phase 6 remaining collectors** (one per session): network, power, audio, AMD GPU (needs gaming PC online), MangoHud frame.
 3. **Scheduler Analysis dashboard**: Sprint 3 data confirmed — ready to build.
 4. **Packaging**: systemd unit, AUR PKGBUILD, .deb/.rpm.
 

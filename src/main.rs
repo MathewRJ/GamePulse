@@ -1,6 +1,5 @@
 // Entry point for the GamePulse production agent.
-// Phase 6: CPU collector added. No other collectors yet.
-// Collectors are added one per session in subsequent phases.
+// Phase 6: CPU + memory collectors added. Remaining collectors added one per session.
 
 mod collectors;
 mod config;
@@ -41,19 +40,24 @@ async fn main() -> Result<()> {
     if cli.dry_run {
         tracing::info!("dry-run mode, skipping ES connectivity check");
 
+        // CPU: first tick returns None (no delta yet), second returns data.
         let mut cpu = collectors::cpu::CpuCollector::new(None);
-        // First tick returns None (no delta yet).
         let _ = cpu.collect();
         std::thread::sleep(std::time::Duration::from_secs(1));
-        // Second tick returns data.
         match cpu.collect()? {
-            Some(doc) => {
-                tracing::info!("CPU sample:\n{}", serde_json::to_string_pretty(&doc)?);
-            }
+            Some(doc) => tracing::info!("CPU sample:\n{}", serde_json::to_string_pretty(&doc)?),
             None => tracing::warn!("CPU collector returned None on second tick"),
         }
 
-        tracing::info!("GamePulse agent ready — 1 collector loaded");
+        // Memory: no delta required — both ticks return data; discard first, print second.
+        let mut mem = collectors::memory::MemoryCollector::new(None);
+        let _ = mem.collect();
+        match mem.collect()? {
+            Some(doc) => tracing::info!("Memory sample:\n{}", serde_json::to_string_pretty(&doc)?),
+            None => tracing::warn!("Memory collector returned None on second tick"),
+        }
+
+        tracing::info!("GamePulse agent ready — 2 collectors loaded");
         return Ok(());
     }
 
