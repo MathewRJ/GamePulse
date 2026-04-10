@@ -16,13 +16,11 @@ Source of truth reconciled: 2026-04-10
 
 ## Current position
 
-Phase 2 Sprint 3 is complete and ES-confirmed (2026-04-10). All 5 new probes (futex,
-irq, vfs, gpu_fence, gpu_submit) are confirmed live in `metrics-gamepulse.ebpf-default`
-(session 7bce1dc5, Starfield, 2348 total eBPF docs). The daemon now runs 9 probes
-end-to-end (sched, bio, gpu_sched, mem, stutter_correlation, futex, irq, vfs,
-gpu_fence, gpu_submit). Phase 2 is fully complete. The active frontier is:
-(1) Phase 6 Rust production agent scaffold — the critical path item blocking closed
-beta; (2) Scheduler Analysis dashboard (Sprint 3 data now available in ES).
+Phase 2 eBPF daemon is fully complete (all 9 probes ES-confirmed). Phase 6 Rust
+production agent scaffold is done (`src/` exists, CLI/config/shipper built, `cargo
+check` passes, `--version` and `--dry-run` work). The active frontier is Phase 6
+collectors — one per session, CPU first. Network collector bug also fixed (was
+disabled by default; now enabled). Next session: `src/collectors/cpu.rs`.
 
 ---
 
@@ -104,9 +102,9 @@ vfs (read + write), gpu_fence, gpu_submit. `elastic-package check` PASS, `test s
 
 ---
 
-## Phase 6: Rust Production Agent — CRITICAL PATH 🔲
+## Phase 6: Rust Production Agent — CRITICAL PATH
 
-**Status:** Not started. `src/` does not exist.
+**Status:** Scaffold complete. `src/` exists, `cargo check` passes.
 
 This gates Phase 4 (closed beta) and the elastic/integrations PR. The data model
 is completely stable — field names are proven by 6 live dashboards and real gameplay
@@ -116,7 +114,7 @@ data. The Rust port is translation work, not design work.
 
 | Step | Deliverable | Notes |
 |---|---|---|
-| 1 | `src/Cargo.toml`, CLI, config, ES shipper — `cargo check` passes | Reuse config format from `ebpf/gamepulse-ebpf-daemon/src/config.rs` |
+| 1 | `src/Cargo.toml`, CLI, config, ES shipper — `cargo check` passes | ✅ Done 2026-04-10 |
 | 2 | CPU collector (`/proc/stat`, `/proc/loadavg`, k10temp hwmon) | Simplest — good warm-up |
 | 3 | Memory collector (`/proc/meminfo`, `/proc/<pid>/status`) | |
 | 4 | Storage collector (`/proc/diskstats`, `/sys/block/`) | |

@@ -1,0 +1,49 @@
+// Entry point for the GamePulse production agent.
+// Phase 6: scaffold only — no collectors yet.
+// Collectors are added one per session in subsequent phases.
+
+mod collectors;
+mod config;
+mod shipper;
+
+use anyhow::Result;
+use clap::Parser;
+use std::path::PathBuf;
+
+#[derive(Parser)]
+#[command(name = "gamepulse-agent", version, about = "GamePulse Linux telemetry agent")]
+struct Cli {
+    /// Path to config file [default: ~/.config/gamepulse/gamepulse.toml]
+    #[arg(short, long, value_name = "PATH")]
+    config: Option<PathBuf>,
+
+    /// Skip ES connectivity check and exit 0
+    #[arg(long)]
+    dry_run: bool,
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let cli = Cli::parse();
+
+    // Initialise tracing — stderr, INFO by default, overridden by GAMEPULSE_LOG.
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_env("GAMEPULSE_LOG")
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .with_writer(std::io::stderr)
+        .init();
+
+    let cfg = config::Config::load(cli.config.as_ref())?;
+
+    if cli.dry_run {
+        tracing::info!("dry-run mode, skipping ES connectivity check");
+        tracing::info!("GamePulse agent ready — 0 collectors loaded");
+        return Ok(());
+    }
+
+    shipper::ping(&cfg).await?;
+    tracing::info!("GamePulse agent ready — 0 collectors loaded");
+    Ok(())
+}

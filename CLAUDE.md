@@ -64,9 +64,24 @@ and package maintainers who need real-world performance data.
 - **gpu_fence blocked_count=0 is the healthy baseline**: `dma_fence_default_wait` fires when CPU waits for GPU work. blocked_count=0 (wait >1ms) means the GPU is keeping up. Elevated blocked_count signals GPU-CPU sync stalls.
 - **Network collector silent failure (fixed 2026-04-10)**: `CollectionConfig.network` defaulted to `False` while all other collectors defaulted to `True`. The collector itself was correct; it simply was never instantiated. User config had no `[collection]` section so the default always applied. Fix: changed default to `True` in `config.py`. No changes needed to `network.py`.
 
-### What is not yet started
+### Rust agent (src/) — Phase 6
 
-- **Rust production agent** (Phase 6): `src/`, `Cargo.toml` do not exist. Python collector is the only working implementation. This gates closed beta (Phase 4) and the elastic/integrations PR.
+**Last updated:** 2026-04-10  
+**Status:** Scaffold only. No collectors implemented yet.
+
+| Component | Status |
+|---|---|
+| Cargo workspace (`src/Cargo.toml`) | ✅ |
+| CLI (clap: --config, --dry-run, --version) | ✅ |
+| Config loader (`src/config.rs`) | ✅ — mirrors Python config.py exactly |
+| ES shipper (`src/shipper.rs`) | ✅ — `ping()` + `ship()`, matches Python auth/index format |
+| Collectors (`src/collectors/mod.rs`) | 🔲 — one per session, CPU first |
+| eBPF integration | 🔲 — Sprint 4 |
+
+**Notes:**
+- `src/Cargo.toml` has `[[bin]] path = "main.rs"` because source files sit at the `src/` level, not in a `src/src/` subdirectory.
+- Root `Cargo.toml` workspace includes only `["src"]`. The `ebpf/` workspace remains independent (cross-compilation target + xtask cannot merge cleanly into a host workspace).
+- `cargo check` produces only dead-code warnings (expected for scaffold — fields will be used when collectors are added).
 - **Scheduler Analysis dashboard**: blocked — needs Sprint 2+ eBPF data confirmed live in Kibana.
 - **Packaging**: no `.deb`, `.rpm`, AUR PKGBUILD, or systemd service file.
 - **Full elastic-package test suite**: only `test static` passes. `test asset`, `test system`, `test policy` not yet configured.
@@ -84,8 +99,8 @@ copy step. Long-term fix is moving the integration to a `package/` subdirectory 
 
 ### Pending work (in priority order)
 
-1. **Phase 6 Rust agent scaffold**: `src/Cargo.toml`, CLI, config, ES shipper — `cargo check` only, no collectors yet.
-2. **Phase 6 Rust collectors** (one per session): CPU, memory, storage, network, power, audio, AMD GPU (needs gaming PC online), MangoHud frame.
+1. **Phase 6 CPU collector**: `src/collectors/cpu.rs`. Read `/proc/stat` and `/proc/loadavg`. Output `gamepulse.cpu.*` fields matching Python collector exactly. Reference: `collector/gamepulse/collectors/cpu.py`.
+2. **Phase 6 remaining collectors** (one per session): memory, storage, network, power, audio, AMD GPU (needs gaming PC online), MangoHud frame.
 3. **Scheduler Analysis dashboard**: Sprint 3 data confirmed — ready to build.
 4. **Packaging**: systemd unit, AUR PKGBUILD, .deb/.rpm.
 

@@ -1,0 +1,174 @@
+/// Configuration — reads the shared gamepulse.toml file.
+///
+/// Mirrors the Python collector's config.py exactly so both agents
+/// read the same file without conflict.
+use anyhow::{Context, Result};
+use serde::Deserialize;
+use std::path::PathBuf;
+
+#[derive(Debug, Deserialize)]
+pub struct Config {
+    pub elasticsearch: ElasticsearchConfig,
+    #[serde(default)]
+    pub collection: CollectionConfig,
+    #[serde(default)]
+    pub privacy: PrivacyConfig,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ElasticsearchConfig {
+    pub endpoint: String,
+    pub api_key: Option<String>,
+    pub username: Option<String>,
+    pub password: Option<String>,
+    #[serde(default = "default_index_prefix")]
+    pub index_prefix: String,
+    #[serde(default = "default_flush_interval_secs")]
+    pub flush_interval_secs: u64,
+    #[serde(default = "default_batch_size")]
+    pub batch_size: usize,
+}
+
+fn default_index_prefix() -> String {
+    "gamepulse".to_string()
+}
+fn default_flush_interval_secs() -> u64 {
+    5
+}
+fn default_batch_size() -> usize {
+    100
+}
+
+impl Default for ElasticsearchConfig {
+    fn default() -> Self {
+        Self {
+            endpoint: "http://localhost:9200".to_string(),
+            api_key: None,
+            username: None,
+            password: None,
+            index_prefix: default_index_prefix(),
+            flush_interval_secs: default_flush_interval_secs(),
+            batch_size: default_batch_size(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CollectionConfig {
+    #[serde(default = "default_interval_ms")]
+    pub interval_ms: u64,
+    #[serde(default = "default_true")]
+    pub cpu: bool,
+    #[serde(default = "default_true")]
+    pub memory: bool,
+    #[serde(default = "default_true")]
+    pub gpu: bool,
+    #[serde(default = "default_true")]
+    pub storage: bool,
+    #[serde(default = "default_true")]
+    pub network: bool,
+    #[serde(default)]
+    pub ebpf: bool,
+    #[serde(default = "default_true")]
+    pub frame_timing: bool,
+    #[serde(default = "default_true")]
+    pub game_detection: bool,
+    #[serde(default = "default_sample_interval")]
+    pub sample_interval_secs: u64,
+}
+
+fn default_interval_ms() -> u64 {
+    1000
+}
+fn default_true() -> bool {
+    true
+}
+fn default_sample_interval() -> u64 {
+    1
+}
+
+impl Default for CollectionConfig {
+    fn default() -> Self {
+        Self {
+            interval_ms: default_interval_ms(),
+            cpu: true,
+            memory: true,
+            gpu: true,
+            storage: true,
+            network: true,
+            ebpf: false,
+            frame_timing: true,
+            game_detection: true,
+            sample_interval_secs: default_sample_interval(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct PrivacyConfig {
+    #[serde(default)]
+    pub opt_in_public: bool,
+    #[serde(default)]
+    pub share_ebpf: bool,
+    #[serde(default)]
+    pub share_network: bool,
+}
+
+impl Config {
+    /// Load config from an explicit path or the first found default location.
+    ///
+    /// Search order:
+    ///   1. `path` argument (from --config CLI flag)
+    ///   2. $GAMEPULSE_CONFIG env var
+    ///   3. ~/.config/gamepulse/gamepulse.toml
+    ///   4. /etc/gamepulse/gamepulse.toml
+    pub fn load(path: Option<&PathBuf>) -> Result<Self> {
+        let candidates: Vec<PathBuf> = if let Some(p) = path {
+            vec![p.clone()]
+        } else if let Ok(env_path) = std::env::var("GAMEPULSE_CONFIG") {
+            vec![PathBuf::from(env_path)]
+        } else {
+            let mut v = Vec::new();
+            if let Some(home) = home_dir() {
+                v.push(home.join(".config/gamepulse/gamepulse.toml"));
+            }
+            v.push(PathBuf::from("/etc/gamepulse/gamepulse.toml"));
+            v
+        };
+
+        for candidate in &candidates {
+            if candidate.exists() {
+                return Self::load_from(candidate);
+            }
+        }
+        anyhow::bail!(
+            "no config file found; searched: {}",
+            candidates
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    }
+
+    fn load_from(path: &PathBuf) -> Result<Self> {
+        let text = std::fs::read_to_string(path)
+            .with_context(|| format!("reading config file: {}", path.display()))?;
+        toml::from_str(&text)
+            .with_context(|| format!("parsing config file: {}", path.display()))
+    }
+}
+
+fn home_dir() -> Option<PathBuf> {
+    // When running via sudo, HOME is /root but config lives in the invoking
+    // user's home. Prefer SUDO_USER → /home/<user> over HOME.
+    if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        if !sudo_user.is_empty() {
+            let p = PathBuf::from("/home").join(&sudo_user);
+            if p.exists() {
+                return Some(p);
+            }
+        }
+    }
+    std::env::var("HOME").ok().map(PathBuf::from)
+}
