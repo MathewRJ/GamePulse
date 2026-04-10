@@ -86,6 +86,21 @@ pub struct EbpfPayload {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stutter: Option<StutterCorrelation>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub futex: Option<FutexSnapshot>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub irq: Option<IrqSnapshot>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vfs: Option<VfsSnapshot>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gpu_fence: Option<GpuFenceSnapshot>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gpu_submit: Option<GpuSubmitSnapshot>,
 }
 
 /// Cross-probe stutter correlation — emitted when ≥2 subsystems spike in the same window.
@@ -185,6 +200,90 @@ pub struct GpuSchedSnapshot {
     pub latency_avg_us: f64,
 
     /// Number of GPU jobs observed this second (across all rings: gfx, comp, sdma).
+    pub event_count: u64,
+}
+
+/// 1-second futex contention snapshot from the futex probe.
+#[derive(Debug, Serialize)]
+pub struct FutexSnapshot {
+    /// Log2 histogram of futex wait latencies — 16-bucket layout.
+    pub latency_histogram: LatencyHistogram,
+
+    pub latency_min_us: f64,
+    pub latency_max_us: f64,
+    pub latency_avg_us: f64,
+
+    /// Total futex operations observed this second (game threads).
+    pub event_count: u64,
+
+    /// Futex operations with latency > 1ms (contended acquisitions).
+    pub contended_count: u64,
+}
+
+/// Hard-IRQ and softirq latency sub-snapshot.
+#[derive(Debug, Serialize)]
+pub struct IrqKindSnapshot {
+    /// Log2 histogram of handler latencies.
+    pub latency_histogram: LatencyHistogram,
+
+    pub latency_avg_us: f64,
+
+    /// Number of handler invocations this second.
+    pub event_count: u64,
+}
+
+/// 1-second IRQ latency snapshot from the irq probe.
+#[derive(Debug, Serialize)]
+pub struct IrqSnapshot {
+    /// Hard-IRQ handler latency stats.
+    pub hard_irq: IrqKindSnapshot,
+    /// Softirq handler latency stats.
+    pub softirq: IrqKindSnapshot,
+}
+
+/// Read or write VFS latency sub-snapshot.
+#[derive(Debug, Serialize)]
+pub struct VfsOpSnapshot {
+    /// Log2 histogram of VFS operation latencies.
+    pub latency_histogram: LatencyHistogram,
+
+    pub latency_avg_us: f64,
+
+    /// Number of operations observed this second.
+    pub event_count: u64,
+
+    /// Total bytes transferred (0 for this probe — bytes not captured at VFS level).
+    pub bytes_total: u64,
+}
+
+/// 1-second VFS I/O latency snapshot from the vfs probe.
+#[derive(Debug, Serialize)]
+pub struct VfsSnapshot {
+    pub read: VfsOpSnapshot,
+    pub write: VfsOpSnapshot,
+}
+
+/// 1-second DMA fence wait snapshot from the gpu_fence probe.
+#[derive(Debug, Serialize)]
+pub struct GpuFenceSnapshot {
+    /// Log2 histogram of fence wait latencies.
+    pub latency_histogram: LatencyHistogram,
+
+    pub latency_min_us: f64,
+    pub latency_max_us: f64,
+    pub latency_avg_us: f64,
+
+    /// Number of fence waits observed this second.
+    pub event_count: u64,
+
+    /// Fence waits that blocked for more than 1ms (frame-impacting).
+    pub blocked_count: u64,
+}
+
+/// 1-second GPU command submission snapshot from the gpu_submit probe.
+#[derive(Debug, Serialize)]
+pub struct GpuSubmitSnapshot {
+    /// Number of amdgpu_cs_ioctl calls observed this second.
     pub event_count: u64,
 }
 

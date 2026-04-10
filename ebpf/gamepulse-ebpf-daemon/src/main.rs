@@ -26,9 +26,14 @@ use aggregator::correlate;
 use config::Config;
 use loader::load_probes;
 use probes::bio::BioProbe;
+use probes::futex::FutexProbe;
+use probes::gpu_fence::GpuFenceProbe;
 use probes::gpu_sched::GpuSchedProbe;
+use probes::gpu_submit::GpuSubmitProbe;
+use probes::irq::IrqProbe;
 use probes::mem::MemProbe;
 use probes::sched::SchedProbe;
+use probes::vfs::VfsProbe;
 use session::{session_file_path, spawn_watcher};
 use shipper::EsShipper;
 
@@ -94,6 +99,11 @@ async fn main() -> Result<()> {
         Box::new(BioProbe::new(host_name.clone(), kernel_version.clone())),
         Box::new(GpuSchedProbe::new(host_name.clone(), kernel_version.clone())),
         Box::new(MemProbe::new(host_name.clone(), kernel_version.clone())),
+        Box::new(FutexProbe::new(host_name.clone(), kernel_version.clone())),
+        Box::new(IrqProbe::new(host_name.clone(), kernel_version.clone())),
+        Box::new(VfsProbe::new(host_name.clone(), kernel_version.clone())),
+        Box::new(GpuFenceProbe::new(host_name.clone(), kernel_version.clone())),
+        Box::new(GpuSubmitProbe::new(host_name.clone(), kernel_version.clone())),
     ];
 
     // Load probes (does capability + BTF checks, attaches tracepoints)

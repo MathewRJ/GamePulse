@@ -9,9 +9,14 @@ use aya::Ebpf;
 use crate::es_model::EbpfMetricDoc;
 
 pub mod bio;
+pub mod futex;
+pub mod gpu_fence;
 pub mod gpu_sched;
+pub mod gpu_submit;
+pub mod irq;
 pub mod mem;
 pub mod sched;
+pub mod vfs;
 
 /// Requirements that must be met for a probe to load.
 #[derive(Debug, Default)]
