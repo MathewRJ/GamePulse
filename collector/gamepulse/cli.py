@@ -41,6 +41,10 @@ log = logging.getLogger("gamepulse")
 _SHUTDOWN = False
 
 
+class _ShutdownSignal(BaseException):
+    """Raised by the SIGTERM handler to interrupt time.sleep() immediately."""
+
+
 def _session_json_path() -> Path:
     """Canonical path for the session handoff file read by the eBPF daemon.
 
@@ -75,6 +79,7 @@ def _remove_session_json() -> None:
 def _handle_sigterm(sig: int, frame: Any) -> None:
     global _SHUTDOWN
     _SHUTDOWN = True
+    raise _ShutdownSignal()
 
 
 def _timestamp() -> str:
@@ -328,9 +333,11 @@ def run(cfg: config_mod.Config, debug: bool, once: bool) -> None:
             elapsed = time.monotonic() - tick_start
             time.sleep(max(0.0, interval - elapsed))
 
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, _ShutdownSignal):
         pass
     finally:
+        # Ignore any further SIGTERM so a second kill doesn't abort the flush.
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
         if shipper and tick > 0:
             duration_s = round(time.monotonic() - session_start)
             summary: dict[str, Any] = {
