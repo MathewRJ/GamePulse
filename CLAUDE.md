@@ -67,7 +67,7 @@ and package maintainers who need real-world performance data.
 ### Rust agent (src/) — Phase 6
 
 **Last updated:** 2026-04-10  
-**Status:** CPU + memory + storage + network + power collectors complete. 5/8 collectors implemented.
+**Status:** CPU + memory + storage + network + power + audio + MangoHud frame collectors complete. 7/8 collectors implemented. AMD GPU is the final collector (requires gaming PC online).
 
 | Component | Status |
 |---|---|
@@ -80,7 +80,9 @@ and package maintainers who need real-world performance data.
 | Storage collector (`src/collectors/storage.rs`) | ✅ — `/proc/diskstats` delta, Steam path device detection, latency/IOPS/throughput |
 | Network collector (`src/collectors/network.rs`) | ✅ — `/proc/net/dev` + `/proc/net/snmp` delta, max-rx_bytes interface selection |
 | Power collector (`src/collectors/power.rs`) | ✅ — AMD TDP cap (hwmon), battery, AC, platform profile; None-safe |
-| Audio collector (`src/collectors/audio.rs`) | 🔲 — next session |
+| Audio collector (`src/collectors/audio.rs`) | ✅ — PipeWire/PulseAudio/ALSA backend detection, xruns, latency, sample rate |
+| MangoHud frame collector (`src/collectors/mangohud.rs`) | ✅ — CSV log tail, fps stats, frametime, stutter count |
+| AMD GPU collector (`src/collectors/gpu_amd.rs`) | 🔲 — needs gaming PC online (RX 9070 XT sysfs path validation) |
 | eBPF integration | 🔲 — Sprint 4 |
 
 **Notes:**
@@ -89,6 +91,8 @@ and package maintainers who need real-world performance data.
 - `cargo check` produces only dead-code warnings (expected — fields will be used when more collectors are added).
 - CPU collector: first `collect()` call always returns `None` (no delta yet — two snapshots required). Second call returns data. `game_pid` stored for future `game_utilisation_pct` field (not yet emitted).
 - Memory collector: `collect()` always returns `Some` (no delta needed). Game-pid fields (`game_rss_mb`, `virtual_mb`, `page_faults_major`, `page_faults_minor`) only appear when `game_pid` is set.
+- Audio collector: backend detected once at construction time. `collect()` always returns `Some` (backend always present). xruns only emitted on 2nd+ call (delta). No regex crate — pattern matching via `rfind`-based string helpers.
+- MangoHud collector: stores file byte offset between ticks for incremental CSV read. Re-checks for newer log file every 5s. Returns `None` when no log present or no new data. `stutter_count` always present (0 when no frametime data).
 - **Scheduler Analysis dashboard**: blocked — needs Sprint 2+ eBPF data confirmed live in Kibana.
 - **Packaging**: no `.deb`, `.rpm`, AUR PKGBUILD, or systemd service file.
 - **Full elastic-package test suite**: only `test static` passes. `test asset`, `test system`, `test policy` not yet configured.
@@ -106,11 +110,9 @@ copy step. Long-term fix is moving the integration to a `package/` subdirectory 
 
 ### Pending work (in priority order)
 
-1. **Phase 6 audio collector**: `src/collectors/audio.rs`. Reference: `collector/gamepulse/collectors/audio.py`. Output `gamepulse.audio.*` matching Python exactly.
-2. **Phase 6 MangoHud collector**: `src/collectors/mangohud.rs`. Reference: `collector/gamepulse/collectors/frame.py`. Output `gamepulse.fps.*` matching Python exactly.
-3. **Phase 6 AMD GPU collector**: `src/collectors/gpu.rs`. Needs gaming PC online — dedicated session. Reference: `collector/gamepulse/collectors/gpu.py`.
-3. **Scheduler Analysis dashboard**: Sprint 3 data confirmed — ready to build.
-4. **Packaging**: systemd unit, AUR PKGBUILD, .deb/.rpm.
+1. **Phase 6 AMD GPU collector**: `src/collectors/gpu_amd.rs`. Needs gaming PC online (RX 9070 XT) — dedicated session. Reference: `collector/gamepulse/collectors/gpu/` (directory). Must validate card1/hwmon scoring heuristic against live sysfs.
+2. **Scheduler Analysis dashboard**: Sprint 3 eBPF data confirmed — ready to build.
+3. **Packaging**: systemd unit, AUR PKGBUILD, .deb/.rpm.
 
 ## Stack
 

@@ -17,9 +17,9 @@ Source of truth reconciled: 2026-04-10
 ## Current position
 
 Phase 2 eBPF daemon is fully complete (all 9 probes ES-confirmed). Phase 6 Rust
-production agent has 5/8 collectors complete: CPU, memory, storage, network, and power
-(all verified side-by-side against Python output 2026-04-10). Next session: audio and
-MangoHud frame collectors. AMD GPU requires gaming PC online — dedicated session.
+production agent has 7/8 collectors complete: CPU, memory, storage, network, power,
+audio, and MangoHud frame (all verified 2026-04-10). Final collector: AMD GPU — requires
+gaming PC online with RX 9070 XT for live sysfs path validation. Dedicated session needed.
 
 ---
 
@@ -119,14 +119,9 @@ data. The Rust port is translation work, not design work.
 | 4 | Storage collector (`/proc/diskstats`, `/sys/block/`) | ✅ Done 2026-04-10 |
 | 5 | Network collector (`/proc/net/dev`) | ✅ Done 2026-04-10 |
 | 6 | Power collector (`/sys/class/power_supply/`, RAPL/hwmon) | ✅ Done 2026-04-10 |
-| 7 | Audio collector (PipeWire/PulseAudio via `pactl`) | Next session |
-| 8 | MangoHud frame collector (log file tail) | Next session |
-| 4 | Storage collector (`/proc/diskstats`, `/sys/block/`) | |
-| 5 | Network collector (`/proc/net/dev`) | |
-| 6 | Power collector (`/sys/class/power_supply/`, RAPL if available) | RAPL needs root; return None gracefully |
-| 7 | Audio collector (PipeWire/PulseAudio via `pactl`/`pw-cli`) | |
-| 8 | AMD GPU collector (sysfs/hwmon — card1/hwmon3 heuristic) | **Needs gaming PC online for live testing.** Preserve card-scoring heuristic from Python exactly. |
-| 9 | MangoHud frame timing collector (log file tail) | |
+| 7 | Audio collector (PipeWire/PulseAudio via `pactl`/`pw-cli`) | ✅ Done 2026-04-10 |
+| 8 | MangoHud frame timing collector (log file tail) | ✅ Done 2026-04-10 |
+| 9 | AMD GPU collector (sysfs/hwmon — card1/hwmon3 heuristic) | **Needs gaming PC online for live testing.** Preserve card-scoring heuristic from Python exactly. |
 | 10 | Merge eBPF daemon as feature-flagged module | Fold `ebpf/` into `src/ebpf/` |
 | 11 | Packaging: systemd unit, `.deb`, `.rpm`, AUR PKGBUILD | |
 
