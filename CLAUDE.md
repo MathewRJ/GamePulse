@@ -8,7 +8,7 @@ It collects, ships, and visualises real-world gaming metrics to Elasticsearch.
 The target audience is game developers, journalists, Proton/Wine/Mesa maintainers,
 and package maintainers who need real-world performance data.
 
-## Current state — last reconciled 2026-04-11 (Scheduler Analysis dashboard live)
+## Current state — last reconciled 2026-04-11 (packaging complete)
 
 ### What is built and verified ✅
 
@@ -69,6 +69,9 @@ and package maintainers who need real-world performance data.
 - **mesa_version unavailable without DISPLAY (fixed 2026-04-10)**: `glxinfo -B` requires an X/Wayland display. As a background agent it gets "unable to open display". For RADV, mesa_version == driver_version. Fix: fall back to driver_version when vulkan_driver is "radv" and glxinfo produces no output.
 - **Session summary game.name null when game exits before summary (fixed 2026-04-11)**: `build_summary_doc()` calls `session.base_doc()` which uses `current_game`, but by shutdown time the game has already exited and `current_game=None`. Fix: track `last_known_game` in the main loop (set on GameStarted and GameEnded), inject game fields into summary doc when game has exited.
 - **AMD GPU power1_average transient spikes (expected behaviour, 2026-04-11)**: `power1_average` (PPT) can briefly read values above the configured power cap (330W). Peak observed 529W during Starfield at ~257W average. This is genuine hardware behaviour — AMD RDNA firmware enforces the cap over a time window so instantaneous readings can exceed it. Not a conversion bug; /1e6 (µW→W) is correct.
+- **AUR PKGBUILD: CachyOS LTO breaks ring crate (fixed 2026-04-11)**: CachyOS `/etc/makepkg.conf` sets `OPTIONS=(...lto...)` and `LTOFLAGS="-flto=auto"`, appending `-flto=auto` to CFLAGS. ring's build.rs compiles its C/ASM via the `cc` crate with these CFLAGS, producing GCC LTO bitcode objects. Rust's LLD linker cannot resolve symbols from GCC LTO objects → `undefined symbol: ring_core_0_17_14__*` at final link. Fix: `options=(!lto)` in the PKGBUILD disables LTO for the package.
+- **AUR PKGBUILD: RUSTFLAGS -C target-cpu=native breaks eBPF cross-compile (fixed 2026-04-11)**: makepkg's `RUSTFLAGS="-C opt-level=3 -C target-cpu=native"` is inherited by the eBPF probes cross-compile step. bpf-linker doesn't understand the host CPU (`znver5` on Ryzen 9800X3D) for the BPF bytecode target. Fix: `RUSTFLAGS=""` prefix on the eBPF probe and daemon build commands.
+- **AUR PKGBUILD: eBPF probe ELF path at runtime (fixed 2026-04-11)**: The daemon's `default_probe_path()` walks up from its own binary to find `gamepulse-ebpf-daemon/` subdir (dev layout). Installed at `/usr/bin/`, no such parent exists → resolves to `/usr/bin/target/bpfel-unknown-none/release/gamepulse-ebpf-probes`. Fix: install probe ELF to `/usr/lib/gamepulse/gamepulse-ebpf-probes` and pass `--probe-path` in the systemd `ExecStart`.
 
 ### Rust agent (src/) — Phase 6
 
@@ -113,7 +116,7 @@ and package maintainers who need real-world performance data.
 - AMD GPU collector: discovery runs once at startup. Hwmon via `{card}/device/hwmon/hwmon*` traversal. card1/hwmon3 = RX 9070 XT.
 - Host enricher `gpu_info()`: selects AMD card with max VRAM to prefer dGPU over iGPU when both expose DRM nodes (card0=iGPU 2GB, card1=RX 9070 XT 16GB). `enrich_amd()` takes first match per field from vulkaninfo (prevents iGPU overwriting dGPU). `mesa_version` falls back to `driver_version` for RADV when `glxinfo` unavailable (no DISPLAY in service context).
 - **Key learnings — AMD GPU sysfs on this hardware (RX 9070 XT, CachyOS)**: card1 = discrete (vendor 0x1002, amdgpu driver); card0 = iGPU. hwmon3 = card1 discrete, hwmon4 = card0 iGPU. Heuristic selects correctly without hardcoding paths.
-- **Packaging**: no `.deb`, `.rpm`, AUR PKGBUILD, or systemd service file.
+- **Packaging**: AUR PKGBUILD + systemd units built and smoke-tested. Both services confirmed active (running) 2026-04-11. gamepulse-agent: 5.8MB stripped; gamepulse-ebpf: 6.4MB stripped.
 - **Full elastic-package test suite**: only `test static` passes. `test asset`, `test system`, `test policy` not yet configured.
 
 ### Package build
@@ -129,9 +132,9 @@ copy step. Long-term fix is moving the integration to a `package/` subdirectory 
 
 ### Pending work (in priority order)
 
-1. **Packaging**: systemd unit, AUR PKGBUILD, .deb/.rpm. Gates Phase 4 closed beta.
-2. **Full elastic-package test suite**: `test asset`, `test system`, `test policy` (require Docker or local ES).
-3. **eBPF Sprint 4**: Update `data_stream/ebpf/sample_event.json` for all probe types; systemd service for ebpf daemon.
+1. **Full elastic-package test suite**: `test asset`, `test system`, `test policy` (require Docker or local ES).
+2. **eBPF Sprint 4**: Update `data_stream/ebpf/sample_event.json` for all probe types.
+3. **.deb/.rpm packaging**: AUR PKGBUILD done; Debian/RPM not yet built.
 
 ## Stack
 
@@ -139,7 +142,7 @@ copy step. Long-term fix is moving the integration to a `package/` subdirectory 
 - **Collector (target)**: Rust + Aya framework for eBPF (Phase 4, not started)
 - **Storage / visualisation**: Elasticsearch Serverless (Elastic Enterprise), Kibana
 - **Hardware target**: AMD GPU primary (Linux); NVIDIA via community; Steam Deck
-- **Packaging target**: Debian, RPM, AUR (not yet built)
+- **Packaging target**: Debian, RPM, AUR (AUR PKGBUILD complete; .deb/.rpm not yet built)
 - **CI/CD target**: GitHub Actions (not yet configured)
 - **Key Linux interfaces**: sysfs/hwmon, /proc filesystem, MangoHud log
 

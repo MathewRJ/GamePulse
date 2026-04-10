@@ -1,6 +1,6 @@
 # GamePulse Roadmap
 
-Last updated: 2026-04-11 (Scheduler Analysis dashboard live — 7 Kibana dashboards total)
+Last updated: 2026-04-11 (AUR packaging complete — both services smoke-tested)
 Source of truth reconciled: 2026-04-11
 
 ## Status legend
@@ -23,9 +23,9 @@ active, session summary correct. Rust agent is now production-primary; Python
 collector is reference/fallback only.
 
 **Critical path to Phase 4 (closed beta):**
-1. Packaging — systemd unit + AUR PKGBUILD (gates `cargo install`-based users)
+1. ~~Packaging — systemd unit + AUR PKGBUILD~~ ✅ Done 2026-04-11
 2. Full `elastic-package test` suite (requires Docker or local ES)
-3. eBPF Sprint 4 — `sample_event.json` updates, systemd unit for ebpf daemon
+3. eBPF Sprint 4 — `sample_event.json` updates for all probe types
 
 ---
 
@@ -86,8 +86,8 @@ vfs (read + write), gpu_fence, gpu_submit. `elastic-package check` PASS, `test s
 
 - Update `data_stream/ebpf/sample_event.json` to add examples for bio, gpu_sched,
   mem, and stutter_correlation probe types (currently only schedlatency covered)
-- Add systemd service unit for `gamepulse-ebpf` daemon
-- AUR PKGBUILD for the eBPF daemon binary
+- ~~Add systemd service unit for `gamepulse-ebpf` daemon~~ ✅ Done 2026-04-11 (`packaging/systemd/gamepulse-ebpf.service`)
+- ~~AUR PKGBUILD for the eBPF daemon binary~~ ✅ Done 2026-04-11 (`packaging/PKGBUILD`, both services smoke-tested active)
 
 **Scheduler Analysis dashboard** (`dashboards/scheduler-analysis-dashboard.json`):
 15 panels — probe type filter, session filter, 6 metric tiles (runqueue avg latency,
@@ -96,7 +96,7 @@ fence avg latency), runqueue latency timeline, CPU migration timeline, IRQ event
 stacked area, VFS latency timeline, GPU fence latency + blocked count, futex contention
 timeline, GPU submit rate. Source: `metrics-gamepulse.ebpf-default`.
 
-**Session to allocate:** 1 Claude Code session (sample_event.json + systemd unit)
+**Session to allocate:** 1 Claude Code session (sample_event.json only — systemd unit done)
 
 ### Sprint 5 — stretch probes 🔲
 
@@ -134,7 +134,7 @@ data. The Rust port is translation work, not design work.
 | 8 | MangoHud frame timing collector (log file tail) | ✅ Done 2026-04-10 |
 | 9 | AMD GPU collector (sysfs/hwmon — card1/hwmon3 heuristic) | ✅ Done 2026-04-10 — validated on RX 9070 XT |
 | 10 | Merge eBPF daemon as feature-flagged module | Fold `ebpf/` into `src/ebpf/` |
-| 11 | Packaging: systemd unit, `.deb`, `.rpm`, AUR PKGBUILD | |
+| 11 | Packaging: AUR PKGBUILD + systemd units | ✅ Done 2026-04-11 — both services smoke-tested active; `.deb`/`.rpm` deferred |
 
 **AMD GPU heuristic validated 2026-04-10**: card1 = RX 9070 XT (score 18: fan+power+hotspot+hwmon); card0 = iGPU (score 1). Hwmon discovered via `{card}/device/hwmon/hwmon*` device-path traversal.
 

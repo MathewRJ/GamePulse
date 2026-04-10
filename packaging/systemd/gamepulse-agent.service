@@ -1,0 +1,12 @@
+[Unit]
+Description=GamePulse metrics agent
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/gamepulse-agent --config /etc/gamepulse/gamepulse.toml
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
