@@ -5,6 +5,70 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-10 (Phase 6 audio + MangoHud collectors — code red)
+
+### Context coming in
+
+Phase 6 Rust agent had 5/8 collectors (CPU, memory, storage, network, power) complete
+from prior sessions. Audio and MangoHud implementations had been written in the first
+half of this session but context was exhausted before registration/validation/commit.
+
+### What was done this session
+
+#### Audio collector (`4ee7e8b`)
+
+`src/collectors/audio.rs` — full parity with Python `audio.py`:
+- `run_cmd()`: polling loop with `child.try_wait()` every 50ms, `child.kill()` on deadline. Avoids blocking `output()`.
+- String helpers (no regex crate): `number_before()`, `quant_rate()`, `hz_value()` — all using `rfind`.
+- `detect_backend()`: pw-cli info 0 (2s) → pactl info (2s) → aplay --version (1s) → "unknown".
+- `pipewire_stats()`: pw-top -b (3s), sums ERR column for xruns, finds first N/M pair for latency_ms.
+- `pulseaudio_stats()`: pactl stat (2s), Hz value from "Sample Specification" line.
+- `AudioCollector { backend, prev_xruns }` — always returns Some; backend always present.
+- xruns only emitted on 2nd+ call (delta from prev_xruns).
+- On this machine: `{"backend": "pipewire", "latency_ms": 5.33}` (no xruns on first call).
+
+#### MangoHud frame collector (`a248244`)
+
+`src/collectors/mangohud.rs` — full parity with Python `frame.py`:
+- File-tail via stored `file_pos: u64`; seek to offset on each tick, advance after read.
+- Re-checks for newest *.csv every 5s via `maybe_switch_log()`.
+- CSV preamble: skips lines until `row[0].lower() == "fps"` (3-line preamble).
+- Filters: fps < 1.0 dropped; frametime > 200ms capped (loading screen protection).
+- `percentile()`: `sorted[max(0, (len * pct / 100.0) as i64 - 1)]` — exact Python parity.
+- `stutter_count` always present (0 when no frametime data).
+- Returns `None` when no log file present (game not running).
+
+#### Registration and validation
+
+- `src/collectors/mod.rs`: added `pub mod audio; pub mod mangohud;`
+- `src/main.rs`: audio (instantaneous, one call) and mangohud (may return None) exercised in dry-run. Count updated to 7.
+- `cargo check`: 0 errors, expected dead-code warnings only.
+- `elastic-package check`: PASS.
+- `elastic-package test static`: 11/11 PASS.
+
+### Current state
+
+- Working tree clean. `251d484` pushed (docs update). Branch up to date with origin/main.
+- Phase 6 Rust agent: **7/8 collectors** complete.
+- CLAUDE.md, ROADMAP.md, docs/claude-chat-context.md all updated and pushed.
+
+### Next step: Phase 6 AMD GPU collector
+
+`src/collectors/gpu_amd.rs`. **Requires gaming PC online (RX 9070 XT).**
+
+Reference: `collector/gamepulse/collectors/gpu/` (it's a directory — multiple files).
+Must validate card1/hwmon scoring heuristic against live sysfs before implementing.
+
+Key things to confirm on the gaming PC before writing code:
+- Which card number is the discrete GPU (`/sys/class/drm/card*/device/vendor`)
+- Which hwmon path corresponds to amdgpu (`/sys/class/hwmon/hwmon*/name`)
+- Which hwmon number is hwmon3 (or whatever it is on that session)
+- That `power1_cap`, `temp1_input`, `freq1_input` etc. exist and read correctly
+
+Do NOT attempt this collector without the gaming PC online. The heuristic is hardware-specific.
+
+---
+
 ## Session: 2026-04-10 (Phase 6 CPU collector — code red)
 
 ### Context coming in
