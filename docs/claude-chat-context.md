@@ -9,7 +9,7 @@ Claude Code (implementation sessions).
 - Claude Code: update CLAUDE.md current state section at the end of every session
 - Neither should edit the other's file
 
-Last updated: 2026-04-10 (Phase 6 Rust agent: 8/8 collectors complete)
+Last updated: 2026-04-11 (Phase 6 Rust agent: fully verified with live gameplay)
 
 ---
 
@@ -58,9 +58,11 @@ Last updated: 2026-04-10 (Phase 6 Rust agent: 8/8 collectors complete)
 | shader | Mesa uprobe | 🔲 NOT STARTED |
 | proton | Wine/ntdll kprobes | 🔲 NOT STARTED |
 
-### Rust agent — Phase 6 collector status (2026-04-10)
+### Rust agent — Phase 6 status (2026-04-11)
 
-| Collector | Status |
+**COMPLETE — all 8 collectors + main loop + gameplay verified**
+
+| Component | Status |
 |---|---|
 | CPU | ✅ Done 2026-04-10 |
 | Memory | ✅ Done 2026-04-10 |
@@ -70,16 +72,21 @@ Last updated: 2026-04-10 (Phase 6 Rust agent: 8/8 collectors complete)
 | Audio | ✅ Done 2026-04-10 |
 | MangoHud frame | ✅ Done 2026-04-10 |
 | AMD GPU | ✅ Done 2026-04-10 — card1/hwmon3, validated on RX 9070 XT |
+| Main loop (session.rs, host.rs, main.rs) | ✅ Done 2026-04-10 — ES-confirmed idle |
+| Full gameplay session verified | ✅ Done 2026-04-11 — Starfield, 40 min, 286.9 avg fps |
 
-### Git state (end of last Claude Code session — 2026-04-10)
+**Gameplay verification results (Starfield, Proton, 2026-04-11):**
+- All 8 streams: cpu 661, gpu 662, memory 662, storage 661, network 661, audio 662, power 662, frame 642 docs
+- `gamepulse.game.name='Starfield'`, `graphics_api='dx_via_proton'` ✅
+- Session summary: avg_fps=286.9, low_1pct=167, duration=2430s, bottleneck=gpu ✅
+
+### Git state (end of last Claude Code session — 2026-04-11)
 
 Branch: `main`, clean, up to date with `origin/main` (after push)
 
 Recent commits:
-- `b95e667` feat(agent): Phase 6 AMD GPU collector — sysfs heuristic, RX 9070 XT validated
-- `251d484` docs: audio + MangoHud collectors complete — AMD GPU is final collector
-- `a248244` feat(agent): Phase 6 MangoHud frame collector — log tail, matches Python output
-- `4ee7e8b` feat(agent): Phase 6 audio collector — PipeWire/PulseAudio, matches Python output
+- `6ac83ad` feat(agent): Phase 6 main loop — all 8 collectors + session lifecycle, ES-confirmed
+- (gameplay verify commit pending — this session)
 
 ### Hardware confirmed in live session (2026-04-08/09)
 
@@ -92,10 +99,9 @@ Recent commits:
 
 ## Priorities (in order)
 
-1. **Phase 6 main loop integration**: Wire all 8 collectors into the main loop (1s tick), port game detection from Python `session.py`/`cli.py`, write `/tmp/gamepulse/session.json` on game start (eBPF handoff), ship docs via `src/shipper.rs`. Run a full gameplay session and verify all 8 Rust streams in ES. Requires gaming PC online.
+1. **Packaging**: systemd unit, AUR PKGBUILD, .deb/.rpm. Gates Phase 4 closed beta.
 2. **Scheduler Analysis dashboard**: Sprint 3 eBPF data confirmed in ES — ready to build.
-3. **Packaging**: systemd unit, AUR PKGBUILD, .deb/.rpm.
-4. **Full elastic-package test suite**: asset + system + policy tests (need Docker/local ES).
+3. **Full elastic-package test suite**: asset + system + policy tests (need Docker/local ES).
 
 ---
 

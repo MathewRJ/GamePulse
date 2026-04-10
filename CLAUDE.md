@@ -66,11 +66,13 @@ and package maintainers who need real-world performance data.
 - **Rust host enricher: dGPU selection requires max-VRAM heuristic (fixed 2026-04-10)**: On systems with iGPU + dGPU both exposing DRM nodes (card0=iGPU 2GB, card1=RX 9070 XT 16GB), iterating sorted cards and breaking at first AMD card picks the wrong one. Fix: score all AMD cards by VRAM and pick the one with the most. Both the Python enricher (same sorted/break bug) and the original Rust enricher had this flaw; only caught when live ES data showed `hardware.gpu.model=iGPU`.
 - **Rust host enricher: vulkaninfo first-match must be guarded (fixed 2026-04-10)**: `enrich_amd()` originally overwrote model/vulkan_driver on every matching line. With iGPU+dGPU, vulkaninfo lists dGPU first then iGPU — the iGPU name wins. Fix: `!m.contains_key("model")` guard preserves first (correct) match.
 - **mesa_version unavailable without DISPLAY (fixed 2026-04-10)**: `glxinfo -B` requires an X/Wayland display. As a background agent it gets "unable to open display". For RADV, mesa_version == driver_version. Fix: fall back to driver_version when vulkan_driver is "radv" and glxinfo produces no output.
+- **Session summary game.name null when game exits before summary (fixed 2026-04-11)**: `build_summary_doc()` calls `session.base_doc()` which uses `current_game`, but by shutdown time the game has already exited and `current_game=None`. Fix: track `last_known_game` in the main loop (set on GameStarted and GameEnded), inject game fields into summary doc when game has exited.
+- **AMD GPU power1_average transient spikes (expected behaviour, 2026-04-11)**: `power1_average` (PPT) can briefly read values above the configured power cap (330W). Peak observed 529W during Starfield at ~257W average. This is genuine hardware behaviour — AMD RDNA firmware enforces the cap over a time window so instantaneous readings can exceed it. Not a conversion bug; /1e6 (µW→W) is correct.
 
 ### Rust agent (src/) — Phase 6
 
-**Last updated:** 2026-04-10  
-**Status:** COMPLETE — all 8 collectors + main loop integration ES-confirmed.
+**Last updated:** 2026-04-11  
+**Status:** COMPLETE — all 8 collectors + main loop integration ES-confirmed. Full gameplay session verified (Starfield, 40 min, Proton). Rust agent is production-primary; Python collector is reference/fallback.
 
 | Component | Status |
 |---|---|
@@ -94,6 +96,13 @@ and package maintainers who need real-world performance data.
 **ES-confirmed 2026-04-10** (no active game, all system metrics streaming):
 - All 8 metric datasets: cpu 178 docs, gpu 180, memory 180, storage 178, network 178, audio 180, power 180, frame 2 (no game), session 4 ✅
 - Hardware fields: `hardware.gpu.model=AMD Radeon RX 9070 XT (RADV GFX1201)`, `vram_mb=16304`, `driver_version=26.0.4`, `mesa_version=26.0.4` ✅
+
+**ES-confirmed 2026-04-11 — full gameplay session (Starfield, Proton, 40 min)**:
+- All 8 metric datasets: cpu 661, gpu 662, memory 662, storage 661, network 661, audio 662, power 662, frame 642 ✅
+- `gamepulse.game.name='Starfield'` in all per-tick docs ✅
+- `gamepulse.game.graphics_api='dx_via_proton'` ✅ (DX12 via Proton/VKD3D)
+- Frame data: avg_fps=286.9, low_1pct=167 fps, p99_frametime=6.36ms, total_frames=184,169 ✅
+- Session summary: duration_s=2430, bottleneck=gpu, peak_gpu_temp=46°C, peak_cpu_temp=61.6°C ✅
 
 **Notes:**
 - `src/Cargo.toml` has `[[bin]] path = "main.rs"` because source files sit at the `src/` level, not in a `src/src/` subdirectory.
@@ -119,10 +128,9 @@ copy step. Long-term fix is moving the integration to a `package/` subdirectory 
 
 ### Pending work (in priority order)
 
-1. **Scheduler Analysis dashboard**: Sprint 3 eBPF data confirmed — ready to build.
-2. **Packaging**: systemd unit, AUR PKGBUILD, .deb/.rpm.
+1. **Packaging**: systemd unit, AUR PKGBUILD, .deb/.rpm.
+2. **Scheduler Analysis dashboard**: Sprint 3 eBPF data confirmed — ready to build.
 3. **Full elastic-package test suite**: `test asset`, `test system`, `test policy` (require Docker or local ES).
-4. **Full gameplay session verification**: Run agent during a game to confirm frame collector data + game detection fields in all docs. No game was active during Phase 6 verification run.
 
 ## Stack
 

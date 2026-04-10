@@ -1,7 +1,7 @@
 # GamePulse Roadmap
 
-Last updated: 2026-04-10 (Phase 6 main loop integration ES-confirmed)
-Source of truth reconciled: 2026-04-10
+Last updated: 2026-04-11 (Phase 6 fully verified — full gameplay session confirmed)
+Source of truth reconciled: 2026-04-11
 
 ## Status legend
 
@@ -16,12 +16,16 @@ Source of truth reconciled: 2026-04-10
 
 ## Current position
 
-Phase 2 eBPF daemon is fully complete (all 9 probes ES-confirmed). Phase 6 Rust
-production agent is fully operational: all 8 collectors wired into the main loop
-with 1s tick, game detection running (Steam `/proc` scan + ACF name lookup),
-session.json written for eBPF handoff, all 8 metric streams confirmed in ES
-(2026-04-10). Next: packaging (systemd unit, AUR PKGBUILD) and Scheduler Analysis
-dashboard.
+Phase 2 eBPF daemon fully complete (all 9 probes ES-confirmed). Phase 6 Rust
+production agent **fully verified with live gameplay** (Starfield, Proton, 40 min,
+2026-04-11): all 8 metric streams confirmed, game detection working, frame data
+active, session summary correct. Rust agent is now production-primary; Python
+collector is reference/fallback only.
+
+**Critical path to Phase 4 (closed beta):**
+1. Packaging — systemd unit + AUR PKGBUILD (gates `cargo install`-based users)
+2. Scheduler Analysis dashboard — Sprint 3 data ready
+3. Full `elastic-package test` suite (requires Docker or local ES)
 
 ---
 
@@ -138,21 +142,21 @@ Python (`session.rs`). Host enricher implemented (`host.rs`). Session lifecycle
 complete: session.json written on game start, removed on exit; session start/end
 docs with hardware snapshot shipped to `metrics-gamepulse.session-default`.
 
-**ES-confirmed 2026-04-10:** All 8 datasets shipping:
-- `gamepulse.cpu` — 178 docs ✅
-- `gamepulse.gpu` — 180 docs ✅
-- `gamepulse.memory` — 180 docs ✅
-- `gamepulse.storage` — 178 docs ✅
-- `gamepulse.network` — 178 docs ✅
-- `gamepulse.audio` — 180 docs ✅
-- `gamepulse.power` — 180 docs ✅
-- `gamepulse.frame` — shipping (no game active during test) ✅
+**ES-confirmed 2026-04-10** (idle, no game): All 8 datasets shipping.
+
+**ES-confirmed 2026-04-11 — full gameplay session** (Starfield, Proton, 40 min):
+- `gamepulse.cpu` — 661 docs, `gamepulse.game.name='Starfield'` ✅
+- `gamepulse.gpu` — 662 docs ✅
+- `gamepulse.memory` — 662 docs ✅
+- `gamepulse.storage` — 661 docs ✅
+- `gamepulse.network` — 661 docs ✅
+- `gamepulse.audio` — 662 docs ✅
+- `gamepulse.power` — 662 docs ✅
+- `gamepulse.frame` — 642 docs, avg_fps=286.9, p99_frametime=6.36ms ✅ (MangoHud active)
 - `gamepulse.session` — start + summary confirmed ✅
 
-Hardware fields confirmed: `hardware.gpu.model=AMD Radeon RX 9070 XT (RADV GFX1201)`,
-`hardware.gpu.vram_mb=16304`, `hardware.gpu.driver_version=26.0.4`,
-`hardware.gpu.mesa_version=26.0.4`, `host.name=cachyos-pc`,
-`host.os.kernel=6.19.11-1-cachyos-deckify`.
+Session summary: `avg_fps=286.9`, `low_1pct=167`, `duration_s=2430`, `bottleneck=gpu`,
+`peak_gpu_temp=46°C`, `peak_cpu_temp=61.6°C`, `graphics_api=dx_via_proton` ✅
 
 ---
 

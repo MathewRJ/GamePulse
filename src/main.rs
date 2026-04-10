@@ -233,6 +233,7 @@ fn build_summary_doc(
     hostname: &str,
     duration_s: u64,
     acc: &SessionAccumulators,
+    last_game: Option<&session::DetectedGame>,
 ) -> Value {
     let interval = 1.0_f64; // 1-second collection interval
 
@@ -283,7 +284,21 @@ fn build_summary_doc(
         summary.insert("bottleneck_dominant".to_string(), Value::String(bn.to_string()));
     }
 
-    let base = session.base_doc(hostname);
+    let mut base = session.base_doc(hostname);
+
+    // If the game exited before the summary is built, session.current_game is None.
+    // Inject the last known game fields so gamepulse.game.* appear in the summary.
+    if let (Some(game), None) = (last_game, session.current_game.as_ref()) {
+        let mut game_doc = serde_json::Map::new();
+        game_doc.insert("name".to_string(), Value::String(game.name.clone()));
+        game_doc.insert("steam_app_id".to_string(), Value::from(game.steam_app_id));
+        if let Some(api) = &game.graphics_api {
+            game_doc.insert("graphics_api".to_string(), Value::String(api.clone()));
+        }
+        let overlay = json!({ "gamepulse": { "game": game_doc } });
+        base = deep_merge(base, overlay);
+    }
+
     let ts = json!({ "@timestamp": utc_now() });
     let summary_overlay = json!({ "gamepulse": { "summary": summary } });
     let mut doc = deep_merge(
@@ -417,6 +432,8 @@ async fn main() -> Result<()> {
     let session_start = std::time::Instant::now();
     let mut tick: u64 = 0;
     let mut acc = SessionAccumulators::new();
+    // Track last seen game so summary doc includes game.name even after game exits.
+    let mut last_known_game: Option<session::DetectedGame> = None;
 
     // 1-second tick interval; skip missed ticks (don't burst-catch-up).
     let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
@@ -439,6 +456,7 @@ async fn main() -> Result<()> {
                         mem.set_game_pid(Some(game.pid));
                         mhud.set_game_pid(Some(game.pid));
                         gpu.set_game_pid(Some(game.pid));
+                        last_known_game = Some(game.clone());
                         let game_doc = build_game_detected_doc(
                             &session, &host_snapshot, &hostname, &game,
                         );
@@ -452,6 +470,7 @@ async fn main() -> Result<()> {
                         mem.set_game_pid(None);
                         mhud.set_game_pid(None);
                         gpu.set_game_pid(None);
+                        last_known_game = Some(old);
                     }
                     SessionEvent::NoChange => {}
                 }
@@ -525,7 +544,8 @@ async fn main() -> Result<()> {
     if tick > 0 {
         let duration_s = session_start.elapsed().as_secs();
         let summary_doc =
-            build_summary_doc(&session, &host_snapshot, &hostname, duration_s, &acc);
+            build_summary_doc(&session, &host_snapshot, &hostname, duration_s, &acc,
+                last_known_game.as_ref());
         tracing::info!(
             "Shipping session summary ({}s, {} ticks)",
             duration_s, tick
