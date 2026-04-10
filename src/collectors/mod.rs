@@ -3,6 +3,8 @@ use serde_json::Value;
 
 pub mod cpu;
 pub mod memory;
+pub mod network;
+pub mod power;
 pub mod storage;
 
 pub trait Collector: Send {
