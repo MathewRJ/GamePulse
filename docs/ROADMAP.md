@@ -1,6 +1,6 @@
 # GamePulse Roadmap
 
-Last updated: 2026-04-10
+Last updated: 2026-04-10 (Sprint 3 complete)
 Source of truth reconciled: 2026-04-10
 
 ## Status legend
@@ -16,14 +16,15 @@ Source of truth reconciled: 2026-04-10
 
 ## Current position
 
-Phase 2 Sprint 2 is complete. The eBPF daemon ships 4 active probes (schedlatency,
-bio, gpu_sched, mem) plus cross-probe stutter correlation. Sprint 1 is confirmed in
-Elasticsearch (231 docs, Starfield session 2026-04-09). Sprint 2 probes are
-hardware-validated but ES doc receipt has not been re-confirmed since their
-implementation. The Python collector covers all 8 metric streams and is live.
-Six Kibana dashboards are live. The active frontier is Sprint 3 extended probes
-followed immediately by the Rust production agent scaffold — the critical path
-item blocking closed beta and the elastic/integrations PR.
+Phase 2 Sprint 3 is code-complete (2026-04-10). All 5 new probes (futex, irq, vfs,
+gpu_fence, gpu_submit) are implemented kernel-side (BPF) and userspace-side (Aya/Rust),
+with field mappings in fields.yml. `cargo check` passes; `elastic-package check` and
+`test static` both pass 11/11. ES confirmation (live run as root) is pending —
+requires recompiling the BPF object and running the daemon. The daemon now supports
+9 total probes (sched, bio, gpu_sched, mem, stutter_correlation, futex, irq, vfs,
+gpu_fence, gpu_submit) with graceful per-probe requirements checking. The active
+frontier is: (1) Sprint 3 ES confirmation, then (2) Phase 6 Rust production agent
+scaffold — the critical path item blocking closed beta.
 
 ---
 
@@ -61,22 +62,23 @@ landed without errors. Open question resolved: `type: histogram` works on TSDS S
 
 **Sprint 2 is fully verified. Proceed directly to Sprint 3.**
 
-### Sprint 3 — extended probes 🔲
+### Sprint 3 — extended probes ⚠️
 
-**Status:** Not started
+**Status:** Code complete — ES confirmation pending (needs daemon recompile + root run)
 
-| Probe | Kernel attachment | Requirement |
-|---|---|---|
-| gpu_fence | kprobe `dma_fence_default_wait` | DRM subsystem (any GPU) |
-| gpu_submit | kprobe `amdgpu_cs_ioctl` | amdgpu module loaded |
-| futex | futex tracepoints | Universal |
-| irq | irq + softirq tracepoints | Universal |
-| vfs | kprobes `vfs_read`, `vfs_write` | Universal |
+| Probe | Kernel attachment | Symbol source | ES confirmed |
+|---|---|---|---|
+| futex | kprobe/kretprobe `do_futex` | `T do_futex` in kallsyms | Pending |
+| irq | tracepoints `irq/irq_handler_{entry,exit}`, `irq/softirq_{entry,exit}` | `/sys/kernel/tracing/events/irq/` | Pending |
+| vfs | kprobe/kretprobe `vfs_read`, `vfs_write` | `T vfs_read`, `T vfs_write` in kallsyms | Pending |
+| gpu_fence | kprobe/kretprobe `dma_fence_default_wait` | `T dma_fence_default_wait` in kallsyms | Pending |
+| gpu_submit | kprobe `amdgpu_cs_ioctl` | `t amdgpu_cs_ioctl [amdgpu]` in kallsyms | Pending |
 
-Fields to add to `data_stream/ebpf/fields/fields.yml`: gpu_fence, gpu_submit,
-futex, irq, vfs groups (mirror the histogram + min/max/avg/count pattern).
+Fields added to `data_stream/ebpf/fields/fields.yml`: futex, irq (hard_irq + softirq),
+vfs (read + write), gpu_fence, gpu_submit field groups. `elastic-package check` PASS.
 
-**Session to allocate:** 1–2 Claude Code sessions
+**Next step:** Run `cargo xtask build-ebpf && gamepulse-ebpf` as root with Sprint 3
+probes compiled and confirm ES doc receipt.
 
 ### Sprint 4 — integration + Scheduler Analysis dashboard 🔲
 

@@ -9,7 +9,7 @@ Claude Code (implementation sessions).
 - Claude Code: update CLAUDE.md current state section at the end of every session
 - Neither should edit the other's file
 
-Last updated: 2026-04-10 (state reconciliation audit)
+Last updated: 2026-04-10 (Sprint 3 code complete)
 
 ---
 
@@ -49,24 +49,24 @@ Last updated: 2026-04-10 (state reconciliation audit)
 | gpu_sched | `drm_sched_job_queue`, `drm_sched_job_run` | ✅ CONFIRMED IN ES (6,112 docs total with schedlatency+bio, date 2026-04-10) |
 | mem | `page_fault_user`, `mm_vmscan_direct_reclaim_begin` | ✅ CONFIRMED — silence correct by design (flush() returns None when working set resident; will fire under real memory pressure) |
 | stutter_correlation | (userspace only) | ✅ CONFIRMED — silence correct by design (16ms threshold not crossed in healthy session; will fire under actual stutter events) |
-| gpu_fence | `dma_fence_default_wait` kprobe | 🔲 NOT STARTED |
-| gpu_submit | `amdgpu_cs_ioctl` kprobe | 🔲 NOT STARTED |
-| futex | futex tracepoints | 🔲 NOT STARTED |
-| irq | irq/softirq tracepoints | 🔲 NOT STARTED |
-| vfs | `vfs_read`/`vfs_write` kprobes | 🔲 NOT STARTED |
+| gpu_fence | `dma_fence_default_wait` kprobe | ⚠️ BUILT — ES confirmation pending |
+| gpu_submit | `amdgpu_cs_ioctl` kprobe | ⚠️ BUILT — ES confirmation pending |
+| futex | `do_futex` kprobe/kretprobe | ⚠️ BUILT — ES confirmation pending |
+| irq | irq_handler_{entry,exit} + softirq_{entry,exit} tracepoints | ⚠️ BUILT — ES confirmation pending |
+| vfs | `vfs_read`/`vfs_write` kprobe/kretprobe | ⚠️ BUILT — ES confirmation pending |
 | syscall | syscall tracepoints | 🔲 NOT STARTED |
 | shader | Mesa uprobe | 🔲 NOT STARTED |
 | proton | Wine/ntdll kprobes | 🔲 NOT STARTED |
 
 ### Git state (end of last Claude Code session — 2026-04-10)
 
-Branch: `main`, clean, up to date with `origin/main`
+Branch: `main`, clean, up to date with `origin/main` (after push)
 
 Recent commits:
+- `0fac78c` feat(ebpf): Sprint 3 — five new probes: futex, irq, vfs, gpu_fence, gpu_submit
+- `614fb0d` docs: mark Sprint 2 fully ES-confirmed 2026-04-10
 - `8983d27` fix(collector): SIGTERM now interrupts sleep and runs finally cleanup
-- `69ba844` feat(ebpf): Sprint 2 stutter correlation probe
 - `92cd994` feat(ebpf): Sprint 2 mem probe
-- `64297a4` feat(ebpf): Sprint 2 bio and gpu_sched probes
 
 ### Hardware confirmed in live session (2026-04-08/09)
 
@@ -79,8 +79,8 @@ Recent commits:
 
 ## Priorities (in order)
 
-1. **Sprint 3 eBPF probes**: gpu_fence (`dma_fence_default_wait`), gpu_submit
-   (`amdgpu_cs_ioctl`), futex, irq, vfs. One Claude Code session.
+1. **Sprint 3 ES confirmation**: Recompile BPF object (`cargo xtask build-ebpf`), run
+   daemon as root, verify futex/irq/vfs/gpu_fence/gpu_submit docs appear in ES.
 2. **Phase 6 Rust agent scaffold**: `src/Cargo.toml`, CLI, config, ES shipper —
    `cargo check` only. One session. This gates Phase 4 (closed beta) and the
    elastic/integrations PR.

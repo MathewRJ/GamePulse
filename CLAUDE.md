@@ -8,7 +8,7 @@ It collects, ships, and visualises real-world gaming metrics to Elasticsearch.
 The target audience is game developers, journalists, Proton/Wine/Mesa maintainers,
 and package maintainers who need real-world performance data.
 
-## Current state — last reconciled 2026-04-10
+## Current state — last reconciled 2026-04-10 (Sprint 3)
 
 ### What is built and verified ✅
 
@@ -40,8 +40,13 @@ and package maintainers who need real-world performance data.
 - **stutter_correlation** ✅ CONFIRMED — silence correct by design (16ms threshold not crossed in healthy session; will fire under actual stutter events) — `correlate()` in `aggregator.rs`, emits `probe: "stutter_correlation"` when ≥2 probes spike in same 1s window.
 - All Sprint 2 fields mapped in `data_stream/ebpf/fields/fields.yml` (bio, gpu_sched, mem, stutter groups). `elastic-package check` PASS.
 
-**Sprint 3 — extended probes** 🔲 NOT STARTED
-- `gpu_fence` (kprobe `dma_fence_default_wait`), `gpu_submit` (`amdgpu_cs_ioctl`), `futex`, `irq`, `vfs` — no code exists.
+**Sprint 3 — extended probes** ✅ IMPLEMENTED (2026-04-10) — ES confirmation pending (needs root to run daemon)
+- **futex** ✅ — kprobe/kretprobe on `do_futex` (kernel symbol confirmed in /proc/kallsyms as `T do_futex`). GAME_PIDS filtered. FutexSnapshot: latency_histogram, min/max/avg_us, event_count, contended_count (>1ms).
+- **irq** ✅ — tracepoints `irq/irq_handler_{entry,exit}` + `irq/softirq_{entry,exit}`. System-wide. IrqSnapshot: hard_irq + softirq sub-groups with latency_histogram, avg_us, event_count.
+- **vfs** ✅ — kprobe/kretprobe on `vfs_read` + `vfs_write` (`T vfs_read`, `T vfs_write` confirmed in kallsyms). GAME_PIDS filtered. VfsSnapshot: read + write sub-groups with latency_histogram, avg_us, event_count.
+- **gpu_fence** ✅ — kprobe/kretprobe on `dma_fence_default_wait` (`T dma_fence_default_wait` confirmed in kallsyms). System-wide. GpuFenceSnapshot: latency_histogram, min/max/avg_us, event_count, blocked_count (>1ms).
+- **gpu_submit** ✅ — kprobe on `amdgpu_cs_ioctl` (confirmed in kallsyms as `t amdgpu_cs_ioctl [amdgpu]`; module-symbol kprobes work). System-wide count-only. GpuSubmitSnapshot: event_count.
+- All 5 probes wired end-to-end: BPF kernel side → userspace aggregator → EbpfPayload → ES fields. `cargo check` PASS. `elastic-package check` PASS. `elastic-package test static` 11/11 PASS.
 
 **Sprint 4–5** 🔲 NOT STARTED
 - Scheduler Analysis dashboard, packaging (systemd, AUR), advanced probes (syscall, shader, proton).
@@ -54,6 +59,7 @@ and package maintainers who need real-world performance data.
 - **session.json path**: Always `/tmp/gamepulse/session.json`. `$XDG_RUNTIME_DIR` is stripped by sudo — daemon and collector would watch different paths.
 - **RADV GPU scheduling**: `drm_sched_job_queue` must be system-wide. RADV uses dedicated submission threads not in the game PID tree.
 - **ES histogram field type on Serverless TSDS (resolved 2026-04-10)**: The `type: histogram` field mapping is accepted by Elasticsearch Serverless in TSDS mode. LatencyHistogram docs (`{"values":[…],"counts":[…]}`) land without bulk errors. No fallback to scalar percentile fields required. This was the last open architectural risk for the eBPF data model.
+- **Sprint 3 kernel symbol availability (confirmed 2026-04-10)**: `T do_futex`, `T vfs_read`, `T vfs_write`, `T dma_fence_default_wait` all present in /proc/kallsyms on kernel 6.19.11 CachyOS. `t amdgpu_cs_ioctl [amdgpu]` also present (lowercase = module-local, kprobes still work on module symbols). sys_enter_futex/sys_exit_futex tracepoints exist but format files are root-only at build time; using do_futex kprobe as implementation instead. irq tracepoint format files also root-only — layout inferred from kernel source (offset 8: s32 irq for irq_handler_{entry,exit}; offset 8: u32 vec for softirq_{entry,exit}) consistent with kernel 5.x–6.x standard.
 
 ### What is not yet started
 
@@ -75,7 +81,7 @@ copy step. Long-term fix is moving the integration to a `package/` subdirectory 
 
 ### Pending work (in priority order)
 
-1. **Sprint 3 eBPF probes**: gpu_fence (`dma_fence_default_wait` kprobe), gpu_submit (`amdgpu_cs_ioctl`), futex, irq, vfs.
+1. **Sprint 3 ES confirmation**: Run daemon as root with Sprint 3 probes live — confirm futex/irq/vfs/gpu_fence/gpu_submit docs appear in Elasticsearch.
 2. **Phase 6 Rust agent scaffold**: `src/Cargo.toml`, CLI, config, ES shipper — `cargo check` only, no collectors yet.
 3. **Phase 6 Rust collectors** (one per session): CPU, memory, storage, network, power, audio, AMD GPU (needs gaming PC online), MangoHud frame.
 4. **Scheduler Analysis dashboard**: build after Sprint 3 data confirmed in ES.
