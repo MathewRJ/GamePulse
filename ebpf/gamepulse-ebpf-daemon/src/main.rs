@@ -22,6 +22,7 @@ use tokio::time::interval;
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
+use aggregator::correlate;
 use config::Config;
 use loader::load_probes;
 use probes::bio::BioProbe;
@@ -164,12 +165,20 @@ async fn main() -> Result<()> {
                     }
                 };
 
+                let mut tick_docs = Vec::new();
                 for probe in &mut loaded.probes {
                     match probe.collect(&sid) {
-                        Ok(docs) => shipper.queue_all(docs),
+                        Ok(docs) => tick_docs.extend(docs),
                         Err(e) => warn!("probe '{}' collect error: {e}", probe.name()),
                     }
                 }
+
+                // Stutter correlation: emit a cross-probe doc if ≥2 probes spiked.
+                if let Some(corr_doc) = correlate(&tick_docs, &host_name, &kernel_version, &sid) {
+                    tick_docs.push(corr_doc);
+                }
+
+                shipper.queue_all(tick_docs);
 
                 if let Err(e) = shipper.flush().await {
                     warn!("ES flush error: {e}");

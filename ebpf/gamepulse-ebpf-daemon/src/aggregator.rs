@@ -3,7 +3,7 @@
 use crate::es_model::{
     BlockIoSnapshot, DataStream, EbpfMetricDoc, EbpfPayload, GamePulseFields, GpuSchedSnapshot,
     HostFields, LatencyHistogram, MemSnapshot, MigrationSnapshot, OsFields, RunqueueSnapshot,
-    SessionRef, ThreadStat,
+    SessionRef, StutterCorrelation, ThreadStat,
 };
 use chrono::Utc;
 use std::collections::HashMap;
@@ -180,6 +180,7 @@ impl SchedAggregator {
                     } else {
                         Some(thread_breakdown)
                     },
+                    stutter: None,
                 },
             },
         })
@@ -341,6 +342,7 @@ impl BioAggregator {
                         event_count,
                         bytes_total,
                     }),
+                    stutter: None,
                 },
             },
         })
@@ -428,6 +430,7 @@ impl GpuAggregator {
                         event_count,
                     }),
                     mem: None,
+                    stutter: None,
                 },
             },
         })
@@ -521,8 +524,101 @@ impl MemAggregator {
                         page_fault_write,
                         direct_reclaim_count,
                     }),
+                    stutter: None,
                 },
             },
         })
     }
+}
+
+// ---------------------------------------------------------------------------
+// Stutter correlator
+// ---------------------------------------------------------------------------
+
+/// Latency threshold above which a probe is considered to have "spiked" (μs).
+/// 16 ms = one dropped frame at 60 fps.
+const SPIKE_THRESHOLD_US: f64 = 16_000.0;
+
+/// Inspect a batch of docs produced in the same 1-second window and emit a
+/// `stutter_correlation` doc if ≥2 subsystems show simultaneous spikes.
+///
+/// `docs` should be the full slice returned by all probes in one tick.
+pub fn correlate(
+    docs: &[EbpfMetricDoc],
+    host_name: &str,
+    kernel_version: &str,
+    session_id: &str,
+) -> Option<EbpfMetricDoc> {
+    let mut sched_max_us: f64 = 0.0;
+    let mut bio_max_us: f64 = 0.0;
+    let mut gpu_sched_max_us: f64 = 0.0;
+    let mut mem_pressure = false;
+    let mut contributing: Vec<String> = Vec::new();
+
+    for doc in docs {
+        let p = &doc.gamepulse.ebpf;
+        if let Some(rq) = &p.runqueue {
+            sched_max_us = rq.latency_max_us;
+            if rq.latency_max_us > SPIKE_THRESHOLD_US {
+                contributing.push("schedlatency".to_string());
+            }
+        }
+        if let Some(bio) = &p.bio {
+            bio_max_us = bio.latency_max_us;
+            if bio.latency_max_us > SPIKE_THRESHOLD_US {
+                contributing.push("bio".to_string());
+            }
+        }
+        if let Some(gpu) = &p.gpu_sched {
+            gpu_sched_max_us = gpu.latency_max_us;
+            if gpu.latency_max_us > SPIKE_THRESHOLD_US {
+                contributing.push("gpu_sched".to_string());
+            }
+        }
+        if let Some(mem) = &p.mem {
+            if mem.direct_reclaim_count > 0 {
+                mem_pressure = true;
+                contributing.push("mem".to_string());
+            }
+        }
+    }
+
+    if contributing.len() < 2 {
+        return None;
+    }
+
+    let severity_score = contributing.len() as u8;
+
+    Some(EbpfMetricDoc {
+        timestamp: chrono::Utc::now(),
+        data_stream: DataStream::default(),
+        host: HostFields {
+            name: host_name.to_string(),
+            os: OsFields {
+                kernel: kernel_version.to_string(),
+            },
+        },
+        gamepulse: GamePulseFields {
+            session: SessionRef {
+                id: session_id.to_string(),
+            },
+            ebpf: EbpfPayload {
+                probe: "stutter_correlation",
+                runqueue: None,
+                migration: None,
+                thread_breakdown: None,
+                bio: None,
+                gpu_sched: None,
+                mem: None,
+                stutter: Some(StutterCorrelation {
+                    contributing_probes: contributing,
+                    sched_max_us,
+                    bio_max_us,
+                    gpu_sched_max_us,
+                    mem_pressure,
+                    severity_score,
+                }),
+            },
+        },
+    })
 }

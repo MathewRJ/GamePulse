@@ -83,6 +83,31 @@ pub struct EbpfPayload {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mem: Option<MemSnapshot>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stutter: Option<StutterCorrelation>,
+}
+
+/// Cross-probe stutter correlation — emitted when ≥2 subsystems spike in the same window.
+#[derive(Debug, Serialize)]
+pub struct StutterCorrelation {
+    /// Which probes contributed a spike this second (e.g. ["schedlatency", "bio"]).
+    pub contributing_probes: Vec<String>,
+
+    /// Runqueue max latency this window (μs); 0 if sched probe not active.
+    pub sched_max_us: f64,
+
+    /// Block I/O max latency this window (μs); 0 if bio probe not active.
+    pub bio_max_us: f64,
+
+    /// GPU scheduling max latency this window (μs); 0 if gpu_sched probe not active.
+    pub gpu_sched_max_us: f64,
+
+    /// True if direct memory reclaim was observed this window.
+    pub mem_pressure: bool,
+
+    /// Number of contributing probes: 2 = low, 3 = medium, 4 = high.
+    pub severity_score: u8,
 }
 
 /// 1-second runqueue latency snapshot from the schedlatency probe.
