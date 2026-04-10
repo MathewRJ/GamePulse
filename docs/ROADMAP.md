@@ -1,6 +1,6 @@
 # GamePulse Roadmap
 
-Last updated: 2026-04-11 (Phase 6 fully verified — full gameplay session confirmed)
+Last updated: 2026-04-11 (Scheduler Analysis dashboard live — 7 Kibana dashboards total)
 Source of truth reconciled: 2026-04-11
 
 ## Status legend
@@ -24,8 +24,8 @@ collector is reference/fallback only.
 
 **Critical path to Phase 4 (closed beta):**
 1. Packaging — systemd unit + AUR PKGBUILD (gates `cargo install`-based users)
-2. Scheduler Analysis dashboard — Sprint 3 data ready
-3. Full `elastic-package test` suite (requires Docker or local ES)
+2. Full `elastic-package test` suite (requires Docker or local ES)
+3. eBPF Sprint 4 — `sample_event.json` updates, systemd unit for ebpf daemon
 
 ---
 
@@ -82,16 +82,21 @@ vfs (read + write), gpu_fence, gpu_submit. `elastic-package check` PASS, `test s
 
 ### Sprint 4 — integration + Scheduler Analysis dashboard 🔲
 
-**Status:** Not started. Sprint 3 blocker resolved — ready to schedule.
+**Status:** Scheduler Analysis dashboard ✅ built (2026-04-11, ID: 89ca0908-5639-45f7-9a70-edadfe7d7124). Remaining:
 
 - Update `data_stream/ebpf/sample_event.json` to add examples for bio, gpu_sched,
   mem, and stutter_correlation probe types (currently only schedlatency covered)
-- Build **Scheduler Analysis dashboard** in Kibana (runqueue latency distribution,
-  CPU migration frequency, CFS vs SCHED_FIFO comparison)
 - Add systemd service unit for `gamepulse-ebpf` daemon
 - AUR PKGBUILD for the eBPF daemon binary
 
-**Session to allocate:** 1–2 Claude Code sessions
+**Scheduler Analysis dashboard** (`dashboards/scheduler-analysis-dashboard.json`):
+15 panels — probe type filter, session filter, 6 metric tiles (runqueue avg latency,
+CPU migrations, hard IRQ avg latency, futex contentions, VFS read avg latency, GPU
+fence avg latency), runqueue latency timeline, CPU migration timeline, IRQ event count
+stacked area, VFS latency timeline, GPU fence latency + blocked count, futex contention
+timeline, GPU submit rate. Source: `metrics-gamepulse.ebpf-default`.
+
+**Session to allocate:** 1 Claude Code session (sample_event.json + systemd unit)
 
 ### Sprint 5 — stretch probes 🔲
 

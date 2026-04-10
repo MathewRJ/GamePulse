@@ -8,7 +8,7 @@ It collects, ships, and visualises real-world gaming metrics to Elasticsearch.
 The target audience is game developers, journalists, Proton/Wine/Mesa maintainers,
 and package maintainers who need real-world performance data.
 
-## Current state — last reconciled 2026-04-10 (Sprint 3 ES-confirmed)
+## Current state — last reconciled 2026-04-11 (Scheduler Analysis dashboard live)
 
 ### What is built and verified ✅
 
@@ -18,13 +18,14 @@ and package maintainers who need real-world performance data.
 - **Live gameplay verified**: Full session end-to-end (Cyberpunk 2077, Proton, MangoHud, all 8 streams, game detection working).
 - **Session summary doc**: `cli.py` `finally` block ships session-end doc. Fields: `ended`, `duration_s`, `avg_fps`, `low_1pct_fps`, `p99_frametime_ms`, `peak_gpu_temp_c`, `peak_cpu_temp_c`, `peak_gpu_power_w`, `total_frames`, `stutter_count`, `bottleneck_dominant`.
 - **GPU driver version**: `gamepulse.hardware.gpu.driver_version` via `enricher/host.py` (AMD: vulkaninfo, NVIDIA: nvidia-smi).
-- **Kibana dashboards** (Phase 3, 6 live dashboards):
+- **Kibana dashboards** (7 live dashboards):
   - `dashboards/gamepulse-dashboard.ndjson` — baseline (UI-exported)
   - `dashboards/config-comparison-dashboard.json` — 16 panels (ID: 21b663d6-de42-46c6-aeaf-e6c48e46ecec)
   - `dashboards/session-deep-dive-dashboard.json` — 17 panels (ID: b68f1178-6923-4e92-819b-33eb595197a9)
   - `dashboards/storage-io-dashboard.json` — 16 panels (ID: f8a9d960-130e-43db-8554-6033f45e8a9c)
   - `dashboards/system-health-dashboard.json` — 15 panels (ID: 1b2a1b70-a315-4ed4-91c4-11aa0abe5e1d)
   - `dashboards/game-library-dashboard.json` — 8 panels (ID: e7d878d0-e2d6-454b-9a95-d93a4aeb70a8)
+  - `dashboards/scheduler-analysis-dashboard.json` — 15 panels (ID: 89ca0908-5639-45f7-9a70-edadfe7d7124) eBPF data
 
 ### eBPF daemon (Phase 2)
 
@@ -128,9 +129,9 @@ copy step. Long-term fix is moving the integration to a `package/` subdirectory 
 
 ### Pending work (in priority order)
 
-1. **Packaging**: systemd unit, AUR PKGBUILD, .deb/.rpm.
-2. **Scheduler Analysis dashboard**: Sprint 3 eBPF data confirmed — ready to build.
-3. **Full elastic-package test suite**: `test asset`, `test system`, `test policy` (require Docker or local ES).
+1. **Packaging**: systemd unit, AUR PKGBUILD, .deb/.rpm. Gates Phase 4 closed beta.
+2. **Full elastic-package test suite**: `test asset`, `test system`, `test policy` (require Docker or local ES).
+3. **eBPF Sprint 4**: Update `data_stream/ebpf/sample_event.json` for all probe types; systemd service for ebpf daemon.
 
 ## Stack
 
@@ -160,7 +161,7 @@ with proper NDJSON saved objects). Until then, all dashboard JSON files live in
 | Storage & I/O Analysis | ✅ built | `dashboards/storage-io-dashboard.json` (ID: f8a9d960-130e-43db-8554-6033f45e8a9c) |
 | System Health | ✅ built | `dashboards/system-health-dashboard.json` (ID: 1b2a1b70-a315-4ed4-91c4-11aa0abe5e1d) |
 | Game Library | ✅ built | `dashboards/game-library-dashboard.json` (ID: e7d878d0-e2d6-454b-9a95-d93a4aeb70a8) |
-| Scheduler Analysis | Phase 2 data required | needs eBPF stream |
+| Scheduler Analysis | ✅ built | `dashboards/scheduler-analysis-dashboard.json` (ID: 89ca0908-5639-45f7-9a70-edadfe7d7124) |
 
 **Session Deep-Dive** (`dashboards/session-deep-dive-dashboard.json`):
 17 panels — 3 filter controls (Game/Session/OS), 6 metric tiles (Median FPS,
@@ -190,11 +191,13 @@ game (bar), FPS over time broken out by game, GPU util and GPU power timelines
 by game, and a performance summary data table (avg/1%/0.1% FPS, frame time,
 max stutter, GPU util/power, session count per game). Default range: now-30d.
 
-**Scheduler Analysis** (Phase 2 data required):
-   - Runqueue latency distribution per thread
-   - CPU migration frequency / CCX boundary crossings
-   - Comparison: CFS vs SCHED_FIFO for same game
-   - Target data stream: ebpf
+**Scheduler Analysis** (`dashboards/scheduler-analysis-dashboard.json`, ID: 89ca0908-5639-45f7-9a70-edadfe7d7124):
+15 panels — 2 filter controls (Probe Type, Session ID), 6 metric tiles (runqueue avg latency,
+CPU migrations, hard IRQ avg latency, futex contentions, VFS read avg latency, GPU fence avg
+latency), runqueue latency timeline (avg + max), CPU migration timeline (total + CCX cross),
+IRQ event count (hard + softirq stacked area), VFS latency timeline (read + write), GPU fence
+latency + blocked count, futex contention timeline, GPU submit rate.
+Source: `metrics-gamepulse.ebpf-default` (all Sprint 1–3 probes).
 
 ### Dashboard workflow
 
