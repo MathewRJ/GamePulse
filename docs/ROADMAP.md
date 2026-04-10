@@ -17,9 +17,9 @@ Source of truth reconciled: 2026-04-10
 ## Current position
 
 Phase 2 eBPF daemon is fully complete (all 9 probes ES-confirmed). Phase 6 Rust
-production agent has CPU, memory, and storage collectors implemented (all verified
-side-by-side against Python output 2026-04-10). The active frontier is Phase 6 collectors
-— one per session. Next session: network collector (`src/collectors/network.rs`).
+production agent has 5/8 collectors complete: CPU, memory, storage, network, and power
+(all verified side-by-side against Python output 2026-04-10). Next session: audio and
+MangoHud frame collectors. AMD GPU requires gaming PC online — dedicated session.
 
 ---
 
@@ -117,7 +117,10 @@ data. The Rust port is translation work, not design work.
 | 2 | CPU collector (`/proc/stat`, `/proc/loadavg`, k10temp hwmon) | ✅ Done 2026-04-10 |
 | 3 | Memory collector (`/proc/meminfo`, `/proc/<pid>/status`) | ✅ Done 2026-04-10 |
 | 4 | Storage collector (`/proc/diskstats`, `/sys/block/`) | ✅ Done 2026-04-10 |
-| 5 | Network collector (`/proc/net/dev`) | Next session |
+| 5 | Network collector (`/proc/net/dev`) | ✅ Done 2026-04-10 |
+| 6 | Power collector (`/sys/class/power_supply/`, RAPL/hwmon) | ✅ Done 2026-04-10 |
+| 7 | Audio collector (PipeWire/PulseAudio via `pactl`) | Next session |
+| 8 | MangoHud frame collector (log file tail) | Next session |
 | 4 | Storage collector (`/proc/diskstats`, `/sys/block/`) | |
 | 5 | Network collector (`/proc/net/dev`) | |
 | 6 | Power collector (`/sys/class/power_supply/`, RAPL if available) | RAPL needs root; return None gracefully |
