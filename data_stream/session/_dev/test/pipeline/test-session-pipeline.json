@@ -1,0 +1,108 @@
+{
+  "events": [
+    {
+      "@timestamp": "2026-04-11T12:00:00.000Z",
+      "data_stream": {
+        "type": "metrics",
+        "dataset": "gamepulse.session",
+        "namespace": "default"
+      },
+      "host": {
+        "name": "cachyos-pc",
+        "os": {
+          "name": "CachyOS Linux",
+          "version": "2024.12",
+          "kernel": "6.19.11-1-cachyos",
+          "type": "Linux",
+          "platform": "cachyos"
+        }
+      },
+      "gamepulse": {
+        "session": {
+          "id": "test-session-001",
+          "agent_version": "0.1.0",
+          "opt_in_public": true
+        },
+        "game": {
+          "name": "  Cyberpunk 2077  ",
+          "steam_app_id": 1091500,
+          "graphics_api": "Vulkan"
+        },
+        "hardware": {
+          "gpu": {
+            "model": "AMD Radeon RX 9070 XT",
+            "vendor": "AMD",
+            "vram_mb": 16384,
+            "driver_version": "26.0.4",
+            "vulkan_driver": "radv"
+          },
+          "cpu": {
+            "model": "AMD Ryzen 9 9800X3D",
+            "cores": 8,
+            "threads": 16
+          },
+          "ram": {
+            "total_mb": 32768,
+            "type": "ddr5"
+          }
+        },
+        "summary": {
+          "ended": false
+        }
+      }
+    }
+  ],
+  "expected_events": [
+    {
+      "@timestamp": "2026-04-11T12:00:00.000Z",
+      "data_stream": {
+        "type": "metrics",
+        "dataset": "gamepulse.session",
+        "namespace": "default"
+      },
+      "host": {
+        "name": "cachyos-pc",
+        "os": {
+          "name": "CachyOS Linux",
+          "version": "2024.12",
+          "kernel": "6.19.11-1-cachyos",
+          "type": "linux",
+          "platform": "cachyos"
+        }
+      },
+      "gamepulse": {
+        "session": {
+          "id": "test-session-001",
+          "agent_version": "0.1.0",
+          "opt_in_public": true
+        },
+        "game": {
+          "name": "Cyberpunk 2077",
+          "steam_app_id": 1091500,
+          "graphics_api": "vulkan"
+        },
+        "hardware": {
+          "gpu": {
+            "model": "AMD Radeon RX 9070 XT",
+            "vendor": "amd",
+            "vram_mb": 16384,
+            "driver_version": "26.0.4",
+            "vulkan_driver": "radv"
+          },
+          "cpu": {
+            "model": "AMD Ryzen 9 9800X3D",
+            "cores": 8,
+            "threads": 16
+          },
+          "ram": {
+            "total_mb": 32768,
+            "type": "ddr5"
+          }
+        },
+        "summary": {
+          "ended": false
+        }
+      }
+    }
+  ]
+}

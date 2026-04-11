@@ -31,7 +31,7 @@ PROTECTED_DIRS=(
 
 # Protected file patterns (glob-style substring match)
 PROTECTED_GLOBS=(
-  "pipeline"   # matches any file with 'pipeline' in the path
+  "ingest_pipeline"   # matches elasticsearch/ingest_pipeline/ files; _dev/test/pipeline/ is NOT protected
   "index-template"
   "ilm-policy"
 )
