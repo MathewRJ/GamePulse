@@ -53,9 +53,43 @@ cd "$REPO_ROOT"
 echo "==> Stashing dev-only directories to $STASH_DIR ..."
 hide_dir .agents
 hide_dir collector/.venv
+hide_dir ebpf
+hide_dir src
+hide_dir target
+hide_dir packaging
+hide_dir dashboards
 
 echo "==> Running: elastic-package build $*"
 elastic-package build "$@"
+
+# Strip elastic/component-templates/ from the zip — the ECS import technical
+# preview feature in elastic-package v0.122.0 adds this directory, but the
+# local package-registry (v1.37.0 in the 8.13.0 stack) rejects hyphenated
+# directory names. These component templates are loaded by Kibana directly and
+# are not needed for local registry serving.
+ZIP=$(ls build/packages/gamepulse-*.zip 2>/dev/null | head -1)
+if [ -n "$ZIP" ]; then
+  echo "==> Stripping elastic/component-templates/ from $(basename "$ZIP") ..."
+  python3 - "$ZIP" <<'PYEOF'
+import sys, zipfile, os, re
+path = sys.argv[1]
+tmp = path + ".tmp"
+# Strip the entire elastic-package v0.122.0 "technical preview" ECS build
+# artifacts tree (elastic/<anything>/ inside the zip). The local package-registry
+# v1.37.0 predates this feature and rejects any hyphenated directory name.
+# The data_stream/ subdirectory is the canonical source for all assets; the
+# elastic/ subtree is redundant for local registry serving.
+# Pattern: <pkgname>/elastic/<subdir>/ — strip everything except <pkgname>/elastic/ itself.
+strip_re = re.compile(r'^[^/]+/elastic/.+')
+with zipfile.ZipFile(path, 'r') as src, zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED) as dst:
+    for item in src.infolist():
+        if strip_re.match(item.filename):
+            print(f"  stripped: {item.filename}")
+        else:
+            dst.writestr(item, src.read(item.filename))
+os.replace(tmp, path)
+PYEOF
+fi
 
 echo "==> Restoring stashed directories..."
 restore_dirs

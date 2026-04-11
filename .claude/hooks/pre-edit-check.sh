@@ -15,13 +15,23 @@ fi
 # Normalise to relative path for matching
 REL_PATH="${FILE_PATH#./}"
 
-# Protected file patterns
+
+
+# Protected file patterns (exact suffix or path matches — not substring)
+# manifest.yml: only the root package manifest, not data_stream/*/manifest.yml
 PROTECTED_PATTERNS=(
-  "manifest.yml"
   "deploy_pipelines.py"
   "wire_pipelines.py"
   "docs/GamePulse-Scope-v3_2.md"
 )
+
+# Root manifest.yml is protected; data_stream/*/manifest.yml are NOT
+if [[ "$REL_PATH" == "manifest.yml" ]]; then
+  echo "BLOCKED: '$REL_PATH' is the protected root package manifest." >&2
+  echo "Protected files require an explicit planner-assigned task targeting them." >&2
+  echo "If this edit is intentional, ask the user to confirm in the chat before proceeding." >&2
+  exit 2
+fi
 
 # Protected directory prefixes
 PROTECTED_DIRS=(

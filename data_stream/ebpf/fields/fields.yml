@@ -1,7 +1,6 @@
 # ECS fields
 - name: host.name
   type: keyword
-  dimension: true
   description: "Hostname of the gaming PC"
 
 - name: host.os.kernel
@@ -17,7 +16,6 @@
       fields:
         - name: id
           type: keyword
-          dimension: true
           description: "Unique session identifier (UUID)"
 
     - name: ebpf
@@ -25,7 +23,6 @@
       fields:
         - name: probe
           type: keyword
-          dimension: true
           description: "Probe name discriminant (e.g. schedlatency)"
 
         # Scheduler probe: runqueue latency

@@ -1,4 +1,2 @@
 title: "GamePulse eBPF Metrics"
 type: metrics
-elasticsearch:
-  index_mode: "time_series"
