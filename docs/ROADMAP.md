@@ -1,6 +1,6 @@
 # GamePulse Roadmap
 
-Last updated: 2026-04-11 (elastic-package full test suite complete — all tests in final state)
+Last updated: 2026-04-11 (Phase 4 distribution verified — zip upload to Fleet API confirmed on local + Serverless)
 Source of truth reconciled: 2026-04-11
 
 ## Status legend
@@ -175,42 +175,46 @@ Session summary: `avg_fps=286.9`, `low_1pct=167`, `duration_s=2430`, `bottleneck
 
 ---
 
-## Phase 4: Closed Beta — NEXT
+## Phase 4: Closed Beta — IN PROGRESS
 
-**Status:** All prerequisites met. Ready to start.
+**Status:** Distribution infrastructure verified 2026-04-11. Ready to onboard first colleague.
 
-**Prerequisites — ALL MET:**
-- ✅ Rust agent ES-verified (Starfield, Proton, 40 min, 2026-04-11)
-- ✅ AUR PKGBUILD + systemd units smoke-tested active (2026-04-11)
-- ✅ `elastic-package test static` 11/11 PASS
-- ✅ `elastic-package test pipeline` 11/11 PASS
-- ✅ `elastic-package test asset` 12/12 PASS
-- ✅ `elastic-package test system` — "No test results" (acceptable skip for hardware integration)
+**Distribution verified (2026-04-11):**
+- ✅ Local registry: `elastic-package stack up` (from repo root) serves gamepulse 0.1.0 via HTTPS registry on port 8080. Registry auto-discovers `build/packages/*.zip`.
+- ✅ Zip upload to Kibana Fleet API: `POST /api/fleet/epm/packages` with `Content-Type: application/zip`. Works on local 8.13.0 (44 assets) and Elastic Cloud Serverless (47 assets).
+- ✅ All 11 index templates present after fresh install.
+- ✅ `docs/BETA-INSTALL.md` created — colleague onboarding guide.
 
-**Tasks:**
-1. **Self-hosted Package Registry** — `docker.elastic.co/package-registry/package-registry`
-   - Build and serve the GamePulse package via the registry
-   - Verify a fresh Fleet install picks up the integration
-2. **First external tester** — share with one colleague; confirm one-click install works end-to-end
-3. **`.deb`/`.rpm` packaging** — deferred from AUR session; needed for Linux diversity
+**Distribution method for Serverless:** Zip upload only. Serverless Fleet does not support custom registry URLs (`xpack.fleet.registryUrl` is a self-hosted Kibana config). Colleagues upload the zip via Kibana Fleet UI or direct API POST.
 
-**Currently passing:** `elastic-package check` ✅, all test types in final state ✅
+**Remaining tasks:**
+1. **First colleague onboarding** — share `docs/BETA-INSTALL.md` + `gamepulse-0.1.0.zip`
+2. **GitHub Release v0.1.0** — tag, attach zip + AUR package binaries
+3. **`.deb`/`.rpm` packaging** — needed for non-Arch Linux users
+
+**Phase 4 success criteria:** 10+ colleagues running GamePulse with data flowing to their ES deployments.
 
 ---
 
-## elastic/integrations PR (end goal) 🚫
+## elastic/integrations PR (end goal) — NEXT MAJOR MILESTONE
 
-**Status:** Blocked on multiple items below
+**Status:** Phase 4 beta in progress. PR prep is the next Claude Code session work.
 
 **Requirements checklist:**
-- [ ] `elastic-package test` all types passing
-- [ ] Rust binary builds and runs
-- [ ] README with screenshots
-- [ ] `CHANGELOG.md` maintained
-- [ ] ECS compliance verified
-- [ ] Dashboard panels all by-value with `data_stream.dataset` filters
+- [x] `elastic-package test` all types in final state (static+pipeline+asset PASS, system/policy acceptable skip)
+- [x] Rust binary builds and runs (ES-confirmed, AUR packaging done)
+- [ ] `docs/README.md` — elastic/integrations-format README with screenshots, config reference, troubleshooting
+- [ ] `CHANGELOG.md` — 0.1.0 entry
+- [ ] ECS compliance check (`elastic-package check` covers field compliance; full review TBD)
+- [x] Dashboard panels all by-value with `data_stream.dataset` filters ✅ (verified in build sessions)
 - [ ] Fork `elastic/integrations`, add to `packages/`, submit PR
 - [ ] Engage Elastic integrations team for review
+
+**Next session tasks:**
+1. Write `docs/README.md` meeting elastic/integrations contribution standards
+2. Write `CHANGELOG.md` (0.1.0 entry)
+3. Run ECS compliance check
+4. Fork `elastic/integrations` and prepare the PR structure
 
 ---
 

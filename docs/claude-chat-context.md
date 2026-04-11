@@ -9,7 +9,7 @@ Claude Code (implementation sessions).
 - Claude Code: update CLAUDE.md current state section at the end of every session
 - Neither should edit the other's file
 
-Last updated: 2026-04-11 (elastic-package full test suite complete — all tests in final state)
+Last updated: 2026-04-11 (Phase 4 distribution verified — zip upload to Fleet API works on local + Serverless)
 
 ---
 
@@ -95,9 +95,9 @@ Last updated: 2026-04-11 (elastic-package full test suite complete — all tests
 Branch: `main`, clean, up to date with `origin/main` (after push)
 
 Recent commits:
+- `5682f97` test(system): elastic-package test system — No test results (acceptable skip)
 - `0a3a2c2` feat(testing): full elastic-package test suite — static+pipeline+asset all PASS
 - `f3ef6eb` feat(packaging): AUR PKGBUILD + systemd units — both services smoke-tested active
-- `51a1701` verify(agent): full gameplay session confirmed — Starfield 40 min, all 8 streams
 
 ### Hardware confirmed in live session (2026-04-08/09)
 
@@ -108,13 +108,27 @@ Recent commits:
 
 ---
 
+## Phase 4 distribution status (2026-04-11)
+
+- Registry: `elastic-package stack up` from repo root auto-serves `build/packages/*.zip` via HTTPS registry on port 8080 ✅
+- Install method (Serverless): `POST /api/fleet/epm/packages` with zip body + ApiKey header ✅ (47 assets)
+- Install method (local 8.13): same API, Basic auth ✅ (44 assets)
+- Serverless Fleet does NOT support custom registry URLs — zip upload is the only method
+- `docs/BETA-INSTALL.md` created ✅
+- `elastic-package install --zip` hangs (TLS/HTTP2 bug in v0.122.0) — use direct API call or Kibana UI instead
+
 ## Priorities (in order)
 
-**Phase 4 Closed Beta — all prerequisites met, ready to start:**
-1. **Self-hosted Package Registry** — serve the GamePulse package via Docker registry; verify Fleet one-click install
-2. **First external tester** — one colleague confirms end-to-end install
+**Phase 4 Closed Beta — active:**
+1. **First colleague onboarding** — share `docs/BETA-INSTALL.md` + `gamepulse-0.1.0.zip`
+2. **GitHub Release v0.1.0** — tag, attach zip + AUR binaries
 3. **.deb/.rpm packaging** — AUR done; Debian/RPM deferred
-4. **eBPF Sprint 4** — `sample_event.json` for all probe types (low priority for beta)
+
+**Next Claude Code session:**
+1. Write `docs/README.md` (elastic/integrations format — screenshots, config ref, troubleshooting)
+2. Write `CHANGELOG.md` (0.1.0 entry)
+3. ECS compliance check
+4. Fork `elastic/integrations`, prepare PR structure
 
 ---
 
