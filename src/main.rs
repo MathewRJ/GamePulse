@@ -555,6 +555,17 @@ async fn main() -> Result<()> {
         );
         if let Err(e) = shipper::ship(&cfg, vec![summary_doc]).await {
             tracing::warn!("Failed to ship summary doc: {}", e);
+        } else {
+            // Trigger an immediate transform sync so the Games dashboard
+            // reflects this session within seconds rather than up to 60 s.
+            if let Err(e) = shipper::trigger_transform_sync(
+                &cfg,
+                "gamepulse-game-timeline",
+            )
+            .await
+            {
+                tracing::warn!("transform schedule_now failed (non-fatal): {}", e);
+            }
         }
     }
 

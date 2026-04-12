@@ -160,3 +160,36 @@ pub async fn ship(config: &Config, docs: Vec<Value>) -> Result<ShipResult> {
     debug!("shipped {}/{} docs", succeeded, attempted);
     Ok(ShipResult { attempted, succeeded, failed })
 }
+
+/// Request an immediate transform sync via POST /_transform/{id}/_schedule_now.
+///
+/// Called after shipping the session summary document so the Games dashboard
+/// updates within seconds rather than waiting up to 60 s for the next scheduled
+/// sync. Failures are logged at WARN level and never propagate to the caller —
+/// this is a best-effort optimisation, not part of the critical shipping path.
+pub async fn trigger_transform_sync(config: &Config, transform_id: &str) -> Result<()> {
+    let client = build_client()?;
+    let endpoint = format!(
+        "{}/_transform/{}/_schedule_now",
+        config.elasticsearch.endpoint.trim_end_matches('/'),
+        transform_id,
+    );
+    let mut req = client.post(&endpoint);
+    if let Some(auth) = auth_header(config) {
+        req = req.header("Authorization", auth);
+    }
+    let resp = req.send().await.context("sending transform schedule_now")?;
+    let status = resp.status();
+    if status.is_success() {
+        debug!("transform '{}' schedule_now accepted", transform_id);
+    } else {
+        let body = resp.text().await.unwrap_or_default();
+        warn!(
+            "transform '{}' schedule_now returned {}: {}",
+            transform_id,
+            status,
+            &body[..body.len().min(200)]
+        );
+    }
+    Ok(())
+}
