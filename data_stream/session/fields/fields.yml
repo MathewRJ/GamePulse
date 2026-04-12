@@ -225,6 +225,34 @@
             - name: tdp_watts
               type: float
               description: "Configured TDP limit in watts (relevant for handhelds)"
+        - name: monitors
+          type: nested
+          description: "Connected display monitors at session start"
+          fields:
+            - name: name
+              type: keyword
+              description: "Connector name as reported by xrandr (e.g. DP-2, HDMI-1)"
+            - name: resolution_h
+              type: integer
+              description: "Horizontal resolution in pixels"
+            - name: resolution_v
+              type: integer
+              description: "Vertical resolution in pixels"
+            - name: refresh_rate_hz
+              type: float
+              description: "Active refresh rate in Hz"
+            - name: is_primary
+              type: boolean
+              description: "True if this is the primary display"
+            - name: vrr_capable
+              type: boolean
+              description: "True if the monitor reports VRR/FreeSync/G-Sync support"
+            - name: hdr_capable
+              type: boolean
+              description: "True if the monitor reports HDR capability (max bpc > 8)"
+            - name: current_vrr_enabled
+              type: boolean
+              description: "True if variable refresh rate is currently active on this monitor"
 
     - name: summary
       type: group

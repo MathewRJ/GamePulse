@@ -364,6 +364,140 @@ fn device_info() -> Map<String, Value> {
     m
 }
 
+// ── Monitor info ──────────────────────────────────────────────────────────────
+
+/// Parse `xrandr --verbose` output and return one JSON object per connected
+/// monitor. Fields collected per monitor:
+///   name, resolution_h, resolution_v, refresh_rate_hz, is_primary,
+///   vrr_capable, hdr_capable, current_vrr_enabled
+fn collect_monitors() -> Vec<Value> {
+    let out = match run_cmd("xrandr", &["--verbose"], 4000) {
+        Some(s) => s,
+        None => return Vec::new(),
+    };
+
+    let mut monitors: Vec<Value> = Vec::new();
+    let mut current: Option<Map<String, Value>> = None;
+    // True after we see the *current mode line; cleared after we parse its v: clock.
+    let mut after_current = false;
+
+    for line in out.lines() {
+        let tokens: Vec<&str> = line.split_whitespace().collect();
+
+        // ── Monitor header ────────────────────────────────────────────────────
+        // Format: "<name> connected [primary] [WxH+X+Y] ..."
+        //      or "<name> disconnected ..."
+        if tokens.len() >= 2 && tokens[1] == "connected" {
+            // Flush previous monitor.
+            if let Some(m) = current.take() {
+                monitors.push(Value::Object(m));
+            }
+            after_current = false;
+
+            let mut m = Map::new();
+            m.insert("name".to_string(), Value::String(tokens[0].to_string()));
+            m.insert(
+                "is_primary".to_string(),
+                Value::Bool(tokens.contains(&"primary")),
+            );
+            // Default booleans — overwritten if properties are found below.
+            m.insert("vrr_capable".to_string(), Value::Bool(false));
+            m.insert("hdr_capable".to_string(), Value::Bool(false));
+            m.insert("current_vrr_enabled".to_string(), Value::Bool(false));
+
+            // Geometry token: "WxH+X+Y" e.g. "3440x1440+0+0"
+            for tok in &tokens[2..] {
+                if tok.contains('x') && tok.contains('+') {
+                    let geom = tok.split('+').next().unwrap_or("");
+                    let parts: Vec<&str> = geom.split('x').collect();
+                    if parts.len() == 2 {
+                        if let (Ok(w), Ok(h)) =
+                            (parts[0].parse::<i64>(), parts[1].parse::<i64>())
+                        {
+                            m.insert("resolution_h".to_string(), Value::from(w));
+                            m.insert("resolution_v".to_string(), Value::from(h));
+                        }
+                    }
+                    break;
+                }
+            }
+
+            current = Some(m);
+            continue;
+        }
+
+        let m = match current.as_mut() {
+            Some(m) => m,
+            None => continue,
+        };
+
+        let trimmed = line.trim();
+
+        // ── Active mode line ──────────────────────────────────────────────────
+        // "  3440x1440 (0x41) 889.750MHz -HSync +VSync *current +preferred"
+        if trimmed.contains("*current") {
+            after_current = true;
+            continue;
+        }
+
+        // ── Refresh rate (v: timing line after *current) ───────────────────
+        // "  v: height 1440 start 1443 end 1453 total 1545 clock 119.98Hz"
+        if after_current && trimmed.starts_with("v:") {
+            if let Some(pos) = trimmed.find("clock ") {
+                let rest = &trimmed[pos + 6..];
+                let hz: String = rest
+                    .chars()
+                    .take_while(|&c| c.is_ascii_digit() || c == '.')
+                    .collect();
+                if let Ok(f) = hz.parse::<f64>() {
+                    m.insert("refresh_rate_hz".to_string(), json!(f));
+                }
+            }
+            after_current = false;
+            continue;
+        }
+
+        // ── VRR / HDR properties ──────────────────────────────────────────
+        let lower = trimmed.to_lowercase();
+
+        // vrr_capable: 1
+        if lower.starts_with("vrr_capable:") && lower.contains(": 1") {
+            m.insert("vrr_capable".to_string(), Value::Bool(true));
+        }
+        // FreeSync or G-Sync Compatible properties
+        if (lower.contains("freesync") || lower.contains("gsync"))
+            && lower.ends_with(": 1")
+        {
+            m.insert("vrr_capable".to_string(), Value::Bool(true));
+        }
+        // Variable Refresh Rate currently active
+        if lower.starts_with("variable refresh rate") && lower.contains(": 1") {
+            m.insert("current_vrr_enabled".to_string(), Value::Bool(true));
+        }
+        // HDR: max bpc > 8 signals HDR panel
+        if lower.starts_with("max bpc:") {
+            if let Some(pos) = trimmed.rfind(':') {
+                if let Ok(bpc) = trimmed[pos + 1..].trim().parse::<u32>() {
+                    if bpc > 8 {
+                        m.insert("hdr_capable".to_string(), Value::Bool(true));
+                    }
+                }
+            }
+        }
+        // Colorspace BT.2020 or HDR10 metadata implies HDR panel
+        if lower.contains("colorspace") && (lower.contains("bt2020") || lower.contains("hdr")) {
+            m.insert("hdr_capable".to_string(), Value::Bool(true));
+        }
+    }
+
+    // Flush the last monitor.
+    if let Some(m) = current.take() {
+        monitors.push(Value::Object(m));
+    }
+
+    monitors
+}
+
 // ── Public entry point ─────────────────────────────────────────────────────────
 
 /// Build the host enrichment snapshot. Called once at startup.
@@ -374,6 +508,7 @@ pub fn collect_snapshot() -> Value {
     let gpu = gpu_info();
     let ram = ram_info();
     let device = device_info();
+    let monitors = collect_monitors();
 
     let mut hardware = serde_json::Map::new();
     if !cpu.is_empty() {
@@ -387,6 +522,9 @@ pub fn collect_snapshot() -> Value {
     }
     if !device.is_empty() {
         hardware.insert("device".to_string(), Value::Object(device));
+    }
+    if !monitors.is_empty() {
+        hardware.insert("monitors".to_string(), Value::Array(monitors));
     }
 
     let mut doc = json!({ "host": { "os": os } });

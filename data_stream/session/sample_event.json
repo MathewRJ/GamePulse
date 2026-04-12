@@ -88,7 +88,19 @@
       "device": {
         "type": "desktop",
         "power_source": "ac"
-      }
+      },
+      "monitors": [
+        {
+          "name": "DP-2",
+          "resolution_h": 3440,
+          "resolution_v": 1440,
+          "refresh_rate_hz": 119.98,
+          "is_primary": true,
+          "vrr_capable": false,
+          "hdr_capable": false,
+          "current_vrr_enabled": false
+        }
+      ]
     },
     "summary": {
       "ended": false

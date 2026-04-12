@@ -314,6 +314,9 @@ fn build_summary_doc(
 async fn dry_run() -> Result<()> {
     tracing::info!("dry-run mode — validating all 8 collectors");
 
+    let snapshot = host::collect_snapshot();
+    tracing::info!("Host snapshot:\n{}", serde_json::to_string_pretty(&snapshot)?);
+
     // CPU: first tick returns None (delta), second returns data.
     let mut cpu = collectors::cpu::CpuCollector::new(None);
     let _ = cpu.collect();
