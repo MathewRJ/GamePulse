@@ -8,7 +8,7 @@ It collects, ships, and visualises real-world gaming metrics to Elasticsearch.
 The target audience is game developers, journalists, Proton/Wine/Mesa maintainers,
 and package maintainers who need real-world performance data.
 
-## Current state — last reconciled 2026-04-11 (Phase 4 closed beta setup complete)
+## Current state — last reconciled 2026-04-13 (Home dashboard complete)
 
 ### What is built and verified ✅
 
@@ -18,7 +18,7 @@ and package maintainers who need real-world performance data.
 - **Live gameplay verified**: Full session end-to-end (Cyberpunk 2077, Proton, MangoHud, all 8 streams, game detection working).
 - **Session summary doc**: `cli.py` `finally` block ships session-end doc. Fields: `ended`, `duration_s`, `avg_fps`, `low_1pct_fps`, `p99_frametime_ms`, `peak_gpu_temp_c`, `peak_cpu_temp_c`, `peak_gpu_power_w`, `total_frames`, `stutter_count`, `bottleneck_dominant`.
 - **GPU driver version**: `gamepulse.hardware.gpu.driver_version` via `enricher/host.py` (AMD: vulkaninfo, NVIDIA: nvidia-smi).
-- **Kibana dashboards** (7 live dashboards):
+- **Kibana dashboards** (8 live dashboards):
   - `dashboards/gamepulse-dashboard.ndjson` — baseline (UI-exported)
   - `dashboards/config-comparison-dashboard.json` — 16 panels (ID: 21b663d6-de42-46c6-aeaf-e6c48e46ecec)
   - `dashboards/session-deep-dive-dashboard.json` — 17 panels (ID: b68f1178-6923-4e92-819b-33eb595197a9)
@@ -26,6 +26,7 @@ and package maintainers who need real-world performance data.
   - `dashboards/system-health-dashboard.json` — 15 panels (ID: 1b2a1b70-a315-4ed4-91c4-11aa0abe5e1d)
   - `dashboards/game-library-dashboard.json` — 8 panels (ID: e7d878d0-e2d6-454b-9a95-d93a4aeb70a8)
   - `dashboards/scheduler-analysis-dashboard.json` — 15 panels (ID: 89ca0908-5639-45f7-9a70-edadfe7d7124) eBPF data
+  - `dashboards/home-dashboard.json` — 10 panels (ID: home-dashboard-2026-04-13) — nav bar, rig health, FPS trends, all games, recent sessions
 
 ### eBPF daemon (Phase 2)
 
@@ -89,6 +90,11 @@ and package maintainers who need real-world performance data.
 - **ES transform pivot: .keyword sub-fields only exist in old backing index (2026-04-12/13)**: The session backing index from 2026-03-30 has `gamepulse.game.name` as text+keyword multi-field. The 2026-04-12 index has it as native keyword with NO `.keyword` sub-field. Using `.keyword` paths in composite group_by works on the old index but returns empty results on the new index. Fix: use base field paths AND add a date range filter (gte: 2026-04-12) to restrict to the new index. This avoids fielddata errors on the old index and avoids the empty composite issue.
 - **ES transform pivot: terms agg on text fields requires fielddata (2026-04-12/13)**: Composite `terms` source and `top_metrics` metrics field both require keyword type. Text fields without fielddata=true fail with "Fielddata is disabled". Cumulative sum window functions are NOT possible in ES pivot transforms — must be done in Python post-enrichment.
 - **gamepulse-game-timeline transform (deployed 2026-04-12/13)**: Live and running. Source: `metrics-gamepulse.session-default` (date gte 2026-04-12, ended=true, game.name exists). Group by: game_name + session_id. Numeric metrics in pivot; keyword context fields added by post-enrichment. `cumulative_playtime_hours` computed in Python and bulk-updated. Deploy script: `python3 tools/deploy_game_timeline_transform.py`. Re-enrich only: `--enrich-only`. Reset: `--reset`.
+- **Kibana Serverless dashboard API auth (confirmed 2026-04-13)**: ES_API_KEY (not KIBANA_API_KEY) is the correct credential for `POST /api/saved_objects/_import`, `POST /api/data_views/data_view`, and `GET /api/data_views`. KIBANA_API_KEY returns 401 on all protected endpoints. `_import` is the only working programmatic dashboard creation path on Serverless — `POST /api/dashboards/dashboard/{id}` returns 404 on this Serverless instance.
+- **Home dashboard NDJSON format (2026-04-13)**: panelsJSON embeds panel objects with `"type": "lens"` or `"type": "markdown"`. lnsDatatable `visualization.columns` uses `isTransposed: true` for bucket (terms) columns and `isTransposed: false` for metric columns. `last_value` operationType requires `params.sortField`. `max` on a date field produces `dataType: "date"`. `count` has no `sourceField`. typeMigrationVersion must be `"10.3.0"` for dashboard objects.
+- **gamepulse-game-timeline data view created (2026-04-13)**: ID `gp-dv-timeline`, title `gamepulse-game-timeline`, timeFieldName `session_start`. Created via `POST /api/data_views/data_view` with ES_API_KEY. All game-timeline fields (game_name, avg_fps, duration_s, etc.) are properly-typed keywords/numerics — no text/keyword ambiguity unlike the session stream.
+- **Environment changes panel: LAG not possible in ES (confirmed 2026-04-13)**: The "recent changes" panel shows raw per-session env values (driver_version, kernel_version, proton_version, avg_fps per session). ES|QL has no LAG function; Lens has no cross-row difference operation. Computing "FPS before vs after" delta requires a future Transform or Python post-enrichment step. Panel is built as a reference table only.
+- **gamepulse.summary.bottleneck_dominant null in session docs (2026-04-13)**: Latest session summary docs in metrics-gamepulse.session-default have null bottleneck_dominant. The field IS populated in gamepulse-game-timeline (bottleneck_dominant="gpu" for the Starfield session). Root cause: ingest pipeline may not be populating this field in the 2026-04-12 backing index. Investigate before the Hardware dashboard session.
 
 ### Rust agent (src/) — Phase 6
 
@@ -173,11 +179,14 @@ Pipeline test fixtures live in `data_stream/*/_ dev/test/pipeline/test-*-pipelin
 
 ### Pending work (in priority order)
 
-1. **Phase 4: First colleague onboarding** — share `docs/BETA-INSTALL.md` + `gamepulse-0.1.0.zip`. Distribution verified: zip upload to Kibana Fleet API works on both local 8.13.0 and Serverless.
-2. **GitHub Release v0.1.0** — tag, attach zip + AUR package binaries.
-3. **eBPF Sprint 4**: Update `data_stream/ebpf/sample_event.json` for all probe types.
-4. **.deb/.rpm packaging**: AUR PKGBUILD done; Debian/RPM not yet built.
-5. **Games continuous line dashboard** — reads from `gamepulse-game-timeline`. Transform deployed and running (1 session, Starfield). Build dashboard next session.
+1. **New dashboard suite** — build order: Games → Environment → Hardware → Compare → Engine (Home ✅ complete 2026-04-13).
+   - **Games dashboard** — next session. Source: `gamepulse-game-timeline` (ID: gp-dv-timeline). X-axis: cumulative_playtime_hours. Needs ≥2 Starfield sessions for a meaningful continuous line; play another session before building.
+   - Navigation bar placeholders (GAMES, HARDWARE, ENV, ENGINE, COMPARE) need updating in `home-dashboard.json` as each ID is confirmed.
+2. **Phase 4: First colleague onboarding** — share `docs/BETA-INSTALL.md` + `gamepulse-0.1.0.zip`. Distribution verified.
+3. **GitHub Release v0.1.0** — tag, attach zip + AUR package binaries.
+4. **eBPF Sprint 4**: Update `data_stream/ebpf/sample_event.json` for all probe types.
+5. **.deb/.rpm packaging**: AUR PKGBUILD done; Debian/RPM not yet built.
+6. **Investigate null bottleneck_dominant in session stream**: gamepulse-game-timeline has "gpu" for Starfield but session summary docs show null. May be an ingest pipeline enrichment issue on the 2026-04-12 backing index.
 
 ## Stack
 
@@ -208,6 +217,12 @@ with proper NDJSON saved objects). Until then, all dashboard JSON files live in
 | System Health | ✅ built | `dashboards/system-health-dashboard.json` (ID: 1b2a1b70-a315-4ed4-91c4-11aa0abe5e1d) |
 | Game Library | ✅ built | `dashboards/game-library-dashboard.json` (ID: e7d878d0-e2d6-454b-9a95-d93a4aeb70a8) |
 | Scheduler Analysis | ✅ built | `dashboards/scheduler-analysis-dashboard.json` (ID: 89ca0908-5639-45f7-9a70-edadfe7d7124) |
+| Home | ✅ built | `dashboards/home-dashboard.json` (ID: home-dashboard-2026-04-13) |
+| Games | 🔲 next | reads gamepulse-game-timeline (gp-dv-timeline); needs ≥2 sessions |
+| Environment | 🔲 planned | |
+| Hardware | 🔲 planned | |
+| Compare | 🔲 planned | |
+| Engine | 🔲 planned (lowest priority) | |
 
 **Session Deep-Dive** (`dashboards/session-deep-dive-dashboard.json`):
 17 panels — 3 filter controls (Game/Session/OS), 6 metric tiles (Median FPS,

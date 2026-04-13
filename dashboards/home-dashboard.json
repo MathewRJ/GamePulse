@@ -1,0 +1,53 @@
+{
+  "id": "home-dashboard-2026-04-13",
+  "kibana_url": "https://gamepulse-af41f9.kb.us-central1.gcp.elastic.cloud/app/dashboards#/view/home-dashboard-2026-04-13",
+  "created": "2026-04-13",
+  "import_method": "POST /api/saved_objects/_import?overwrite=true (NDJSON format)",
+  "notes": [
+    "Created via direct Kibana saved_objects _import API (kibana-dashboards skill not installed; newer POST /api/dashboards/dashboard/{id} API returns 404 on this Serverless instance).",
+    "ES_API_KEY (not KIBANA_API_KEY) is required for /api/data_views and _import endpoints on Serverless.",
+    "Data views used: gp-dv-timeline (gamepulse-game-timeline, created this session), 18dd83e8-6f88-474f-b434-a4b6c14a04a2 (metrics-gamepulse.* wildcard).",
+    "gamepulse-game-timeline data view created this session (ID: gp-dv-timeline, timeFieldName: session_start).",
+    "gamepulse.game.name has text/keyword ambiguity across backing indices — not usable in ES|QL STATS BY even with date filter. Dashboard uses gp-dv-timeline (game_name keyword) instead.",
+    "gamepulse.summary.bottleneck_dominant is null in 2026-04-12 session docs (field present in game-timeline as keyword).",
+    "Navigation bar placeholders: Games, Hardware, Environment, Engine, Compare dashboards not yet built. Update nav bar markdown when IDs are known.",
+    "Sessions link points to Session Deep-Dive dashboard (b68f1178-6923-4e92-819b-33eb595197a9).",
+    "Environment changes panel shows raw per-session env values (driver, kernel, proton, avg_fps) — delta/LAG computation not possible in ES without a Transform. Noted in CLAUDE.md.",
+    "All games table: 'Total Play (s)' column is duration_s SUM in seconds. Kibana format: use 'duration' formatter if desired.",
+    "count() for Sessions column in all-games table counts gamepulse-game-timeline documents per game (1 doc = 1 session).",
+    "All field paths validated from live gamepulse-game-timeline data before building."
+  ],
+  "schema_notes": [
+    "Kibana NDJSON _import format: panelsJSON is an array of embedded panel objects (not separate lens saved objects).",
+    "typeMigrationVersion: '10.3.0' required for dashboard objects.",
+    "references array at dashboard level must duplicate all references from all embedded panels.",
+    "lnsDatatable visualization.columns: bucket columns use isTransposed=true, metric columns use isTransposed=false.",
+    "last_value operationType requires params.sortField — used 'session_start' throughout.",
+    "max operationType on a date field produces dataType='date' column.",
+    "count operationType has no sourceField — isBucketed=false, dataType=number.",
+    "markdown panel type: embeddableConfig.markdown contains the content string."
+  ],
+  "panels": [
+    {"uid": "p-nav",      "title": "Navigation bar",                      "type": "markdown",    "grid": {"y": 0,  "x": 0,  "w": 48, "h": 3}},
+    {"uid": "p-rh-fps",   "title": "Avg Session FPS",                     "type": "lnsMetric",   "grid": {"y": 3,  "x": 0,  "w": 12, "h": 8},  "source": "gp-dv-timeline", "op": "average(avg_fps)"},
+    {"uid": "p-rh-low",   "title": "Avg 1% Low FPS",                      "type": "lnsMetric",   "grid": {"y": 3,  "x": 12, "w": 12, "h": 8},  "source": "gp-dv-timeline", "op": "average(low_1pct_fps)"},
+    {"uid": "p-rh-gpu",   "title": "Peak GPU Temp (°C)",                  "type": "lnsMetric",   "grid": {"y": 3,  "x": 24, "w": 12, "h": 8},  "source": "gp-dv-timeline", "op": "max(peak_gpu_temp_c)"},
+    {"uid": "p-rh-cpu",   "title": "Peak CPU Temp (°C)",                  "type": "lnsMetric",   "grid": {"y": 3,  "x": 36, "w": 12, "h": 8},  "source": "gp-dv-timeline", "op": "max(peak_cpu_temp_c)"},
+    {"uid": "p-hw",       "title": "Last Session Details",                 "type": "lnsDatatable","grid": {"y": 11, "x": 0,  "w": 48, "h": 8},  "source": "gp-dv-timeline", "rows": "session_id (top 5)", "cols": "date, game, avg_fps, 1%low, peak_gpu_c, peak_cpu_c, gpu_model, driver, bottleneck"},
+    {"uid": "p-fps",      "title": "FPS by Session (Avg & 1% Low)",       "type": "lnsXY",       "grid": {"y": 19, "x": 0,  "w": 32, "h": 14}, "source": "gp-dv-timeline", "x": "session_start", "y": "avg_fps + low_1pct_fps", "split": "game_name"},
+    {"uid": "p-env",      "title": "Environment per Session",              "type": "lnsDatatable","grid": {"y": 19, "x": 32, "w": 16, "h": 14}, "source": "gp-dv-timeline", "rows": "session_id (top 30)", "cols": "date, game, driver, kernel, proton, avg_fps"},
+    {"uid": "p-games",    "title": "All Games — 30d Performance Summary",  "type": "lnsDatatable","grid": {"y": 33, "x": 0,  "w": 48, "h": 14}, "source": "gp-dv-timeline", "rows": "game_name (top 50, sorted by total_s)", "cols": "total_s, sessions, avg_fps, 1%low, peak_gpu_c, last_played"},
+    {"uid": "p-recent",   "title": "Recent Sessions",                      "type": "lnsDatatable","grid": {"y": 47, "x": 0,  "w": 48, "h": 10}, "source": "gp-dv-timeline", "rows": "session_id (top 10, sorted by date)", "cols": "date, game, duration_s, avg_fps, 1%low, peak_gpu_c, bottleneck"}
+  ],
+  "data_views": {
+    "gp-dv-timeline": "gamepulse-game-timeline (created 2026-04-13, timeFieldName=session_start)",
+    "18dd83e8-6f88-474f-b434-a4b6c14a04a2": "metrics-gamepulse.* wildcard (pre-existing)"
+  },
+  "navigation_bar_placeholders": {
+    "PLACEHOLDER-GAMES": "Update when Games dashboard is built",
+    "PLACEHOLDER-HARDWARE": "Update when Hardware dashboard is built",
+    "PLACEHOLDER-ENV": "Update when Environment dashboard is built",
+    "PLACEHOLDER-ENGINE": "Update when Engine dashboard is built",
+    "PLACEHOLDER-COMPARE": "Update when Compare dashboard is built"
+  }
+}
