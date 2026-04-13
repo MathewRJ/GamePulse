@@ -179,6 +179,94 @@ for full rationale:
 
 ---
 
+## New dashboard suite — design spec (locked 2026-04-11)
+
+### Architecture
+Entity-centric navigation replacing the current session-centric model.
+Primary dashboards: Home, Games, Sessions, Hardware, Environment,
+Engine, Compare. Persistent top navigation bar on every dashboard.
+Breadcrumb trail: Home / Game: Cyberpunk 2077 / Session: 2026-04-10.
+Compare available as a context button from any dashboard, not just its
+own page.
+
+### Prerequisites (complete)
+- xrandr monitor enrichment: gamepulse.hardware.monitors[] nested field
+  (resolution, refresh rate, VRR, HDR). Live: DP-2, 3440x1440, 119.98Hz.
+- gamepulse-game-timeline Transform: Python post-enrichment approach
+  (runtime fields cannot do window aggregation across sibling docs).
+  Deployed to Serverless, 1 session (Starfield). Transform trigger wired
+  into Rust agent after session summary ship.
+
+### Design decisions (all locked — do not change without user confirmation)
+- Session boundaries on continuous line: small visual gap + annotation
+  marker between sessions
+- Home trend default window: last 30 days
+- Regression leaderboard: both avg FPS and 1% low shown side by side
+- Games dashboard view: selector — single game / two games / two
+  hardware configs
+- Annotation layers: all types visible by default (hardware changes,
+  driver/Proton/kernel, game updates, session boundaries)
+- GPU upgrade display: same continuous line, hardware change as
+  annotation — not a separate view
+- Home sparklines: all games played, scrollable list
+- Rig health summary: short natural language sentence (e.g. "GPU-bound,
+  thermals healthy, FPS trending up")
+- Game tile playtime: "23 sessions · 47h · last played 3 days ago"
+- Peripherals: monitor only (via xrandr), no keyboard/mouse/headset
+
+### Dashboard build order (one Claude Code session each)
+1. Home — ✅ prerequisites met, ready to build
+2. Games — ✅ prerequisites met (Transform deployed)
+3. Environment — ✅ prerequisites met (existing session stream data)
+4. Hardware — ✅ prerequisites met (xrandr enrichment done)
+5. Compare — ✅ prerequisites met (Transform deployed)
+6. Engine — lowest priority, build last
+
+### Home dashboard spec
+Top strip: natural language rig health sentence derived from last
+session (bottleneck_dominant, peak temps vs threshold, 30d FPS trend
+direction). Below: all games scrollable, each tile showing game name,
+"N sessions · Nh · last played X days ago", avg FPS sparkline (30d),
+trend arrow. Recent sessions strip (last 5). Recent changes timeline
+(driver/kernel/Proton changes in last 30d annotated against FPS).
+
+### Games dashboard spec
+Filter control: game selector at top. View selector: single game /
+compare two games / compare two hardware configs. Main panel: continuous
+line of avg_fps + low_1pct_fps (y-axis) vs cumulative_playtime_hours
+(x-axis) from gamepulse-game-timeline index. Session boundaries shown
+as small gaps + vertical annotation markers. Annotation layers (all on
+by default, toggleable): hardware changes (🔴), driver/Proton/kernel
+(🔵), game updates (🟡), stutter events (⚫). Below: session table
+(date, duration, avg FPS, 1% low, p99 frametime, driver, Proton,
+bottleneck). FPS distribution box plot across sessions.
+
+### Environment dashboard spec
+Change history timeline: every detected environment change with date,
+what changed, avg FPS before vs after, 1% low before vs after. Snapshot
+diff table: pick two dates, see all changed fields. Regression
+leaderboard: ranked by impact, showing both avg FPS delta and 1% low
+delta side by side. Groups changes by type: driver, kernel, Proton,
+game update.
+
+### Hardware dashboard spec
+Top: hardware specs summary from most recent session. Sub-panels:
+GPU (FPS per game, utilisation, thermals, power efficiency FPS/W,
+before/after hardware upgrade comparison). CPU (utilisation per game,
+scheduler latency trends from eBPF). Storage (I/O latency per game
+from bio probe). Memory (page fault trends, working set per game).
+Bottleneck evolution chart: bottleneck_dominant over time across all
+sessions.
+
+### Compare dashboard spec
+Pre-populated from "Compare" context buttons on other dashboards.
+Comparison types: session vs session / driver vs driver / Proton vs
+Proton / hardware vs hardware / preset vs preset. Uses
+gamepulse-game-timeline for hardware comparisons. Side-by-side panels:
+avg FPS, 1% low, p99 frametime, peak temps, power draw.
+
+---
+
 ## Verified field paths (live session 2026-04-08)
 
 ### Session (`data_stream.dataset: "gamepulse.session"`)
