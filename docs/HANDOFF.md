@@ -5,6 +5,48 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-14 (session.label auto-generation)
+
+### Context coming in
+
+`session.label` was added in the previous session as a static field (manual config/CLI only).
+The intended behaviour is auto-generation from game name + timestamp, with manual override.
+
+### What was done this session
+
+Added auto-label logic to `src/session.rs` (commit `3cdc856`):
+
+**Priority**:
+1. Manual `--label` / `[session].label` in config → `label_is_manual = true`, never overwritten
+2. Auto game label: `<slug>-YYYYMMDD-HHMMSS` — set in `poll()` `(None, Some(game))` arm
+3. Auto idle label: `idle-YYYYMMDD-HHMMSS` — set at `new_with_label()` construction
+
+**Slug rules** (`slug_from_game_name()`): lowercase, spaces→hyphens, strip non-alphanumeric,
+truncate to 32 chars. Examples: "Starfield" → "starfield", "Cyberpunk 2077" → "cyberpunk-2077",
+"The Elder Scrolls V: Skyrim" → "the-elder-scrolls-v-skyrim".
+
+**New types**: `label_is_manual: bool` field on `SessionManager`; `new_with_label()` is now
+the real constructor; `new()` delegates to it.
+
+**ES-confirmed** against a live Starfield session:
+- session stream: `idle-20260414-145035` on session-start doc (before game); `starfield-20260414-145036` on docs after game detected
+- cpu stream: `starfield-20260414-145036` on all 2 per-tick docs
+- gpu stream: `starfield-20260414-145036` on all 3 per-tick docs
+
+**Validation**: `cargo check` PASS; `cargo build --release` PASS; `elastic-package check` PASS.
+
+### State at end of session
+
+- `session.label` is fully automatic — no user action needed for a useful label
+- Manual override still works: `gamepulse-agent --label "proton-9-test"` or `[session] label = "..."` in config
+- All 9 data stream fields.yml already declared `label: keyword` (from prior session)
+
+### Commits
+
+- `3cdc856` — feat(session): auto-generate session.label from game name + timestamp
+
+---
+
 ## Session: 2026-04-14 (Home dashboard fix, kibana-dashboards skill update, session.label)
 
 ### Context coming in

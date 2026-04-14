@@ -8,7 +8,7 @@ It collects, ships, and visualises real-world gaming metrics to Elasticsearch.
 The target audience is game developers, journalists, Proton/Wine/Mesa maintainers,
 and package maintainers who need real-world performance data.
 
-## Current state — last reconciled 2026-04-14 (session.label, dashboard fix)
+## Current state — last reconciled 2026-04-14 (session.label auto-gen)
 
 ### What is built and verified ✅
 
@@ -98,7 +98,7 @@ and package maintainers who need real-world performance data.
 - **Kibana _import file extension (2026-04-14)**: `POST /api/saved_objects/_import` rejects files with `.json` extension ("Invalid file extension .json"). File MUST have `.ndjson` extension. Copy the file with the correct extension before importing.
 - **Kibana _export vs GET saved object (2026-04-14)**: `GET /api/saved_objects/dashboard/{id}` returns 400 ("not available with the current configuration") on Elastic Cloud Serverless. Use `POST /api/saved_objects/_export` with body `{"objects":[{"type":"dashboard","id":"..."}],"includeReferencesDeep":false}` to retrieve a live dashboard as NDJSON.
 - **proton_version not in gamepulse-game-timeline (2026-04-14)**: The field has never been written to the transform output index. Any panel referencing `proton_version` as a `sourceField` will cause a render error. The field was removed from the Home dashboard "Environment per Session" panel (column mp-env_4).
-- **session.label field (added 2026-04-14)**: `gamepulse.session.label` (keyword) added to all 9 data stream fields.yml. Set via `[session] label = "..."` in gamepulse.toml or `--label "..."` CLI flag. Appears in every per-tick doc via base_doc(). Useful for annotating sessions with context (e.g. driver version under test) for dashboard filtering.
+- **session.label field (added 2026-04-14)**: `gamepulse.session.label` (keyword) added to all 9 data stream fields.yml. Auto-generated at runtime — priority: (1) manual `--label`/`[session].label` override, (2) `<game-slug>-YYYYMMDD-HHMMSS` on game detection, (3) `idle-YYYYMMDD-HHMMSS` at startup before any game. Slug rules: lowercase, spaces→hyphens, strip non-alphanumeric, truncate 32 chars. `label_is_manual` flag prevents auto-generation from overwriting user override. ES-confirmed: label appears in session, cpu, and gpu streams. Examples: "Starfield" → "starfield-20260414-145036", "Cyberpunk 2077" → "cyberpunk-2077-YYYYMMDD-HHMMSS".
 
 ### Rust agent (src/) — Phase 6
 
