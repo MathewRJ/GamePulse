@@ -47,6 +47,9 @@ pub struct SessionManager {
     pub current_game: Option<DetectedGame>,
     session_json_path: PathBuf,
     last_scan: Option<Instant>,
+    /// Tracks the last time a "no game detected" message was logged, to throttle
+    /// INFO noise while still giving visibility into detection health.
+    last_no_game_log: Option<Instant>,
 }
 
 impl SessionManager {
@@ -56,6 +59,7 @@ impl SessionManager {
             current_game: None,
             session_json_path: PathBuf::from("/tmp/gamepulse/session.json"),
             last_scan: None,
+            last_no_game_log: None,
         }
     }
 
@@ -72,13 +76,32 @@ impl SessionManager {
         let detected = scan_for_game();
 
         match (self.current_game.take(), detected) {
-            (None, None) => SessionEvent::NoChange,
+            (None, None) => {
+                // Log "no game" at INFO once every 30 s so service logs show detection
+                // is running even during long idle periods. This was ranked fix #1 from
+                // the 2026-04-14 systemctl bug analysis.
+                let log_now = match self.last_no_game_log {
+                    None => true,
+                    Some(t) => now.duration_since(t) >= Duration::from_secs(30),
+                };
+                if log_now {
+                    tracing::info!("No game detected — scanning /proc every 5 s");
+                    self.last_no_game_log = Some(now);
+                }
+                SessionEvent::NoChange
+            }
 
             (None, Some(game)) => {
+                tracing::info!(
+                    "Game detected: {} (app_id={}, pid={}, api={:?})",
+                    game.name, game.steam_app_id, game.pid,
+                    game.graphics_api.as_deref().unwrap_or("unknown")
+                );
                 if let Err(e) = self.write_session_json(&game) {
                     tracing::warn!("Failed to write session.json: {}", e);
                 }
                 self.current_game = Some(game.clone());
+                self.last_no_game_log = None; // reset so "no game" logs resume if game exits
                 SessionEvent::GameStarted(game)
             }
 
