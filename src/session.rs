@@ -12,6 +12,7 @@
 /// eBPF daemon's SessionInfo struct expects:
 ///   {"session_id":"…","game_pid":N,"game_name":"…","game_pids":[…],"steam_app_id":N}
 use anyhow::Result;
+use chrono::Utc;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -45,8 +46,17 @@ pub enum SessionEvent {
 pub struct SessionManager {
     pub session_id: String,
     pub current_game: Option<DetectedGame>,
-    /// Optional user-supplied annotation (set via --label CLI flag or [session].label in config).
+    /// Current label written to every doc. Auto-generated unless the user supplied
+    /// a manual override via --label / [session].label in the config.
+    ///
+    /// Priority at runtime:
+    ///   1. Manual label (user override) — set once, never changed.
+    ///   2. Auto game label: <slug>-<YYYYMMDD>-<HHMMSS> — updated on game detection.
+    ///   3. Auto idle label: idle-<YYYYMMDD>-<HHMMSS> — set at startup, before any game.
     pub label: Option<String>,
+    /// True when the user explicitly set a label — prevents auto-generation from
+    /// overwriting it on game detection.
+    label_is_manual: bool,
     session_json_path: PathBuf,
     last_scan: Option<Instant>,
     /// Tracks the last time a "no game detected" message was logged, to throttle
@@ -59,11 +69,22 @@ impl SessionManager {
         Self::new_with_label(None)
     }
 
-    pub fn new_with_label(label: Option<String>) -> Self {
+    /// Create a `SessionManager`.
+    ///
+    /// If `manual_label` is `Some(s)` and non-empty, it is used as-is and never
+    /// overridden by auto-generation. Otherwise an `idle-YYYYMMDD-HHMMSS` label
+    /// is generated immediately; it will be replaced with a game slug label when
+    /// the first game is detected.
+    pub fn new_with_label(manual_label: Option<String>) -> Self {
+        let (label, label_is_manual) = match manual_label {
+            Some(s) if !s.is_empty() => (Some(s), true),
+            _ => (Some(auto_label_idle()), false),
+        };
         SessionManager {
             session_id: Uuid::new_v4().to_string(),
             current_game: None,
             label,
+            label_is_manual,
             session_json_path: PathBuf::from("/tmp/gamepulse/session.json"),
             last_scan: None,
             last_no_game_log: None,
@@ -99,10 +120,15 @@ impl SessionManager {
             }
 
             (None, Some(game)) => {
+                // Auto-generate a game slug label unless the user set a manual one.
+                if !self.label_is_manual {
+                    self.label = Some(auto_label_game(&game.name));
+                }
                 tracing::info!(
-                    "Game detected: {} (app_id={}, pid={}, api={:?})",
+                    "Game detected: {} (app_id={}, pid={}, api={:?}, label={:?})",
                     game.name, game.steam_app_id, game.pid,
-                    game.graphics_api.as_deref().unwrap_or("unknown")
+                    game.graphics_api.as_deref().unwrap_or("unknown"),
+                    self.label.as_deref().unwrap_or("")
                 );
                 if let Err(e) = self.write_session_json(&game) {
                     tracing::warn!("Failed to write session.json: {}", e);
@@ -201,6 +227,42 @@ impl SessionManager {
             Err(e) => tracing::warn!("Failed to remove session.json: {}", e),
         }
     }
+}
+
+// ── Label helpers ──────────────────────────────────────────────────────────────
+
+/// Generate a UTC timestamp string in the format YYYYMMDD-HHMMSS.
+fn label_timestamp() -> String {
+    Utc::now().format("%Y%m%d-%H%M%S").to_string()
+}
+
+/// Slugify a game name: lowercase, spaces→hyphens, strip non-alphanumeric
+/// (except hyphens), truncate to 32 chars.
+///
+/// Examples:
+///   "Starfield"                      → "starfield"
+///   "Cyberpunk 2077"                  → "cyberpunk-2077"
+///   "The Elder Scrolls V: Skyrim"     → "the-elder-scrolls-v-skyrim"
+fn slug_from_game_name(name: &str) -> String {
+    name.to_lowercase()
+        .chars()
+        .map(|c| if c == ' ' { '-' } else { c })
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
+        .take(32)
+        .collect()
+}
+
+/// Auto-label for when no game is running: "idle-YYYYMMDD-HHMMSS".
+fn auto_label_idle() -> String {
+    format!("idle-{}", label_timestamp())
+}
+
+/// Auto-label once a game is detected: "<slug>-YYYYMMDD-HHMMSS".
+fn auto_label_game(game_name: &str) -> String {
+    let slug = slug_from_game_name(game_name);
+    // Ensure slug + separator + 15-char timestamp fits in a reasonable length.
+    // slug is already ≤32 chars; total label ≤ 32+1+15 = 48 chars.
+    format!("{}-{}", slug, label_timestamp())
 }
 
 // ── /proc/environ parsing ──────────────────────────────────────────────────────
