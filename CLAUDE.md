@@ -177,6 +177,22 @@ Pipeline test fixtures live in `data_stream/*/_ dev/test/pipeline/test-*-pipelin
 
 **All required elastic-package tests are now in a final state.** The full test suite is complete as of 2026-04-11.
 
+### Backing index type conflict — resolved 2026-04-14
+
+All 10 data streams (`session`, `cpu`, `gpu`, `memory`, `storage`, `network`, `audio`, `power`, `frame`, `ebpf`) had two backing indices with incompatible field type mappings:
+- Old indices (2026.03.30-000001 / 2026.04.01-000001 / 2026.04.09-000001): ES auto-mapped `gamepulse.game.name`, `gamepulse.session.id`, `gamepulse.compatibility.proton_version` as **text**; eBPF numeric fields as **double**, histogram fields as **object**, `thread_breakdown` as **object**.
+- New indices (2026.04.12-000002 onwards): correct types per `fields.yml` — **keyword** for string identifiers, **float** for numeric metrics, **histogram** for latency histograms, **nested** for `thread_breakdown`.
+
+Effect: `verification_exception` on all ES|QL queries spanning both indices. Kibana Lens silently returned null for any field with a type conflict.
+
+Fix: deleted all 10 old backing indices. Reindex was attempted but failed — TSDS timestamp constraint prevents writing old-timestamped docs into the new backing index's time window. Data from March 30 – April 10 (development sessions: Cyberpunk 2077, Starfield, Wolfenstein) was lost. This data was not in `gamepulse-game-timeline` (transform filters `gte: 2026-04-12`) and is superseded by proper post-April-12 sessions.
+
+Root cause: old backing indices were created before the integration package's index template was deployed. ES auto-mapped string fields as `text`. The fields.yml always had `keyword` — no schema change triggered this. The new April 12 backing index was created after the template was deployed, getting the correct mapping.
+
+Prevention: **Always deploy the integration package (and verify index templates are active) before collecting any live data.** After any mapping change, immediately roll over all affected data streams before shipping new data so the new backing index inherits the updated template.
+
+ES|QL verified working post-fix: `FROM metrics-gamepulse.session-default | WHERE ... | STATS ... BY gamepulse.session.id` returns rows with `game.name='Starfield'` — no errors.
+
 ### systemctl bug analysis — 2026-04-14
 
 **Root cause**: No game was running during either systemctl test session. Sessions `eac4383f` (33 s) and `18e36369` (35 s) at 23:40 and 23:52 on 2026-04-12 had zero "Game detected" log lines and shipped metric docs with `gamepulse.game` entirely absent. All game-centric dashboards (Game Library groups by game name, Session Deep-Dive FPS timeline had only 2 frame docs) show nothing without game context. Data IS visible in Kibana Discover because Discover has no implicit game filter.
