@@ -5,6 +5,65 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-14 (Home dashboard fix, kibana-dashboards skill update, session.label)
+
+### Context coming in
+
+Three tasks from the previous session (which ran out of context):
+1. Fix Home dashboard render error (proton_version missing from gamepulse-game-timeline)
+2. Update kibana-dashboards skill with Serverless lessons
+3. Add session.label to the Rust agent
+
+### What was done this session
+
+#### Task 1: Home dashboard fix (commit `e0e9398`)
+
+The "Environment per Session" panel (`p-env`) referenced `proton_version` via a `last_value`
+column (`mp-env_4`). This field has never been written to `gamepulse-game-timeline`. Fetched
+the live dashboard via `POST /api/saved_objects/_export`, removed the column from all three
+locations (columns dict, columnOrder, visualization.columns), re-imported via
+`POST /api/saved_objects/_import?overwrite=true`. Dashboard now loads without render errors.
+
+Key discovery: `GET /api/saved_objects/dashboard/{id}` returns 400 on Serverless — use
+`_export` instead. File must have `.ndjson` extension for `_import`.
+
+#### Task 2: kibana-dashboards skill update
+
+Added a "GamePulse-Specific Lessons" section to
+`.agents/skills/kibana-dashboards/SKILL.md` covering:
+- Field path rules (`.keyword` on old indices, bare path on new keyword-native indices)
+- Backing index type conflicts and prevention
+- TSDS dimension fields and nested type incompatibility
+- Saved objects import API behaviour on Serverless
+- By-value panel structure requirement
+- Full field inventory for `gamepulse-game-timeline` (notably: no `proton_version`)
+
+#### Task 3: session.label feature (commit `ac4ea50`)
+
+Added optional `gamepulse.session.label` keyword field to every per-tick doc:
+- `src/config.rs`: new `[session]` config section with `label: Option<String>`
+- `src/main.rs`: `--label TEXT` CLI flag (overrides config)
+- `src/session.rs`: `new_with_label()` constructor; `base_doc()` emits label when set
+- `data_stream/*/fields/fields.yml`: `label` keyword added to all 9 data streams
+
+Usage: set `[session] label = "after-driver-update"` in `gamepulse.toml`, or pass
+`gamepulse-agent --label "after-driver-update"` at runtime.
+
+`cargo check` PASS; `elastic-package check` PASS.
+
+### State at end of session
+
+- Home dashboard live and render-error-free
+- kibana-dashboards skill updated with Serverless operational knowledge
+- session.label wired end-to-end in Rust agent + all data stream field mappings
+
+### Commits
+
+- `e0e9398` — fix(dashboard): remove proton_version column from Home dashboard env panel
+- `ac4ea50` — feat(agent): add session.label — user annotation field for sessions
+
+---
+
 ## Session: 2026-04-14 (backing index type conflict — all 10 streams cleaned)
 
 ### Context coming in
