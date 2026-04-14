@@ -101,6 +101,12 @@ package() {
     install -Dm644 "${startdir}/systemd/gamepulse-ebpf.service" \
         "${pkgdir}/usr/lib/systemd/system/gamepulse-ebpf.service"
 
+    # ---- Launcher CLI ----
+    # Single entry-point for start/stop/run/setup subcommands.
+    # 'gamepulse run %command%' is the Steam launch option form.
+    install -Dm755 "${startdir}/gamepulse-launcher.sh" \
+        "${pkgdir}/usr/bin/gamepulse"
+
     # ---- Config ----
     # Install example as the default config (backup= in PKGBUILD protects user edits
     # from being overwritten on upgrade). User should edit this with their ES credentials.
