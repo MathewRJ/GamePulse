@@ -5,6 +5,56 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-14 (game-name propagation investigation + logging improvements)
+
+### Context coming in
+
+systemctl --user session on 2026-04-14 showed `gamepulse.game.name='Starfield'` in only ONE
+Kibana Discover document out of 1,523. User believed game name was not propagating into
+per-tick metric docs. Prior systemctl analysis (2026-04-14 commit `0c3d061`) identified
+ranked fixes but the game-detection logging fix had not yet been implemented.
+
+### What was done this session
+
+#### Investigation result: no propagation bug exists
+
+Full diagnosis via journald + ES queries:
+- journald confirmed game detected at 09:21:57 UTC, game exited at 09:24:39, SIGTERM at 09:24:51.
+- ES query confirmed 44 CPU docs, 44 GPU docs, 44 memory docs WITH game.name='Starfield'
+  during the 09:21:57–09:24:39 window. Code was working correctly.
+- "Only ONE document" was a Kibana observation artifact: 1,091 eBPF docs (71% of 1,523
+  total) have no game.name by design. Default Discover sort (time-desc) showed post-game-exit
+  docs first where game.name is correctly absent.
+
+#### Fixes implemented (`6016173`)
+
+`src/session.rs`:
+- Added `last_no_game_log: Option<Instant>` to `SessionManager`
+- `poll()`: when no game found, logs `INFO "No game detected — scanning /proc every 5 s"`
+  at most every 30 seconds (throttled). Resets on game detection.
+- `poll()`: added `INFO "Game detected: {name} (app_id={}, pid={}, api={})"` log in
+  the `(None, Some(game))` arm (ranked fix #1 from systemctl analysis).
+
+`packaging/systemd/gamepulse-agent.service`:
+- Added `Environment=HOME=/home/%u` — guards ACF game name lookup if PAM env absent
+- Added `Environment=GAMEPULSE_LOG=info` — makes log level explicit; override via
+  `systemctl --user edit gamepulse-agent`. Note: code reads `GAMEPULSE_LOG`, not `RUST_LOG`.
+
+### State at end of session
+
+- All changes committed and pushed: `6016173`
+- `cargo check` PASS, `cargo build --release` PASS
+- Manually verified: "No game detected" INFO log fires on first scan, throttled to 30s after
+
+### Next session
+
+1. **Games dashboard** — play another Starfield session via `systemctl --user start gamepulse-agent`
+   to accumulate a second session in `gamepulse-game-timeline`, then build the Games dashboard.
+2. Remaining systemctl analysis ranked fixes: `getpwuid` fallback for HOME (fix #2), no-game
+   system metrics dashboard (fix #4), startup credential validation (fix #5).
+
+---
+
 ## Session: 2026-04-10 (Phase 6 audio + MangoHud collectors — code red)
 
 ### Context coming in

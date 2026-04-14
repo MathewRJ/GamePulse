@@ -191,11 +191,13 @@ Pipeline test fixtures live in `data_stream/*/_ dev/test/pipeline/test-*-pipelin
 5. Entire dashboard suite is game-session-centric — no panels for system metrics without a game.
 
 **Ranked fixes** (for a future implementation session):
-1. Add periodic "no game detected" INFO log in `src/session.rs` `poll()` when no game found after N ticks.
+1. ✅ Add periodic "no game detected" INFO log in `src/session.rs` `poll()` when no game found after N ticks. **DONE — commit `6016173` (2026-04-14).**
 2. Replace `HOME` env lookup in `game_name_from_appid()` with `getpwuid(getuid())` for robustness.
-3. Add `Environment=HOME=/home/%u` and `Environment=RUST_LOG=info` to `packaging/systemd/gamepulse-agent.service`.
+3. ✅ Add `Environment=HOME=/home/%u` and `Environment=GAMEPULSE_LOG=info` to `packaging/systemd/gamepulse-agent.service`. **DONE — commit `6016173` (2026-04-14).** Note: code reads `GAMEPULSE_LOG`, not `RUST_LOG`.
 4. Build a no-game system metrics dashboard panel (CPU/GPU/memory without game filter).
 5. Add startup credential validation (ping ES at startup; log WARN if unreachable).
+
+**2026-04-14 follow-up investigation**: "game name not propagating" report from 04-14 Starfield session investigated. Diagnosis: NO BUG. Per-tick metric docs had `gamepulse.game.name='Starfield'` on all 44 ticks during the game-running window (ES-verified). The "only ONE document" Kibana observation was a display artifact: 1,091 eBPF docs (71% of 1,523 total) have no game.name by design; Discover default sort (time-desc) showed post-game-exit docs first where game.name is correctly absent. Root cause of confusion: eBPF docs dominating the wildcard data view.
 
 ### Pending work (in priority order)
 
