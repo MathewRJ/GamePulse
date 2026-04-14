@@ -475,6 +475,25 @@ claude.ai must never directly edit `CLAUDE.md`.
 6. Reviewer must approve before tester runs.
 7. Progress auditor runs at every milestone boundary, not every task.
 
+## Skills inventory
+
+Project-specific reference skills in `.agents/skills/` (force-added to git despite
+parent directory gitignore; Elastic-provided skills are not committed).
+
+| Skill | SKILL.md | Coverage |
+|-------|----------|----------|
+| `elasticsearch-tsds` | `.agents/skills/elasticsearch-tsds/SKILL.md` | keyword vs text rules, .keyword suffix, TSDS dimension restrictions, backing index conflict detection/resolution, rollover procedure, ES\|QL validation pattern |
+| `gamepulse-data-model` | `.agents/skills/gamepulse-data-model/SKILL.md` | All 10 data stream index patterns + modes, canonical field paths, TSDS dimension fields, session.id vs session.label, gamepulse-game-timeline fields, data view IDs, known bugs |
+| `gamepulse-workflow` | `.agents/skills/gamepulse-workflow/SKILL.md` | Pre/post-session checklists, field validation pattern, Rust/dashboard change checklists, elastic-package commands, systemd service patterns, journald commands, common mistakes |
+| `kibana-dashboards` | `.agents/skills/kibana-dashboards/SKILL.md` | Kibana 9.4 Dashboards API, Lens panel types, GamePulse-specific Serverless lessons (.keyword rules, _import/.ndjson, _export, game-timeline field inventory) |
+| `elasticsearch-esql` | `.agents/skills/elasticsearch-esql/SKILL.md` | ES\|QL query execution, time bucketing, aggregations (Elastic-provided) |
+| `kibana-vega` | `.agents/skills/kibana-vega/SKILL.md` | Vega/Vega-Lite with ES\|QL data sources (Elastic-provided) |
+
+Elastic-provided skills (not committed; recreate with `npx skills add elastic/agent-skills -a claude-code`):
+`cloud-network-security`, `elasticsearch-file-ingest`, `elasticsearch-onboarding`,
+`kibana-connectors`, `kibana-streams`, `observability-logs-search`,
+`observability-manage-slos`, `observability-service-health`
+
 ## Key file locations
 
 ### Python collector (current implementation)
