@@ -177,6 +177,26 @@ Pipeline test fixtures live in `data_stream/*/_ dev/test/pipeline/test-*-pipelin
 
 **All required elastic-package tests are now in a final state.** The full test suite is complete as of 2026-04-11.
 
+### systemctl bug analysis — 2026-04-14
+
+**Root cause**: No game was running during either systemctl test session. Sessions `eac4383f` (33 s) and `18e36369` (35 s) at 23:40 and 23:52 on 2026-04-12 had zero "Game detected" log lines and shipped metric docs with `gamepulse.game` entirely absent. All game-centric dashboards (Game Library groups by game name, Session Deep-Dive FPS timeline had only 2 frame docs) show nothing without game context. Data IS visible in Kibana Discover because Discover has no implicit game filter.
+
+**System environment confirmed correct**: HOME, XDG_RUNTIME_DIR, DISPLAY, WAYLAND_DISPLAY are all correctly inherited under `systemctl --user` from the PAM session. Config loading works (`--config /etc/gamepulse/gamepulse.toml` explicit → skips HOME lookup). Session.json path `/tmp/gamepulse/session.json` is hardcoded — no XDG_RUNTIME_DIR dependency.
+
+**Contributing / latent factors**:
+1. `game_name_from_appid()` in `src/session.rs:197` uses `std::env::var("HOME").unwrap_or_else(|_| "/root".to_string())` — falls back to `/root` if HOME absent under a non-PAM launch.
+2. `/etc/gamepulse/gamepulse.toml.pacnew` has placeholder credentials — will silently ship to wrong endpoint if deployed.
+3. Service unit missing `RUST_LOG` — no log level without manual journald override.
+4. No Before= or game-presence condition in service unit — service starts even with no Steam running.
+5. Entire dashboard suite is game-session-centric — no panels for system metrics without a game.
+
+**Ranked fixes** (for a future implementation session):
+1. Add periodic "no game detected" INFO log in `src/session.rs` `poll()` when no game found after N ticks.
+2. Replace `HOME` env lookup in `game_name_from_appid()` with `getpwuid(getuid())` for robustness.
+3. Add `Environment=HOME=/home/%u` and `Environment=RUST_LOG=info` to `packaging/systemd/gamepulse-agent.service`.
+4. Build a no-game system metrics dashboard panel (CPU/GPU/memory without game filter).
+5. Add startup credential validation (ping ES at startup; log WARN if unreachable).
+
 ### Pending work (in priority order)
 
 1. **New dashboard suite** — build order: Games → Environment → Hardware → Compare → Engine (Home ✅ complete 2026-04-13).
