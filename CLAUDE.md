@@ -8,7 +8,7 @@ It collects, ships, and visualises real-world gaming metrics to Elasticsearch.
 The target audience is game developers, journalists, Proton/Wine/Mesa maintainers,
 and package maintainers who need real-world performance data.
 
-## Current state — last reconciled 2026-04-13 (Home dashboard complete)
+## Current state — last reconciled 2026-04-14 (session.label, dashboard fix)
 
 ### What is built and verified ✅
 
@@ -95,6 +95,10 @@ and package maintainers who need real-world performance data.
 - **gamepulse-game-timeline data view created (2026-04-13)**: ID `gp-dv-timeline`, title `gamepulse-game-timeline`, timeFieldName `session_start`. Created via `POST /api/data_views/data_view` with ES_API_KEY. All game-timeline fields (game_name, avg_fps, duration_s, etc.) are properly-typed keywords/numerics — no text/keyword ambiguity unlike the session stream.
 - **Environment changes panel: LAG not possible in ES (confirmed 2026-04-13)**: The "recent changes" panel shows raw per-session env values (driver_version, kernel_version, proton_version, avg_fps per session). ES|QL has no LAG function; Lens has no cross-row difference operation. Computing "FPS before vs after" delta requires a future Transform or Python post-enrichment step. Panel is built as a reference table only.
 - **gamepulse.summary.bottleneck_dominant null in session docs (2026-04-13)**: Latest session summary docs in metrics-gamepulse.session-default have null bottleneck_dominant. The field IS populated in gamepulse-game-timeline (bottleneck_dominant="gpu" for the Starfield session). Root cause: ingest pipeline may not be populating this field in the 2026-04-12 backing index. Investigate before the Hardware dashboard session.
+- **Kibana _import file extension (2026-04-14)**: `POST /api/saved_objects/_import` rejects files with `.json` extension ("Invalid file extension .json"). File MUST have `.ndjson` extension. Copy the file with the correct extension before importing.
+- **Kibana _export vs GET saved object (2026-04-14)**: `GET /api/saved_objects/dashboard/{id}` returns 400 ("not available with the current configuration") on Elastic Cloud Serverless. Use `POST /api/saved_objects/_export` with body `{"objects":[{"type":"dashboard","id":"..."}],"includeReferencesDeep":false}` to retrieve a live dashboard as NDJSON.
+- **proton_version not in gamepulse-game-timeline (2026-04-14)**: The field has never been written to the transform output index. Any panel referencing `proton_version` as a `sourceField` will cause a render error. The field was removed from the Home dashboard "Environment per Session" panel (column mp-env_4).
+- **session.label field (added 2026-04-14)**: `gamepulse.session.label` (keyword) added to all 9 data stream fields.yml. Set via `[session] label = "..."` in gamepulse.toml or `--label "..."` CLI flag. Appears in every per-tick doc via base_doc(). Useful for annotating sessions with context (e.g. driver version under test) for dashboard filtering.
 
 ### Rust agent (src/) — Phase 6
 
@@ -225,6 +229,7 @@ ES|QL verified working post-fix: `FROM metrics-gamepulse.session-default | WHERE
 4. **eBPF Sprint 4**: Update `data_stream/ebpf/sample_event.json` for all probe types.
 5. **.deb/.rpm packaging**: AUR PKGBUILD done; Debian/RPM not yet built.
 6. **Investigate null bottleneck_dominant in session stream**: gamepulse-game-timeline has "gpu" for Starfield but session summary docs show null. May be an ingest pipeline enrichment issue on the 2026-04-12 backing index.
+7. **Remaining systemctl ranked fixes**: #2 `getpwuid` for HOME fallback, #4 no-game system metrics dashboard panel, #5 startup credential validation (ping ES at startup).
 
 ## Stack
 
