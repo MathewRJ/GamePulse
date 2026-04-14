@@ -36,6 +36,9 @@
         - name: opt_in_public
           type: boolean
           description: "True if the user has opted in to sharing this session's data publicly"
+        - name: label
+          type: keyword
+          description: "Optional user-supplied annotation for this session (e.g. 'after-driver-update')"
 
     - name: game
       type: group

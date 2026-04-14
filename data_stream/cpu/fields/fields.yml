@@ -18,6 +18,9 @@
         - name: agent_version
           type: keyword
           description: "Version of the GamePulse collector agent"
+        - name: label
+          type: keyword
+          description: "Optional user-supplied annotation for this session (e.g. 'after-driver-update')"
 
     - name: game
       type: group

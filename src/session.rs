@@ -45,6 +45,8 @@ pub enum SessionEvent {
 pub struct SessionManager {
     pub session_id: String,
     pub current_game: Option<DetectedGame>,
+    /// Optional user-supplied annotation (set via --label CLI flag or [session].label in config).
+    pub label: Option<String>,
     session_json_path: PathBuf,
     last_scan: Option<Instant>,
     /// Tracks the last time a "no game detected" message was logged, to throttle
@@ -54,9 +56,14 @@ pub struct SessionManager {
 
 impl SessionManager {
     pub fn new() -> Self {
+        Self::new_with_label(None)
+    }
+
+    pub fn new_with_label(label: Option<String>) -> Self {
         SessionManager {
             session_id: Uuid::new_v4().to_string(),
             current_game: None,
+            label,
             session_json_path: PathBuf::from("/tmp/gamepulse/session.json"),
             last_scan: None,
             last_no_game_log: None,
@@ -137,6 +144,9 @@ impl SessionManager {
             Value::String(env!("CARGO_PKG_VERSION").to_string()),
         );
         gp_session.insert("opt_in_public".to_string(), Value::Bool(false));
+        if let Some(label) = &self.label {
+            gp_session.insert("label".to_string(), Value::String(label.clone()));
+        }
 
         let mut gp = serde_json::Map::new();
         gp.insert("session".to_string(), Value::Object(gp_session));

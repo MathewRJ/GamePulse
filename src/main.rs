@@ -33,6 +33,11 @@ struct Cli {
     /// Run one collection cycle, print output, exit without shipping to ES
     #[arg(long)]
     dry_run: bool,
+
+    /// Short annotation for this session (e.g. "after-driver-update").
+    /// Overrides [session].label in the config file.
+    #[arg(long, value_name = "TEXT")]
+    label: Option<String>,
 }
 
 // ── Utilities ──────────────────────────────────────────────────────────────────
@@ -415,9 +420,14 @@ async fn main() -> Result<()> {
     let mut mhud = collectors::mangohud::MangoHudCollector::new();
     let mut gpu = collectors::gpu_amd::GpuAmdCollector::new(None);
 
-    // Session manager
-    let mut session = session::SessionManager::new();
-    tracing::info!("Session {} started", session.session_id);
+    // Session manager — CLI --label overrides [session].label in config.
+    let session_label = cli.label.or_else(|| cfg.session.label.clone());
+    let mut session = session::SessionManager::new_with_label(session_label.clone());
+    tracing::info!(
+        "Session {} started{}",
+        session.session_id,
+        session_label.as_deref().map(|l| format!(" (label: {l})")).unwrap_or_default()
+    );
 
     // Ship session-start document
     let start_doc = build_session_start_doc(&session, &host_snapshot, &hostname);

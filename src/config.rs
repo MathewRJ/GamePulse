@@ -13,6 +13,19 @@ pub struct Config {
     pub collection: CollectionConfig,
     #[serde(default)]
     pub privacy: PrivacyConfig,
+    #[serde(default)]
+    pub session: SessionConfig,
+}
+
+/// Optional per-session metadata the user can set in gamepulse.toml.
+///
+/// [session]
+/// label = "after-driver-update"
+#[derive(Debug, Deserialize, Default)]
+pub struct SessionConfig {
+    /// A short human-readable annotation for this session (e.g. "proton-9-test").
+    /// Written to every doc as gamepulse.session.label for easy dashboard filtering.
+    pub label: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
