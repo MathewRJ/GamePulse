@@ -187,6 +187,13 @@ Session summary: `avg_fps=286.9`, `low_1pct=167`, `duration_s=2430`, `bottleneck
 
 **Distribution method for Serverless:** Zip upload only. Serverless Fleet does not support custom registry URLs (`xpack.fleet.registryUrl` is a self-hosted Kibana config). Colleagues upload the zip via Kibana Fleet UI or direct API POST.
 
+**Distribution and packaging (completed 2026-04-14):**
+- ✅ `packaging/gamepulse-launcher.sh` — POSIX sh unified CLI: `setup / start / stop / status / run %command%`
+- ✅ Steam launch option: `gamepulse run %command%` — starts agent before game, stops on exit/crash/signal
+- ✅ First-run `gamepulse setup` — prompts ES endpoint + API key, verifies connectivity, writes `~/.config/gamepulse/gamepulse.toml` (mode 600)
+- ✅ eBPF graceful degradation — WARN on sudo failure; agent-only mode ships all 8 metric streams
+- ✅ `docs/steam-setup.md` — user-facing Steam integration guide with troubleshooting
+
 **Remaining tasks:**
 1. **First colleague onboarding** — share `docs/BETA-INSTALL.md` + `gamepulse-0.1.0.zip`
 2. **GitHub Release v0.1.0** — tag, attach zip + AUR package binaries

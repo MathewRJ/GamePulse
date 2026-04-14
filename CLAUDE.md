@@ -519,6 +519,14 @@ Elastic-provided skills (not committed; recreate with `npx skills add elastic/ag
   - `dashboards/session-deep-dive-dashboard.json` — API-built, live ID: b68f1178-6923-4e92-819b-33eb595197a9
 - `docs/kibana-lens-ndjson-reference.md` — structural reference for Lens NDJSON and Serverless constraints
 
+### Packaging
+
+- `packaging/gamepulse-launcher.sh` — unified launcher CLI (setup/start/stop/status/run subcommands; Steam `gamepulse run %command%` integration)
+- `packaging/PKGBUILD` — AUR package build script
+- `packaging/systemd/gamepulse-agent.service` — user systemd unit
+- `packaging/systemd/gamepulse-ebpf.service` — system systemd unit (CAP_BPF)
+- `packaging/config/gamepulse.toml.example` — example config installed to `/etc/gamepulse/`
+
 ### Elastic Agent skills (Claude Code)
 Skills are in `.agents/skills/` and `.claude/skills/` (symlinks). These are
 excluded from git — recreate on a fresh clone with:
