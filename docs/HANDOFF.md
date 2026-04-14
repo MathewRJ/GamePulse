@@ -5,6 +5,69 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-14 (backing index type conflict — all 10 streams cleaned)
+
+### Context coming in
+
+ES|QL queries against `metrics-gamepulse.session-default` failed with `verification_exception`
+(4 field type conflicts). Kibana Lens silently returned null for `gamepulse.game.name`,
+`gamepulse.session.id`, and `gamepulse.compatibility.proton_version` even when data existed.
+
+### What was done this session
+
+#### Root cause identified
+
+All 10 data streams had two backing indices with incompatible field type mappings:
+- Old indices (created Mar 30 / Apr 1 / Apr 9 before index template was deployed): ES
+  auto-mapped string fields as `text`. eBPF numeric fields as `double`, histograms as `object`,
+  `thread_breakdown` as `object`.
+- New indices (created Apr 12 after template deployed): correct types — `keyword`, `float`,
+  `histogram`, `nested`.
+- Fields.yml always had `keyword` — no schema change caused this. Template was deployed
+  after data collection had already started on the old indices.
+
+#### Fix applied
+
+Attempted reindex: TSDS timestamp constraint prevents writing Mar/Apr-10 docs into the Apr-12
+backing index time window. All 10 old backing indices deleted:
+- `session` (92 docs, 28 game sessions Mar 30–Apr 10, including Cyberpunk/Starfield/Wolfenstein)
+- `cpu`, `gpu`, `memory`, `storage`, `network`, `audio`, `power`, `frame` (~25k each)
+- `ebpf` (25,766 docs, Sprint 1–2 data Apr 9)
+
+Total lost: ~140k docs from development/testing sessions. None were in `gamepulse-game-timeline`
+(transform filters `gte: 2026-04-12`).
+
+#### Verification
+
+ES|QL query that previously failed now returns correctly: 5 session rows, 2 with
+`game.name='Starfield'`, 3 null (no-game test sessions). Status 200, no verification_exception.
+
+#### Commits
+
+- `80d19dd` — CLAUDE.md: backing index type conflict documented
+
+### Prevention rule
+
+> **Always deploy the integration package and verify index templates are active BEFORE
+> collecting any live data. After any mapping change, roll over all affected data streams
+> before shipping new data.**
+
+### State at end of session
+
+- All 10 streams: single backing index (Apr 12–), clean keyword/float/histogram types
+- ES|QL working across all streams
+- `gamepulse-game-timeline` unaffected (was already filtering to Apr 12+)
+
+### Next session
+
+1. **Games dashboard** — build using `gamepulse-game-timeline` (gp-dv-timeline data view).
+   Needs ≥2 sessions; session `15bdb1f4` (Starfield, Apr 14, 44 ticks) + `8fb597bb` (Starfield,
+   Apr 14) are confirmed. Play one more session to ensure cumulative playtime line is meaningful.
+2. Config Comparison and Session Deep-Dive dashboards should now show `game.name` in
+   Session Configuration table — verify in Kibana before next build session.
+
+---
+
 ## Session: 2026-04-14 (game-name propagation investigation + logging improvements)
 
 ### Context coming in
