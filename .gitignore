@@ -26,3 +26,7 @@ build/
 # Recreate with: npx skills add elastic/agent-skills -a claude-code
 .claude/skills/
 .agents/
+# Exception: GamePulse-specific skills ARE committed (regular dirs, no symlinks)
+!.agents/skills/elasticsearch-tsds/
+!.agents/skills/gamepulse-data-model/
+!.agents/skills/gamepulse-workflow/
