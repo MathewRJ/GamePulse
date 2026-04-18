@@ -143,3 +143,14 @@ Forks from `main` after Phase B lands. Targets air-gapped benchmarkers, reviewer
 
 - Windows eBPF equivalents (ETW deep telemetry)
 - Community platform (public aggregated dashboards, leaderboards, regression detection)
+
+---
+
+## Tooling (non-critical-path)
+
+These work packages enhance developer workflow but don't block milestones.
+
+| WP | Deliverable |
+|---|---|
+| T.1 | Elastic Agent Builder MCP server connection for claude.ai + Claude Code |
+| T.2 | Install elastic/elastic-docs-skills when Phase G starts (writing the integrations PR README) |

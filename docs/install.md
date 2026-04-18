@@ -180,3 +180,11 @@ Config is read from (in priority order):
 ## Beta install guide
 
 For colleagues onboarding as beta testers, see `docs/BETA-INSTALL.md`. That document will be merged here once .deb/.rpm packaging ships.
+
+---
+
+## Contributor tooling
+
+The Elastic Agent Builder MCP server lets Claude Code and claude.ai query Elasticsearch directly during dashboard builds and field validation. This is optional developer convenience — it is not required to run GamePulse.
+
+Setup instructions and the API key creation recipe are in `.agents/skills/elastic-mcp-setup/SKILL.md`. The template config is in `.mcp.json.example` at the repo root; copy it to `.mcp.json` (gitignored) and set `GAMEPULSE_MCP_API_KEY` before restarting Claude Code.

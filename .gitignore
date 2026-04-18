@@ -30,3 +30,7 @@ build/
 !.agents/skills/elasticsearch-tsds/
 !.agents/skills/gamepulse-data-model/
 !.agents/skills/gamepulse-workflow/
+!.agents/skills/elastic-mcp-setup/
+
+# MCP server config — contains credentials; .example is committed, real file is not
+.mcp.json

@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-18 by claude-code
+Last updated: 2026-04-18 by claude-code (MCP tooling)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -91,6 +91,10 @@ See `docs/ROADMAP.md` for milestone structure and work package definitions.
 - Rewrote `README.md` to lead with Rust agent as primary
 - Deleted: `docs/project-scope.md`, `docs/scope-v2.md`, `docs/claude-chat-context.md`,
   `docs/elasticsearch-setup.md`, `docs/dashboard-guide.md`, `docs/kibana-lens-ndjson-reference.md`
+
+### Developer tooling
+
+- **T.1 Elastic Agent Builder MCP server** — `.mcp.json.example` + `.agents/skills/elastic-mcp-setup/SKILL.md` committed. Wires Claude Code and claude.ai to ES for live ES|QL field validation during dashboard builds. API key creation and wiring steps documented in the skill. Not a runtime dependency.
 
 ## Blockers & decisions pending
 
