@@ -74,7 +74,7 @@ See `docs/ROADMAP.md` for milestone structure and work package definitions.
 - **B.8 — Session label counter format**: Label format changed from `<slug>-YYYYMMDD-HHMMSS` to `<slug>-YYYYMMDD-N`. Counter persisted to `$XDG_STATE_HOME/gamepulse/session-counters.json` with atomic write (rename) and `fs2::FileExt::lock_exclusive`. Prunes entries >30 days on first call each day. Windows path stubbed (`%LOCALAPPDATA%\GamePulse\session-counters.json`). New `session.label_source` ("auto"|"manual") and `session.sequence_number` (integer, auto-only) fields in all session docs. 3 unit tests added (increment, prune, slug). Migration note: existing ES docs with `HHMMSS` labels unchanged; new sessions use `N` counter format.
 - Added `[lints]` to `src/Cargo.toml` to suppress pre-existing dead_code/clippy warnings in collector files so `cargo clippy -- -D warnings` passes cleanly.
 
-Commit: TBD
+Commit: 561dc78
 
 ### Pre-reorg (Phases 0, 0.5, 1, 2, 3, 6)
 
