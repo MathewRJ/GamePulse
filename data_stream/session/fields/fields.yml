@@ -39,6 +39,12 @@
         - name: label
           type: keyword
           description: "Optional user-supplied annotation for this session (e.g. 'after-driver-update')"
+        - name: label_source
+          type: keyword
+          description: "auto | manual — whether the label was auto-generated or user-supplied"
+        - name: sequence_number
+          type: integer
+          description: "Ordinal session number for this game on this calendar date (auto-labelled sessions only)"
 
     - name: game
       type: group
@@ -305,3 +311,56 @@
           type: integer
           metric_type: gauge
           description: "Approximate total frames rendered during the session"
+
+    - name: settings
+      type: group
+      description: "In-game graphics settings captured for this session (Tier 1 = manual; Tier 2 = auto-detect)"
+      fields:
+        - name: preset
+          type: keyword
+          description: "Graphics preset: low | medium | high | ultra | custom | unknown"
+        - name: custom_overrides
+          type: boolean
+          description: "True if preset is a named preset but individual settings were overridden"
+        - name: upscaler.tech
+          type: keyword
+          description: "Upscaler technology: dlss | fsr | xess | tsr | tsr-native | none | unknown"
+        - name: upscaler.version
+          type: keyword
+          description: "Upscaler SDK/driver version string"
+        - name: upscaler.preset
+          type: keyword
+          description: "Upscaler quality preset: quality | balanced | performance | ultra_performance | dlaa | native"
+        - name: upscaler.source_res
+          type: keyword
+          description: "Source render resolution before upscaling, e.g. 1920x1080"
+        - name: frame_gen.tech
+          type: keyword
+          description: "Frame generation technology: dlss3 | fsr3 | afmf | lossless-scaling | none"
+        - name: frame_gen.multiplier
+          type: keyword
+          description: "Frame generation multiplier: 2x | 3x | 4x"
+        - name: features_active
+          type: keyword
+          description: "Array of currently active features: ray_tracing, path_tracing, direct_storage, mesh_shaders, mega_geometry, neural_shaders, hdr, vrr"
+        - name: features_available
+          type: keyword
+          description: "Array of features the game/hardware supports even if currently inactive"
+        - name: render.resolution_output
+          type: keyword
+          description: "Output render resolution, e.g. 3440x1440"
+        - name: render.fullscreen_mode
+          type: keyword
+          description: "Display mode: fullscreen | borderless | windowed"
+        - name: render.vsync
+          type: keyword
+          description: "VSync mode: off | on | adaptive | fast"
+        - name: source
+          type: keyword
+          description: "Settings capture tier: manual | dll_scan | etw | game_config | mixed"
+        - name: confidence
+          type: keyword
+          description: "Data confidence: high | medium | low"
+        - name: notes
+          type: text
+          description: "User-supplied free-text notes for this session"

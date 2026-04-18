@@ -34,7 +34,27 @@
                 "session": {
                     "agent_version": "0.1.0",
                     "id": "test-session-001",
-                    "opt_in_public": true
+                    "opt_in_public": true,
+                    "label": "starfield-20260411-1",
+                    "label_source": "auto",
+                    "sequence_number": 1
+                },
+                "settings": {
+                    "preset": "ultra",
+                    "upscaler": {
+                        "tech": "fsr",
+                        "preset": "quality"
+                    },
+                    "frame_gen": {
+                        "tech": "fsr3"
+                    },
+                    "features_active": ["ray_tracing", "direct_storage"],
+                    "render": {
+                        "resolution_output": "3440x1440",
+                        "vsync": "off"
+                    },
+                    "source": "manual",
+                    "confidence": "high"
                 },
                 "summary": {
                     "ended": false

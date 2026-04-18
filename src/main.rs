@@ -38,6 +38,38 @@ struct Cli {
     /// Overrides [session].label in the config file.
     #[arg(long, value_name = "TEXT")]
     label: Option<String>,
+
+    // ── Tier 1 settings flags (B.7) ───────────────────────────────────────────
+
+    /// Graphics preset: low | medium | high | ultra | custom | unknown
+    #[arg(long, value_name = "VALUE")]
+    preset: Option<String>,
+
+    /// Upscaler technology and optional quality preset: tech[:preset]
+    /// e.g. dlss:quality  fsr:balanced  xess
+    #[arg(long, value_name = "TECH[:PRESET]")]
+    upscaler: Option<String>,
+
+    /// Frame generation technology: dlss3 | fsr3 | afmf | lossless-scaling | none
+    #[arg(long, value_name = "TECH")]
+    frame_gen: Option<String>,
+
+    /// Comma-separated list of active features
+    /// e.g. ray_tracing,path_tracing,direct_storage
+    #[arg(long, value_name = "FEATURE,...")]
+    features: Option<String>,
+
+    /// Output render resolution, e.g. 3440x1440
+    #[arg(long, value_name = "WxH")]
+    resolution: Option<String>,
+
+    /// VSync mode: off | on | adaptive | fast
+    #[arg(long, value_name = "off|on|adaptive|fast")]
+    vsync: Option<String>,
+
+    /// Free-text notes for this session, e.g. "engineering sample GPU"
+    #[arg(long, value_name = "TEXT")]
+    notes: Option<String>,
 }
 
 // ── Utilities ──────────────────────────────────────────────────────────────────
@@ -84,6 +116,94 @@ fn add_data_stream(doc: &mut Value, dataset: &str) {
     }
 }
 
+// ── Tier 1 settings overlay builder (B.7) ────────────────────────────────────
+
+/// Build the `{ "gamepulse": { "settings": { … } } }` overlay from merged
+/// CLI and config values. Returns `None` if no settings were provided at all
+/// (so the key is simply absent from session docs).
+#[allow(clippy::too_many_arguments)]
+fn build_settings_overlay(
+    preset: Option<&str>,
+    upscaler_tech: Option<&str>,
+    upscaler_preset: Option<&str>,
+    frame_gen_tech: Option<&str>,
+    features_active: Option<&[String]>,
+    resolution: Option<&str>,
+    vsync: Option<&str>,
+    notes: Option<&str>,
+) -> Option<Value> {
+    if preset.is_none()
+        && upscaler_tech.is_none()
+        && frame_gen_tech.is_none()
+        && features_active.is_none()
+        && resolution.is_none()
+        && vsync.is_none()
+        && notes.is_none()
+    {
+        return None;
+    }
+
+    let mut s = serde_json::Map::new();
+
+    if let Some(p) = preset {
+        s.insert("preset".into(), Value::String(p.to_string()));
+    }
+
+    if upscaler_tech.is_some() || upscaler_preset.is_some() {
+        let mut u = serde_json::Map::new();
+        if let Some(t) = upscaler_tech {
+            u.insert("tech".into(), Value::String(t.to_string()));
+        }
+        if let Some(p) = upscaler_preset {
+            u.insert("preset".into(), Value::String(p.to_string()));
+        }
+        s.insert("upscaler".into(), Value::Object(u));
+    }
+
+    if let Some(ft) = frame_gen_tech {
+        let mut fg = serde_json::Map::new();
+        fg.insert("tech".into(), Value::String(ft.to_string()));
+        s.insert("frame_gen".into(), Value::Object(fg));
+    }
+
+    if let Some(feats) = features_active {
+        let arr: Vec<Value> = feats.iter().map(|f| Value::String(f.clone())).collect();
+        s.insert("features_active".into(), Value::Array(arr));
+    }
+
+    if resolution.is_some() || vsync.is_some() {
+        let mut r = serde_json::Map::new();
+        if let Some(res) = resolution {
+            r.insert("resolution_output".into(), Value::String(res.to_string()));
+        }
+        if let Some(vs) = vsync {
+            r.insert("vsync".into(), Value::String(vs.to_string()));
+        }
+        s.insert("render".into(), Value::Object(r));
+    }
+
+    if let Some(n) = notes {
+        s.insert("notes".into(), Value::String(n.to_string()));
+    }
+
+    s.insert("source".into(), Value::String("manual".to_string()));
+    s.insert("confidence".into(), Value::String("high".to_string()));
+
+    Some(json!({ "gamepulse": { "settings": Value::Object(s) } }))
+}
+
+/// Parse "--upscaler dlss:quality" into (tech, Option<preset>).
+fn parse_upscaler(s: &str) -> (String, Option<String>) {
+    match s.find(':') {
+        Some(pos) => {
+            let tech = s[..pos].to_string();
+            let preset = s[pos + 1..].to_string();
+            (tech, if preset.is_empty() { None } else { Some(preset) })
+        }
+        None => (s.to_string(), None),
+    }
+}
+
 // ── Session document builders ─────────────────────────────────────────────────
 
 /// Ship a session-start document when the agent comes online.
@@ -95,6 +215,9 @@ fn build_session_start_doc(
     let base = session.base_doc(hostname);
     let ts = json!({ "@timestamp": utc_now() });
     let mut doc = deep_merge(deep_merge(ts, base), host_snapshot.clone());
+    if let Some(settings) = &session.settings_overlay {
+        doc = deep_merge(doc, settings.clone());
+    }
     add_data_stream(&mut doc, "gamepulse.session");
     doc
 }
@@ -124,6 +247,9 @@ fn build_game_detected_doc(
         deep_merge(deep_merge(ts, base), host_snapshot.clone()),
         compat_overlay,
     );
+    if let Some(settings) = &session.settings_overlay {
+        doc = deep_merge(doc, settings.clone());
+    }
     add_data_stream(&mut doc, "gamepulse.session");
     doc
 }
@@ -310,6 +436,9 @@ fn build_summary_doc(
         deep_merge(deep_merge(ts, base), host_snapshot.clone()),
         summary_overlay,
     );
+    if let Some(settings) = &session.settings_overlay {
+        doc = deep_merge(doc, settings.clone());
+    }
     add_data_stream(&mut doc, "gamepulse.session");
     doc
 }
@@ -422,7 +551,59 @@ async fn main() -> Result<()> {
 
     // Session manager — CLI --label overrides [session].label in config.
     let session_label = cli.label.or_else(|| cfg.session.label.clone());
-    let mut session = session::SessionManager::new_with_label(session_label.clone());
+
+    // Resolve Tier 1 settings: CLI flags override [session.settings] config.
+    let (upscaler_tech, upscaler_preset) = cli
+        .upscaler
+        .as_deref()
+        .map(parse_upscaler)
+        .unwrap_or((
+            cfg.session.settings.upscaler_tech.clone().unwrap_or_default(),
+            cfg.session.settings.upscaler_preset.clone(),
+        ));
+    let upscaler_tech_ref = if upscaler_tech.is_empty() { None } else { Some(upscaler_tech.as_str()) };
+
+    let preset = cli.preset.as_deref().or(cfg.session.settings.preset.as_deref());
+    let frame_gen_tech = cli
+        .frame_gen
+        .as_deref()
+        .or(cfg.session.settings.frame_gen_tech.as_deref());
+    let resolution = cli
+        .resolution
+        .as_deref()
+        .or(cfg.session.settings.render_resolution_output.as_deref());
+    let vsync = cli
+        .vsync
+        .as_deref()
+        .or(cfg.session.settings.render_vsync.as_deref());
+    let notes = cli
+        .notes
+        .as_deref()
+        .or(cfg.session.settings.notes.as_deref());
+
+    // CLI --features overrides config features_active (comma-separated string vs vec).
+    let cli_features: Option<Vec<String>> = cli
+        .features
+        .as_deref()
+        .map(|s| s.split(',').map(|f| f.trim().to_string()).collect());
+    let features_active: Option<Vec<String>> = cli_features
+        .or_else(|| cfg.session.settings.features_active.clone());
+
+    let settings_overlay = build_settings_overlay(
+        preset,
+        upscaler_tech_ref,
+        upscaler_preset.as_deref(),
+        frame_gen_tech,
+        features_active.as_deref(),
+        resolution,
+        vsync,
+        notes,
+    );
+
+    let mut session = session::SessionManager::new_with_label_and_settings(
+        session_label.clone(),
+        settings_overlay,
+    );
     tracing::info!(
         "Session {} started{}",
         session.session_id,

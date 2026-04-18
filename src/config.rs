@@ -21,11 +21,31 @@ pub struct Config {
 ///
 /// [session]
 /// label = "after-driver-update"
+///
+/// [session.settings]
+/// preset = "ultra"
+/// upscaler_tech = "dlss"
 #[derive(Debug, Deserialize, Default)]
 pub struct SessionConfig {
     /// A short human-readable annotation for this session (e.g. "proton-9-test").
     /// Written to every doc as gamepulse.session.label for easy dashboard filtering.
     pub label: Option<String>,
+    #[serde(default)]
+    pub settings: SessionSettingsConfig,
+}
+
+/// Tier 1 manual settings capture — populated from [session.settings] in the config
+/// and/or CLI flags. All fields optional; unset fields are omitted from session docs.
+#[derive(Debug, Deserialize, Default)]
+pub struct SessionSettingsConfig {
+    pub preset: Option<String>,
+    pub upscaler_tech: Option<String>,
+    pub upscaler_preset: Option<String>,
+    pub frame_gen_tech: Option<String>,
+    pub features_active: Option<Vec<String>>,
+    pub render_resolution_output: Option<String>,
+    pub render_vsync: Option<String>,
+    pub notes: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

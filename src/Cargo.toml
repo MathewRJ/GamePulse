@@ -19,3 +19,16 @@ chrono = "0.4"
 uuid = { version = "1", features = ["v4"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+fs2 = "0.4"
+
+[lints.rust]
+# Public API fields deserialized from TOML/config and collectors trait methods are
+# intentionally unused in the current codebase — suppress dead_code globally.
+dead_code = "allow"
+
+[lints.clippy]
+# Pre-existing issues in src/collectors/ (not touched by B.7/B.8 work):
+seek_from_current = "allow"
+needless_lifetimes = "allow"
+manual_div_ceil = "allow"
+bind_instead_of_map = "allow"

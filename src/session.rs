@@ -13,8 +13,10 @@
 ///   {"session_id":"…","game_pid":N,"game_name":"…","game_pids":[…],"steam_app_id":N}
 use anyhow::Result;
 use chrono::Utc;
+use fs2::FileExt;
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::io::Read;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use uuid::Uuid;
@@ -51,12 +53,19 @@ pub struct SessionManager {
     ///
     /// Priority at runtime:
     ///   1. Manual label (user override) — set once, never changed.
-    ///   2. Auto game label: <slug>-<YYYYMMDD>-<HHMMSS> — updated on game detection.
+    ///   2. Auto game label: <slug>-<YYYYMMDD>-<N> — updated on game detection.
     ///   3. Auto idle label: idle-<YYYYMMDD>-<HHMMSS> — set at startup, before any game.
     pub label: Option<String>,
     /// True when the user explicitly set a label — prevents auto-generation from
     /// overwriting it on game detection.
     label_is_manual: bool,
+    /// "auto" | "manual" — emitted as gamepulse.session.label_source.
+    pub label_source: &'static str,
+    /// Per-game per-day ordinal counter. None for manual labels.
+    pub sequence_number: Option<u32>,
+    /// Pre-resolved Tier 1 settings overlay — merged into session-start and summary docs.
+    /// Structure: { "gamepulse": { "settings": { ... } } }. None if nothing configured.
+    pub settings_overlay: Option<Value>,
     session_json_path: PathBuf,
     last_scan: Option<Instant>,
     /// Tracks the last time a "no game detected" message was logged, to throttle
@@ -66,7 +75,11 @@ pub struct SessionManager {
 
 impl SessionManager {
     pub fn new() -> Self {
-        Self::new_with_label(None)
+        Self::new_with_label_and_settings(None, None)
+    }
+
+    pub fn new_with_label(manual_label: Option<String>) -> Self {
+        Self::new_with_label_and_settings(manual_label, None)
     }
 
     /// Create a `SessionManager`.
@@ -75,16 +88,26 @@ impl SessionManager {
     /// overridden by auto-generation. Otherwise an `idle-YYYYMMDD-HHMMSS` label
     /// is generated immediately; it will be replaced with a game slug label when
     /// the first game is detected.
-    pub fn new_with_label(manual_label: Option<String>) -> Self {
-        let (label, label_is_manual) = match manual_label {
-            Some(s) if !s.is_empty() => (Some(s), true),
-            _ => (Some(auto_label_idle()), false),
+    ///
+    /// `settings_overlay` is a pre-built JSON value of the form
+    /// `{ "gamepulse": { "settings": { ... } } }` derived from CLI flags and
+    /// [session.settings] config. Pass `None` if nothing was configured.
+    pub fn new_with_label_and_settings(
+        manual_label: Option<String>,
+        settings_overlay: Option<Value>,
+    ) -> Self {
+        let (label, label_is_manual, label_source) = match manual_label {
+            Some(s) if !s.is_empty() => (Some(s), true, "manual"),
+            _ => (Some(auto_label_idle()), false, "auto"),
         };
         SessionManager {
             session_id: Uuid::new_v4().to_string(),
             current_game: None,
             label,
             label_is_manual,
+            label_source,
+            sequence_number: None,
+            settings_overlay,
             session_json_path: PathBuf::from("/tmp/gamepulse/session.json"),
             last_scan: None,
             last_no_game_log: None,
@@ -122,7 +145,10 @@ impl SessionManager {
             (None, Some(game)) => {
                 // Auto-generate a game slug label unless the user set a manual one.
                 if !self.label_is_manual {
-                    self.label = Some(auto_label_game(&game.name));
+                    let slug = slug_from_game_name(&game.name);
+                    let n = increment_session_counter(&slug);
+                    self.sequence_number = Some(n);
+                    self.label = Some(auto_label_game_n(&slug, n));
                 }
                 tracing::info!(
                     "Game detected: {} (app_id={}, pid={}, api={:?}, label={:?})",
@@ -172,6 +198,13 @@ impl SessionManager {
         gp_session.insert("opt_in_public".to_string(), Value::Bool(false));
         if let Some(label) = &self.label {
             gp_session.insert("label".to_string(), Value::String(label.clone()));
+        }
+        gp_session.insert(
+            "label_source".to_string(),
+            Value::String(self.label_source.to_string()),
+        );
+        if let Some(n) = self.sequence_number {
+            gp_session.insert("sequence_number".to_string(), Value::from(n));
         }
 
         let mut gp = serde_json::Map::new();
@@ -231,7 +264,7 @@ impl SessionManager {
 
 // ── Label helpers ──────────────────────────────────────────────────────────────
 
-/// Generate a UTC timestamp string in the format YYYYMMDD-HHMMSS.
+/// Generate a UTC timestamp string in the format YYYYMMDD-HHMMSS (idle labels only).
 fn label_timestamp() -> String {
     Utc::now().format("%Y%m%d-%H%M%S").to_string()
 }
@@ -243,7 +276,7 @@ fn label_timestamp() -> String {
 ///   "Starfield"                      → "starfield"
 ///   "Cyberpunk 2077"                  → "cyberpunk-2077"
 ///   "The Elder Scrolls V: Skyrim"     → "the-elder-scrolls-v-skyrim"
-fn slug_from_game_name(name: &str) -> String {
+pub(crate) fn slug_from_game_name(name: &str) -> String {
     name.to_lowercase()
         .chars()
         .map(|c| if c == ' ' { '-' } else { c })
@@ -257,12 +290,220 @@ fn auto_label_idle() -> String {
     format!("idle-{}", label_timestamp())
 }
 
-/// Auto-label once a game is detected: "<slug>-YYYYMMDD-HHMMSS".
-fn auto_label_game(game_name: &str) -> String {
-    let slug = slug_from_game_name(game_name);
-    // Ensure slug + separator + 15-char timestamp fits in a reasonable length.
-    // slug is already ≤32 chars; total label ≤ 32+1+15 = 48 chars.
-    format!("{}-{}", slug, label_timestamp())
+/// Auto-label once a game is detected: "<slug>-YYYYMMDD-N".
+fn auto_label_game_n(slug: &str, n: u32) -> String {
+    let date = Utc::now().format("%Y%m%d").to_string();
+    format!("{}-{}-{}", slug, date, n)
+}
+
+// ── Session counter (B.8) ──────────────────────────────────────────────────────
+
+/// Path to the per-game-per-day session counter file.
+fn counter_file_path() -> PathBuf {
+    #[cfg(unix)]
+    {
+        let state_dir = std::env::var("XDG_STATE_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                let home =
+                    std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+                PathBuf::from(home).join(".local/state")
+            });
+        state_dir.join("gamepulse/session-counters.json")
+    }
+    #[cfg(windows)]
+    {
+        let local_app_data = std::env::var("LOCALAPPDATA")
+            .unwrap_or_else(|_| r"C:\Users\Default\AppData\Local".to_string());
+        PathBuf::from(local_app_data).join(r"GamePulse\session-counters.json")
+    }
+}
+
+/// Increment and persist the session counter for `slug` on today's UTC date.
+/// Returns the new counter value (1-based). On any I/O error returns 1 and
+/// logs a warning so the agent keeps running.
+pub(crate) fn increment_session_counter(slug: &str) -> u32 {
+    increment_counter_at(slug, &counter_file_path())
+}
+
+fn increment_counter_at(slug: &str, path: &std::path::Path) -> u32 {
+    let dir = match path.parent() {
+        Some(d) => d,
+        None => return 1,
+    };
+
+    if !dir.exists() {
+        if let Err(e) = std::fs::create_dir_all(dir) {
+            tracing::warn!("session counter: cannot create dir {}: {}", dir.display(), e);
+            return 1;
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(
+                dir,
+                std::fs::Permissions::from_mode(0o700),
+            );
+        }
+    }
+
+    let mut lock_file = match std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false) // we read before overwriting; atomic rename handles the write
+        .open(path)
+    {
+        Ok(f) => f,
+        Err(e) => {
+            tracing::warn!("session counter: cannot open {}: {}", path.display(), e);
+            return 1;
+        }
+    };
+
+    if let Err(e) = lock_file.lock_exclusive() {
+        tracing::warn!("session counter: cannot lock {}: {}", path.display(), e);
+        return 1;
+    }
+
+    let mut contents = String::new();
+    let _ = lock_file.read_to_string(&mut contents);
+
+    let mut counters: serde_json::Map<String, Value> = if contents.trim().is_empty() {
+        serde_json::Map::new()
+    } else {
+        serde_json::from_str(&contents).unwrap_or_default()
+    };
+
+    let today = Utc::now().format("%Y-%m-%d").to_string();
+
+    // Prune entries older than 30 days when _last_pruned differs from today.
+    let last_pruned = counters
+        .get("_last_pruned")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    if last_pruned != today {
+        let cutoff = (Utc::now() - chrono::Duration::days(30))
+            .format("%Y-%m-%d")
+            .to_string();
+        counters.retain(|k, _| {
+            if k == "_last_pruned" {
+                return true;
+            }
+            // key format: "<slug>:<YYYY-MM-DD>"
+            k.split(':')
+                .nth(1)
+                .map(|d| d >= cutoff.as_str())
+                .unwrap_or(true)
+        });
+        counters.insert("_last_pruned".to_string(), Value::String(today.clone()));
+    }
+
+    let key = format!("{}:{}", slug, today);
+    let n = counters
+        .get(&key)
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0)
+        + 1;
+    counters.insert(key, Value::from(n));
+
+    // Atomic write: write to a tmpfile then rename over the target.
+    let mut tmp_name = std::ffi::OsString::from(
+        path.file_name().unwrap_or_default(),
+    );
+    tmp_name.push(".tmp");
+    let tmp_path = dir.join(tmp_name);
+
+    let serialised = serde_json::to_string_pretty(&Value::Object(counters))
+        .unwrap_or_else(|_| "{}".to_string());
+    if let Err(e) = std::fs::write(&tmp_path, &serialised) {
+        tracing::warn!("session counter: write tmpfile failed: {}", e);
+    } else if let Err(e) = std::fs::rename(&tmp_path, path) {
+        tracing::warn!("session counter: rename failed: {}", e);
+    }
+
+    // lock_file dropped here releases the exclusive lock.
+    n as u32
+}
+
+// ── Unit tests ─────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tmp_counter_path() -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "gp-counter-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir.join("session-counters.json")
+    }
+
+    #[test]
+    fn counter_increments_per_game_per_day() {
+        let path = tmp_counter_path();
+
+        let n1 = increment_counter_at("starfield", &path);
+        assert_eq!(n1, 1, "first session should be 1");
+
+        let n2 = increment_counter_at("starfield", &path);
+        assert_eq!(n2, 2, "second session same game same day should be 2");
+
+        let n3 = increment_counter_at("cyberpunk-2077", &path);
+        assert_eq!(n3, 1, "different game starts at 1");
+
+        let n4 = increment_counter_at("starfield", &path);
+        assert_eq!(n4, 3, "starfield continues from 2");
+    }
+
+    #[test]
+    fn counter_prunes_old_entries() {
+        let path = tmp_counter_path();
+
+        // Seed with an old entry and a _last_pruned that's not today.
+        let old_date = (Utc::now() - chrono::Duration::days(40))
+            .format("%Y-%m-%d")
+            .to_string();
+        let yesterday = (Utc::now() - chrono::Duration::days(1))
+            .format("%Y-%m-%d")
+            .to_string();
+        let seed = serde_json::json!({
+            format!("old-game:{}", old_date): 5,
+            format!("recent-game:{}", yesterday): 2,
+            "_last_pruned": yesterday,
+        });
+        std::fs::write(&path, serde_json::to_string(&seed).unwrap()).unwrap();
+
+        increment_counter_at("new-game", &path);
+
+        let contents = std::fs::read_to_string(&path).unwrap();
+        let counters: serde_json::Map<String, Value> =
+            serde_json::from_str(&contents).unwrap();
+
+        // Old entry (>30 days) must be gone.
+        assert!(
+            !counters.contains_key(&format!("old-game:{}", old_date)),
+            "40-day-old entry should be pruned"
+        );
+        // Recent entry within 30 days survives.
+        assert!(
+            counters.contains_key(&format!("recent-game:{}", yesterday)),
+            "yesterday's entry should survive"
+        );
+    }
+
+    #[test]
+    fn slug_from_name_examples() {
+        assert_eq!(slug_from_game_name("Starfield"), "starfield");
+        assert_eq!(slug_from_game_name("Cyberpunk 2077"), "cyberpunk-2077");
+        assert_eq!(
+            slug_from_game_name("The Elder Scrolls V: Skyrim"),
+            "the-elder-scrolls-v-skyrim"
+        );
+    }
 }
 
 // ── /proc/environ parsing ──────────────────────────────────────────────────────

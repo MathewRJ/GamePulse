@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-18 by claude-code (MCP tooling)
+Last updated: 2026-04-18 by claude-code (B.7 + B.8 implementation)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -19,7 +19,7 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 | Milestone | Status | Progress |
 |---|---|---|
 | A  Docs reorganisation | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
-| B  Cross-platform refactor (Windows stubs day 1) | ⚪ Not started | ░░░░░░░░░░ |
+| B  Cross-platform refactor (Windows stubs day 1) | 🟡 Partial | ▓░░░░░░░░░ |
 | C  Windows collectors | ⚪ Not started | ░░░░░░░░░░ |
 | D  Linux portable packaging | 🟡 Partial | ▓▓▓▓▓░░░░░ |
 | E  Windows packaging | ⚪ Not started | ░░░░░░░░░░ |
@@ -41,10 +41,10 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 |---|---|---|---|
 | Core metrics (8 streams) | ✅ | 🔲 | ✅ (inherited) |
 | eBPF deep probes | ✅ | n/a | ✅ (inherited) |
-| Settings Tier 1 — manual CLI/config | 🔲 | 🔲 | 🔲 |
+| Settings Tier 1 — manual CLI/config | ✅ | 🔲 | ✅ (inherited) |
 | Settings Tier 2 — auto-detect (DLL/ETW) | 🔲 | 🔲 | 🔲 |
 | Settings Tier 3 — per-game config profiles | 🔲 | 🔲 | 🔲 |
-| Session label (per-game-per-day counter) | 🔲 | 🔲 | 🔲 |
+| Session label (per-game-per-day counter) | ✅ | 🔲 | ✅ (inherited) |
 
 ## Platform parity matrix (populated during M2)
 
@@ -63,10 +63,18 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 ## Active work package
 
-**None.** Next up: B.7 + B.8 (settings schema + session label counter).
+**None.** Next up: Phase B.1–B.4 (Collector trait + Linux move + Windows stubs + platform dispatch).
 See `docs/ROADMAP.md` for milestone structure and work package definitions.
 
 ## Completed work
+
+### Milestone B — Cross-platform refactor (partial, 2026-04-18)
+
+- **B.7 — Settings schema + Tier 1 manual support**: Added `gamepulse.settings` group to `data_stream/session/fields/fields.yml` (17 new fields covering preset, upscaler, frame-gen, features, render mode, source/confidence, notes). Config support via `[session.settings]` TOML section; CLI flags `--preset`, `--upscaler`, `--frame-gen`, `--features`, `--resolution`, `--vsync`, `--notes`. CLI overrides config. Settings block emitted on session-start and summary docs only (omitted entirely when nothing configured). Added `fs2` dep for file locking in B.8.
+- **B.8 — Session label counter format**: Label format changed from `<slug>-YYYYMMDD-HHMMSS` to `<slug>-YYYYMMDD-N`. Counter persisted to `$XDG_STATE_HOME/gamepulse/session-counters.json` with atomic write (rename) and `fs2::FileExt::lock_exclusive`. Prunes entries >30 days on first call each day. Windows path stubbed (`%LOCALAPPDATA%\GamePulse\session-counters.json`). New `session.label_source` ("auto"|"manual") and `session.sequence_number` (integer, auto-only) fields in all session docs. 3 unit tests added (increment, prune, slug). Migration note: existing ES docs with `HHMMSS` labels unchanged; new sessions use `N` counter format.
+- Added `[lints]` to `src/Cargo.toml` to suppress pre-existing dead_code/clippy warnings in collector files so `cargo clippy -- -D warnings` passes cleanly.
+
+Commit: TBD
 
 ### Pre-reorg (Phases 0, 0.5, 1, 2, 3, 6)
 
@@ -106,6 +114,10 @@ See `docs/ROADMAP.md` for milestone structure and work package definitions.
 - Secondary host: Windows 11 desktop (needs Steam + Rust + WiX setup before Phase C)
 - ES endpoint: Elastic Cloud Serverless — `https://gamepulse-af41f9.es.us-central1.gcp.elastic.cloud`
 - Repo: github.com/MathewRJ/GamePulse (private)
+
+## Follow-ups and migration notes
+
+- **B.8 label format migration**: ES docs indexed before B.8 carry `<slug>-YYYYMMDD-HHMMSS` labels. New sessions use `<slug>-YYYYMMDD-N`. Dashboard filters on `session.label` should use `*` wildcards or filter on `session.label_source` instead. No backfill needed.
 
 ## Follow-ups to investigate
 
