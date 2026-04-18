@@ -82,7 +82,7 @@ See `docs/ROADMAP.md` for milestone structure and work package definitions.
 ### Milestone A — Docs reorganisation (2026-04-18)
 
 - Created `docs/STATUS.md` as single source of truth for project state
-- Created `architecture/` subdirectory at repo root (ebpf.md moved, data-model.md + agent.md stubs added)
+- Created `architecture/` subdirectory at repo root (ebpf.md moved, data-model.md + agent.md stubs added) — note: lives at repo root, **not** `docs/architecture/`, because `elastic-package check` rejects subdirectories inside `docs/`. Do not re-nest.
 - Created `docs/install.md` (unified installation guide, absorbs elasticsearch-setup.md content)
 - Created `docs/dashboards.md` (merged dashboard-guide.md + kibana-lens-ndjson-reference.md)
 - Renamed `docs/GamePulse-Scope-v3_2.md` → `docs/SCOPE.md`

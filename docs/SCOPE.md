@@ -1,3 +1,7 @@
+> **Note:** This document describes the original strategic scope. The tactical execution plan has evolved — see `docs/ROADMAP.md` for the current phase/work package structure and `docs/STATUS.md` for progress. Key updates since this document was written: (1) Windows collectors pulled forward ahead of the elastic/integrations PR given 92% of PC gamers are on Windows; (2) an `offline` git branch has been planned for air-gapped benchmarkers/reviewers; (3) per-session settings capture (FSR/DLSS/frame-gen/RT/etc.) added as a three-tier feature family.
+
+---
+
 **GamePulse**
 
 An Elastic Agent Integration for Gaming Telemetry

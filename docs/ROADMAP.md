@@ -1,292 +1,145 @@
-# GamePulse Roadmap
+# GamePulse — Roadmap
 
-Last updated: 2026-04-11 (Phase 4 distribution verified — zip upload to Fleet API confirmed on local + Serverless)
-Source of truth reconciled: 2026-04-11
+This file defines the milestones and work packages for GamePulse. It describes structure only — current status lives in `docs/STATUS.md`.
 
-## Status legend
+## Milestone structure
 
-| Symbol | Meaning |
+- Main branch (cross-platform cloud):
+  - A  Docs reorganisation
+  - B  Cross-platform refactor (Windows stubs from day 1)
+  - C  Windows collectors
+  - D  Linux portable packaging
+  - E  Windows packaging
+  - F  Cross-platform parity verification
+  - G  elastic/integrations PR
+- Offline branch (air-gapped bundle, forks from main after B):
+  - H1  Branch + docs-sync automation
+  - H2  Bundled stack
+  - H3  Offline install flow
+  - H4  Export tooling
+  - H5  Ongoing merge-from-main cadence
+- Deferred: community platform, Windows eBPF equivalents
+
+---
+
+## Phase A — Docs reorganisation
+
+Established `docs/STATUS.md` as single source of truth; stripped planning docs; rewrote README to lead with Rust agent. Complete.
+
+---
+
+## Phase B — Cross-platform refactor
+
+**Goal:** introduce a `Collector` trait and OS-specific module split so Windows collectors can be added without forking the codebase. Windows stubs land on day 1 returning `Ok(None)`; real collection lives in Phase C.
+
+| WP | Deliverable |
 |---|---|
-| ✅ | Complete and verified end-to-end (code + ES confirmation) |
-| ⚠️ | Built, hardware-validated, ES receipt not re-confirmed this session |
-| 🔲 | Not started — no code exists |
-| 🚫 | Blocked on a dependency listed inline |
+| B.1 | Define `Collector` trait in `src/collectors/mod.rs`; no OS-specific types in the trait signature |
+| B.2 | Move existing collectors to `src/collectors/linux/` |
+| B.3 | Scaffold `src/collectors/windows/` with stub impls that return `Ok(None)` |
+| B.4 | Platform dispatch in `src/main.rs` via `#[cfg(target_os)]` |
+| B.5 | GitHub Actions CI matrix — `cargo check` on linux + windows targets for every PR |
+| B.6 | eBPF as `features = ["ebpf"]` flag, Linux-only |
+| B.7 | Settings capture schema (manual Tier 1) — new `gamepulse.settings.*` fields on session stream; CLI flags; config section |
+| B.8 | Session label counter — change auto-generated label from `-HHMMSS` to `-N` per-game-per-day counter |
 
 ---
 
-## Current position
+## Phase C — Windows collectors
 
-Phase 2 eBPF daemon fully complete (all 9 probes ES-confirmed). Phase 6 Rust
-production agent **fully verified with live gameplay** (Starfield, Proton, 40 min,
-2026-04-11): all 8 metric streams confirmed, game detection working, frame data
-active, session summary correct. Rust agent is now production-primary; Python
-collector is reference/fallback only.
+**Goal:** feature parity with Linux for all collectors that have Windows equivalents. eBPF has no Windows equivalent in v1.
 
-**elastic-package full test suite — COMPLETE (2026-04-11):**
-
-| Test type | Result | Notes |
-|-----------|--------|-------|
-| `test static` | ✅ 11/11 PASS | |
-| `test pipeline` | ✅ 11/11 PASS | Uses remote ES; no Docker required |
-| `test asset` | ✅ 12/12 PASS | Via `bash scripts/test-asset.sh`; local 8.13.0 stack |
-| `test policy` | ⏭ "No test results" | No policy fixtures; acceptable |
-| `test system` | ⏭ "No test results" | Custom binary integration requiring gaming hardware; elastic/integrations guidelines allow skip |
-
-**Critical path to Phase 4 (closed beta) — ALL prerequisites met:**
-1. ~~Packaging — systemd unit + AUR PKGBUILD~~ ✅ Done 2026-04-11
-2. ~~Full `elastic-package test` suite~~ ✅ All tests in final state 2026-04-11
-3. eBPF Sprint 4 — `sample_event.json` updates for all probe types (low priority for beta)
+| WP | Collector | Data source |
+|---|---|---|
+| C.1 | CPU | PDH `\Processor Information(*)` + WMI |
+| C.2 | Memory | `GlobalMemoryStatusEx`, `GetProcessMemoryInfo` |
+| C.3 | Storage | PDH `\PhysicalDisk(*)` |
+| C.4 | Network | PDH `\Network Interface(*)` |
+| C.5 | Power | `GetSystemPowerStatus`, WMI battery |
+| C.6 | GPU — NVIDIA | NVML (cross-platform crate) |
+| C.7 | GPU — AMD | ADLX SDK |
+| C.8 | Frame timing | PresentMon sidecar process + CSV parsing |
+| C.9 | Game detection | Steam registry `HKCU\Software\Valve\Steam\Apps\<appid>\Running` + process scan |
+| C.10 | Session lifecycle | Port `src/session.rs` paths — `%APPDATA%\GamePulse\session.json` |
+| C.11 | ETW image-load subscription for Tier 2 settings auto-detect |
 
 ---
 
-## Phase 2: eBPF daemon (active)
+## Phase D — Linux portable packaging
 
-### Sprint 1 — schedlatency probe ✅
+**Goal:** install-and-run packages for non-Arch Linux distros; unified CLI UX; diagnostic tooling.
 
-**Status:** Complete and confirmed in ES
-
-| Item | Detail |
+| WP | Deliverable |
 |---|---|
-| Tracepoints | `sched/sched_wakeup`, `sched/sched_switch`, `sched/sched_migrate_task` |
-| ES verified | Yes — 231 docs, `metrics-gamepulse.ebpf-default`, Starfield 2026-04-09 |
-| Fields defined | `gamepulse.ebpf.runqueue.*` (histogram, min/max/avg_us, event_count), `gamepulse.ebpf.migration.*` (total_count, ccx_cross_count), `gamepulse.ebpf.thread_breakdown[]` (nested) |
-| Known behaviour | `ccx_cross_count` always 0 on 9800X3D (single CCX) — expected, not a bug |
-
-### Sprint 2 — I/O + GPU + memory probes ✅
-
-**Status:** ✅ Confirmed in ES. ES|QL query 2026-04-10: 6,112 docs, probes=["bio","gpu_sched","schedlatency"], latest=2026-04-09T15:31:36Z.
-
-| Probe | Tracepoints | Verified event rate | ES confirmed |
-|---|---|---|---|
-| bio | `block/block_rq_issue`, `block/block_rq_complete` | 1–1,351/s (spikes on asset loads) | ✅ Confirmed |
-| gpu_sched | `gpu_scheduler/drm_sched_job_queue`, `.../drm_sched_job_run` | 1,500–10,925/s | ✅ Confirmed |
-| mem | `exceptions/page_fault_user`, `vmscan/mm_vmscan_direct_reclaim_begin` | 0/s steady-state (expected) | ✅ Correct — no events = no doc (by design) |
-| stutter_correlation | Userspace correlator — fires when ≥2 probes exceed 16ms in same 1s window | Never observed (healthy session) | ✅ Correct — threshold not crossed |
-
-**Note:** Stutter correlation ships to `metrics-gamepulse.ebpf-default` with
-`probe: "stutter_correlation"` (not a separate data stream as originally designed —
-simpler, no extra stream needed). Threshold is 16ms (1 frame at 60fps) uniform
-across all probes. May need tuning once live data accumulates.
-
-**ES histogram field type:** Confirmed accepted — bio and gpu_sched histogram docs
-landed without errors. Open question resolved: `type: histogram` works on TSDS Serverless.
-
-**Sprint 2 is fully verified. Proceed directly to Sprint 3.**
-
-### Sprint 3 — extended probes ✅
-
-**Status:** ✅ Confirmed in ES. Session 7bce1dc5 (Starfield, 2026-04-10): 2348 total eBPF docs, all 5 probes present.
-
-| Probe | Kernel attachment | Symbol source | ES confirmed |
-|---|---|---|---|
-| futex | kprobe/kretprobe `do_futex` | `T do_futex` in kallsyms | ✅ 6 docs — GAME_PIDS filtered; sparse = correct (low contention) |
-| irq | tracepoints `irq/irq_handler_{entry,exit}`, `irq/softirq_{entry,exit}` | `/sys/kernel/tracing/events/irq/` | ✅ 367 docs — hard_irq + softirq both confirmed |
-| vfs | kprobe/kretprobe `vfs_read`, `vfs_write` | `T vfs_read`, `T vfs_write` in kallsyms | ✅ 362 docs — read + write both confirmed |
-| gpu_fence | kprobe/kretprobe `dma_fence_default_wait` | `T dma_fence_default_wait` in kallsyms | ✅ 367 docs — blocked_count=0 (GPU not stalling, healthy session) |
-| gpu_submit | kprobe `amdgpu_cs_ioctl` | `t amdgpu_cs_ioctl [amdgpu]` in kallsyms | ✅ 367 docs — event_count=181/doc (count-only, as designed) |
-
-Fields in `data_stream/ebpf/fields/fields.yml`: futex, irq (hard_irq + softirq),
-vfs (read + write), gpu_fence, gpu_submit. `elastic-package check` PASS, `test static` 11/11 PASS.
-
-**Sprint 3 is complete. Phase 2 eBPF daemon is fully confirmed end-to-end.**
-
-### Sprint 4 — integration + Scheduler Analysis dashboard 🔲
-
-**Status:** Scheduler Analysis dashboard ✅ built (2026-04-11, ID: 89ca0908-5639-45f7-9a70-edadfe7d7124). Remaining:
-
-- Update `data_stream/ebpf/sample_event.json` to add examples for bio, gpu_sched,
-  mem, and stutter_correlation probe types (currently only schedlatency covered)
-- ~~Add systemd service unit for `gamepulse-ebpf` daemon~~ ✅ Done 2026-04-11 (`packaging/systemd/gamepulse-ebpf.service`)
-- ~~AUR PKGBUILD for the eBPF daemon binary~~ ✅ Done 2026-04-11 (`packaging/PKGBUILD`, both services smoke-tested active)
-
-**Scheduler Analysis dashboard** (`dashboards/scheduler-analysis-dashboard.json`):
-15 panels — probe type filter, session filter, 6 metric tiles (runqueue avg latency,
-CPU migrations, hard IRQ avg latency, futex contentions, VFS read avg latency, GPU
-fence avg latency), runqueue latency timeline, CPU migration timeline, IRQ event count
-stacked area, VFS latency timeline, GPU fence latency + blocked count, futex contention
-timeline, GPU submit rate. Source: `metrics-gamepulse.ebpf-default`.
-
-**Session to allocate:** 1 Claude Code session (sample_event.json only — systemd unit done)
-
-### Sprint 5 — stretch probes 🔲
-
-**Status:** Not started
-
-| Probe | Method | Blocker |
-|---|---|---|
-| syscall | syscall enter/exit tracepoints | High frequency — needs careful rate limiting |
-| shader | uprobe on Mesa `nir_shader_compiler_init` or equivalent | Target path not stable across Mesa versions; discovery needed at runtime |
-| proton | kprobes on Wine/ntdll translation entry points | Only meaningful when Proton is running |
-
-**Session to allocate:** 1–2 Claude Code sessions
+| D.1 | `.deb` build + Ubuntu 24.04 clean-VM smoke test |
+| D.2 | `.rpm` build + Fedora 40 clean-VM smoke test |
+| D.3 | Unified `--verbose`, `--log-level`, `--dry-run`, `--print-config` flags; consolidate with `GAMEPULSE_LOG` env |
+| D.4 | Optional keyring credential storage via D-Bus Secret Service (libsecret); plaintext TOML fallback |
+| D.5 | `gamepulse diagnose` subcommand — single-file bug-report dump (kernel, driver, ES reach, last 20 log lines) |
+| D.6 | GitHub Actions release workflow — on tag `v*` builds .deb, .rpm, Arch pkg.tar.zst; attaches to GitHub Release |
+| D.7 | Game profile loader + three starter profiles (Starfield, Cyberpunk 2077, Baldur's Gate 3) for Tier 3 settings capture |
+| D.8 | Linux DLL scan via `/proc/<pid>/maps` for Tier 2 settings auto-detect |
 
 ---
 
-## Phase 6: Rust Production Agent — CRITICAL PATH
+## Phase E — Windows packaging
 
-**Status:** Scaffold complete. `src/` exists, `cargo check` passes.
-
-This gates Phase 4 (closed beta) and the elastic/integrations PR. The data model
-is completely stable — field names are proven by 6 live dashboards and real gameplay
-data. The Rust port is translation work, not design work.
-
-### Implementation order (one session per item)
-
-| Step | Deliverable | Notes |
-|---|---|---|
-| 1 | `src/Cargo.toml`, CLI, config, ES shipper — `cargo check` passes | ✅ Done 2026-04-10 |
-| 2 | CPU collector (`/proc/stat`, `/proc/loadavg`, k10temp hwmon) | ✅ Done 2026-04-10 |
-| 3 | Memory collector (`/proc/meminfo`, `/proc/<pid>/status`) | ✅ Done 2026-04-10 |
-| 4 | Storage collector (`/proc/diskstats`, `/sys/block/`) | ✅ Done 2026-04-10 |
-| 5 | Network collector (`/proc/net/dev`) | ✅ Done 2026-04-10 |
-| 6 | Power collector (`/sys/class/power_supply/`, RAPL/hwmon) | ✅ Done 2026-04-10 |
-| 7 | Audio collector (PipeWire/PulseAudio via `pactl`/`pw-cli`) | ✅ Done 2026-04-10 |
-| 8 | MangoHud frame timing collector (log file tail) | ✅ Done 2026-04-10 |
-| 9 | AMD GPU collector (sysfs/hwmon — card1/hwmon3 heuristic) | ✅ Done 2026-04-10 — validated on RX 9070 XT |
-| 10 | Merge eBPF daemon as feature-flagged module | Fold `ebpf/` into `src/ebpf/` |
-| 11 | Packaging: AUR PKGBUILD + systemd units | ✅ Done 2026-04-11 — both services smoke-tested active; `.deb`/`.rpm` deferred |
-
-**AMD GPU heuristic validated 2026-04-10**: card1 = RX 9070 XT (score 18: fan+power+hotspot+hwmon); card0 = iGPU (score 1). Hwmon discovered via `{card}/device/hwmon/hwmon*` device-path traversal.
-
-### Phase 6 — Main loop integration ✅
-
-**Status:** Complete and ES-confirmed 2026-04-10.
-
-All 8 collectors wired into the main loop with 1s tick. Game detection ported from
-Python (`session.rs`). Host enricher implemented (`host.rs`). Session lifecycle
-complete: session.json written on game start, removed on exit; session start/end
-docs with hardware snapshot shipped to `metrics-gamepulse.session-default`.
-
-**ES-confirmed 2026-04-10** (idle, no game): All 8 datasets shipping.
-
-**ES-confirmed 2026-04-11 — full gameplay session** (Starfield, Proton, 40 min):
-- `gamepulse.cpu` — 661 docs, `gamepulse.game.name='Starfield'` ✅
-- `gamepulse.gpu` — 662 docs ✅
-- `gamepulse.memory` — 662 docs ✅
-- `gamepulse.storage` — 661 docs ✅
-- `gamepulse.network` — 661 docs ✅
-- `gamepulse.audio` — 662 docs ✅
-- `gamepulse.power` — 662 docs ✅
-- `gamepulse.frame` — 642 docs, avg_fps=286.9, p99_frametime=6.36ms ✅ (MangoHud active)
-- `gamepulse.session` — start + summary confirmed ✅
-
-Session summary: `avg_fps=286.9`, `low_1pct=167`, `duration_s=2430`, `bottleneck=gpu`,
-`peak_gpu_temp=46°C`, `peak_cpu_temp=61.6°C`, `graphics_api=dx_via_proton` ✅
+| WP | Deliverable |
+|---|---|
+| E.1 | Portable zip: `gamepulse-<ver>-windows-x64.zip` with agent, config template, README |
+| E.2 | WiX MSI: installs to `Program Files\GamePulse\`, registers Windows Service |
+| E.3 | Windows `gamepulse.exe setup` — mirrors Linux UX; credentials in `%APPDATA%\GamePulse\gamepulse.toml` (current-user ACL) |
+| E.4 | Steam launch wrapper: `gamepulse.exe run %command%` — subprocess + wait + stop |
+| E.5 | Windows Service (admin install) vs Scheduled Task (user install) — both paths tested |
+| E.6 | Code signing — self-signed for beta; plan EV cert later |
+| E.7 | GitHub Actions Windows runner builds MSI + zip on tag |
 
 ---
 
-## Phase 4: Closed Beta — IN PROGRESS
+## Phase F — Cross-platform parity verification (M2)
 
-**Status:** Distribution infrastructure verified 2026-04-11. Ready to onboard first colleague.
+**Goal:** every cell in the parity matrix in STATUS.md is ✅ or has a documented known limitation. This is the gate before the elastic/integrations PR.
 
-**Distribution verified (2026-04-11):**
-- ✅ Local registry: `elastic-package stack up` (from repo root) serves gamepulse 0.1.0 via HTTPS registry on port 8080. Registry auto-discovers `build/packages/*.zip`.
-- ✅ Zip upload to Kibana Fleet API: `POST /api/fleet/epm/packages` with `Content-Type: application/zip`. Works on local 8.13.0 (44 assets) and Elastic Cloud Serverless (47 assets).
-- ✅ All 11 index templates present after fresh install.
-- ✅ `docs/BETA-INSTALL.md` created — colleague onboarding guide.
-
-**Distribution method for Serverless:** Zip upload only. Serverless Fleet does not support custom registry URLs (`xpack.fleet.registryUrl` is a self-hosted Kibana config). Colleagues upload the zip via Kibana Fleet UI or direct API POST.
-
-**Distribution and packaging (completed 2026-04-14):**
-- ✅ `packaging/gamepulse-launcher.sh` — POSIX sh unified CLI: `setup / start / stop / status / run %command%`
-- ✅ Steam launch option: `gamepulse run %command%` — starts agent before game, stops on exit/crash/signal
-- ✅ First-run `gamepulse setup` — prompts ES endpoint + API key, verifies connectivity, writes `~/.config/gamepulse/gamepulse.toml` (mode 600)
-- ✅ eBPF graceful degradation — WARN on sudo failure; agent-only mode ships all 8 metric streams
-- ✅ `docs/steam-setup.md` — user-facing Steam integration guide with troubleshooting
-
-**Remaining tasks:**
-1. **First colleague onboarding** — share `docs/BETA-INSTALL.md` + `gamepulse-0.1.0.zip`
-2. **GitHub Release v0.1.0** — tag, attach zip + AUR package binaries
-3. **`.deb`/`.rpm` packaging** — needed for non-Arch Linux users
-
-**Phase 4 success criteria:** 10+ colleagues running GamePulse with data flowing to their ES deployments.
+| WP | Target |
+|---|---|
+| F.1 | Define `docs/QA-MATRIX.md` — the parity test oracle |
+| F.2 | Ubuntu 24.04 parity run |
+| F.3 | Fedora 40 parity run |
+| F.4 | Arch (non-CachyOS) parity run |
+| F.5 | SteamOS 3.6+ parity run |
+| F.6 | Windows 11 parity run |
+| F.7 | Automated 60s smoke test in CI (docker ES target) |
 
 ---
 
-## elastic/integrations PR (end goal) — NEXT MAJOR MILESTONE
+## Phase G — elastic/integrations PR
 
-**Status:** Phase 4 beta in progress. PR prep is the next Claude Code session work.
-
-**Requirements checklist:**
-- [x] `elastic-package test` all types in final state (static+pipeline+asset PASS, system/policy acceptable skip)
-- [x] Rust binary builds and runs (ES-confirmed, AUR packaging done)
-- [ ] `docs/README.md` — elastic/integrations-format README with screenshots, config reference, troubleshooting
-- [ ] `CHANGELOG.md` — 0.1.0 entry
-- [ ] ECS compliance check (`elastic-package check` covers field compliance; full review TBD)
-- [x] Dashboard panels all by-value with `data_stream.dataset` filters ✅ (verified in build sessions)
-- [ ] Fork `elastic/integrations`, add to `packages/`, submit PR
-- [ ] Engage Elastic integrations team for review
-
-**Next session tasks:**
-1. Write `docs/README.md` meeting elastic/integrations contribution standards
-2. Write `CHANGELOG.md` (0.1.0 entry)
-3. Run ECS compliance check
-4. Fork `elastic/integrations` and prepare the PR structure
+**Requirements:**
+- `elastic-package test` suite green (already done)
+- `docs/README.md` in elastic/integrations format with screenshots
+- `CHANGELOG.md` entry for the submitted version
+- ECS compliance review
+- Parity matrix from Phase F cited in PR description
+- Fork `elastic/integrations`, add `packages/gamepulse/`, submit PR
+- Engage Elastic integrations team for review
 
 ---
 
-## Phase 5: Windows & Cross-Platform 🔲
+## Offline branch — Phase H
 
-**Status:** Deferred. Not on critical path until Phase 6 is complete.
+Forks from `main` after Phase B lands. Targets air-gapped benchmarkers, reviewers, NDA hardware testers.
 
----
-
-## Phase 7: Community Platform 🔲
-
-**Status:** Deferred. Dependent on public elastic/integrations merge.
-
----
-
-## Known technical gotchas (permanent reference)
-
-**BPF verifier opt-level:**
-`-C opt-level=2` MUST be set for the `bpfel-unknown-none` target in
-`ebpf/.cargo/config.toml`. Debug builds emit BPF-to-BPF calls to panic
-infrastructure that fail the kernel verifier ("processed 0 insns"). Never remove
-this flag.
-
-**Async ring buffer drain race:**
-Do not use `AsyncFd<RingBuf>` with Tokio's EPOLLET — events arriving between
-`rb.next()==None` and `clear_ready()` are silently dropped. Drain synchronously
-in `collect()` on each tick instead. `next()` is non-blocking.
-
-**GAME_PIDS map capacity:**
-`max_entries=256` (bumped from 64). BPF hash maps at 100% load fail inserts due
-to hash collision chains. Always leave headroom.
-
-**session.json path:**
-Always `/tmp/gamepulse/session.json`. Never `$XDG_RUNTIME_DIR` — sudo strips
-that variable, so the daemon (root) and collector (user) would watch different paths.
-
-**RADV GPU scheduling:**
-`drm_sched_job_queue` must be system-wide (no GAME_PIDS filter). RADV uses
-dedicated submission threads that are not in the game's PID tree.
-
-**Kibana API schema drift (verified 2026-04-07):**
-- `options_list_control`: use `field_name` (snake_case), not `fieldName`
-- Text field filters MUST use `.keyword` sub-field (bare field silently broken)
-- `xy` chart terms x-axis and `breakdown_by`: no `size` field allowed
-- `data_table` type name is `data_table` (not `datatable`)
-- ES|QL `type:"esql"` not supported in inline panel attributes — use `type:"dataView"`
-
-**elastic-package hyphen constraint:**
-Directory names inside the package cannot contain hyphens. eBPF workspace lives
-in `ebpf/` not `gamepulse-ebpf/`. Inner crate names can use hyphens.
+| WP | Deliverable |
+|---|---|
+| H1 | Fork `offline` branch from `main`; add `.github/workflows/sync-docs-from-main.yml` to cherry-pick doc changes daily |
+| H2 | Bundled stack — native Elasticsearch + Kibana tar/zip (not Docker by default); pinned version; persistent volume next to binaries |
+| H3 | Offline install flow — `gamepulse setup --local`; saved-objects API asset import (bypasses Fleet registry) |
+| H4 | Export tooling — `gamepulse export` outputs `sessions.csv`, `frames.jsonl`, `metrics/<stream>.jsonl` filterable by session/time |
+| H5 | Merge-from-main cadence — docs auto-sync; code merges manual on feature stability boundaries |
 
 ---
 
-## Open questions (unresolved)
+## Deferred
 
-1. **ES `histogram` field type on Serverless TSDS**: ✅ RESOLVED — Accepted natively
-   by Serverless TSDS. histogram docs land without errors. No schema change needed.
-
-2. **Stutter correlation threshold tuning**: 16ms (1 frame at 60fps) may be too
-   coarse for typical gameplay. Revisit once real stutter events are captured.
-
-3. **Mesa shader compiler uprobe** (Sprint 5): target path for
-   `nir_shader_compiler_init` is not stable across Mesa versions/distros. Runtime
-   discovery mechanism needed.
-
-4. **`ccx_cross_count` always zero**: Expected on AMD Ryzen 9800X3D (single CCX,
-   all 16 logical CPUs share L3). Metric is architecturally correct for multi-CCD
-   chips (7950X, 9950X etc.) — not a bug on this hardware.
+- Windows eBPF equivalents (ETW deep telemetry)
+- Community platform (public aggregated dashboards, leaderboards, regression detection)
