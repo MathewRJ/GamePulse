@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-18 by claude-code (B.7 + B.8 implementation)
+Last updated: 2026-04-19 by claude-code (dashboard verification tooling)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -103,6 +103,7 @@ Commit: 561dc78
 ### Developer tooling
 
 - **T.1 Elastic Agent Builder MCP server** — `.mcp.json.example` + `.agents/skills/elastic-mcp-setup/SKILL.md` committed. Wires Claude Code and claude.ai to ES for live ES|QL field validation during dashboard builds. API key creation and wiring steps documented in the skill. Not a runtime dependency.
+- **T.2 Dashboard verification script (2026-04-19)** — `scripts/verify-dashboard.sh` + `scripts/kibana-lib.sh`. Runs four checks against a deployed dashboard: saved-objects export round-trip, Lens datasource-layer invariants (catches "import-valid but UI-blank" foot-gun), internal dashboard loader (`/internal/dashboards/app/<id>`) renderability, and opt-in `--require-dataset-filter` for integration-submission compliance. Also supports `--expected-panel-types` for regression pinning. Pattern adapted from `/home/cachyos/coding/chatgpt-codex-test`. Smoke-tested live against both deployed dashboards; documented in the `kibana-dashboards` skill.
 
 ## Blockers & decisions pending
 
@@ -121,6 +122,7 @@ Commit: 561dc78
 
 ## Follow-ups to investigate
 
+- **Dashboard integration-compliance gap (Milestone G blocker)**: `dashboards/gamepulse-dashboard.ndjson` (id `c1249af5-dbb2-4d34-8d43-839cba2746db`) — all 11 Lens panels fail `scripts/verify-dashboard.sh --require-dataset-filter`. Panels need a `data_stream.dataset` filter embedded in each `embeddableConfig` for elastic/integrations submission. Fix before Milestone G.
 - `bottleneck_dominant` null in session summary docs vs populated in `gamepulse-game-timeline` — ingest pipeline enrichment issue on 2026-04-12 backing index
 - HOME env fallback via `getpwuid` in `game_name_from_appid()` (src/session.rs)
 - No-game system metrics dashboard panel (system health without game filter)

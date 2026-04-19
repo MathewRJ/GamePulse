@@ -5,6 +5,84 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-19 (ES-backed memory + dashboard verification tooling)
+
+### Context coming in
+
+Previous session compacted mid-work. Outstanding threads: finish verifying the ES-backed
+memory MCP setup (`elastic-agent-builder` server); decide whether to adopt
+`elastic/example-mcp-dashbuilder`; lift useful patterns from
+`/home/cachyos/coding/chatgpt-codex-test` into GamePulse for programmatic dashboard
+verification.
+
+### What was done this session
+
+**ES-backed memory (user-scope, not repo-scope — lives in `~/.claude/memory-setup/`)**
+
+- Verified `elastic-agent-builder` MCP server is connected and healthy against ES
+  project `gamepulse-af41f9` (Serverless 9.4.0, us-central1.gcp).
+- Index `agent-memory` with `semantic_text` title + content (ELSER auto-embedding)
+  plus keyword/date fields for filtering.
+- Three Agent Builder ES|QL tools registered: `recall_memory` (semantic search),
+  `recall_recent` (latest-N), `recall_shared` (cross-project).
+- Credentials at `~/.elastic/claude-memory-credentials.json` (chmod 600).
+- Recall-usage snippet added to `~/.claude/CLAUDE.md` (user global, not committed).
+- Known gap: scoped-key derivation fell back to parent `ES_API_KEY` because Serverless
+  requires an empty `role_descriptors` object for derived keys. One-line patch pending
+  in `~/.claude/memory-setup/setup.sh`.
+- **Tools activate on next Claude Code session start** — not live in the session they
+  were registered in.
+
+**Dashbuilder MCP decision: declined**
+
+Researched `elastic/example-mcp-dashbuilder` (20 tools covering dashboard lifecycle +
+Lens-mappable panels). Rejected because (a) the existing `kibana-dashboards` skill
+already covers programmatic dashboard creation via the Kibana 9.4+ Dashboards API with
+a stable contract, (b) dashbuilder is `example`-labeled (Elastic License 2.0, no SLA),
+and (c) it doesn't enforce GamePulse's per-panel `data_stream.dataset` filter rule.
+No net-new capability for GamePulse's current workflow.
+
+**Dashboard verification tooling (committed)**
+
+Lifted and adapted the verify-dashboard pattern from
+`/home/cachyos/coding/chatgpt-codex-test/scripts/verify_kibana_dashboards.sh`. New files:
+
+- `scripts/kibana-lib.sh` — minimal `curl_kibana` helper (reads `KIBANA_URL` +
+  `ELASTIC_API_KEY`/`ES_API_KEY`, space-aware `kibana_base_url`).
+- `scripts/verify-dashboard.sh` — four-check verifier, exits non-zero on any failure:
+  1. Saved-objects export round-trip.
+  2. Lens datasource-layer invariants (catches the "imports fine, renders blank"
+     foot-gun where migration versions are wrong and layers become `{}`).
+  3. Internal dashboard loader (`GET /internal/dashboards/app/<id>` with
+     `x-elastic-internal-origin: Kibana`) — catches UI-unrenderable imports.
+  4. Opt-in `--require-dataset-filter` for elastic/integrations compliance
+     (every panel references `data_stream.dataset`).
+  Also: `--expected-panel-types` for regression pinning, `--skip-internal` escape.
+- `.agents/skills/kibana-dashboards/SKILL.md` — new "Programmatic Verification"
+  subsection documenting usage, `coreMigrationVersion: 8.8.0` +
+  `typeMigrationVersion: 10.3.0` invariants for inline Lens, and the
+  `embeddableConfig.enhancements` preservation rule.
+
+**Smoke-tested live** against both deployed dashboards. Both pass basic checks.
+`--require-dataset-filter` **caught a real integration-compliance gap** on
+`dashboards/gamepulse-dashboard.ndjson` (id `c1249af5…`) — all 11 panels lack the
+per-panel `data_stream.dataset` filter required for Milestone G submission.
+Recorded under Follow-ups in STATUS.md for a future fix (out of scope for this session).
+
+### State at end of session
+
+- MCP server registered (next session will see `recall_memory` / `recall_recent` /
+  `recall_shared` tools).
+- `scripts/verify-dashboard.sh` is the canonical dashboard verifier going forward;
+  run after any Lens panel change or before committing a new dashboard.
+- Integration-compliance gap on `gamepulse-dashboard.ndjson` is flagged but not fixed.
+
+### Commits
+
+- *(this session)* — feat(scripts): add Kibana dashboard verification tooling
+
+---
+
 ## Session: 2026-04-14 (session.label auto-generation)
 
 ### Context coming in

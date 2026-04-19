@@ -572,6 +572,53 @@ When fixing or updating a dashboard fetched via `_export`:
   in the index) causes a render error for the whole panel — remove the column from all
   three locations.
 
+### Programmatic Verification: `scripts/verify-dashboard.sh`
+
+After deploying a dashboard (via Method A Dashboards API or Method B `_import`),
+run `scripts/verify-dashboard.sh <dashboard-id>` to confirm it is actually
+UI-renderable, not just import-valid. Import can silently succeed while leaving
+Lens datasource layers empty — the result is a blank panel in the UI.
+
+The script runs four checks (exits non-zero on any failure):
+
+1. **Saved-objects export round-trip** — `POST /api/saved_objects/_export`
+   with `includeReferencesDeep=true`. Asserts the dashboard object is present.
+2. **Lens datasource invariants** — every Lens panel has a non-empty
+   `formBased.layers` or `textBased.layers`, and the `visualization.layerId`
+   (if set) resolves to a real layer in the formBased map.
+3. **Internal dashboard loader** — `GET /internal/dashboards/app/<id>` with
+   `x-elastic-internal-origin: Kibana`. A `statusCode` field in the response
+   means the UI couldn't load it. This catches cases import accepts but the
+   loader rejects (e.g., stale migration versions, broken references).
+4. **`data_stream.dataset` filter** (opt-in via `--require-dataset-filter`) —
+   required for elastic/integrations submission. Every panel must reference
+   `data_stream.dataset` somewhere in its embeddableConfig. Skip for
+   internal-only dashboards.
+
+Usage examples:
+
+```sh
+# Basic: every dashboard after any Lens panel change.
+./scripts/verify-dashboard.sh <dashboard-id>
+
+# Integration submission: enforce per-panel dataset filter.
+./scripts/verify-dashboard.sh <dashboard-id> --require-dataset-filter
+
+# Regression check on panel inventory ordering.
+./scripts/verify-dashboard.sh <dashboard-id> \
+  --expected-panel-types lens,lens,lens,lens,lens,lens,lens,lens
+```
+
+**Migration-version invariants for `_import`:** dashboards with inline Lens
+panels must include `coreMigrationVersion: "8.8.0"` and
+`typeMigrationVersion: "10.3.0"` on the dashboard saved object. Without them,
+Kibana imports the dashboard but migrates inline Lens datasource layers to
+empty objects — the verify script's Lens invariants catch this.
+
+**Preserve on export:** Kibana adds `embeddableConfig.enhancements: {}` to
+some panels. Keep it when hand-editing a `_export`ed NDJSON; stripping it can
+break UI rendering even though the saved object imports cleanly.
+
 ### gamepulse-game-timeline Field Inventory
 
 The ES transform index `gamepulse-game-timeline` (data view ID: `gp-dv-timeline`) contains
