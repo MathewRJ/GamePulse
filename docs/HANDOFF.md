@@ -5,6 +5,83 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-20 (infrastructure — token optimisation + security + Windows prep)
+
+### Context coming in
+
+Project ready to move to Milestone C (Windows collectors). User wanted to transfer the
+working environment to Windows and asked about infrastructure hygiene before starting.
+
+### What was done this session
+
+**Token optimisation (CLAUDE.md progressive disclosure)**
+
+- `CLAUDE.md` refactored 208 → 84 lines using Elastic's progressive disclosure pattern.
+  Reference content (file locations, hardware notes, skills inventory, Kibana conventions,
+  test suite status, package build details) extracted to `docs/claude-reference.md`.
+- Agent routing table added to CLAUDE.md: Haiku for extractions/summaries, Gemini for
+  large files/research, Explore for codebase scans, Sonnet for code changes, Opus for
+  ultrathink only.
+- Grep-first rule added: files >100 lines → Grep before Read; SCOPE.md (~1700 lines)
+  never read in full, delegate to Gemini or Grep.
+- Estimated 60–70% reduction in per-turn system prompt overhead.
+
+**ES_API_KEY security audit and consolidation**
+
+- Full repo + git history scan: no hardcoded keys found in committed files. Git history clean.
+- `scripts/kibana-lib.sh`: removed `ELASTIC_API_KEY` fallback — `ES_API_KEY` is now the
+  single canonical name project-wide.
+- `~/.elastic/claude-memory-credentials.json`: `mcp_api_key` and `mcp_api_key_id` fields
+  deleted. Only non-secret URLs remain.
+- `~/.claude/memory-setup/save-memory.sh`: now reads `$ES_API_KEY` from env (was reading
+  from JSON). `$ES_URL` preferred from env; falls back to JSON for URL only.
+- `~/.config/gamepulse/gamepulse.toml`: hardcoded (expired) API key cleared; replaced with
+  comment directing to `ES_API_KEY` env var.
+- `/etc/gamepulse/gamepulse.toml`: same hardcoded key present — requires `sudo` to clear.
+  User action: `sudo sed -i 's/^api_key = .*/# api_key via ES_API_KEY env var/' /etc/gamepulse/gamepulse.toml`
+- `settings.local.json` KIBANA_API_KEY/ELASTICSEARCH_API_KEY entries retained — these are
+  necessary bridges because Elastic's own skill node scripts require those names. They
+  reference `$ES_API_KEY`, no hardcoded values.
+
+**Rust and eBPF env var support**
+
+- `src/config.rs`: `apply_env_overrides()` added — `ES_API_KEY` and `ES_URL` env vars
+  override TOML at load time. Enables running with no credentials in the TOML file.
+- `ebpf/gamepulse-ebpf-daemon/src/config.rs`: same pattern; `api_key` made
+  `Option<String>` with env var fallback; clear error if neither TOML nor env provides key.
+- `ebpf/gamepulse-ebpf-daemon/src/main.rs`: unwrap api_key with actionable error.
+- Both crates pass `cargo check` cleanly.
+
+**ES memory migration (cross-platform)**
+
+- All 6 prior file-based memories migrated to `agent-memory` ES index via save-memory.sh.
+- `recall_memory` and `recall_recent` verified returning correct results semantically.
+- `MEMORY.md` reduced to 3-line pointer — ES is now the live source of truth.
+- Windows setup: only needs `ES_API_KEY` env var + `wire-mcp.sh` run; all memories
+  already in ES, no migration needed on Windows clone.
+
+**settings.local.json cleanup**
+
+- Removed ~40 stale entries: all `/home/cachyos/claude/GamePulse/` references (old path),
+  specific PID (`kill 16768`), one-off diagnostic commands, entries covered by broader
+  wildcards, wrong-path binaries.
+- Consolidated overlapping entries: `elastic-package:*` covers all ep subcommands;
+  `git:*` covers all git ops; `rustup:*` covers all rustup; `Read(//home/cachyos/**)` 
+  covers all home subdirs; `Read(//sys/devices/**)` covers all sysfs device paths.
+- Fixed broken `UserPromptSubmit` hook path: was `/home/cachyos/claude/GamePulse/` (old),
+  now `/home/cachyos/coding/GamePulse/` (current).
+
+### State at end of session
+
+- All changes committed and pushed to main.
+- Windows development ready: clone repo → set `ES_API_KEY` + `ES_URL` env vars →
+  run `wire-mcp.sh` → start Milestone C.
+- One manual action outstanding: clear hardcoded key from `/etc/gamepulse/gamepulse.toml`
+  (requires sudo — see command above).
+- Next: Milestone C — Windows collectors (PresentMon, PDH, ADL/NVML).
+
+---
+
 ## Session: 2026-04-20 (MCP proxy + credential hygiene)
 
 ### Context coming in

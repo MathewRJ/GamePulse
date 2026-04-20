@@ -131,9 +131,12 @@ async fn main() -> Result<()> {
     }
 
     // ES shipper
+    let api_key = config.elasticsearch.api_key
+        .as_deref()
+        .ok_or_else(|| anyhow::anyhow!("No API key: set ES_API_KEY env var or api_key in gamepulse.toml"))?;
     let mut shipper = EsShipper::new(
         &config.elasticsearch.endpoint,
-        &config.elasticsearch.api_key,
+        api_key,
     )
     .context("creating ES shipper")?;
 

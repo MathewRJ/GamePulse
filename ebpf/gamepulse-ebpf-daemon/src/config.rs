@@ -16,7 +16,8 @@ pub struct Config {
 #[derive(Debug, Deserialize)]
 pub struct ElasticsearchConfig {
     pub endpoint: String,
-    pub api_key: String,
+    #[serde(default)]
+    pub api_key: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -96,10 +97,27 @@ impl Config {
         Self::load_from(&path)
     }
 
+    /// Apply ES_API_KEY and ES_URL env vars on top of whatever was in the TOML file.
+    fn apply_env_overrides(&mut self) {
+        if let Ok(key) = std::env::var("ES_API_KEY") {
+            if !key.is_empty() {
+                self.elasticsearch.api_key = Some(key);
+            }
+        }
+        if let Ok(url) = std::env::var("ES_URL") {
+            if !url.is_empty() {
+                self.elasticsearch.endpoint = url;
+            }
+        }
+    }
+
     pub fn load_from(path: &PathBuf) -> Result<Self> {
         let text = std::fs::read_to_string(path)
             .with_context(|| format!("reading config file: {}", path.display()))?;
-        toml::from_str(&text).with_context(|| format!("parsing config file: {}", path.display()))
+        let mut config: Self = toml::from_str(&text)
+            .with_context(|| format!("parsing config file: {}", path.display()))?;
+        config.apply_env_overrides();
+        Ok(config)
     }
 }
 

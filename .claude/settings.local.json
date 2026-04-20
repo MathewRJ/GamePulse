@@ -1,0 +1,90 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//sys/class/drm/**)",
+      "Read(//proc/**)",
+      "Read(//sys/kernel/tracing/**)",
+      "Read(//sys/kernel/debug/tracing/**)",
+      "Read(//sys/devices/**)",
+      "Read(//home/cachyos/**)",
+      "Read(//etc/**)",
+      "Read(//usr/lib/systemd/**)",
+      "Bash(fish:*)",
+      "Bash(bash:*)",
+      "Bash(ls:*)",
+      "Bash(git:*)",
+      "Bash(elastic-package:*)",
+      "Bash(cargo check:*)",
+      "Bash(cargo build:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(cargo run:*)",
+      "Bash(cargo test *)",
+      "Bash(cargo clean:*)",
+      "Bash(cargo xtask:*)",
+      "Bash(cargo --version)",
+      "Bash(rustup:*)",
+      "Bash(python3:*)",
+      "Bash(pip show:*)",
+      "Bash(node .agents/skills/kibana-dashboards/scripts/kibana-dashboards.js test)",
+      "Bash(node .agents/skills/kibana-dashboards/scripts/kibana-dashboards.js dashboard create -)",
+      "Bash(node .agents/skills/kibana-dashboards/scripts/kibana-dashboards.js dashboard get 1b2a1b70-a315-4ed4-91c4-11aa0abe5e1d)",
+      "Bash(node .agents/skills/kibana-dashboards/scripts/kibana-dashboards.js dashboard update 21b663d6-de42-46c6-aeaf-e6c48e46ecec -)",
+      "Bash(node .agents/skills/kibana-dashboards/scripts/kibana-dashboards.js dashboard update 1b2a1b70-a315-4ed4-91c4-11aa0abe5e1d -)",
+      "Bash(node .agents/skills/elasticsearch-esql/scripts/esql.js:*)",
+      "Bash(export KIBANA_URL=\"https://gamepulse-af41f9.kb.us-central1.gcp.elastic.cloud\")",
+      "Bash(export KIBANA_API_KEY=\"$ES_API_KEY\")",
+      "Bash(export ELASTICSEARCH_URL=\"https://gamepulse-af41f9.es.us-central1.gcp.elastic.cloud\")",
+      "Bash(export ELASTICSEARCH_API_KEY=\"$ES_API_KEY\")",
+      "Bash(KIBANA_URL=\"https://gamepulse-af41f9.kb.us-central1.gcp.elastic.cloud\" KIBANA_API_KEY=\"$ES_API_KEY\" node:*)",
+      "Bash(RUSTFLAGS=\"-C opt-level=3 -C target-cpu=native\" cargo build --release --manifest-path src/Cargo.toml)",
+      "Bash(makepkg:*)",
+      "Bash(gamepulse-agent --dry-run --once)",
+      "Bash(gamepulse-agent --dry-run)",
+      "Bash(GAMEPULSE_LOG=info ./target/release/gamepulse-agent --dry-run)",
+      "Bash(GAMEPULSE_LOG=info timeout 7 ./target/release/gamepulse-agent)",
+      "Bash(systemctl:*)",
+      "Bash(journalctl:*)",
+      "Bash(systemd-run --user --collect --quiet --pty -- gamepulse-agent --dry-run --once)",
+      "Bash(systemd-run --user --collect --quiet --pty -- gamepulse-agent --dry-run)",
+      "Bash(docker info:*)",
+      "Bash(docker compose:*)",
+      "Bash(pacman -Qs:*)",
+      "Bash(pacman -Ss:*)",
+      "Bash(ip link:*)",
+      "Bash(vulkaninfo --summary)",
+      "Bash(glxinfo -B)",
+      "Bash(llvm-objdump --version)",
+      "Bash(llvm-config --version)",
+      "Bash(bpftool --version)",
+      "Bash(bpf-linker --version)",
+      "Bash(objdump --version)",
+      "Bash(/usr/bin/ld --version)",
+      "Bash(ar t:*)",
+      "Bash(unzip -l build/packages/gamepulse-*.zip)",
+      "Bash(gemini:*)",
+      "Bash(codex --version)",
+      "Bash(codex --help)",
+      "Bash(codex exec *)",
+      "Bash(claude mcp *)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "mcp__elastic-agent-builder__recall_recent",
+      "mcp__elastic-agent-builder__recall_memory"
+    ]
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/cachyos/coding/GamePulse/.claude/hooks/code-red-save.sh",
+            "timeout": 30,
+            "statusMessage": "Code red — saving..."
+          }
+        ]
+      }
+    ]
+  },
+  "permissionMode": "acceptEdits"
+}

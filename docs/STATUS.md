@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-19 by claude-code (dashboard verification tooling)
+Last updated: 2026-04-20 by claude-code (infrastructure session — token optimisation, security, Windows prep)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -99,6 +99,15 @@ Commit: 561dc78
 - Rewrote `README.md` to lead with Rust agent as primary
 - Deleted: `docs/project-scope.md`, `docs/scope-v2.md`, `docs/claude-chat-context.md`,
   `docs/elasticsearch-setup.md`, `docs/dashboard-guide.md`, `docs/kibana-lens-ndjson-reference.md`
+
+### Infrastructure session — 2026-04-20 (token optimisation + security + Windows prep)
+
+- **CLAUDE.md progressive disclosure refactor** — slimmed from 208 → 84 lines. Reference content (file locations, hardware, skills, Kibana conventions, test suite status, package build) moved to `docs/claude-reference.md`. Agent routing table and grep-first rule added as enforced rules. Estimated 60–70% reduction in per-turn system prompt overhead.
+- **ES_API_KEY security consolidation** — single canonical key name across all scripts. `scripts/kibana-lib.sh` ELASTIC_API_KEY fallback removed. `~/.elastic/claude-memory-credentials.json` scrubbed of plaintext key fields. `~/.config/gamepulse/gamepulse.toml` hardcoded expired key cleared. `/etc/gamepulse/gamepulse.toml` still needs `sudo` clear (user action).
+- **Rust agent (`src/config.rs`) env var override** — `ES_API_KEY` and `ES_URL` env vars override TOML values at load time. Enables keyless TOML on Windows.
+- **eBPF daemon (`ebpf/.../config.rs`) env var override** — same pattern applied; `api_key` made optional with env var fallback and clear error if neither TOML nor env var provides the key.
+- **ES memory migration** — all 6 prior file-based memories migrated to `agent-memory` ES index. `recall_memory` / `recall_recent` verified working. MEMORY.md reduced to 3-line pointer. Cross-platform: Windows clone needs only `ES_API_KEY` env var set + `wire-mcp.sh` run.
+- **`settings.local.json` cleanup** — removed ~40 stale entries (old `/home/cachyos/claude/GamePulse/` paths, specific PIDs, one-off diagnostic commands); consolidated overlapping wildcards; fixed broken hook path to current repo location.
 
 ### Developer tooling
 
