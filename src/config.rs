@@ -171,7 +171,9 @@ impl Config {
 
         for candidate in &candidates {
             if candidate.exists() {
-                return Self::load_from(candidate);
+                let mut config = Self::load_from(candidate)?;
+                config.apply_env_overrides();
+                return Ok(config);
             }
         }
         anyhow::bail!(
@@ -182,6 +184,21 @@ impl Config {
                 .collect::<Vec<_>>()
                 .join(", ")
         )
+    }
+
+    /// Apply ES_API_KEY and ES_URL env vars on top of whatever was in the TOML file.
+    /// Env vars win — allows key rotation without editing config files.
+    fn apply_env_overrides(&mut self) {
+        if let Ok(key) = std::env::var("ES_API_KEY") {
+            if !key.is_empty() {
+                self.elasticsearch.api_key = Some(key);
+            }
+        }
+        if let Ok(url) = std::env::var("ES_URL") {
+            if !url.is_empty() {
+                self.elasticsearch.endpoint = url;
+            }
+        }
     }
 
     fn load_from(path: &PathBuf) -> Result<Self> {

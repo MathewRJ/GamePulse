@@ -3,24 +3,22 @@
 # Source, don't execute: `. "$(dirname "$0")/kibana-lib.sh"`
 #
 # Reads env:
-#   KIBANA_URL       — required; full base URL (e.g., https://foo.kb.region.gcp.elastic.cloud)
-#   KIBANA_SPACE     — optional; defaults to "default"
-#   ELASTIC_API_KEY  — preferred; falls back to ES_API_KEY (same key works on Serverless)
+#   KIBANA_URL   — required; full base URL (e.g., https://foo.kb.region.gcp.elastic.cloud)
+#   KIBANA_SPACE — optional; defaults to "default"
+#   ES_API_KEY   — required; same key works for both ES and Kibana on Serverless
 
 set -eu
 
 require_env() {
   missing=""
-  [ -n "${KIBANA_URL:-}" ] || missing="${missing} KIBANA_URL"
-  if [ -z "${ELASTIC_API_KEY:-}" ] && [ -z "${ES_API_KEY:-}" ]; then
-    missing="${missing} ELASTIC_API_KEY (or ES_API_KEY)"
-  fi
+  [ -n "${KIBANA_URL:-}" ]  || missing="${missing} KIBANA_URL"
+  [ -n "${ES_API_KEY:-}" ]  || missing="${missing} ES_API_KEY"
   if [ -n "$missing" ]; then
     echo "Missing required environment variables:${missing}" >&2
     exit 2
   fi
   KIBANA_SPACE="${KIBANA_SPACE:-default}"
-  KIBANA_AUTH_KEY="${ELASTIC_API_KEY:-$ES_API_KEY}"
+  KIBANA_AUTH_KEY="$ES_API_KEY"
 }
 
 kibana_base_url() {
