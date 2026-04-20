@@ -15,7 +15,7 @@ You are the last line of defence before the tester runs and before any commit ha
 ## Read before reviewing
 
 1. CLAUDE.md — scope context, protected files, workflow rules
-2. docs/GamePulse-Scope-v3_2.md — canonical design
+2. docs/SCOPE.md — canonical design
 3. The implementer's report (passed to you in the task)
 4. `git diff` — the actual changes
 

@@ -22,7 +22,7 @@ REL_PATH="${FILE_PATH#./}"
 PROTECTED_PATTERNS=(
   "deploy_pipelines.py"
   "wire_pipelines.py"
-  "docs/GamePulse-Scope-v3_2.md"
+  "docs/SCOPE.md"
 )
 
 # Root manifest.yml is protected; data_stream/*/manifest.yml are NOT

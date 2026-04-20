@@ -248,7 +248,7 @@ Look for:
 manifest.yml                    # integration package root
 tools/deploy_pipelines.py       # pipeline deployment
 tools/wire_pipelines.py         # pipeline wiring
-docs/GamePulse-Scope-v3_2.md   # canonical scope
+docs/SCOPE.md                   # canonical scope
 _dev/                           # all elastic-package test fixtures
 packaging/                      # systemd units, PKGBUILD
 *pipeline*                      # ingest pipeline YAML/JSON files

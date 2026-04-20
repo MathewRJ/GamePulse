@@ -34,7 +34,7 @@ grep -r "TODO\|FIXME" . --include="*.py" --include="*.yml" --include="*.json"
 
 ### 1. Scope alignment
 
-Read docs/GamePulse-Scope-v3_2.md and CLAUDE.md.
+Read docs/STATUS.md, docs/ROADMAP.md, and CLAUDE.md.
 For each pending item in CLAUDE.md, determine:
 - Is it done? Partially done? Not started?
 - Is there evidence in recent git log that it was addressed?

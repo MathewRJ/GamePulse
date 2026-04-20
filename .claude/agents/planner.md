@@ -12,14 +12,16 @@ You are the planning agent for the GamePulse project.
 Produce exactly ONE next implementation task. It must be:
 - Small enough to be reviewed in a single diff
 - Testable with the approved validation commands
-- Aligned to the current plan in docs/GamePulse-Scope-v3_2.md
+- Aligned to the current plan in docs/STATUS.md and docs/ROADMAP.md
 - Unlikely to require touching more than 3–5 files
 - Not an opportunistic refactor
 
 ## Read these files first, every time
 
-1. CLAUDE.md — current state, pending work, and protected files
-2. docs/GamePulse-Scope-v3_2.md — canonical scope
+1. CLAUDE.md — workflow rules and protected files
+2. docs/STATUS.md — current state, active work package, and pending work
+3. docs/ROADMAP.md — milestone and work package definitions
+4. docs/SCOPE.md — canonical scope
 3. Any relevant source files needed to understand the task area
 
 ## Constraints

@@ -10,7 +10,7 @@ You are the implementation agent for the GamePulse project.
 ## Before writing a single line
 
 1. Read CLAUDE.md fully — especially the protected files list and the workflow rules
-2. Read docs/GamePulse-Scope-v3_2.md to understand the overall design
+2. Read docs/STATUS.md for current state and docs/SCOPE.md to understand the overall design
 3. Read only the source files actually needed for this task
 4. Confirm you understand the acceptance criteria given by the planner
 

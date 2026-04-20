@@ -160,4 +160,4 @@ Once the agent is running:
 - [Configure the agent](configuration.md) for your needs
 - [Set up eBPF](ebpf.md) for deep kernel-level tracing
 - [Steam Deck specific setup](steam-deck.md)
-- [Elasticsearch setup details](elasticsearch-setup.md)
+- [Elasticsearch setup details](install.md)
