@@ -5,6 +5,42 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-20 (MCP proxy + credential hygiene)
+
+### Context coming in
+
+elastic-agent-builder MCP server was failing to reconnect — API key stored in `~/.claude.json` had been rotated externally.
+
+### What was done this session
+
+**MCP server: switched from HTTP to stdio proxy transport**
+
+- Problem: HTTP transport stores the API key literally in `~/.claude.json`; key rotation requires manual re-wiring.
+- Solution: Created `~/.claude/memory-setup/elastic-mcp-proxy.sh` — a stdio wrapper that runs `npx mcp-remote <endpoint> --header "Authorization: ApiKey $ES_API_KEY"`. Claude Code spawns this fresh each session, reading `$ES_API_KEY` from the environment at that moment.
+- Updated `~/.claude/memory-setup/wire-mcp.sh` to register the stdio transport instead of HTTP.
+- Re-wired the live registration: `claude mcp get elastic-agent-builder` now shows `Type: stdio, Status: ✓ Connected`.
+- **Key rotation going forward:** `set -xU ES_API_KEY "new-key"` — no re-wiring needed.
+
+**Credential scan + cleanup**
+
+- Scanned entire repo for hardcoded credentials.
+- Found old (rotated) API key in 3 allowlist entries in `.claude/settings.local.json` and its build artifact copy in `build/packages/gamepulse/0.1.0/.claude/settings.local.json`.
+- Both files are gitignored; key was never committed. Replaced hardcoded values with `$ES_API_KEY` references.
+- Git history confirmed clean (no commits containing the key).
+
+**Stale doc reference fixes (committed: 23c95cc)**
+
+- Agent prompts, gamepulse-workflow skill, pre-edit hook, and getting-started.md all referenced `docs/GamePulse-Scope-v3_2.md` (old path). Updated to `docs/SCOPE.md`, `docs/STATUS.md`, `docs/ROADMAP.md`.
+
+### State at end of session
+
+- MCP: connected, stdio proxy, key-rotation-friendly.
+- Repo: clean, pushed to main (23c95cc).
+- No credentials in any config file or git history.
+- No active work package in progress — next session should read `docs/STATUS.md` for current milestone.
+
+---
+
 ## Session: 2026-04-19 (ES-backed memory + dashboard verification tooling)
 
 ### Context coming in
