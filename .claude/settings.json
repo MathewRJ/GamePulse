@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/pre-edit-check.sh"
+            "command": "python3 .claude/hooks/pre-edit-check.py"
           }
         ]
       },
@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/pre-command-check.sh"
+            "command": "python3 .claude/hooks/pre-command-check.py"
           }
         ]
       }
@@ -26,7 +26,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/post-edit-check.sh"
+            "command": "python3 .claude/hooks/post-edit-check.py"
           }
         ]
       }
