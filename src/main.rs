@@ -19,7 +19,6 @@ use collectors::Collector;
 use serde_json::{json, Value};
 use session::SessionEvent;
 use std::path::PathBuf;
-use tokio::signal::unix::SignalKind;
 
 // ── CLI ───────────────────────────────────────────────────────────────────────
 
@@ -616,11 +615,28 @@ async fn main() -> Result<()> {
         tracing::warn!("Failed to ship session-start doc: {}", e);
     }
 
-    // Signal handlers
-    let mut sigterm =
-        tokio::signal::unix::signal(SignalKind::terminate()).expect("SIGTERM handler");
-    let mut sigint =
-        tokio::signal::unix::signal(SignalKind::interrupt()).expect("SIGINT handler");
+    // Signal handlers — spawned watcher sends on a oneshot so the select! arm
+    // is platform-neutral (tokio's select! macro doesn't support #[cfg] on arms).
+    let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+    #[cfg(unix)]
+    tokio::spawn(async move {
+        use tokio::signal::unix::SignalKind;
+        let mut sigterm = tokio::signal::unix::signal(SignalKind::terminate())
+            .expect("SIGTERM handler");
+        let mut sigint = tokio::signal::unix::signal(SignalKind::interrupt())
+            .expect("SIGINT handler");
+        tokio::select! {
+            _ = sigterm.recv() => tracing::info!("SIGTERM received — shutting down"),
+            _ = sigint.recv() => tracing::info!("SIGINT received — shutting down"),
+        }
+        let _ = shutdown_tx.send(());
+    });
+    #[cfg(not(unix))]
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c().await.ok();
+        tracing::info!("Ctrl-C received — shutting down");
+        let _ = shutdown_tx.send(());
+    });
 
     // Accumulators for summary doc
     let session_start = std::time::Instant::now();
@@ -720,13 +736,7 @@ async fn main() -> Result<()> {
                 }
             }
 
-            _ = sigterm.recv() => {
-                tracing::info!("SIGTERM received — shutting down");
-                break;
-            }
-
-            _ = sigint.recv() => {
-                tracing::info!("SIGINT received — shutting down");
+            _ = &mut shutdown_rx => {
                 break;
             }
         }

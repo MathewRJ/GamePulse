@@ -63,10 +63,14 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 ## Active work package
 
-**None.** Next up: Phase B.1–B.4 (Collector trait + Linux move + Windows stubs + platform dispatch).
+**None.** Phase B.4 (Windows signal-handler gate) complete. Next: Phase B.1–B.3 (Collector trait + Linux move + Windows stubs).
 See `docs/ROADMAP.md` for milestone structure and work package definitions.
 
 ## Completed work
+
+### Milestone B — Cross-platform refactor (partial, 2026-04-21)
+
+- **B.4 — Windows signal-handler gate**: Unix-only `tokio::signal::unix` import and signal setup moved behind `#[cfg(unix)]`. On non-Unix hosts the agent spawns a task waiting on `tokio::signal::ctrl_c()` instead; both paths send on a `tokio::sync::oneshot` channel so the `select!` loop arm is platform-neutral. `cargo check` and `cargo clippy -- -D warnings` both pass on Windows.
 
 ### Milestone B — Cross-platform refactor (partial, 2026-04-18)
 
