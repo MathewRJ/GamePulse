@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-20 by claude-code (infrastructure session — token optimisation, security, Windows prep)
+Last updated: 2026-04-21 by claude-code (infrastructure session — Python hooks, cross-platform guard)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -104,6 +104,13 @@ Commit: 561dc78
 - Deleted: `docs/project-scope.md`, `docs/scope-v2.md`, `docs/claude-chat-context.md`,
   `docs/elasticsearch-setup.md`, `docs/dashboard-guide.md`, `docs/kibana-lens-ndjson-reference.md`
 
+### Infrastructure session — 2026-04-21 (Python hooks — cross-platform guard)
+
+- **Claude Code hooks ported to Python**: Three hooks (pre-edit-check, pre-command-check, post-edit-check) rewritten as Python 3 replacements; bash scripts retained as fallback. Windows machine now has functional protected-file guard, blocked-command guard, and auto cargo check on .rs edits — all three were silently dead on Windows before this change (bash does not execute). Linux behaviour preserved; when Linux switches to Python hooks, fixes propagate automatically.
+- **Absolute-path bug fixed in pre-edit-check**: exact-match (manifest.yml) and prefix checks (_dev/, packaging/) never fired against absolute paths on either OS. Fixed in the Python port by stripping the cwd prefix (available in hook JSON) before applying checks.
+- **Self-test harness**: `python3 .claude/hooks/pre-edit-check.py --test` — 10 cases covering Windows absolute paths, Linux relative paths, backslash normalization, outside-cwd safety, and sibling-directory guard. All pass.
+- Commits: 6c05cdf (Python files + absolute-path fix), e49d7db (settings.json switched to python3)
+
 ### Infrastructure session — 2026-04-20 (token optimisation + security + Windows prep)
 
 - **CLAUDE.md progressive disclosure refactor** — slimmed from 208 → 84 lines. Reference content (file locations, hardware, skills, Kibana conventions, test suite status, package build) moved to `docs/claude-reference.md`. Agent routing table and grep-first rule added as enforced rules. Estimated 60–70% reduction in per-turn system prompt overhead.
@@ -120,7 +127,9 @@ Commit: 561dc78
 
 ## Blockers & decisions pending
 
-- None currently.
+- **Infrastructure follow-up — pre-command-check allowlist non-functional**: the `allowed_prefixes` list exists in both the bash and Python hooks but non-blocked commands fall through to `exit 0` regardless, so it has no blocking effect. Behaviour preserved verbatim during Linux→Python port. Pending decision: make allowlist enforce (breaking change, risks blocking valid workflows) or remove dead code (documents true behaviour). Review before Phase G.
+- **Infrastructure fix — pre-edit-check absolute-path bug (resolved in Python port)**: exact-match (manifest.yml) and prefix checks (_dev/, packaging/) never fired against absolute paths on either OS in the bash version. Fixed in Python port by stripping cwd prefix before applying checks. Bash scripts still carry the unfixed logic; when Linux migrates to Python hooks, the fix propagates automatically.
+- **Hook observability — PostToolUse stdout not surfaced to Claude Code**: post-edit-check cargo check output flows to the Claude Code terminal, not back into conversation context. Claude Code cannot directly observe the hook result; it must re-run cargo check manually to verify. Not blocking; worth revisiting if hook output becomes debugging-relevant.
 
 ## Environment
 
