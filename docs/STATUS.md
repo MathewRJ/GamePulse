@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-21 by claude-code (infrastructure session — Python hooks, cross-platform guard)
+Last updated: 2026-04-21 by claude-code (infrastructure session — Windows MCP wiring complete)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -104,6 +104,10 @@ Commit: 561dc78
 - Deleted: `docs/project-scope.md`, `docs/scope-v2.md`, `docs/claude-chat-context.md`,
   `docs/elasticsearch-setup.md`, `docs/dashboard-guide.md`, `docs/kibana-lens-ndjson-reference.md`
 
+### Infrastructure session — 2026-04-21 (Windows MCP wiring)
+
+- **Windows machine MCP wiring (2026-04-21)**: elastic-agent-builder registered and connected via npx mcp-remote against `https://gamepulse-af41f9.kb.us-central1.gcp.elastic.cloud/api/agent_builder/mcp`. `GAMEPULSE_MCP_API_KEY` set as persistent user env var; `.mcp.json` uses variable substitution (`${GAMEPULSE_MCP_API_KEY}`) rather than baked-in key — no API key material on disk. New MCP key was created with explicit `feature_agentBuilder.read` + `feature_actions.read` application privileges via Kibana Dev Console (superuser session). Previous attempt with derived inherits-parent key failed because parent `ES_API_KEY` lacks `feature_agentBuilder.read`; documented here to save future time. Tools (`recall_memory`, `recall_recent`) activate on next session restart per the MCP protocol.
+
 ### Infrastructure session — 2026-04-21 (Python hooks — cross-platform guard)
 
 - **Claude Code hooks ported to Python**: Three hooks (pre-edit-check, pre-command-check, post-edit-check) rewritten as Python 3 replacements; bash scripts retained as fallback. Windows machine now has functional protected-file guard, blocked-command guard, and auto cargo check on .rs edits — all three were silently dead on Windows before this change (bash does not execute). Linux behaviour preserved; when Linux switches to Python hooks, fixes propagate automatically.
@@ -126,6 +130,8 @@ Commit: 561dc78
 - **T.2 Dashboard verification script (2026-04-19)** — `scripts/verify-dashboard.sh` + `scripts/kibana-lib.sh`. Runs four checks against a deployed dashboard: saved-objects export round-trip, Lens datasource-layer invariants (catches "import-valid but UI-blank" foot-gun), internal dashboard loader (`/internal/dashboards/app/<id>`) renderability, and opt-in `--require-dataset-filter` for integration-submission compliance. Also supports `--expected-panel-types` for regression pinning. Pattern adapted from `/home/cachyos/coding/chatgpt-codex-test`. Smoke-tested live against both deployed dashboards; documented in the `kibana-dashboards` skill.
 
 ## Blockers & decisions pending
+
+- **Security hardening follow-up — MCP key exposure via `claude mcp list`**: During initial MCP setup attempt, the first `gamepulse-mcp` API key was printed verbatim in `claude mcp list` output and exposed to a conversation transcript. That key has been invalidated. A separate properly-scoped key now lives in env var only. `claude mcp list` displaying raw API key values in its output is a design-level issue — future setup flows should either redact or be executed in non-logged contexts. Worth surfacing to Anthropic as a product feedback item.
 
 - **Infrastructure follow-up — pre-command-check allowlist non-functional**: the `allowed_prefixes` list exists in both the bash and Python hooks but non-blocked commands fall through to `exit 0` regardless, so it has no blocking effect. Behaviour preserved verbatim during Linux→Python port. Pending decision: make allowlist enforce (breaking change, risks blocking valid workflows) or remove dead code (documents true behaviour). Review before Phase G.
 - **Infrastructure fix — pre-edit-check absolute-path bug (resolved in Python port)**: exact-match (manifest.yml) and prefix checks (_dev/, packaging/) never fired against absolute paths on either OS in the bash version. Fixed in Python port by stripping cwd prefix before applying checks. Bash scripts still carry the unfixed logic; when Linux migrates to Python hooks, the fix propagates automatically.
