@@ -43,7 +43,7 @@ can still be run directly (they don't rebuild the package from the repo root).
 - `src/host.rs` — once-at-startup hardware snapshot, dGPU selection heuristic
 - `src/config.rs` — config loading, mirrors Python config.py
 - `src/shipper.rs` — ES Bulk API shipper
-- `src/collectors/` — 8 per-subsystem collectors (cpu, gpu_amd, memory, storage, network, power, audio, mangohud)
+- `src/collectors/` — `Collector` trait + platform submodules. Linux collectors live in `src/collectors/linux/` (cpu, gpu_amd, memory, storage, network, power, audio, mangohud); Windows stubs in `src/collectors/windows/` (cpu, gpu, memory, storage, network, power, audio, frame). `src/collectors/mod.rs` cfg-gates the platform module and re-exports via `pub use <platform>::*`.
 
 ### Python collector (legacy reference)
 

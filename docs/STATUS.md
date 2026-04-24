@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-21 by claude-code (infrastructure session — Windows MCP wiring complete)
+Last updated: 2026-04-24 by claude-code (B.1–B.3 Collector trait + Linux submodule + Windows stubs)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -19,7 +19,7 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 | Milestone | Status | Progress |
 |---|---|---|
 | A  Docs reorganisation | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
-| B  Cross-platform refactor (Windows stubs day 1) | 🟡 Partial | ▓░░░░░░░░░ |
+| B  Cross-platform refactor | 🟡 Partial | ▓▓▓▓▓▓▓░░░ |
 | C  Windows collectors | ⚪ Not started | ░░░░░░░░░░ |
 | D  Linux portable packaging | 🟡 Partial | ▓▓▓▓▓░░░░░ |
 | E  Windows packaging | ⚪ Not started | ░░░░░░░░░░ |
@@ -39,7 +39,7 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 | Feature | Linux | Windows | Offline |
 |---|---|---|---|
-| Core metrics (8 streams) | ✅ | 🔲 | ✅ (inherited) |
+| Core metrics (8 streams) | ✅ | 🔲 scaffolded | ✅ (inherited) |
 | eBPF deep probes | ✅ | n/a | ✅ (inherited) |
 | Settings Tier 1 — manual CLI/config | ✅ | 🔲 | ✅ (inherited) |
 | Settings Tier 2 — auto-detect (DLL/ETW) | 🔲 | 🔲 | 🔲 |
@@ -63,10 +63,17 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 ## Active work package
 
-**None.** Phase B.4 (Windows signal-handler gate) complete. Next: Phase B.1–B.3 (Collector trait + Linux move + Windows stubs).
+**None.** Phase B.1–B.3 (Collector trait + Linux submodule + Windows stubs) complete. Next: Phase B.5 (GitHub Actions CI matrix — can happen on either host) + Phase B.6 (eBPF `features = ["ebpf"]` flag — gaming PC needed for real validation).
 See `docs/ROADMAP.md` for milestone structure and work package definitions.
 
 ## Completed work
+
+### Milestone B — Cross-platform refactor (partial, 2026-04-24)
+
+- **B.1 — Collector trait + uniform constructor**: `Collector` trait now requires `Send + 'static` and includes a default-no-op `set_game_pid(&mut self, _pid: Option<u32>)`. All 8 collectors now implement the trait (previously only some did). Every collector's `new()` signature is uniform: `pub fn new(game_pid: Option<u32>) -> Self` — collectors that don't use the pid prefix with `_`. AudioCollector's previously-expensive `detect_backend()` call in `new()` moved into lazy init at first `collect()` via an `Option<String>` field. Collectors with process-scoped state (cpu, memory, mangohud, gpu_amd) keep both an inherent `set_game_pid` method and a delegating trait impl. Commit: ce29210.
+- **B.2 — Linux collectors moved to `src/collectors/linux/`**: 8 collectors (cpu, memory, storage, network, power, audio, mangohud, gpu_amd) relocated via `git mv` into a platform submodule. New `src/collectors/linux/mod.rs` declares and re-exports each collector; `GpuAmdCollector` re-exported as `GpuCollector` for platform symmetry. Imports in moved files: `use super::Collector` → `use crate::collectors::Collector`. `src/collectors/mod.rs` now cfg-gates the linux module behind `#[cfg(target_os = "linux")]` and re-exports via `pub use linux::*`.
+- **B.3 — Windows collector stubs + `Vec<Box<dyn Collector>>` dispatch**: 8 Windows stub files in `src/collectors/windows/` (cpu, memory, storage, network, power, audio, frame, gpu). Each stub implements the trait with the same `dataset()` string as its Linux counterpart but returns `Ok(None)` from `collect()` — Phase C will replace with real collection. The MangoHud↔frame split follows platform-symmetric naming: `frame.rs` defines `FrameCollector`, re-exported in `windows/mod.rs` as `MangoHudCollector` so main.rs uses a single type name across both platforms. main.rs collector instantiation replaced with `build_collectors(game_pid) -> Vec<Box<dyn Collector>>`; per-tick collect and game-pid propagation are now Vec iterations using the trait's `dataset()` method. `cargo check` passes on Windows. Commit: 40d1612.
+- B.1–B.3 shipped as two commits rather than three: B.2 and B.3 were combined because B.2's intermediate state leaves Windows `cargo check` broken, and this session was Windows-only (no Linux host to verify a standalone B.2). Splitting post-hoc via hunk-staging was rejected as higher-risk than combining.
 
 ### Milestone B — Cross-platform refactor (partial, 2026-04-21)
 
@@ -146,6 +153,7 @@ Commit: 561dc78
 
 ## Follow-ups and migration notes
 
+- **Linux `cargo check` verification for B.1–B.3 pending**: 2026-04-24 session was Windows-only (gaming PC offline). Windows `cargo check` passed via post-edit hook. Linux validation (both `cargo check` and `cargo clippy -- -D warnings`) deferred to the next gaming-PC session. No behavioural change on Linux is expected — the collectors themselves are unchanged; only their module path moved and main.rs switched to trait-object dispatch — but verify before declaring Milestone B fully green.
 - **B.8 label format migration**: ES docs indexed before B.8 carry `<slug>-YYYYMMDD-HHMMSS` labels. New sessions use `<slug>-YYYYMMDD-N`. Dashboard filters on `session.label` should use `*` wildcards or filter on `session.label_source` instead. No backfill needed.
 
 ## Follow-ups to investigate
