@@ -182,14 +182,14 @@ fn pulseaudio_stats() -> Option<PulseaudioStats> {
 // ── Collector ─────────────────────────────────────────────────────────────────
 
 pub struct AudioCollector {
-    backend: String,
+    backend: Option<String>,
     prev_xruns: Option<i64>,
 }
 
 impl AudioCollector {
-    pub fn new() -> Self {
+    pub fn new(_game_pid: Option<u32>) -> Self {
         AudioCollector {
-            backend: detect_backend(),
+            backend: None,
             prev_xruns: None,
         }
     }
@@ -201,10 +201,15 @@ impl Collector for AudioCollector {
     }
 
     fn collect(&mut self) -> Result<Option<Value>> {
-        let mut audio = serde_json::Map::new();
-        audio.insert("backend".to_string(), Value::from(self.backend.clone()));
+        if self.backend.is_none() {
+            self.backend = Some(detect_backend());
+        }
+        let backend = self.backend.as_deref().unwrap_or("unknown");
 
-        if self.backend == "pipewire" {
+        let mut audio = serde_json::Map::new();
+        audio.insert("backend".to_string(), Value::from(backend.to_string()));
+
+        if backend == "pipewire" {
             if let Some(stats) = pipewire_stats() {
                 let xruns_total = stats.xruns;
                 if let Some(prev) = self.prev_xruns {
@@ -218,7 +223,7 @@ impl Collector for AudioCollector {
                     audio.insert("latency_ms".to_string(), Value::from(lat));
                 }
             }
-        } else if self.backend == "pulseaudio" {
+        } else if backend == "pulseaudio" {
             if let Some(stats) = pulseaudio_stats() {
                 if let Some(hz) = stats.sample_rate_hz {
                     audio.insert("sample_rate_hz".to_string(), Value::from(hz));

@@ -226,6 +226,10 @@ impl Collector for CpuCollector {
         "gamepulse.cpu"
     }
 
+    fn set_game_pid(&mut self, pid: Option<u32>) {
+        self.game_pid = pid;
+    }
+
     fn collect(&mut self) -> Result<Option<Value>> {
         let snap = ProcStatSnapshot::read()?;
 

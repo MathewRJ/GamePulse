@@ -186,6 +186,10 @@ impl Collector for GpuAmdCollector {
         "gamepulse.gpu"
     }
 
+    fn set_game_pid(&mut self, pid: Option<u32>) {
+        self.game_pid = pid;
+    }
+
     fn collect(&mut self) -> Result<Option<Value>> {
         let device = match &self.card_path {
             Some(p) => p.clone(),

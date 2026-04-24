@@ -466,7 +466,7 @@ async fn dry_run() -> Result<()> {
         None => tracing::warn!("Memory collector returned None"),
     }
 
-    let mut stor = collectors::storage::StorageCollector::new();
+    let mut stor = collectors::storage::StorageCollector::new(None);
     let _ = stor.collect();
     std::thread::sleep(std::time::Duration::from_secs(1));
     match stor.collect()? {
@@ -474,7 +474,7 @@ async fn dry_run() -> Result<()> {
         None => tracing::warn!("Storage collector returned None"),
     }
 
-    let mut net = collectors::network::NetworkCollector::new();
+    let mut net = collectors::network::NetworkCollector::new(None);
     let _ = net.collect();
     std::thread::sleep(std::time::Duration::from_secs(1));
     match net.collect()? {
@@ -482,19 +482,19 @@ async fn dry_run() -> Result<()> {
         None => tracing::warn!("Network collector returned None"),
     }
 
-    let mut pwr = collectors::power::PowerCollector::new();
+    let mut pwr = collectors::power::PowerCollector::new(None);
     match pwr.collect()? {
         Some(doc) => tracing::info!("Power sample:\n{}", serde_json::to_string_pretty(&doc)?),
         None => tracing::info!("Power: no sources on this hardware"),
     }
 
-    let mut aud = collectors::audio::AudioCollector::new();
+    let mut aud = collectors::audio::AudioCollector::new(None);
     match aud.collect()? {
         Some(doc) => tracing::info!("Audio sample:\n{}", serde_json::to_string_pretty(&doc)?),
         None => tracing::warn!("Audio returned None"),
     }
 
-    let mut mhud = collectors::mangohud::MangoHudCollector::new();
+    let mut mhud = collectors::mangohud::MangoHudCollector::new(None);
     match mhud.collect()? {
         Some(doc) => tracing::info!("MangoHud sample:\n{}", serde_json::to_string_pretty(&doc)?),
         None => tracing::info!("MangoHud: no log present (game not running)"),
@@ -541,11 +541,11 @@ async fn main() -> Result<()> {
     // Instantiate all 8 collectors
     let mut cpu = collectors::cpu::CpuCollector::new(None);
     let mut mem = collectors::memory::MemoryCollector::new(None);
-    let mut stor = collectors::storage::StorageCollector::new();
-    let mut net = collectors::network::NetworkCollector::new();
-    let mut pwr = collectors::power::PowerCollector::new();
-    let mut aud = collectors::audio::AudioCollector::new();
-    let mut mhud = collectors::mangohud::MangoHudCollector::new();
+    let mut stor = collectors::storage::StorageCollector::new(None);
+    let mut net = collectors::network::NetworkCollector::new(None);
+    let mut pwr = collectors::power::PowerCollector::new(None);
+    let mut aud = collectors::audio::AudioCollector::new(None);
+    let mut mhud = collectors::mangohud::MangoHudCollector::new(None);
     let mut gpu = collectors::gpu_amd::GpuAmdCollector::new(None);
 
     // Session manager — CLI --label overrides [session].label in config.

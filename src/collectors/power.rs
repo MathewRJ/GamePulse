@@ -124,7 +124,7 @@ pub struct PowerCollector {
 }
 
 impl PowerCollector {
-    pub fn new() -> Self {
+    pub fn new(_game_pid: Option<u32>) -> Self {
         PowerCollector {
             battery_path: find_battery(),
             ac_path: find_ac(),

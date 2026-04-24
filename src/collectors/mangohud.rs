@@ -84,9 +84,9 @@ pub struct MangoHudCollector {
 }
 
 impl MangoHudCollector {
-    pub fn new() -> Self {
+    pub fn new(game_pid: Option<u32>) -> Self {
         MangoHudCollector {
-            game_pid: None,
+            game_pid,
             log_dir: find_log_dir(),
             log_path: None,
             file_pos: 0,
@@ -191,6 +191,10 @@ impl MangoHudCollector {
 impl Collector for MangoHudCollector {
     fn dataset(&self) -> &'static str {
         "gamepulse.frame"
+    }
+
+    fn set_game_pid(&mut self, pid: Option<u32>) {
+        self.game_pid = pid;
     }
 
     fn collect(&mut self) -> Result<Option<Value>> {

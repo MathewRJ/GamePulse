@@ -143,7 +143,7 @@ pub struct StorageCollector {
 }
 
 impl StorageCollector {
-    pub fn new() -> Self {
+    pub fn new(_game_pid: Option<u32>) -> Self {
         StorageCollector {
             prev: None,
             prev_time: None,

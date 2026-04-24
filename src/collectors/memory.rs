@@ -99,6 +99,10 @@ impl Collector for MemoryCollector {
         "gamepulse.memory"
     }
 
+    fn set_game_pid(&mut self, pid: Option<u32>) {
+        self.game_pid = pid;
+    }
+
     fn collect(&mut self) -> Result<Option<Value>> {
         let info = read_meminfo();
 

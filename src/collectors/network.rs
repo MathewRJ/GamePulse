@@ -119,7 +119,7 @@ pub struct NetworkCollector {
 }
 
 impl NetworkCollector {
-    pub fn new() -> Self {
+    pub fn new(_game_pid: Option<u32>) -> Self {
         NetworkCollector {
             prev_stats: None,
             prev_time: None,
