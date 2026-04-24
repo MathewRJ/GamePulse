@@ -1,4 +1,4 @@
-> **Note:** This document describes the original strategic scope. The tactical execution plan has evolved — see `docs/ROADMAP.md` for the current phase/work package structure and `docs/STATUS.md` for progress. Key updates since this document was written: (1) Windows collectors pulled forward ahead of the elastic/integrations PR given 92% of PC gamers are on Windows; (2) an `offline` git branch has been planned for air-gapped benchmarkers/reviewers; (3) per-session settings capture (FSR/DLSS/frame-gen/RT/etc.) added as a three-tier feature family.
+> **Note:** This document describes the original strategic scope. The tactical execution plan has evolved — see `docs/ROADMAP.md` for the current phase/work package structure and `docs/STATUS.md` for progress. Key updates since this document was written: (1) Windows collectors pulled forward ahead of the elastic/integrations PR given 92% of PC gamers are on Windows; (2) an `offline` git branch has been planned for air-gapped benchmarkers/reviewers; (3) per-session settings capture (FSR/DLSS/frame-gen/RT/etc.) added as a three-tier feature family; (4) game detection generalised from Steam-only to any PC launcher — Phase B2 adds first-class Lutris/Heroic/Bottles support plus a user-specified target mode for long-tail launchers (Battle.net, EA, Ubisoft, Rockstar, etc.). GamePulse targets PC games regardless of which launcher started them. Passages below that reference Steam-specific detection sources predate this shift and reflect Phase 1's initial implementation; the generalisation lands in B2.
 
 ---
 
@@ -1115,8 +1115,9 @@ a driver update or a background process.
   Vulkan driver name       Critical       vulkaninfo           vulkaninfo
   (radv, anv, etc.)                                            
 
-  Proton version           Critical       \$PROTON_VERSION /   N/A
-                                          steam compat         
+  Proton version           Critical       PROTONPATH /         N/A
+                                          STEAM_COMPAT_\* env   
+                                          (any launcher)       
 
   Wine version (via        High           wine \--version      N/A
   Proton)                                                      
@@ -1162,8 +1163,9 @@ meaningless.
   -----------------------------------------------------------------------------------------------
   **Metric**                         **Priority**   **Source (Linux)**      **Source (Windows)**
   ---------------------------------- -------------- ----------------------- ---------------------
-  Game name (auto-detected)          Critical       Process name + Steam    Process name + Steam
-                                                    API                     API
+  Game name (auto-detected)          Critical       Steam API / Lutris /    Steam / process
+                                                    Heroic / Bottles /      registry / user-
+                                                    user-specified target   specified target
 
   Steam App ID                       Critical       Steam client API / env  Steam client API /
                                                                             registry

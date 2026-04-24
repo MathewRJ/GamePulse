@@ -20,10 +20,12 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 |---|---|---|
 | A  Docs reorganisation | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
 | B  Cross-platform refactor | 🟡 Partial | ▓▓▓▓▓▓▓░░░ |
-| C  Windows collectors | ⚪ Not started | ░░░░░░░░░░ |
+| B2 Launcher-agnostic game detection | ⚪ Not started | ░░░░░░░░░░ |
+| B3 Automatic game detection (TBD) | ⚪ Not started | ░░░░░░░░░░ |
+| C  Windows collectors | 🔒 Blocked on B2 | ░░░░░░░░░░ |
 | D  Linux portable packaging | 🟡 Partial | ▓▓▓▓▓░░░░░ |
 | E  Windows packaging | ⚪ Not started | ░░░░░░░░░░ |
-| F  Cross-platform parity verification (M2) | 🔒 Blocked on C+E | — |
+| F  Cross-platform parity verification (M2) | 🔒 Blocked on B2+C+E | — |
 | G  elastic/integrations PR (M4) | 🔒 Blocked on F | — |
 
 ## At a glance — offline branch (not yet forked)

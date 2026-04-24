@@ -7,6 +7,8 @@ This file defines the milestones and work packages for GamePulse. It describes s
 - Main branch (cross-platform cloud):
   - A  Docs reorganisation
   - B  Cross-platform refactor (Windows stubs from day 1)
+  - B2 Launcher-agnostic game detection
+  - B3 Automatic game detection (TBD)
   - C  Windows collectors
   - D  Linux portable packaging
   - E  Windows packaging
@@ -42,6 +44,45 @@ Established `docs/STATUS.md` as single source of truth; stripped planning docs; 
 | B.6 | eBPF as `features = ["ebpf"]` flag, Linux-only |
 | B.7 | Settings capture schema (manual Tier 1) — new `gamepulse.settings.*` fields on session stream; CLI flags; config section |
 | B.8 | Session label counter — change auto-generated label from `-HHMMSS` to `-N` per-game-per-day counter |
+
+---
+
+## Phase B2 — Launcher-agnostic game detection
+
+**Goal:** Generalise game detection beyond Steam. Add first-class support for Lutris, Heroic, and Bottles on Linux. Add user-specified target mode for long-tail launchers (Battle.net, EA, Ubisoft, Rockstar, Epic on Linux via Heroic, and anything else). Generalise Proton/Wine detection to work regardless of which launcher started the process (incl. umu-launcher). Ensure Phase C Windows collectors inherit the generalised detection model rather than baking new Steam-specific assumptions.
+
+| WP | Deliverable |
+|---|---|
+| B2.1 | `Target` enum in `src/session.rs` wrapping Steam/Lutris/Heroic/Bottles/UserSpecified variants; refactor current Steam-only detection as one source of many |
+| B2.2 | Schema generalisation: `gamepulse.game.steam_app_id` becomes optional; add `gamepulse.game.source` (steam\|lutris\|heroic\|bottles\|user_specified\|auto_detected) and `gamepulse.game.launcher` (human-readable) fields. Backwards-compatible addition. |
+| B2.3 | Lutris detection via `~/.local/share/lutris/games/*.yml` config parse |
+| B2.4 | Heroic detection via `~/.config/heroic/` JSON config parse |
+| B2.5 | Bottles detection via Bottles' config format |
+| B2.6 | Proton/Wine detection generalised via environment variables (`WINEPREFIX`, `PROTONPATH`, `STEAM_COMPAT_*`, `UMU_ID`). Works for Steam-launched Proton, Lutris-launched Wine, Heroic-launched Wine, umu-launcher, and raw Wine invocations. |
+| B2.7 | User-specified target CLI: `--target-process <name>`, `--target-pid <pid>`, `gamepulse run <command>`. Config-file equivalent in `[session]` section. |
+| B2.8 | Dashboard query updates: existing dashboards that filter on `steam_app_id` switch to filtering on a launcher-agnostic identifier. Minimum-churn updates only. |
+
+---
+
+## Phase B3 — Automatic game detection (scope + timing TBD)
+
+**Goal:** Ship auto-detection so non-technical users don't have to configure launcher pre-launch hooks or specify targets manually. Agent runs in background, notices when a game starts, begins collection automatically.
+
+**Scope: NOT COMMITTED.** This phase is placeheld to reserve roadmap position. Work packages are sketched below but no implementation happens until Phase B2 ships and real usage signal exists. The decision to commit Phase B3 depends on whether B2's manual-target UX turns out to be a genuine pain point for users or merely a theoretical one.
+
+**Architectural note:** Inspired by behavioural-classification patterns from EDR systems (e.g. Elastic Defend) — specifically the insight that "is this process X-type" is better answered by observing kernel-level runtime behaviour than by matching allowlists. Implementation is a lightweight in-agent classifier reusing GamePulse's existing eBPF infrastructure (gpu_sched, gpu_submit, page fault probes). **No third-party EDR dependency, no Elastic Defend integration** — the pattern is borrowed, the product is not. Licensing, performance overhead, installation friction, and data-model pollution all rule out literal reuse of Defend.
+
+Sketch of likely work packages (not committed):
+- Per-PID signal aggregation on top of existing eBPF probes (rolling-window GPU submission rate)
+- Graphics API detection via library load events (libvulkan, libGL, d3d11)
+- Fullscreen state + input device activity signals (X11/Wayland window state, /dev/input activity)
+- Scoring function combining signals with tunable thresholds
+- Allowlist for known non-games (video apps, 3D modelling tools)
+- Validation dataset from real usage (own gaming + non-gaming sessions)
+- Service/daemon mode + tray/notification UI for auto-start UX
+- User feedback mechanism for misclassifications
+
+Windows equivalent uses ETW providers (DxgKrnl, Win32k, PresentMon) for the same signals.
 
 ---
 
