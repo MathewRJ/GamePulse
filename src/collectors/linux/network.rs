@@ -20,9 +20,7 @@ use anyhow::Result;
 use serde_json::{json, Value};
 use std::time::Instant;
 
-const SKIP_PREFIXES: &[&str] = &[
-    "lo", "docker", "br-", "veth", "virbr", "tun", "tap", "vlan",
-];
+const SKIP_PREFIXES: &[&str] = &["lo", "docker", "br-", "veth", "virbr", "tun", "tap", "vlan"];
 
 // ── /proc/net/dev ─────────────────────────────────────────────────────────────
 
@@ -52,7 +50,15 @@ fn parse_net_dev() -> Vec<(String, IfaceStats)> {
         let rx_packets: i64 = parts[2].parse().unwrap_or(0);
         let tx_bytes: i64 = parts[9].parse().unwrap_or(0);
         let tx_packets: i64 = parts[10].parse().unwrap_or(0);
-        result.push((iface, IfaceStats { rx_bytes, rx_packets, tx_bytes, tx_packets }));
+        result.push((
+            iface,
+            IfaceStats {
+                rx_bytes,
+                rx_packets,
+                tx_bytes,
+                tx_packets,
+            },
+        ));
     }
     result
 }
@@ -182,8 +188,7 @@ impl Collector for NetworkCollector {
         let tx_bps = (cur.tx_bytes - prv.tx_bytes) as f64 / dt;
         let rx_pps = (cur.rx_packets - prv.rx_packets) as f64 / dt;
         let tx_pps = (cur.tx_packets - prv.tx_packets) as f64 / dt;
-        let retransmits_per_sec =
-            (retransmits_total - self.prev_retransmits) as f64 / dt;
+        let retransmits_per_sec = (retransmits_total - self.prev_retransmits) as f64 / dt;
 
         let rx_mbps = (rx_bps / 1_048_576.0 * 1000.0).round() / 1000.0;
         let tx_mbps = (tx_bps / 1_048_576.0 * 1000.0).round() / 1000.0;

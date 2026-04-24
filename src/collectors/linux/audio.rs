@@ -13,7 +13,7 @@
 /// collect() always returns Some — backend is always included even if stats fail.
 use crate::collectors::Collector;
 use anyhow::Result;
-use serde_json::{Value};
+use serde_json::Value;
 use std::io::Read;
 use std::time::{Duration, Instant};
 
@@ -68,7 +68,9 @@ fn number_before(line: &str, keyword: &str) -> Option<i64> {
         .map(|i| i + 1)
         .unwrap_or(0);
     let s = &before[num_start..];
-    if s.is_empty() { return None; }
+    if s.is_empty() {
+        return None;
+    }
     s.parse().ok()
 }
 
@@ -82,10 +84,16 @@ fn quant_rate(line: &str) -> Option<(i64, i64)> {
         .rfind(|c: char| !c.is_ascii_digit())
         .map(|i| i + 1)
         .unwrap_or(0);
-    let n2_end = after.find(|c: char| !c.is_ascii_digit()).unwrap_or(after.len());
+    let n2_end = after
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(after.len());
     let n1: i64 = before[n1_start..].parse().ok()?;
     let n2: i64 = after[..n2_end].parse().ok()?;
-    if n1 > 0 && n2 > 0 { Some((n1, n2)) } else { None }
+    if n1 > 0 && n2 > 0 {
+        Some((n1, n2))
+    } else {
+        None
+    }
 }
 
 /// Extract integer before "Hz" in `line`.
@@ -98,7 +106,9 @@ fn hz_value(line: &str) -> Option<i64> {
         .map(|i| i + 1)
         .unwrap_or(0);
     let s = &before[num_start..];
-    if s.is_empty() { return None; }
+    if s.is_empty() {
+        return None;
+    }
     s.parse().ok()
 }
 
@@ -151,15 +161,17 @@ fn pipewire_stats() -> Option<PipewireStats> {
         if latency_ms.is_none() {
             if let Some((quant, rate)) = quant_rate(line) {
                 if rate > 0 {
-                    latency_ms = Some(
-                        ((quant as f64 / rate as f64 * 1000.0) * 100.0).round() / 100.0,
-                    );
+                    latency_ms =
+                        Some(((quant as f64 / rate as f64 * 1000.0) * 100.0).round() / 100.0);
                 }
             }
         }
     }
 
-    Some(PipewireStats { xruns: total_xruns, latency_ms })
+    Some(PipewireStats {
+        xruns: total_xruns,
+        latency_ms,
+    })
 }
 
 struct PulseaudioStats {
@@ -176,7 +188,11 @@ fn pulseaudio_stats() -> Option<PulseaudioStats> {
             }
         }
     }
-    if sample_rate_hz.is_some() { Some(PulseaudioStats { sample_rate_hz }) } else { None }
+    if sample_rate_hz.is_some() {
+        Some(PulseaudioStats { sample_rate_hz })
+    } else {
+        None
+    }
 }
 
 // ── Collector ─────────────────────────────────────────────────────────────────

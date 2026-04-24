@@ -49,8 +49,16 @@ fn encode_base64(input: &[u8]) -> String {
         let n = (b0 << 16) | (b1 << 8) | b2;
         out.push(ALPHABET[(n >> 18) as usize] as char);
         out.push(ALPHABET[((n >> 12) & 0x3f) as usize] as char);
-        out.push(if chunk.len() > 1 { ALPHABET[((n >> 6) & 0x3f) as usize] as char } else { '=' });
-        out.push(if chunk.len() > 2 { ALPHABET[(n & 0x3f) as usize] as char } else { '=' });
+        out.push(if chunk.len() > 1 {
+            ALPHABET[((n >> 6) & 0x3f) as usize] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            ALPHABET[(n & 0x3f) as usize] as char
+        } else {
+            '='
+        });
     }
     out
 }
@@ -72,7 +80,11 @@ pub async fn ping(config: &Config) -> Result<()> {
     let status = resp.status();
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
-        anyhow::bail!("ES ping returned {}: {}", status, &body[..body.len().min(200)]);
+        anyhow::bail!(
+            "ES ping returned {}: {}",
+            status,
+            &body[..body.len().min(200)]
+        );
     }
 
     let body: Value = resp.json().await.context("parsing ES ping response")?;
@@ -95,7 +107,11 @@ pub async fn ping(config: &Config) -> Result<()> {
 ///   metrics-gamepulse.<dataset>-default
 pub async fn ship(config: &Config, docs: Vec<Value>) -> Result<ShipResult> {
     if docs.is_empty() {
-        return Ok(ShipResult { attempted: 0, succeeded: 0, failed: 0 });
+        return Ok(ShipResult {
+            attempted: 0,
+            succeeded: 0,
+            failed: 0,
+        });
     }
 
     let attempted = docs.len();
@@ -132,7 +148,11 @@ pub async fn ship(config: &Config, docs: Vec<Value>) -> Result<ShipResult> {
     let status = resp.status();
     if !status.is_success() {
         let text = resp.text().await.unwrap_or_default();
-        anyhow::bail!("ES bulk returned {}: {}", status, &text[..text.len().min(500)]);
+        anyhow::bail!(
+            "ES bulk returned {}: {}",
+            status,
+            &text[..text.len().min(500)]
+        );
     }
 
     let resp_body: Value = resp.json().await.context("parsing bulk response")?;
@@ -158,7 +178,11 @@ pub async fn ship(config: &Config, docs: Vec<Value>) -> Result<ShipResult> {
 
     let succeeded = attempted - failed;
     debug!("shipped {}/{} docs", succeeded, attempted);
-    Ok(ShipResult { attempted, succeeded, failed })
+    Ok(ShipResult {
+        attempted,
+        succeeded,
+        failed,
+    })
 }
 
 /// Request an immediate transform sync via POST /_transform/{id}/_schedule_now.

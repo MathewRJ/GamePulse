@@ -86,13 +86,19 @@ fn os_info() -> Map<String, Value> {
 
     // kernel version from uname
     if let Ok(uname) = std::fs::read_to_string("/proc/sys/kernel/osrelease") {
-        m.insert("kernel".to_string(), Value::String(uname.trim().to_string()));
+        m.insert(
+            "kernel".to_string(),
+            Value::String(uname.trim().to_string()),
+        );
     }
 
     if let Some(name) = release.get("NAME").or_else(|| release.get("PRETTY_NAME")) {
         m.insert("name".to_string(), Value::String(name.clone()));
     }
-    if let Some(version) = release.get("VERSION_ID").or_else(|| release.get("BUILD_ID")) {
+    if let Some(version) = release
+        .get("VERSION_ID")
+        .or_else(|| release.get("BUILD_ID"))
+    {
         m.insert("version".to_string(), Value::String(version.clone()));
     }
     if let Some(id) = release.get("ID") {
@@ -162,7 +168,11 @@ fn gpu_info() -> Map<String, Value> {
         .filter(|p| {
             p.file_name()
                 .and_then(|n| n.to_str())
-                .map(|n| n.len() == 5 && n.starts_with("card") && n[4..].chars().all(|c| c.is_ascii_digit()))
+                .map(|n| {
+                    n.len() == 5
+                        && n.starts_with("card")
+                        && n[4..].chars().all(|c| c.is_ascii_digit())
+                })
                 .unwrap_or(false)
         })
         .collect();
@@ -178,8 +188,12 @@ fn gpu_info() -> Map<String, Value> {
         if let Some(v) = read_str(vendor_path.to_str().unwrap_or("")) {
             if matches!(v.as_str(), "0x1002" | "0x10de" | "0x8086") {
                 // For NVIDIA/Intel there's typically only one; for AMD pick by VRAM.
-                let vram = read_int(card.join("device/mem_info_vram_total").to_str().unwrap_or(""))
-                    .unwrap_or(0);
+                let vram = read_int(
+                    card.join("device/mem_info_vram_total")
+                        .to_str()
+                        .unwrap_or(""),
+                )
+                .unwrap_or(0);
                 if best_card.is_none() || vram > best_vram {
                     best_vram = vram;
                     best_card = Some(card.clone());
@@ -228,7 +242,10 @@ fn enrich_amd(m: &mut Map<String, Value>) {
             }
             if trimmed.starts_with("driverVersion") && !m.contains_key("driver_version") {
                 if let Some((_, v)) = trimmed.split_once('=') {
-                    m.insert("driver_version".to_string(), Value::String(v.trim().to_string()));
+                    m.insert(
+                        "driver_version".to_string(),
+                        Value::String(v.trim().to_string()),
+                    );
                 }
             }
             if trimmed.starts_with("driverName") && !m.contains_key("vulkan_driver") {
@@ -278,7 +295,10 @@ fn enrich_nvidia(m: &mut Map<String, Value>) {
     let query = "name,memory.total,driver_version";
     if let Some(out) = run_cmd(
         "nvidia-smi",
-        &[&format!("--query-gpu={}", query), "--format=csv,noheader,nounits"],
+        &[
+            &format!("--query-gpu={}", query),
+            "--format=csv,noheader,nounits",
+        ],
         5000,
     ) {
         let line = out.lines().next().unwrap_or("").trim().to_string();
@@ -291,10 +311,16 @@ fn enrich_nvidia(m: &mut Map<String, Value>) {
                 m.insert("vram_mb".to_string(), Value::from(vram));
             }
             if !parts[2].is_empty() {
-                m.insert("driver_version".to_string(), Value::String(parts[2].to_string()));
+                m.insert(
+                    "driver_version".to_string(),
+                    Value::String(parts[2].to_string()),
+                );
             }
         }
-        m.insert("vulkan_driver".to_string(), Value::String("nvidia".to_string()));
+        m.insert(
+            "vulkan_driver".to_string(),
+            Value::String("nvidia".to_string()),
+        );
     }
 }
 
@@ -411,9 +437,7 @@ fn collect_monitors() -> Vec<Value> {
                     let geom = tok.split('+').next().unwrap_or("");
                     let parts: Vec<&str> = geom.split('x').collect();
                     if parts.len() == 2 {
-                        if let (Ok(w), Ok(h)) =
-                            (parts[0].parse::<i64>(), parts[1].parse::<i64>())
-                        {
+                        if let (Ok(w), Ok(h)) = (parts[0].parse::<i64>(), parts[1].parse::<i64>()) {
                             m.insert("resolution_h".to_string(), Value::from(w));
                             m.insert("resolution_v".to_string(), Value::from(h));
                         }
@@ -465,9 +489,7 @@ fn collect_monitors() -> Vec<Value> {
             m.insert("vrr_capable".to_string(), Value::Bool(true));
         }
         // FreeSync or G-Sync Compatible properties
-        if (lower.contains("freesync") || lower.contains("gsync"))
-            && lower.ends_with(": 1")
-        {
+        if (lower.contains("freesync") || lower.contains("gsync")) && lower.ends_with(": 1") {
             m.insert("vrr_capable".to_string(), Value::Bool(true));
         }
         // Variable Refresh Rate currently active
@@ -529,10 +551,9 @@ pub fn collect_snapshot() -> Value {
 
     let mut doc = json!({ "host": { "os": os } });
     if !hardware.is_empty() {
-        doc.as_object_mut().unwrap().insert(
-            "gamepulse".to_string(),
-            json!({ "hardware": hardware }),
-        );
+        doc.as_object_mut()
+            .unwrap()
+            .insert("gamepulse".to_string(), json!({ "hardware": hardware }));
     }
     doc
 }

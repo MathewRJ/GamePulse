@@ -39,10 +39,7 @@ impl ProcStatSnapshot {
                 continue; // skip aggregate line; compute from per-core
             }
             // fields: user nice system idle iowait irq softirq steal [guest guest_nice]
-            let fields: Vec<u64> = parts
-                .take(8)
-                .map(|s| s.parse().unwrap_or(0))
-                .collect();
+            let fields: Vec<u64> = parts.take(8).map(|s| s.parse().unwrap_or(0)).collect();
             if fields.len() < 5 {
                 continue;
             }
@@ -172,9 +169,7 @@ fn temperature_c() -> Option<f64> {
             for label_path in labels {
                 let label = read_str(label_path.to_str()?).unwrap_or_default();
                 if label.contains("Tdie") || label.contains("Package") || label.contains("Tctl") {
-                    let input_path = label_path
-                        .to_string_lossy()
-                        .replace("_label", "_input");
+                    let input_path = label_path.to_string_lossy().replace("_label", "_input");
                     if let Some(v) = read_int(&input_path) {
                         return Some((v as f64 / 1000.0 * 10.0).round() / 10.0);
                     }
@@ -213,7 +208,10 @@ pub struct CpuCollector {
 
 impl CpuCollector {
     pub fn new(game_pid: Option<u32>) -> Self {
-        CpuCollector { prev: None, game_pid }
+        CpuCollector {
+            prev: None,
+            game_pid,
+        }
     }
 
     pub fn set_game_pid(&mut self, pid: Option<u32>) {

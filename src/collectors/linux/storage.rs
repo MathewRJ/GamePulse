@@ -51,9 +51,7 @@ fn parse_diskstats() -> DiskStats {
                 continue;
             }
             let dev = parts[2].to_string();
-            let stats: Vec<i64> = parts[3..].iter()
-                .map(|s| s.parse().unwrap_or(0))
-                .collect();
+            let stats: Vec<i64> = parts[3..].iter().map(|s| s.parse().unwrap_or(0)).collect();
             result.push((dev, stats));
         }
     }
@@ -181,7 +179,11 @@ impl Collector for StorageCollector {
 
         // Prefer the detected game device; fall back to first real device.
         let mut dev = self.device.clone();
-        if dev.as_deref().map(|d| get_stats(&current, d).is_none()).unwrap_or(true) {
+        if dev
+            .as_deref()
+            .map(|d| get_stats(&current, d).is_none())
+            .unwrap_or(true)
+        {
             dev = first_real_device(&current).map(|s| s.to_string());
         }
 
@@ -209,17 +211,26 @@ impl Collector for StorageCollector {
         let d_read_merges = get(cur, F_READ_MERGES) - get(prv, F_READ_MERGES);
         let d_write_merges = get(cur, F_WRITE_MERGES) - get(prv, F_WRITE_MERGES);
 
-        let read_mbps = ((d_read_sectors as f64 * SECTOR_BYTES / dt / 1_048_576.0) * 100.0).round() / 100.0;
-        let write_mbps = ((d_write_sectors as f64 * SECTOR_BYTES / dt / 1_048_576.0) * 100.0).round() / 100.0;
+        let read_mbps =
+            ((d_read_sectors as f64 * SECTOR_BYTES / dt / 1_048_576.0) * 100.0).round() / 100.0;
+        let write_mbps =
+            ((d_write_sectors as f64 * SECTOR_BYTES / dt / 1_048_576.0) * 100.0).round() / 100.0;
         let read_iops = (d_read_ios as f64 / dt) as i64;
         let write_iops = (d_write_ios as f64 / dt) as i64;
 
         // int(d_read_ticks * 1000 / d_read_ios) matches Python's int(float) truncation
-        let read_lat_us = if d_read_ios > 0 { d_read_ticks * 1000 / d_read_ios } else { 0 };
-        let write_lat_us = if d_write_ios > 0 { d_write_ticks * 1000 / d_write_ios } else { 0 };
+        let read_lat_us = if d_read_ios > 0 {
+            d_read_ticks * 1000 / d_read_ios
+        } else {
+            0
+        };
+        let write_lat_us = if d_write_ios > 0 {
+            d_write_ticks * 1000 / d_write_ios
+        } else {
+            0
+        };
 
-        let io_wait_pct =
-            (((d_io_ticks as f64 / (dt * 10.0)).min(100.0)) * 10.0).round() / 10.0;
+        let io_wait_pct = (((d_io_ticks as f64 / (dt * 10.0)).min(100.0)) * 10.0).round() / 10.0;
 
         let queue_depth = get(cur, F_IO_IN_PROGRESS);
         let merged_reads = (d_read_merges as f64 / dt) as i64;

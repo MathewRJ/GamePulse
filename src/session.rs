@@ -152,7 +152,9 @@ impl SessionManager {
                 }
                 tracing::info!(
                     "Game detected: {} (app_id={}, pid={}, api={:?}, label={:?})",
-                    game.name, game.steam_app_id, game.pid,
+                    game.name,
+                    game.steam_app_id,
+                    game.pid,
                     game.graphics_api.as_deref().unwrap_or("unknown"),
                     self.label.as_deref().unwrap_or("")
                 );
@@ -305,8 +307,7 @@ fn counter_file_path() -> PathBuf {
         let state_dir = std::env::var("XDG_STATE_HOME")
             .map(PathBuf::from)
             .unwrap_or_else(|_| {
-                let home =
-                    std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+                let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
                 PathBuf::from(home).join(".local/state")
             });
         state_dir.join("gamepulse/session-counters.json")
@@ -334,16 +335,17 @@ fn increment_counter_at(slug: &str, path: &std::path::Path) -> u32 {
 
     if !dir.exists() {
         if let Err(e) = std::fs::create_dir_all(dir) {
-            tracing::warn!("session counter: cannot create dir {}: {}", dir.display(), e);
+            tracing::warn!(
+                "session counter: cannot create dir {}: {}",
+                dir.display(),
+                e
+            );
             return 1;
         }
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(
-                dir,
-                std::fs::Permissions::from_mode(0o700),
-            );
+            let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700));
         }
     }
 
@@ -401,22 +403,16 @@ fn increment_counter_at(slug: &str, path: &std::path::Path) -> u32 {
     }
 
     let key = format!("{}:{}", slug, today);
-    let n = counters
-        .get(&key)
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0)
-        + 1;
+    let n = counters.get(&key).and_then(|v| v.as_u64()).unwrap_or(0) + 1;
     counters.insert(key, Value::from(n));
 
     // Atomic write: write to a tmpfile then rename over the target.
-    let mut tmp_name = std::ffi::OsString::from(
-        path.file_name().unwrap_or_default(),
-    );
+    let mut tmp_name = std::ffi::OsString::from(path.file_name().unwrap_or_default());
     tmp_name.push(".tmp");
     let tmp_path = dir.join(tmp_name);
 
-    let serialised = serde_json::to_string_pretty(&Value::Object(counters))
-        .unwrap_or_else(|_| "{}".to_string());
+    let serialised =
+        serde_json::to_string_pretty(&Value::Object(counters)).unwrap_or_else(|_| "{}".to_string());
     if let Err(e) = std::fs::write(&tmp_path, &serialised) {
         tracing::warn!("session counter: write tmpfile failed: {}", e);
     } else if let Err(e) = std::fs::rename(&tmp_path, path) {
@@ -434,10 +430,7 @@ mod tests {
     use super::*;
 
     fn tmp_counter_path() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "gp-counter-test-{}",
-            uuid::Uuid::new_v4()
-        ));
+        let dir = std::env::temp_dir().join(format!("gp-counter-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         dir.join("session-counters.json")
     }
@@ -480,8 +473,7 @@ mod tests {
         increment_counter_at("new-game", &path);
 
         let contents = std::fs::read_to_string(&path).unwrap();
-        let counters: serde_json::Map<String, Value> =
-            serde_json::from_str(&contents).unwrap();
+        let counters: serde_json::Map<String, Value> = serde_json::from_str(&contents).unwrap();
 
         // Old entry (>30 days) must be gone.
         assert!(
@@ -522,7 +514,11 @@ fn read_environ(pid: u32) -> Option<HashMap<String, String>> {
             map.insert(key, val);
         }
     }
-    if map.is_empty() { None } else { Some(map) }
+    if map.is_empty() {
+        None
+    } else {
+        Some(map)
+    }
 }
 
 // ── ACF game name lookup ───────────────────────────────────────────────────────
@@ -589,7 +585,10 @@ fn detect_graphics_api(env: &HashMap<String, String>) -> (Option<String>, bool) 
     let uses_proton =
         env.contains_key("PROTON_VERSION") || env.contains_key("STEAM_COMPAT_DATA_PATH");
 
-    let dll_overrides = env.get("WINEDLLOVERRIDES").map(|s| s.to_lowercase()).unwrap_or_default();
+    let dll_overrides = env
+        .get("WINEDLLOVERRIDES")
+        .map(|s| s.to_lowercase())
+        .unwrap_or_default();
     if dll_overrides.contains("vkd3d") || env.contains_key("VKD3D_CONFIG") {
         return (Some("dx12_via_vkd3d".to_string()), uses_proton);
     }
@@ -643,7 +642,11 @@ fn dxvk_version_from_env(env: &HashMap<String, String>) -> Option<String> {
             in_v = false;
         }
     }
-    if !version.is_empty() { Some(version) } else { None }
+    if !version.is_empty() {
+        Some(version)
+    } else {
+        None
+    }
 }
 
 // ── Main game scanner ──────────────────────────────────────────────────────────
@@ -712,7 +715,10 @@ fn scan_for_game() -> Option<DetectedGame> {
     let (graphics_api, _uses_proton) = detect_graphics_api(&env);
     let proton_version = proton_version_from_env(&env);
     let dxvk_version = dxvk_version_from_env(&env);
-    let all_pids = all_pids_by_appid.get(&app_id).cloned().unwrap_or_else(|| vec![pid]);
+    let all_pids = all_pids_by_appid
+        .get(&app_id)
+        .cloned()
+        .unwrap_or_else(|| vec![pid]);
 
     Some(DetectedGame {
         name,

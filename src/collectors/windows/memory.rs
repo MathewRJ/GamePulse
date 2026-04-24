@@ -8,7 +8,9 @@ pub struct MemoryCollector {
 
 impl MemoryCollector {
     pub fn new(game_pid: Option<u32>) -> Self {
-        Self { _game_pid: game_pid }
+        Self {
+            _game_pid: game_pid,
+        }
     }
 }
 

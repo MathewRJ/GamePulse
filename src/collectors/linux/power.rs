@@ -60,9 +60,16 @@ fn find_ac() -> Option<String> {
     // Stable ordering: AC* before ADP*, matching Python glob concat order.
     entries.sort_by_key(|p| {
         let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        if name.starts_with("AC") { 0u8 } else { 1 }
+        if name.starts_with("AC") {
+            0u8
+        } else {
+            1
+        }
     });
-    entries.into_iter().next().and_then(|p| p.to_str().map(|s| s.to_string()))
+    entries
+        .into_iter()
+        .next()
+        .and_then(|p| p.to_str().map(|s| s.to_string()))
 }
 
 // ── Battery metrics ───────────────────────────────────────────────────────────
@@ -90,10 +97,7 @@ fn ac_connected(ac: &str) -> Option<bool> {
 
 fn amd_tdp_w() -> Option<f64> {
     let dir = std::fs::read_dir("/sys/class/hwmon").ok()?;
-    let mut hwmons: Vec<_> = dir
-        .filter_map(|e| e.ok())
-        .map(|e| e.path())
-        .collect();
+    let mut hwmons: Vec<_> = dir.filter_map(|e| e.ok()).map(|e| e.path()).collect();
     hwmons.sort();
 
     for hwmon in hwmons {

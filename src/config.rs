@@ -204,8 +204,7 @@ impl Config {
     fn load_from(path: &PathBuf) -> Result<Self> {
         let text = std::fs::read_to_string(path)
             .with_context(|| format!("reading config file: {}", path.display()))?;
-        toml::from_str(&text)
-            .with_context(|| format!("parsing config file: {}", path.display()))
+        toml::from_str(&text).with_context(|| format!("parsing config file: {}", path.display()))
     }
 }
 

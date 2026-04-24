@@ -23,7 +23,11 @@ use std::path::PathBuf;
 // ── CLI ───────────────────────────────────────────────────────────────────────
 
 #[derive(Parser)]
-#[command(name = "gamepulse-agent", version, about = "GamePulse Linux telemetry agent")]
+#[command(
+    name = "gamepulse-agent",
+    version,
+    about = "GamePulse Linux telemetry agent"
+)]
 struct Cli {
     /// Path to config file [default: ~/.config/gamepulse/gamepulse.toml]
     #[arg(short, long, value_name = "PATH")]
@@ -39,7 +43,6 @@ struct Cli {
     label: Option<String>,
 
     // ── Tier 1 settings flags (B.7) ───────────────────────────────────────────
-
     /// Graphics preset: low | medium | high | ultra | custom | unknown
     #[arg(long, value_name = "VALUE")]
     preset: Option<String>,
@@ -197,7 +200,14 @@ fn parse_upscaler(s: &str) -> (String, Option<String>) {
         Some(pos) => {
             let tech = s[..pos].to_string();
             let preset = s[pos + 1..].to_string();
-            (tech, if preset.is_empty() { None } else { Some(preset) })
+            (
+                tech,
+                if preset.is_empty() {
+                    None
+                } else {
+                    Some(preset)
+                },
+            )
         }
         None => (s.to_string(), None),
     }
@@ -296,8 +306,7 @@ impl SessionAccumulators {
             if let Some(gpu) = gp.get("gpu").and_then(|g| g.as_object()) {
                 tick_gpu_util = gpu.get("utilisation_pct").and_then(|v| v.as_f64());
                 if let Some(t) = gpu.get("temperature_c").and_then(|v| v.as_f64()) {
-                    self.peak_gpu_temp =
-                        Some(self.peak_gpu_temp.map_or(t, |p: f64| p.max(t)));
+                    self.peak_gpu_temp = Some(self.peak_gpu_temp.map_or(t, |p: f64| p.max(t)));
                 }
                 if let Some(p) = gpu.get("power_w").and_then(|v| v.as_f64()) {
                     self.peak_gpu_power =
@@ -306,11 +315,9 @@ impl SessionAccumulators {
             }
 
             if let Some(cpu) = gp.get("cpu").and_then(|g| g.as_object()) {
-                tick_cpu_util =
-                    cpu.get("total_utilisation_pct").and_then(|v| v.as_f64());
+                tick_cpu_util = cpu.get("total_utilisation_pct").and_then(|v| v.as_f64());
                 if let Some(t) = cpu.get("temperature_c").and_then(|v| v.as_f64()) {
-                    self.peak_cpu_temp =
-                        Some(self.peak_cpu_temp.map_or(t, |p: f64| p.max(t)));
+                    self.peak_cpu_temp = Some(self.peak_cpu_temp.map_or(t, |p: f64| p.max(t)));
                 }
             }
 
@@ -339,8 +346,7 @@ impl SessionAccumulators {
     }
 
     fn bottleneck_dominant(&self) -> Option<&'static str> {
-        let total =
-            self.gpu_bottleneck_ticks + self.cpu_bottleneck_ticks + self.balanced_ticks;
+        let total = self.gpu_bottleneck_ticks + self.cpu_bottleneck_ticks + self.balanced_ticks;
         if total == 0 {
             return None;
         }
@@ -375,9 +381,9 @@ fn build_summary_doc(
     if !acc.fps_samples.is_empty() {
         let mut sorted = acc.fps_samples.clone();
         sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-        let avg_fps =
-            (acc.fps_samples.iter().sum::<f64>() / acc.fps_samples.len() as f64 * 10.0).round()
-                / 10.0;
+        let avg_fps = (acc.fps_samples.iter().sum::<f64>() / acc.fps_samples.len() as f64 * 10.0)
+            .round()
+            / 10.0;
         summary.insert("avg_fps".to_string(), Value::from(avg_fps));
         let n = sorted.len();
         let low_idx = (n as f64 * 0.01) as usize;
@@ -386,8 +392,7 @@ fn build_summary_doc(
             "low_1pct_fps".to_string(),
             Value::from(sorted[low_idx] as i64),
         );
-        let total_frames =
-            (acc.fps_samples.iter().sum::<f64>() * interval).round() as i64;
+        let total_frames = (acc.fps_samples.iter().sum::<f64>() * interval).round() as i64;
         summary.insert("total_frames".to_string(), Value::from(total_frames));
     }
 
@@ -411,7 +416,10 @@ fn build_summary_doc(
         summary.insert("peak_gpu_power_w".to_string(), Value::from(p));
     }
     if let Some(bn) = acc.bottleneck_dominant() {
-        summary.insert("bottleneck_dominant".to_string(), Value::String(bn.to_string()));
+        summary.insert(
+            "bottleneck_dominant".to_string(),
+            Value::String(bn.to_string()),
+        );
     }
 
     let mut base = session.base_doc(hostname);
@@ -466,7 +474,10 @@ async fn dry_run() -> Result<()> {
     tracing::info!("dry-run mode — validating collectors");
 
     let snapshot = host::collect_snapshot();
-    tracing::info!("Host snapshot:\n{}", serde_json::to_string_pretty(&snapshot)?);
+    tracing::info!(
+        "Host snapshot:\n{}",
+        serde_json::to_string_pretty(&snapshot)?
+    );
 
     let mut collectors = build_collectors(None);
     tracing::info!("Loaded {} collectors", collectors.len());
@@ -489,7 +500,10 @@ async fn dry_run() -> Result<()> {
         }
     }
 
-    tracing::info!("dry-run complete — {} collectors exercised", collectors.len());
+    tracing::info!(
+        "dry-run complete — {} collectors exercised",
+        collectors.len()
+    );
     Ok(())
 }
 
@@ -528,25 +542,32 @@ async fn main() -> Result<()> {
     let session_label = cli.label.or_else(|| cfg.session.label.clone());
 
     // Resolve Tier 1 settings: CLI flags override [session.settings] config.
-    let (upscaler_tech, upscaler_preset) = cli
-        .upscaler
-        .as_deref()
-        .map(parse_upscaler)
-        .unwrap_or((
-            cfg.session.settings.upscaler_tech.clone().unwrap_or_default(),
-            cfg.session.settings.upscaler_preset.clone(),
-        ));
-    let upscaler_tech_ref = if upscaler_tech.is_empty() { None } else { Some(upscaler_tech.as_str()) };
+    let (upscaler_tech, upscaler_preset) = cli.upscaler.as_deref().map(parse_upscaler).unwrap_or((
+        cfg.session
+            .settings
+            .upscaler_tech
+            .clone()
+            .unwrap_or_default(),
+        cfg.session.settings.upscaler_preset.clone(),
+    ));
+    let upscaler_tech_ref = if upscaler_tech.is_empty() {
+        None
+    } else {
+        Some(upscaler_tech.as_str())
+    };
 
-    let preset = cli.preset.as_deref().or(cfg.session.settings.preset.as_deref());
-    let frame_gen_tech = cli
-        .frame_gen
+    let preset = cli
+        .preset
         .as_deref()
-        .or(cfg.session.settings.frame_gen_tech.as_deref());
-    let resolution = cli
-        .resolution
-        .as_deref()
-        .or(cfg.session.settings.render_resolution_output.as_deref());
+        .or(cfg.session.settings.preset.as_deref());
+    let frame_gen_tech =
+        cli.frame_gen
+            .as_deref()
+            .or(cfg.session.settings.frame_gen_tech.as_deref());
+    let resolution =
+        cli.resolution
+            .as_deref()
+            .or(cfg.session.settings.render_resolution_output.as_deref());
     let vsync = cli
         .vsync
         .as_deref()
@@ -561,8 +582,8 @@ async fn main() -> Result<()> {
         .features
         .as_deref()
         .map(|s| s.split(',').map(|f| f.trim().to_string()).collect());
-    let features_active: Option<Vec<String>> = cli_features
-        .or_else(|| cfg.session.settings.features_active.clone());
+    let features_active: Option<Vec<String>> =
+        cli_features.or_else(|| cfg.session.settings.features_active.clone());
 
     let settings_overlay = build_settings_overlay(
         preset,
@@ -582,7 +603,10 @@ async fn main() -> Result<()> {
     tracing::info!(
         "Session {} started{}",
         session.session_id,
-        session_label.as_deref().map(|l| format!(" (label: {l})")).unwrap_or_default()
+        session_label
+            .as_deref()
+            .map(|l| format!(" (label: {l})"))
+            .unwrap_or_default()
     );
 
     // Ship session-start document
@@ -597,10 +621,10 @@ async fn main() -> Result<()> {
     #[cfg(unix)]
     tokio::spawn(async move {
         use tokio::signal::unix::SignalKind;
-        let mut sigterm = tokio::signal::unix::signal(SignalKind::terminate())
-            .expect("SIGTERM handler");
-        let mut sigint = tokio::signal::unix::signal(SignalKind::interrupt())
-            .expect("SIGINT handler");
+        let mut sigterm =
+            tokio::signal::unix::signal(SignalKind::terminate()).expect("SIGTERM handler");
+        let mut sigint =
+            tokio::signal::unix::signal(SignalKind::interrupt()).expect("SIGINT handler");
         tokio::select! {
             _ = sigterm.recv() => tracing::info!("SIGTERM received — shutting down"),
             _ = sigint.recv() => tracing::info!("SIGINT received — shutting down"),
@@ -710,24 +734,21 @@ async fn main() -> Result<()> {
 
     if tick > 0 {
         let duration_s = session_start.elapsed().as_secs();
-        let summary_doc =
-            build_summary_doc(&session, &host_snapshot, &hostname, duration_s, &acc,
-                last_known_game.as_ref());
-        tracing::info!(
-            "Shipping session summary ({}s, {} ticks)",
-            duration_s, tick
+        let summary_doc = build_summary_doc(
+            &session,
+            &host_snapshot,
+            &hostname,
+            duration_s,
+            &acc,
+            last_known_game.as_ref(),
         );
+        tracing::info!("Shipping session summary ({}s, {} ticks)", duration_s, tick);
         if let Err(e) = shipper::ship(&cfg, vec![summary_doc]).await {
             tracing::warn!("Failed to ship summary doc: {}", e);
         } else {
             // Trigger an immediate transform sync so the Games dashboard
             // reflects this session within seconds rather than up to 60 s.
-            if let Err(e) = shipper::trigger_transform_sync(
-                &cfg,
-                "gamepulse-game-timeline",
-            )
-            .await
-            {
+            if let Err(e) = shipper::trigger_transform_sync(&cfg, "gamepulse-game-timeline").await {
                 tracing::warn!("transform schedule_now failed (non-fatal): {}", e);
             }
         }

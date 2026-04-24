@@ -158,7 +158,7 @@ fn parse_current_clock_mhz(device: &Path) -> Option<i64> {
 
 pub struct GpuAmdCollector {
     pub game_pid: Option<u32>,
-    card_path: Option<PathBuf>, // {card}/device — discovered once at init
+    card_path: Option<PathBuf>,  // {card}/device — discovered once at init
     hwmon_path: Option<PathBuf>, // {card}/device/hwmon/hwmonN — discovered once
 }
 
@@ -173,7 +173,11 @@ impl GpuAmdCollector {
         if let Some(ref h) = hwmon_path {
             tracing::info!("GPU hwmon path: {}", h.display());
         }
-        Self { game_pid, card_path, hwmon_path }
+        Self {
+            game_pid,
+            card_path,
+            hwmon_path,
+        }
     }
 
     pub fn set_game_pid(&mut self, pid: Option<u32>) {
@@ -213,7 +217,10 @@ impl Collector for GpuAmdCollector {
             gpu.insert("memory_used_mb".to_string(), Value::from(used / 1_048_576));
         }
         if let Some(total) = read_int(&device.join("mem_info_vram_total")) {
-            gpu.insert("memory_total_mb".to_string(), Value::from(total / 1_048_576));
+            gpu.insert(
+                "memory_total_mb".to_string(),
+                Value::from(total / 1_048_576),
+            );
         }
 
         if let Some(hw) = &self.hwmon_path {
