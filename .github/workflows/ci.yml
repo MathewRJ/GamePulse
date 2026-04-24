@@ -42,6 +42,14 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --manifest-path src/Cargo.toml --locked -- -D warnings
 
+      - name: cargo check --features ebpf (linux only)
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo check --manifest-path src/Cargo.toml --locked --features ebpf
+
+      - name: cargo clippy --features ebpf (linux only)
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo clippy --manifest-path src/Cargo.toml --locked --features ebpf -- -D warnings
+
   fmt:
     name: rustfmt
     runs-on: ubuntu-latest

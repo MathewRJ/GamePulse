@@ -7,6 +7,16 @@ edition = "2021"
 name = "gamepulse-agent"
 path = "main.rs"
 
+[features]
+# Default build ships without eBPF — the agent emits session.json and
+# relies on the separate `ebpf/` workspace daemon for kernel-level
+# probes. Enable `ebpf` when/if in-agent eBPF integration lands; until
+# then this feature is a scaffold that reserves the flag name, gates
+# any future aya/ebpf dependencies, and enforces the Linux-only
+# constraint at compile time.
+default = []
+ebpf = []
+
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }

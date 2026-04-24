@@ -6,6 +6,9 @@
 //
 // Mirrors the structure of collector/gamepulse/cli.py exactly.
 
+#[cfg(all(feature = "ebpf", not(target_os = "linux")))]
+compile_error!("the 'ebpf' feature is only supported on Linux (aya/BPF syscalls have no Windows equivalent)");
+
 mod collectors;
 mod config;
 mod host;
