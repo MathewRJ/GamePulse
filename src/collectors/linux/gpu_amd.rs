@@ -26,7 +26,7 @@
 ///   power_w              f64  — GPU power in W, 1 dp (power1_average µW / 1e6)
 ///   fan_speed_rpm        i64  — fan RPM (fan1_input)
 ///   fan_pct              f64  — fan %, 1 dp (rpm / fan1_max * 100)
-use super::Collector;
+use crate::collectors::Collector;
 use anyhow::Result;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};

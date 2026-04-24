@@ -11,7 +11,7 @@
 ///   governor               str   — cpufreq scaling governor (optional)
 ///   boost_state            bool  — true if boost/turbo enabled
 ///   power_w                f64   — RAPL package power in W (optional; absent on AMD)
-use super::Collector;
+use crate::collectors::Collector;
 use anyhow::Result;
 use serde_json::{json, Value};
 use std::path::Path;

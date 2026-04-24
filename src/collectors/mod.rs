@@ -1,15 +1,6 @@
 use anyhow::Result;
 use serde_json::Value;
 
-pub mod audio;
-pub mod cpu;
-pub mod gpu_amd;
-pub mod mangohud;
-pub mod memory;
-pub mod network;
-pub mod power;
-pub mod storage;
-
 pub trait Collector: Send + 'static {
     /// Returns the data_stream dataset name, e.g. "cpu".
     fn dataset(&self) -> &'static str;
@@ -20,3 +11,15 @@ pub trait Collector: Send + 'static {
 
     fn set_game_pid(&mut self, _pid: Option<u32>) {}
 }
+
+#[cfg(target_os = "linux")]
+pub mod linux;
+
+#[cfg(target_os = "linux")]
+pub use linux::*;
+
+#[cfg(target_os = "windows")]
+pub mod windows;
+
+#[cfg(target_os = "windows")]
+pub use windows::*;

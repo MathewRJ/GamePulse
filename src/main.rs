@@ -442,71 +442,54 @@ fn build_summary_doc(
     doc
 }
 
+// ── Collector assembly ────────────────────────────────────────────────────────
+
+/// Build the platform-appropriate set of collectors. Types resolve via the
+/// cfg-gated `pub use` in collectors/mod.rs — Linux pulls from `linux::*`,
+/// Windows from `windows::*` (stubs that return None in B.3).
+fn build_collectors(game_pid: Option<u32>) -> Vec<Box<dyn Collector>> {
+    vec![
+        Box::new(collectors::CpuCollector::new(game_pid)),
+        Box::new(collectors::MemoryCollector::new(game_pid)),
+        Box::new(collectors::StorageCollector::new(game_pid)),
+        Box::new(collectors::NetworkCollector::new(game_pid)),
+        Box::new(collectors::PowerCollector::new(game_pid)),
+        Box::new(collectors::AudioCollector::new(game_pid)),
+        Box::new(collectors::MangoHudCollector::new(game_pid)),
+        Box::new(collectors::GpuCollector::new(game_pid)),
+    ]
+}
+
 // ── Dry-run ───────────────────────────────────────────────────────────────────
 
 async fn dry_run() -> Result<()> {
-    tracing::info!("dry-run mode — validating all 8 collectors");
+    tracing::info!("dry-run mode — validating collectors");
 
     let snapshot = host::collect_snapshot();
     tracing::info!("Host snapshot:\n{}", serde_json::to_string_pretty(&snapshot)?);
 
-    // CPU: first tick returns None (delta), second returns data.
-    let mut cpu = collectors::cpu::CpuCollector::new(None);
-    let _ = cpu.collect();
+    let mut collectors = build_collectors(None);
+    tracing::info!("Loaded {} collectors", collectors.len());
+
+    // Two-tick warmup for delta-based collectors.
+    for c in &mut collectors {
+        let _ = c.collect();
+    }
     std::thread::sleep(std::time::Duration::from_secs(1));
-    match cpu.collect()? {
-        Some(doc) => tracing::info!("CPU sample:\n{}", serde_json::to_string_pretty(&doc)?),
-        None => tracing::warn!("CPU collector returned None on second tick"),
+
+    for c in &mut collectors {
+        let dataset = c.dataset();
+        match c.collect()? {
+            Some(doc) => tracing::info!(
+                "{} sample:\n{}",
+                dataset,
+                serde_json::to_string_pretty(&doc)?
+            ),
+            None => tracing::info!("{}: no data this tick", dataset),
+        }
     }
 
-    let mut mem = collectors::memory::MemoryCollector::new(None);
-    let _ = mem.collect();
-    match mem.collect()? {
-        Some(doc) => tracing::info!("Memory sample:\n{}", serde_json::to_string_pretty(&doc)?),
-        None => tracing::warn!("Memory collector returned None"),
-    }
-
-    let mut stor = collectors::storage::StorageCollector::new(None);
-    let _ = stor.collect();
-    std::thread::sleep(std::time::Duration::from_secs(1));
-    match stor.collect()? {
-        Some(doc) => tracing::info!("Storage sample:\n{}", serde_json::to_string_pretty(&doc)?),
-        None => tracing::warn!("Storage collector returned None"),
-    }
-
-    let mut net = collectors::network::NetworkCollector::new(None);
-    let _ = net.collect();
-    std::thread::sleep(std::time::Duration::from_secs(1));
-    match net.collect()? {
-        Some(doc) => tracing::info!("Network sample:\n{}", serde_json::to_string_pretty(&doc)?),
-        None => tracing::warn!("Network collector returned None"),
-    }
-
-    let mut pwr = collectors::power::PowerCollector::new(None);
-    match pwr.collect()? {
-        Some(doc) => tracing::info!("Power sample:\n{}", serde_json::to_string_pretty(&doc)?),
-        None => tracing::info!("Power: no sources on this hardware"),
-    }
-
-    let mut aud = collectors::audio::AudioCollector::new(None);
-    match aud.collect()? {
-        Some(doc) => tracing::info!("Audio sample:\n{}", serde_json::to_string_pretty(&doc)?),
-        None => tracing::warn!("Audio returned None"),
-    }
-
-    let mut mhud = collectors::mangohud::MangoHudCollector::new(None);
-    match mhud.collect()? {
-        Some(doc) => tracing::info!("MangoHud sample:\n{}", serde_json::to_string_pretty(&doc)?),
-        None => tracing::info!("MangoHud: no log present (game not running)"),
-    }
-
-    let mut gpu = collectors::gpu_amd::GpuAmdCollector::new(None);
-    match gpu.collect()? {
-        Some(doc) => tracing::info!("AMD GPU sample:\n{}", serde_json::to_string_pretty(&doc)?),
-        None => tracing::warn!("AMD GPU returned None"),
-    }
-
-    tracing::info!("dry-run complete — 8 collectors loaded");
+    tracing::info!("dry-run complete — {} collectors exercised", collectors.len());
     Ok(())
 }
 
@@ -538,15 +521,8 @@ async fn main() -> Result<()> {
     let host_snapshot = host::collect_snapshot();
     let hostname = host::hostname();
 
-    // Instantiate all 8 collectors
-    let mut cpu = collectors::cpu::CpuCollector::new(None);
-    let mut mem = collectors::memory::MemoryCollector::new(None);
-    let mut stor = collectors::storage::StorageCollector::new(None);
-    let mut net = collectors::network::NetworkCollector::new(None);
-    let mut pwr = collectors::power::PowerCollector::new(None);
-    let mut aud = collectors::audio::AudioCollector::new(None);
-    let mut mhud = collectors::mangohud::MangoHudCollector::new(None);
-    let mut gpu = collectors::gpu_amd::GpuAmdCollector::new(None);
+    // Instantiate all collectors via platform-appropriate builder.
+    let mut collectors = build_collectors(None);
 
     // Session manager — CLI --label overrides [session].label in config.
     let session_label = cli.label.or_else(|| cfg.session.label.clone());
@@ -662,10 +638,9 @@ async fn main() -> Result<()> {
                             "Game detected: {} (pid {}, all_pids={:?})",
                             game.name, game.pid, game.all_pids
                         );
-                        cpu.set_game_pid(Some(game.pid));
-                        mem.set_game_pid(Some(game.pid));
-                        mhud.set_game_pid(Some(game.pid));
-                        gpu.set_game_pid(Some(game.pid));
+                        for c in &mut collectors {
+                            c.set_game_pid(Some(game.pid));
+                        }
                         last_known_game = Some(game.clone());
                         let game_doc = build_game_detected_doc(
                             &session, &host_snapshot, &hostname, &game,
@@ -676,10 +651,9 @@ async fn main() -> Result<()> {
                     }
                     SessionEvent::GameEnded(old) => {
                         tracing::info!("Game exited: {}", old.name);
-                        cpu.set_game_pid(None);
-                        mem.set_game_pid(None);
-                        mhud.set_game_pid(None);
-                        gpu.set_game_pid(None);
+                        for c in &mut collectors {
+                            c.set_game_pid(None);
+                        }
                         last_known_game = Some(old);
                     }
                     SessionEvent::NoChange => {}
@@ -691,31 +665,20 @@ async fn main() -> Result<()> {
                     session.base_doc(&hostname),
                 );
 
-                // ── Collect from all 8 collectors ─────────────────────────────
-                let mut tick_docs: Vec<Value> = Vec::with_capacity(8);
-
-                macro_rules! collect {
-                    ($coll:expr, $dataset:literal) => {
-                        match $coll.collect() {
-                            Ok(Some(payload)) => {
-                                let mut doc = deep_merge(base.clone(), payload);
-                                add_data_stream(&mut doc, $dataset);
-                                tick_docs.push(doc);
-                            }
-                            Ok(None) => {}
-                            Err(e) => tracing::warn!(concat!($dataset, " error: {}"), e),
+                // ── Collect from all collectors ───────────────────────────────
+                let mut tick_docs: Vec<Value> = Vec::with_capacity(collectors.len());
+                for c in &mut collectors {
+                    let dataset = c.dataset();
+                    match c.collect() {
+                        Ok(Some(payload)) => {
+                            let mut doc = deep_merge(base.clone(), payload);
+                            add_data_stream(&mut doc, dataset);
+                            tick_docs.push(doc);
                         }
-                    };
+                        Ok(None) => {}
+                        Err(e) => tracing::warn!("{} error: {}", dataset, e),
+                    }
                 }
-
-                collect!(cpu,  "gamepulse.cpu");
-                collect!(mem,  "gamepulse.memory");
-                collect!(stor, "gamepulse.storage");
-                collect!(net,  "gamepulse.network");
-                collect!(pwr,  "gamepulse.power");
-                collect!(aud,  "gamepulse.audio");
-                collect!(mhud, "gamepulse.frame");
-                collect!(gpu,  "gamepulse.gpu");
 
                 // ── Update session accumulators ───────────────────────────────
                 acc.update(&tick_docs);

@@ -17,7 +17,7 @@
 ///   io_wait_pct           f64  — % of window the drive was busy (1 dp, capped 100)
 ///   merged_reads          i64  — merged read ops per second (truncated)
 ///   merged_writes         i64  — merged write ops per second (truncated)
-use super::Collector;
+use crate::collectors::Collector;
 use anyhow::Result;
 use serde_json::{json, Value};
 use std::time::Instant;

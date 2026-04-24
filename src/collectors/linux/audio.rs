@@ -11,7 +11,7 @@
 ///   sample_rate_hz   i64  — server sample rate (PulseAudio)
 ///
 /// collect() always returns Some — backend is always included even if stats fail.
-use super::Collector;
+use crate::collectors::Collector;
 use anyhow::Result;
 use serde_json::{Value};
 use std::io::Read;

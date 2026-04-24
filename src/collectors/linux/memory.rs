@@ -12,7 +12,7 @@
 ///   virtual_mb        u64  — VmSize from /proc/<pid>/status in MB (when game running)
 ///   page_faults_major u64  — field 9 from /proc/<pid>/stat (matches Python assignment)
 ///   page_faults_minor u64  — field 11 from /proc/<pid>/stat (matches Python assignment)
-use super::Collector;
+use crate::collectors::Collector;
 use anyhow::Result;
 use serde_json::{json, Value};
 use std::collections::HashMap;

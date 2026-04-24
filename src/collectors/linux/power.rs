@@ -11,7 +11,7 @@
 ///   ac_connected     bool — AC adapter online state (desktop: absent)
 ///   tdp_current_w    f64  — AMD GPU power cap in W, 1 dp (e.g. 330.0 on RX 9070 XT)
 ///   profile          str  — ACPI platform_profile string (e.g. "balanced")
-use super::Collector;
+use crate::collectors::Collector;
 use anyhow::Result;
 use serde_json::{json, Value};
 

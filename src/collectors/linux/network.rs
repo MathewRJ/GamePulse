@@ -15,7 +15,7 @@
 ///   bandwidth_utilisation_mbps f64 — (rx + tx) in MB/s (3 dp)
 ///   connection_type          str  — "ethernet" or "wifi"
 ///   interface                str  — interface name (e.g. "enp14s0")
-use super::Collector;
+use crate::collectors::Collector;
 use anyhow::Result;
 use serde_json::{json, Value};
 use std::time::Instant;

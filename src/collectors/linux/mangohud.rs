@@ -16,7 +16,7 @@
 ///   frametime_ms       f64  — mean frametime in ms, 3 dp (when ft data available)
 ///   frametime_variance f64  — frametime variance, 3 dp (when ft data available)
 ///   stutter_count      i64  — frames with ft > 2×avg_ft; always present (0 default)
-use super::Collector;
+use crate::collectors::Collector;
 use anyhow::Result;
 use serde_json::Value;
 use std::io::{Read, Seek, SeekFrom};
