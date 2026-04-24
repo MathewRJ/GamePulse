@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-24 by claude-code (B.1–B.3 Collector trait + Linux submodule + Windows stubs)
+Last updated: 2026-04-24 by claude-code (B.5 CI matrix + B.6 eBPF feature flag — Phase B complete pending Linux verification)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -19,7 +19,7 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 | Milestone | Status | Progress |
 |---|---|---|
 | A  Docs reorganisation | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
-| B  Cross-platform refactor | 🟡 Partial | ▓▓▓▓▓▓▓░░░ |
+| B  Cross-platform refactor | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
 | B2 Launcher-agnostic game detection | ⚪ Not started | ░░░░░░░░░░ |
 | B3 Automatic game detection (TBD) | ⚪ Not started | ░░░░░░░░░░ |
 | C  Windows collectors | 🔒 Blocked on B2 | ░░░░░░░░░░ |
@@ -65,10 +65,15 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 ## Active work package
 
-**None.** Phase B.1–B.3 (Collector trait + Linux submodule + Windows stubs) complete. Next: Phase B.5 (GitHub Actions CI matrix — can happen on either host) + Phase B.6 (eBPF `features = ["ebpf"]` flag — gaming PC needed for real validation).
+**None.** Phase B complete (all 8 WPs: B.1–B.8) pending Linux-side verification of B.1–B.3 and B.6's `--features ebpf` build. Next work package is B2.1 — introduce the `Target` enum in `src/session.rs` as the foundation for launcher-agnostic game detection. B2.1 is mostly host-agnostic (config plumbing + enum refactor) and can land on Windows; later WPs (B2.3 Lutris / B2.4 Heroic / B2.5 Bottles) need Linux for end-to-end verification.
 See `docs/ROADMAP.md` for milestone structure and work package definitions.
 
 ## Completed work
+
+### Milestone B — Cross-platform refactor (complete, 2026-04-24 session 2)
+
+- **B.5 — GitHub Actions CI matrix**: Added `.github/workflows/ci.yml`. `check` job matrix runs `cargo check --locked` and `cargo clippy --locked -- -D warnings` on `ubuntu-latest` and `windows-latest` for every push to `main` and every PR. A Linux-only conditional step also exercises `cargo check --features ebpf` and `cargo clippy --features ebpf -- -D warnings` to verify B.6's feature plumbing. Separate `fmt` job runs `cargo fmt --check` on Linux only. Caching via `Swatinem/rust-cache@v2` with per-OS keys; toolchain via `dtolnay/rust-toolchain@stable`; fail-fast disabled; concurrency group cancels in-progress runs on same ref. eBPF workspace (`ebpf/`) intentionally excluded from CI — separate workspace requiring bpf-linker. A `style: cargo fmt` commit (c556589) preceded B.5 to ensure the fmt gate is green on first CI run. Commits: c556589 (fmt prep), 93ad4e6 (ci.yml).
+- **B.6 — eBPF feature flag (Linux-only)**: Added `[features]` block to `src/Cargo.toml` with `default = []` and `ebpf = []`. Added `compile_error!` gated on `cfg(all(feature = "ebpf", not(target_os = "linux")))` at the top of `src/main.rs`. Today the agent crate has zero eBPF deps and no in-agent eBPF integration (the daemon is an out-of-process sibling workspace), so the feature is a scaffold — it reserves the name, enforces the Linux constraint the moment someone enables it on Windows, and makes the pattern obvious for future in-agent eBPF work. CI exercises both feature modes on Linux. Verified on Windows: default build OK, `--all-features` fails with the compile_error as designed. Commit: ad1aa93.
 
 ### Milestone B — Cross-platform refactor (partial, 2026-04-24)
 
@@ -155,7 +160,8 @@ Commit: 561dc78
 
 ## Follow-ups and migration notes
 
-- **Linux `cargo check` verification for B.1–B.3 pending**: 2026-04-24 session was Windows-only (gaming PC offline). Windows `cargo check` passed via post-edit hook. Linux validation (both `cargo check` and `cargo clippy -- -D warnings`) deferred to the next gaming-PC session. No behavioural change on Linux is expected — the collectors themselves are unchanged; only their module path moved and main.rs switched to trait-object dispatch — but verify before declaring Milestone B fully green.
+- **Linux `cargo check` verification for B.1–B.3 + B.6 (`--features ebpf`) pending**: 2026-04-24 sessions were Windows-only (gaming PC offline). Windows `cargo check`, `cargo clippy -- -D warnings`, `cargo fmt --check`, and `cargo check --all-features` (expected-fail via compile_error) all green. The B.5 CI workflow exercises both Linux and Windows on push, so this is self-healing as soon as CI runs on main — but a gaming-PC session to run `cargo check --manifest-path src/Cargo.toml --features ebpf` and confirm the cfg gate doesn't accidentally exclude required modules on Linux is still worth doing.
+- **Hook scope redesign — PostToolUse cargo check noise during structural refactors**: deferred from the 2026-04-24 sessions. The `post-edit-check.py` hook runs `cargo check` after every `.rs` edit, which is helpful for single-file fixes but creates N-times-expected-failure noise during multi-file structural refactors (see 2026-04-24 B.2+B.3 session for the python-via-bash workaround). Options: scope the hook to only fire on the final edit in a batch, add a way to suppress it during planned structural refactors, or move the cargo check to a manual command. Infrastructure session, defer until Phase C scheduling.
 - **B.8 label format migration**: ES docs indexed before B.8 carry `<slug>-YYYYMMDD-HHMMSS` labels. New sessions use `<slug>-YYYYMMDD-N`. Dashboard filters on `session.label` should use `*` wildcards or filter on `session.label_source` instead. No backfill needed.
 
 ## Follow-ups to investigate

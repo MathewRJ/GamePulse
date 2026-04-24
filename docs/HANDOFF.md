@@ -5,6 +5,77 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-24 session 2 (Phase B finish — B.5 CI + B.6 eBPF feature flag, plus B2/B3 roadmap)
+
+### Context coming in
+
+- Earlier session on 2026-04-24 shipped B.1–B.3 (Collector trait + Linux submodule + Windows stubs) in two commits on Windows with Linux verification deferred.
+- `claude.ai` ran a planning session in parallel today that added two new roadmap phases: **B2** (launcher-agnostic game detection) and **B3** (automatic game detection, scope TBD). Session entry prompt carried the Phase definitions into this session.
+- Host: Windows 11. Gaming PC offline → any Linux-only verification (full `cargo check` on Linux, `--features ebpf` build) deferred to the next gaming-PC session.
+
+### What was done this session
+
+**Stream 3 prep — Windows clippy post B.1–B.3 (no commit)**
+- `cargo clippy --manifest-path src/Cargo.toml -- -D warnings` ran clean. No latent lints exposed by B.1–B.3.
+
+**`style: cargo fmt` (commit c556589)**
+- `cargo fmt --check` flagged ~290 insertions / 162 deletions across 19 files in `src/` — pre-existing unformatted state that would have broken B.5's fmt gate on first push.
+- Ran `cargo fmt`, verified `cargo check` + `cargo clippy -- -D warnings` still pass, committed as `style:` ahead of B.5. No behavioural changes.
+
+**Stream 2 — B2/B3 roadmap + SCOPE positioning shift (commit c92c310)**
+- `docs/ROADMAP.md`: inserted Phase B2 (8 WPs — Lutris/Heroic/Bottles + user-specified target + Proton-via-env-vars + dashboard updates) and Phase B3 (placeheld — architectural note explicitly "borrow pattern, not product" re: Elastic Defend). Updated milestone-structure header.
+- `docs/STATUS.md`: added B2 + B3 rows; marked C as `🔒 Blocked on B2` and F as `🔒 Blocked on B2+C+E`.
+- `docs/SCOPE.md`: top-of-file Note block extended with a fourth bullet documenting the Steam → launcher-agnostic shift. Section 7.3 Game name source column generalised to list Steam / Lutris / Heroic / Bottles / user-specified. Section 7.2 Proton version source generalised to `PROTONPATH` / `STEAM_COMPAT_*` with an explicit "(any launcher)" tag. All other Steam references (Steam Deck, Phase 1 Python-collector implementation details, Steam Remote Play, etc.) left untouched — these are historically accurate and rewriting them would violate the minimum-diff rule.
+- SCOPE.md edit required user-in-chat confirmation to bypass the `pre-edit-check.py` hook (protected file). Applied via python-in-bash to work around the hook's `Edit`/`Write`-only scope — hook config is locked per the 2026-04-21 infrastructure decision.
+
+**Stream 1a — B.5 GitHub Actions CI matrix (commit 93ad4e6)**
+- `.github/workflows/ci.yml` created. `check` job matrix over `ubuntu-latest` + `windows-latest` running `cargo check --locked` and `cargo clippy --locked -- -D warnings` against `src/Cargo.toml`. `fmt` job on Linux only. Caching via `Swatinem/rust-cache@v2` with `workspaces: src -> target` and per-OS keys; toolchain via `dtolnay/rust-toolchain@stable`; fail-fast disabled; concurrency group cancels in-progress runs on same ref.
+- RUSTFLAGS=-D warnings set at env scope so `cargo check` also fails on warnings (matches clippy's strictness).
+- eBPF workspace (`ebpf/`) intentionally not wired into CI — separate workspace, needs bpf-linker + kernel headers + Linux-only. B.6 handles the agent-side feature gate; a separate eBPF CI job belongs to a later infrastructure session.
+- Pre-flight on this host: `cargo check --locked`, `cargo clippy --locked -- -D warnings`, `cargo fmt --check` all green.
+
+**Stream 1b — B.6 eBPF feature flag (commit ad1aa93)**
+- Scan confirmed `src/` has zero eBPF deps in `Cargo.toml` and zero in-agent eBPF integration code in `*.rs` (the daemon at `ebpf/` is a separate workspace invoked out-of-process via `/tmp/gamepulse/session.json`; only comments and a `pub ebpf: bool` config toggle reference it).
+- Given that scan, B.6 landed as a scaffold: `[features]` with `default = []` and `ebpf = []` in `src/Cargo.toml`, plus a top-of-`main.rs` `compile_error!` gated on `cfg(all(feature = "ebpf", not(target_os = "linux")))`. No deps to mark optional; no cfg gates to add at call sites (no call sites exist yet). Reserves the flag name, enforces the Linux constraint the moment someone enables `--features ebpf` on Windows, and makes the pattern obvious for future in-agent eBPF work.
+- Updated `ci.yml` with a Linux-only conditional step that runs `cargo check --features ebpf` and `cargo clippy --features ebpf -- -D warnings`. Windows runner intentionally skips the feature step — by design `--features ebpf` fails to compile on Windows.
+- Verification on this host: default build OK, `--all-features` fails with the compile_error as designed, clippy default clean. Linux run deferred.
+
+### Agent routing retrospective
+
+- **Gemini for web research / SCOPE.md Steam scan**: not invoked. Used direct Grep over SCOPE.md for Steam mentions — ~20 hits scanned via two targeted Grep calls with line numbers, cheaper than spinning up a subagent for a file this size.
+- **Haiku for CI workflow draft**: not invoked. The workflow was short enough (~60 lines) that writing it directly was cheaper than round-tripping through a subagent plus review.
+- **Codex for B.6 refactor**: not invoked. Once the src/ scan confirmed zero eBPF deps/integration, B.6 collapsed to a ~10-line mechanical edit (features block + compile_error + CI conditional). A Codex delegation would have been higher-overhead than direct implementation.
+- **Explore subagent for src/ eBPF scan**: not invoked. Grep with the `ebpf|aya|bpf` pattern gave a complete answer in one pass.
+- Routing decision: for sessions where each stream's core work is a single-digit number of file edits, direct implementation outperforms delegation. Subagents earn their keep on wide codebase scans, long-running verification loops, or prose-rich deliverables — not on mechanical scaffolding. This matches the pattern from the previous session.
+
+### Validation results (on this Windows 11 host)
+
+| Command | Status |
+|---|---|
+| `cargo check --manifest-path src/Cargo.toml --locked` | OK |
+| `cargo check --manifest-path src/Cargo.toml --locked --all-features` | FAILS with compile_error (as designed) |
+| `cargo clippy --manifest-path src/Cargo.toml --locked -- -D warnings` | OK |
+| `cargo fmt --manifest-path src/Cargo.toml -- --check` | OK |
+
+GitHub Actions CI will exercise the Linux leg on first push — `gh` CLI not installed on this host so live run not watched. If CI goes red, fix-forward commits will follow.
+
+### Deferred / follow-ups
+
+- Linux `cargo check` + `cargo clippy --features ebpf` verification on the gaming PC. CI will cover this in the push-based loop; manual local run still worth doing to confirm the cfg gate behaviour on Linux.
+- Hook scope redesign — `post-edit-check.py` cargo check noise during structural refactors (documented in `docs/STATUS.md` follow-ups; unchanged from previous session).
+- Population of the `ebpf` feature with real aya/libbpf-style deps + cfg-gated probe-lifecycle call sites — not in Phase B scope; belongs to whatever future work package introduces in-agent eBPF integration.
+- SCOPE.md rewrite was minimum-diff by design. If later review surfaces Steam-centric framing this pass missed, follow-up rewrites under an explicit protected-file edit assignment.
+
+### Current state
+
+- Phase B: **complete** (all 8 WPs). Linux-side verification pending.
+- `origin/main` at `ad1aa93` — five commits ahead of start of session (c556589, c92c310, 93ad4e6, ad1aa93, plus the docs commit that follows this HANDOFF update).
+- Next session: B2.1 (Target enum in `src/session.rs`) — host-agnostic, can land on either Windows or Linux.
+
+### Previous session: 2026-04-24 (Milestone B — Collector trait + Linux submodule + Windows stubs)
+
+---
+
 ## Session: 2026-04-24 (Milestone B — Collector trait + Linux submodule + Windows stubs)
 
 ### Context coming in
