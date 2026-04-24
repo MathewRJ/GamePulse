@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/pre-edit-check.py"
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/pre-edit-check.py"
           }
         ]
       },
@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/pre-command-check.py"
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/pre-command-check.py"
           }
         ]
       }
@@ -26,7 +26,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/post-edit-check.py"
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/post-edit-check.py"
           }
         ]
       }
