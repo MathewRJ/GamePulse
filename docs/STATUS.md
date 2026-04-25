@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-25 by claude-code (B2.8 — Dashboard source/launcher filters; B2 complete)
+Last updated: 2026-04-25 by claude-code (B2 live verification — Starfield/Steam + Thronebreaker/Lutris confirmed)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -188,6 +188,8 @@ Commit: 561dc78
 ## Follow-ups to investigate
 
 - **Dashboard integration-compliance gap (Milestone G blocker)**: `dashboards/gamepulse-dashboard.ndjson` (id `c1249af5-dbb2-4d34-8d43-839cba2746db`) — all 11 Lens panels fail `scripts/verify-dashboard.sh --require-dataset-filter`. Panels need a `data_stream.dataset` filter embedded in each `embeddableConfig` for elastic/integrations submission. Fix before Milestone G.
+- **Bug: session summary occasionally not shipped on game-exit after multi-session uptime** — ships correctly on agent stop. Observed in Thronebreaker session 2 (2026-04-25, 330 s session, agent running continuously across two sessions). Starfield sessions unaffected. Investigate ship-on-exit path for state reset between sessions. Investigate before Phase G.
+- **Dev install: systemd unit ExecStart path and `--config` path require drop-in override** when installing to `/usr/local/bin`. Unit ships with `ExecStart=/usr/bin/gamepulse-agent` and `--config /etc/gamepulse/gamepulse.toml`; user credentials land at `~/.config/gamepulse/gamepulse.toml`. Consider updating the unit to try `/usr/local/bin` first, or document the override in `docs/install.md`. PKGBUILD installs to `/usr/bin/` and is unaffected.
 - `bottleneck_dominant` null in session summary docs vs populated in `gamepulse-game-timeline` — ingest pipeline enrichment issue on 2026-04-12 backing index
 - HOME env fallback via `getpwuid` in `game_name_from_appid()` (src/session.rs)
 - No-game system metrics dashboard panel (system health without game filter)

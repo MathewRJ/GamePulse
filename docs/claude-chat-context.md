@@ -66,7 +66,9 @@ session docs predate B2.2. Fields will populate on the next real session.
 ## Known open follow-ups (not blocking next milestone)
 
 - **Lutris umu runner label**: umu-backed GOG games show `launcher = "Lutris — Native"` because the top-level `wine:` key is absent from their YAML. Fixing requires process-environ inspection (UMU_ID / PROTON_*). Deferred post-B2.
-- **Live verification of B2 detectors**: No Lutris/Heroic/Bottles game was running during B2.3-B2.8 sessions. First real non-Steam game session will validate the full detection path end-to-end.
+- **Live verification of B2 detectors**: Complete (2026-04-25). Steam (Starfield, app_id=1716740) and Lutris (Thronebreaker, umu/GOG) both verified end-to-end. Lutris umu label limitation confirmed as expected (`launcher="Lutris — Native"`); api="unknown" also expected.
+- **Bug: session summary not shipped on game-exit after multi-session uptime**: Observed in Thronebreaker session 2 (330 s, agent running across two consecutive sessions without restart). Session shipped only when `gamepulse stop` was called ~4 min later. Starfield unaffected. Investigate ship-on-exit state reset before Phase G.
+- **Dev install: systemd unit path mismatch**: Unit ships with `ExecStart=/usr/bin/gamepulse-agent` and `--config /etc/gamepulse/gamepulse.toml`; dev builds land at `/usr/local/bin/` and credentials at `~/.config/gamepulse/gamepulse.toml`. Workaround: drop-in override at `~/.config/systemd/user/gamepulse-agent.service.d/override.conf`. PKGBUILD installs to `/usr/bin/` — not affected. Document or fix before next release.
 - **Component template deployment automation**: `gamepulse-session-context.json` must be manually PUT to ES when the backing index already exists. Consider scripting this as part of a `make deploy-mappings` target.
 
 ---

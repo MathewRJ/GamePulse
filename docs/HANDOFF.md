@@ -5,6 +5,45 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-25 (B2 live verification — Starfield/Steam + Thronebreaker/Lutris)
+
+### What was verified
+
+Live end-to-end verification of B2 launcher detection on the CachyOS gaming PC.
+
+**Steam (Starfield) — PASS**
+
+- Detector: `source=Steam`, `app_id=Some(1716740)`, `api="dx_via_proton"`
+- Label auto-generated: `starfield-20260425-2`
+- Steam launch option (`gamepulse run %command%`) working end-to-end
+- Session shipped correctly on game exit throughout
+
+**Lutris (Thronebreaker The Witcher Tales) — PASS with known limitations**
+
+- Detector: `source=Lutris`, `app_id=None`, `api="unknown"`
+- Labels: `thronebreaker-the-witcher-tales-20260425-1` and `-2`
+- `launcher="Lutris — Native"` — confirmed known umu label issue: umu runner does not set the top-level `wine:` YAML key; env var enrichment (`detect_graphics_api`) cannot identify Wine/Proton without `PROTONPATH` / `UMU_ID`. Deferred post-B2 as previously documented.
+- `api="unknown"` — expected; umu does not stamp the Wine env vars (`DXVK_CONFIG_FILE` etc.) that `detect_graphics_api` looks for.
+
+### Installation finding — systemd unit path mismatch (dev-install-only)
+
+The systemd user unit ships with `ExecStart=/usr/bin/gamepulse-agent`, but dev installs (`cargo build --release && sudo install …`) land at `/usr/local/bin/gamepulse-agent`. Required a drop-in override at `~/.config/systemd/user/gamepulse-agent.service.d/override.conf`. The unit also reads `--config /etc/gamepulse/gamepulse.toml` while user credentials are written to `~/.config/gamepulse/gamepulse.toml` by `gamepulse setup`; the override fixes both paths. The PKGBUILD installs to `/usr/bin/` which avoids this entirely — it is a dev-install-only issue.
+
+### Bug found — session summary not shipping on game-exit after multi-session uptime
+
+- First Thronebreaker session (221 s): summary shipped ~9 s after game exit — correct.
+- Second Thronebreaker session (330 s): summary did NOT ship on game exit; shipped only when `gamepulse stop` was called ~4 minutes later.
+- Starfield sessions shipped correctly on exit throughout.
+- Hypothesis: the ship-on-exit path has a race or state condition that manifests when the agent has been running continuously across multiple game sessions without a restart. Low priority but should be investigated before Phase G.
+
+### State leaving this session
+
+- B2 fully verified live: Steam and Lutris detectors both confirmed end-to-end on real hardware.
+- Known open issues (unchanged): Lutris umu label (`launcher="Lutris — Native"`), session-ship race after multi-session uptime, dev-install unit path mismatch.
+- No code changes this session — docs only.
+
+---
+
 ## Session: 2026-04-25 (B2.8 — Dashboard source/launcher filters; B2 complete)
 
 ### ES|QL validation results
