@@ -600,6 +600,23 @@ mod tests {
     }
 
     #[test]
+    fn test_lutris_slug_to_title() {
+        assert_eq!(
+            lutris_slug_to_title("cyberpunk-2077-1683316261"),
+            "Cyberpunk 2077"
+        );
+        assert_eq!(
+            lutris_slug_to_title("untitled-goose-game-1683316261"),
+            "Untitled Goose Game"
+        );
+        assert_eq!(
+            lutris_slug_to_title("the-elder-scrolls-v-skyrim-1683316261"),
+            "The Elder Scrolls V Skyrim"
+        );
+        assert_eq!(lutris_slug_to_title("mygame"), "Mygame");
+    }
+
+    #[test]
     fn slug_from_name_examples() {
         assert_eq!(slug_from_game_name("Starfield"), "starfield");
         assert_eq!(slug_from_game_name("Cyberpunk 2077"), "cyberpunk-2077");
@@ -608,6 +625,160 @@ mod tests {
             "the-elder-scrolls-v-skyrim"
         );
     }
+}
+
+// ── Lutris detection ──────────────────────────────────────────────────────────
+
+#[derive(serde::Deserialize, Default)]
+struct LutrisGameConfig {
+    #[serde(default)]
+    game: LutrisGameSection,
+    #[serde(default)]
+    wine: serde_yaml::Value,
+}
+
+#[derive(serde::Deserialize, Default)]
+struct LutrisGameSection {
+    exe: Option<String>,
+    prefix: Option<String>,
+}
+
+/// Strip trailing `-<timestamp>` suffix from a Lutris filename stem, then
+/// convert the remaining slug to Title Case.
+fn lutris_slug_to_title(stem: &str) -> String {
+    let parts: Vec<&str> = stem.split('-').collect();
+    let slug = if let Some(last) = parts.last() {
+        if last.len() >= 10 && last.chars().all(|c| c.is_ascii_digit()) {
+            &stem[..stem.len() - last.len() - 1]
+        } else {
+            stem
+        }
+    } else {
+        stem
+    };
+
+    slug.split('-')
+        .map(|w| {
+            let mut c = w.chars();
+            match c.next() {
+                None => String::new(),
+                Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Scan `~/.local/share/lutris/games/*.yml` and cross-reference running
+/// processes to detect a Lutris-managed game. Returns the first match.
+pub(crate) fn scan_for_lutris_game() -> Option<Target> {
+    let home = std::env::var("HOME").ok()?;
+    let games_dir = PathBuf::from(&home).join(".local/share/lutris/games");
+
+    let dir_iter = match std::fs::read_dir(&games_dir) {
+        Ok(it) => it,
+        Err(_) => return None,
+    };
+
+    // Parse all *.yml configs up front.
+    let mut configs: Vec<(String, LutrisGameConfig)> = Vec::new();
+    for entry in dir_iter.filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("yml") {
+            continue;
+        }
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_string();
+        let display_name = lutris_slug_to_title(&stem);
+
+        let content = match std::fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!("Lutris: failed to read {:?}: {}", path, e);
+                continue;
+            }
+        };
+        let config: LutrisGameConfig = match serde_yaml::from_str(&content) {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!("Lutris: failed to parse {:?}: {}", path, e);
+                continue;
+            }
+        };
+        configs.push((display_name, config));
+    }
+
+    if configs.is_empty() {
+        return None;
+    }
+
+    // Build exe → PIDs map from /proc.
+    let pids: Vec<u32> = std::fs::read_dir("/proc")
+        .ok()?
+        .filter_map(|e| e.ok())
+        .filter_map(|e| e.file_name().to_str()?.parse::<u32>().ok())
+        .collect();
+
+    let mut exe_map: HashMap<PathBuf, Vec<u32>> = HashMap::new();
+    for &pid in &pids {
+        if let Ok(exe) = std::fs::read_link(format!("/proc/{}/exe", pid)) {
+            exe_map.entry(exe).or_default().push(pid);
+        }
+    }
+
+    // Match configs against running processes.
+    for (display_name, config) in &configs {
+        let is_wine = !config.wine.is_null();
+        let launcher = Some(if is_wine {
+            "Lutris \u{2014} Wine".to_string()
+        } else {
+            "Lutris \u{2014} Native".to_string()
+        });
+
+        let mut matched_pids: Vec<u32> = Vec::new();
+
+        // Native exe match.
+        if let Some(exe_str) = &config.game.exe {
+            if let Ok(canonical) = std::fs::canonicalize(exe_str) {
+                if let Some(p) = exe_map.get(&canonical) {
+                    matched_pids.extend_from_slice(p);
+                }
+            }
+        }
+
+        // Wine prefix match (secondary).
+        if matched_pids.is_empty() {
+            if let Some(prefix) = &config.game.prefix {
+                for &pid in &pids {
+                    if let Some(env) = read_environ(pid) {
+                        if env.get("WINEPREFIX").map(String::as_str) == Some(prefix.as_str()) {
+                            matched_pids.push(pid);
+                        }
+                    }
+                }
+            }
+        }
+
+        if !matched_pids.is_empty() {
+            let pid = matched_pids[0];
+            return Some(Target {
+                source: TargetSource::Lutris,
+                display_name: display_name.clone(),
+                pid,
+                all_pids: matched_pids,
+                steam_app_id: None,
+                launcher,
+                graphics_api: None,
+                proton_version: None,
+                dxvk_version: None,
+            });
+        }
+    }
+
+    None
 }
 
 // ── /proc/environ parsing ──────────────────────────────────────────────────────
@@ -767,8 +938,7 @@ fn dxvk_version_from_env(env: &HashMap<String, String>) -> Option<String> {
 /// B2.1 only knows Steam. Future WPs slot launcher-specific scanners into this
 /// chain without restructuring callers.
 pub fn scan_for_game() -> Option<Target> {
-    scan_for_steam_game()
-    // B2.3 will add: .or_else(scan_for_lutris_game)
+    scan_for_steam_game().or_else(scan_for_lutris_game)
     // B2.4 will add: .or_else(scan_for_heroic_game)
     // B2.5 will add: .or_else(scan_for_bottles_game)
     // B2.7 will add: .or_else(scan_for_user_specified_target)
