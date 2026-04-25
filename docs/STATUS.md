@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-25 by claude-code (B2.1 — Target type + detection abstraction; behaviour-neutral refactor)
+Last updated: 2026-04-25 by claude-code (B2.2 — Schema generalisation: source, launcher, conditional steam_app_id)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -20,7 +20,7 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 |---|---|---|
 | A  Docs reorganisation | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
 | B  Cross-platform refactor | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
-| B2 Launcher-agnostic game detection | 🟡 Partial | ▓░░░░░░░░░ |
+| B2 Launcher-agnostic game detection | 🟡 Partial | ▓▓░░░░░░░░ |
 | B3 Automatic game detection (TBD) | ⚪ Not started | ░░░░░░░░░░ |
 | C  Windows collectors | 🔒 Blocked on B2 | ░░░░░░░░░░ |
 | D  Linux portable packaging | 🟡 Partial | ▓▓▓▓▓░░░░░ |
@@ -65,12 +65,14 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 ## Active work package
 
-**B2.2 — Schema generalisation.** Make `gamepulse.game.steam_app_id` optional and add `gamepulse.game.source` (steam | lutris | heroic | bottles | user_specified | auto_detected) and `gamepulse.game.launcher` (human-readable) fields on the session stream. Backwards-compatible addition: existing dashboards keep working; new fields are additive. Touches `data_stream/session/fields/fields.yml`, the daemon's `SessionInfo` reader (`ebpf/gamepulse-ebpf-daemon/src/session.rs` already tolerates optional `steam_app_id`), and the `write_session_json` + `base_doc` emission paths in `src/session.rs` (currently use `.expect()` against a B2.1-locked invariant — B2.2 replaces with conditional emission).
+**B2.3 — Lutris detection.** Parse `~/.local/share/lutris/games/*.yml` to detect running Lutris-managed game processes. Populate `Target` with `source: Lutris`, `launcher: "Lutris"`, game name from the YAML `name` field. No `steam_app_id`. Integrates into `scan_for_game()` dispatcher via the B2.1-reserved `.or_else(scan_for_lutris_game)` slot.
 See `docs/ROADMAP.md` for milestone structure and work package definitions.
 
 ## Completed work
 
 ### Milestone B2 — Launcher-agnostic game detection (partial, 2026-04-25)
+
+- **B2.2 — Schema generalisation**: Added `gamepulse.game.source` (keyword enum: steam|lutris|heroic|bottles|user_specified|auto_detected) and `gamepulse.game.launcher` (free-form keyword) to session and events streams (Path 2: per-tick metric streams receive description-only update, no new fields). Made `gamepulse.game.steam_app_id` conditionally emitted — only present when `source == steam`. New helpers `target_source_str()` + `target_to_game_doc()` in `src/session.rs` centralise emission logic; both `base_doc()` and `build_summary_doc()` in `src/main.rs` use the helper. Session.json on-disk format gains `target_source` field; `steam_app_id` now optional. `Target::from_steam()` sets `launcher: Some("Steam")`. Component template `gamepulse-session-context.json` updated with source + launcher properties. Lutris pipeline test fixture added (`test-session-pipeline-lutris.json` + expected) to prove schema accepts non-Steam targets without `steam_app_id`. Daemon compatibility confirmed: `SessionInfo` uses `serde(default)` + no `deny_unknown_fields` — new field silently ignored. Verification: `cargo check`, `cargo clippy -- -D warnings`, `cargo fmt --check`, `cargo test` (3/3) green. Live gaming-PC verification deferred (see follow-ups). Commit: aec9c24.
 
 - **B2.1 — Target type + detection abstraction**: Renamed `DetectedGame` struct to `Target` and introduced a `TargetSource` enum (`Steam` | `Lutris` | `Heroic` | `Bottles` | `UserSpecified` | `AutoDetected`) in `src/session.rs`. Only `Steam` is constructed today via `Target::from_steam()`; the other variants are reserved for B2.3-B2.7 + B3 and rely on the per-crate `dead_code = "allow"` lint to stay quiet until their detectors land. `SessionEvent` variants kept their `Game{Started,Ended}` names but now carry `Target` instead of `DetectedGame`. `SessionManager::current_game` retyped to `Option<Target>`. `scan_for_game` is now a public dispatcher that calls `scan_for_steam_game` (the renamed Steam-specific helper); its body has commented-out `.or_else(scan_for_…)` lines documenting the slot for each future detector. Field accesses migrated: `game.name` → `target.display_name`, `game.steam_app_id: u32` → `target.steam_app_id: Option<u32>` with `.expect("Steam target without steam_app_id — invariant violation")` at the two emission sites (`write_session_json` and `base_doc`/summary `game_doc`). Behaviour-neutral: session.json on-disk format byte-for-byte unchanged (eBPF daemon reader untouched), and the ES schema is unchanged — `gamepulse.game.{source,launcher}` are deferred to B2.2 alongside making `steam_app_id` optional. Verification on Windows: `cargo check`, `cargo clippy -- -D warnings`, `cargo fmt --check`, `cargo test` (3/3) all green. Live game-session verification on the Linux gaming PC deferred (see follow-ups). Single migration commit + docs commit.
 
