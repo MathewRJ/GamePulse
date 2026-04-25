@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-25 by claude-code (B2.7 — --target-pid / --target-name user-specified target override)
+Last updated: 2026-04-25 by claude-code (B2.8 — Dashboard source/launcher filters; B2 complete)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -20,7 +20,7 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 |---|---|---|
 | A  Docs reorganisation | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
 | B  Cross-platform refactor | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
-| B2 Launcher-agnostic game detection | 🟡 Partial | ▓▓▓▓▓▓▓░░░ |
+| B2 Launcher-agnostic game detection | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
 | B3 Automatic game detection (TBD) | ⚪ Not started | ░░░░░░░░░░ |
 | C  Windows collectors | 🔒 Blocked on B2 | ░░░░░░░░░░ |
 | D  Linux portable packaging | 🟡 Partial | ▓▓▓▓▓░░░░░ |
@@ -65,12 +65,16 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 ## Active work package
 
-**B2.8 — Dashboard / query updates.** Update Kibana dashboards and ES|QL queries to handle the new `gamepulse.game.source` and `gamepulse.game.launcher` fields added in B2.2, so dashboards show launcher provenance for non-Steam sessions. Review any hard-coded `source: steam` filters.
+**B3 — Automatic game detection (next milestone, not yet started).** Detect running games without any launcher context (e.g. Wine standalone, DOSBox, emulators) using heuristics on process name, window title, or known game exe patterns.
+
+**C — Windows collectors (unblocked by B2 completion).** Implement real collection in the 8 Windows stub collectors.
 See `docs/ROADMAP.md` for milestone structure and work package definitions.
 
 ## Completed work
 
 ### Milestone B2 — Launcher-agnostic game detection (partial, 2026-04-25)
+
+- **B2.8 — Dashboard source/launcher filters**: Added `ctrl-source` and `ctrl-launcher` options-list filter controls to Game Library dashboard (`game-library-dashboard.json`). Added `launcher-breakdown` horizontal bar panel: x=`gamepulse.game.source` (terms), breakdown by `gamepulse.game.launcher`, count metric, KQL filter `data_stream.dataset : "gamepulse.session"`. Deploy path: component template `gamepulse-session-context.json` PUT to ES (fields were mapped in repo since B2.2 but not deployed to live index); PUT `/_mapping` on `metrics-gamepulse.session-default` to add `source`/`launcher` to existing backing index; saved-objects `_import` with updated NDJSON. `scripts/verify-dashboard.sh` PASS: 11 panels, all Lens invariants OK, internal loader OK. ES|QL validation: fields mapped (0 rows — no sessions indexed since B2.2, expected). Deployed NDJSON saved as `dashboards/game-library-dashboard-deployed.ndjson`. `gamepulse-session-performance.ndjson` unchanged (no `source`/`launcher` filters to break). B2 milestone complete.
 
 - **B2.7 — User-specified target override**: Added `--target-pid <PID>` and `--target-name <NAME>` CLI flags to `src/main.rs` Cli struct, and `target_pid`/`target_name` fields to `SessionConfig` in `src/config.rs` (config-file equivalents under `[session]`). Added `resolve_user_target(pid_override, name_override) -> Option<Target>` to `src/session.rs`: PID mode validates `/proc/<pid>` exists, reads comm/exe for display name, runs enrichment helpers; name mode scans `/proc/*/comm` and `/proc/*/exe` basename (case-insensitive, first match). Added `poll_pinned_target()` helper in `src/main.rs` that synthesises `GameStarted`/`GameEnded`/`NoChange` events by checking `/proc/<pid>` liveness — replaces `session.poll()` in the tick loop when a pinned target is active. CLI takes precedence over config; `--target-pid` over `--target-name` if both given. Fallback to auto-detection if process not found. Updated dispatcher comment in `scan_for_game()` explaining why UserSpecified bypasses the chain. 7/7 tests (added `test_resolve_user_target_invalid_pid` + `test_resolve_user_target_no_args`). Smoke test: `--dry-run --target-pid $SHELL_PID` and `--target-name fish` both parse without panic.
 

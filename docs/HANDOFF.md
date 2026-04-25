@@ -5,6 +5,39 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-25 (B2.8 — Dashboard source/launcher filters; B2 complete)
+
+### ES|QL validation results
+
+- `gamepulse.game.source` → "Unknown column" on first query (field not mapped in live index)
+- `gamepulse.game.launcher` → same
+- Root cause: `gamepulse-session-context.json` component template was updated in B2.2 but never PUT to the live ES cluster. The 31 existing session docs predate the mapping.
+- Fix applied: PUT `/_component_template/gamepulse-session-context` (acknowledged) + PUT `/_mapping` on `metrics-gamepulse.session-default` directly. After mapping update: fields queryable, 0 rows (no sessions since B2.2 — expected).
+
+### Dashboard changes
+
+- `dashboards/game-library-dashboard.json` (Dashboards API format): added `ctrl-source`, `ctrl-launcher` controls and `launcher-breakdown` Lens panel.
+- Deployed via saved-objects `_export` → modify panelsJSON + references → `_import?overwrite=true`. Kibana Dashboards API (9.4+) returned 404 on this Serverless deployment — `_import` fallback used.
+- `scripts/verify-dashboard.sh` PASS: 11 panels, Lens invariants OK, internal loader OK.
+- `dashboards/game-library-dashboard-deployed.ndjson` saved as the live deployed state.
+- `gamepulse-session-performance.ndjson` — confirmed no breaking changes needed.
+
+### Key decisions
+
+- **Component template not auto-deployed**: The integration package deployment flow (elastic-package) is not automated — component templates must be manually PUT to ES when the live index already exists. Added to known-follow-ups: consider scripting component template deployment as part of the agent's first-run setup.
+- **PUT /_mapping for existing index**: New fields added to an existing TSDS backing index require an explicit PUT mapping in addition to the component template update. Rolling over would also work but destroys write continuity.
+- **launcher-breakdown panel KQL filter**: `data_stream.dataset : "gamepulse.session"` in the layer query pins the panel to session docs only — source/launcher are null in all per-tick streams.
+
+### State leaving this session
+
+- B2 complete (all 8 WPs: B2.1–B2.8).
+- Active detectors: Steam, Lutris, Heroic (Epic + GOG), Bottles, UserSpecified.
+- Fields live in ES schema: `gamepulse.game.source`, `gamepulse.game.launcher`.
+- Known open follow-up: Lutris umu-backed GOG games show `launcher = "Lutris — Native"` — deferred post-B2.
+- Next: B3 (placeheld) and C (Windows collectors, now unblocked).
+
+---
+
 ## Session: 2026-04-25 (B2.7 — User-specified target override)
 
 ### What was done
