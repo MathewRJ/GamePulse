@@ -685,8 +685,9 @@ async fn main() -> Result<()> {
     });
 
     // Accumulators for summary doc
-    let session_start = std::time::Instant::now();
+    let mut session_start = std::time::Instant::now();
     let mut tick: u64 = 0;
+    let mut session_tick: u64 = 0; // resets each time a game exits
     let mut acc = SessionAccumulators::new();
     // Track last seen target so summary doc includes game.name even after the target exits.
     let mut last_known_game: Option<session::Target> = None;
@@ -699,6 +700,7 @@ async fn main() -> Result<()> {
         tokio::select! {
             _ = interval.tick() => {
                 tick += 1;
+                session_tick += 1;
                 let ts = utc_now();
 
                 // ── Game detection ────────────────────────────────────────────
@@ -728,7 +730,34 @@ async fn main() -> Result<()> {
                         for c in &mut collectors {
                             c.set_game_pid(None);
                         }
-                        last_known_game = Some(target);
+                        // Ship summary for the session that just ended.
+                        if session_tick > 0 {
+                            let duration_s = session_start.elapsed().as_secs();
+                            let summary_doc = build_summary_doc(
+                                &session,
+                                &host_snapshot,
+                                &hostname,
+                                duration_s,
+                                &acc,
+                                Some(&target),
+                            );
+                            tracing::info!(
+                                "Shipping session summary on game exit ({}s, {} ticks)",
+                                duration_s, session_tick
+                            );
+                            if let Err(e) = shipper::ship(&cfg, vec![summary_doc]).await {
+                                tracing::warn!("Failed to ship summary doc on game exit: {}", e);
+                            } else {
+                                if let Err(e) = shipper::trigger_transform_sync(&cfg, "gamepulse-game-timeline").await {
+                                    tracing::warn!("transform schedule_now failed (non-fatal): {}", e);
+                                }
+                            }
+                        }
+                        // Reset per-session state for next game.
+                        acc = SessionAccumulators::new();
+                        session_start = std::time::Instant::now();
+                        session_tick = 0;
+                        last_known_game = Some(target); // keep for shutdown-path fallback
                     }
                     SessionEvent::NoChange => {}
                 }
@@ -782,7 +811,7 @@ async fn main() -> Result<()> {
     // ── Cleanup ───────────────────────────────────────────────────────────────
     session.remove_session_json();
 
-    if tick > 0 {
+    if session_tick > 0 {
         let duration_s = session_start.elapsed().as_secs();
         let summary_doc = build_summary_doc(
             &session,
@@ -792,7 +821,7 @@ async fn main() -> Result<()> {
             &acc,
             last_known_game.as_ref(),
         );
-        tracing::info!("Shipping session summary ({}s, {} ticks)", duration_s, tick);
+        tracing::info!("Shipping session summary ({}s, {} ticks)", duration_s, session_tick);
         if let Err(e) = shipper::ship(&cfg, vec![summary_doc]).await {
             tracing::warn!("Failed to ship summary doc: {}", e);
         } else {

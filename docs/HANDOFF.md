@@ -5,6 +5,24 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-25 (bug fix — per-session summary ship + accumulator reset)
+
+### Bug fixed: session summary only shipped at agent shutdown
+
+**Root cause**: `build_summary_doc` + `shipper::ship` were called only in the `shutdown_rx` branch of `main()`. The `SessionEvent::GameEnded` arm logged the exit and set `last_known_game` but shipped nothing and never reset `acc` or `session_start`. Across multiple consecutive game sessions the single shutdown summary merged stats from all sessions, and for clean game-exit sequences (game exits, then `gamepulse stop`) only one summary was ever shipped.
+
+**Fix applied** (all changes in `src/main.rs`):
+
+1. `session_start` declared `let mut` so it can be reset.
+2. Added `let mut session_tick: u64 = 0` — a per-session tick counter that resets each time a game exits (the existing `tick` counts lifetime agent ticks and is kept for the shutdown log message).
+3. `session_tick` incremented on every tick iteration alongside `tick`.
+4. `SessionEvent::GameEnded` arm: after `set_game_pid(None)` loop, ships the session summary for the game that just ended (guarded by `session_tick > 0`), then resets `acc = SessionAccumulators::new()`, `session_start = Instant::now()`, and `session_tick = 0`. `last_known_game` is still set after the reset so the shutdown path has something to reference if the agent stops while no game is running.
+5. Shutdown cleanup block guard changed from `if tick > 0` to `if session_tick > 0` — correctly handles: (a) stopped mid-game → ship partial summary; (b) stopped after clean game-exit → `session_tick` is 0, skip (already shipped on exit); (c) never detected a game → `session_tick` is 0, skip.
+
+**Commit**: `fix: ship session summary and reset accumulators on game exit`
+
+---
+
 ## Session: 2026-04-25 (B2 live verification — Starfield/Steam + Thronebreaker/Lutris)
 
 ### What was verified
