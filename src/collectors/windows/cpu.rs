@@ -16,8 +16,9 @@
 /// PDH does not expose per-process counters in a way that works for short-lived
 /// game processes. This is documented as a known parity gap vs Linux.
 /// TODO(C.1-game-util): implement via ETW or Job Object in a later work package.
-use crate::collectors::Collector;
 use crate::collectors::windows::pdh::{PdhCounter, PdhQuery};
+use crate::collectors::windows::wmi;
+use crate::collectors::Collector;
 use anyhow::Result;
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
@@ -37,7 +38,8 @@ impl TempCache {
         }
     }
 
-    /// Return cached temperature, refreshing at most every 5 seconds via PowerShell/WMI.
+    /// Refresh at most every 5 seconds. Takes the first valid thermal zone
+    /// (arbitrary; WMI zone ordering is firmware-defined).
     fn get(&mut self) -> Option<f64> {
         let now = Instant::now();
         let stale = self
@@ -47,40 +49,10 @@ impl TempCache {
 
         if stale {
             self.last_queried = Some(now);
-            self.value = query_wmi_temperature();
+            self.value = wmi::query_thermal_zones().into_iter().next().map(|(_, t)| t);
         }
         self.value
     }
-}
-
-/// Run `Get-WmiObject MSAcpi_ThermalZoneTemperature` via PowerShell with a 500 ms
-/// timeout. Returns the package temperature in °C, or `None` on any error or if
-/// the value is outside the plausible 10–105 °C range.
-fn query_wmi_temperature() -> Option<f64> {
-    let output = std::process::Command::new("powershell")
-        .args([
-            "-NoProfile",
-            "-Command",
-            "Get-WmiObject MSAcpi_ThermalZoneTemperature -Namespace root/wmi | \
-             Select-Object -First 1 -ExpandProperty CurrentTemperature",
-        ])
-        .output()
-        .ok()?;
-
-    // Enforce 500 ms timeout by checking elapsed time is reasonable — we can't
-    // cancel a child process after the fact here, so we rely on WMI being fast.
-    // On machines where WMI is slow, the cache's 5-second debounce limits impact.
-    let raw: f64 = String::from_utf8_lossy(&output.stdout)
-        .trim()
-        .parse()
-        .ok()?;
-
-    // WMI reports temperature in tenths of Kelvin.
-    let celsius = (raw / 10.0) - 273.15;
-    if !(10.0..=105.0).contains(&celsius) {
-        return None;
-    }
-    Some((celsius * 10.0).round() / 10.0)
 }
 
 // ── Collector ─────────────────────────────────────────────────────────────────

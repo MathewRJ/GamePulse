@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-25 by claude-code (C.3 storage + C.4 network + C.6 power — dry-run verified on Windows 11)
+Last updated: 2026-04-25 by claude-code (C.5 GPU DXGI+PDH+WMI + C.7 audio — all 8 collectors dry-run verified on Windows 11)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -22,7 +22,7 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 | B  Cross-platform refactor | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
 | B2 Launcher-agnostic game detection | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
 | B3 Automatic game detection (TBD) | ⚪ Not started | ░░░░░░░░░░ |
-| C  Windows collectors | 🟡 Partial (C.0–C.4, C.6) | ▓▓▓▓▓░░░░░ |
+| C  Windows collectors | 🟢 Done (C.0–C.7) | ▓▓▓▓▓▓▓▓▓▓ |
 | D  Linux portable packaging | 🟡 Partial | ▓▓▓▓▓░░░░░ |
 | E  Windows packaging | ⚪ Not started | ░░░░░░░░░░ |
 | F  Cross-platform parity verification (M2) | 🔒 Blocked on B2+C+E | — |
@@ -53,11 +53,11 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 | Stream | Ubuntu 24.04 | Fedora 40 | Arch/CachyOS | SteamOS 3.6 | Windows 11 |
 |---|---|---|---|---|---|
 | cpu | ✅ | 🔲 | ✅ | 🔲 | 🟡 (PDH; no game_util) |
-| gpu | ✅ (AMD) | 🔲 | ✅ (AMD) | 🔲 | 🔲 |
+| gpu | ✅ (AMD) | 🔲 | ✅ (AMD) | 🔲 | 🟡 (DXGI VRAM + PDH util; temp wmi_acpi) |
 | memory | ✅ | 🔲 | ✅ | 🔲 | ✅ |
 | storage | ✅ | 🔲 | ✅ | 🔲 | 🟡 (aggregate only; no per-disk/game IO) |
 | network | ✅ | 🔲 | ✅ | 🔲 | 🟡 (aggregate only; tunnels filtered) |
-| audio | ✅ | 🔲 | ✅ | 🔲 | 🔲 |
+| audio | ✅ | 🔲 | ✅ | 🔲 | 🟡 (backend=wasapi; no xruns) |
 | power | ✅ | 🔲 | ✅ | 🔲 | 🟡 (AC + battery%; no rate_w) |
 | frame | ✅ (MangoHud) | 🔲 | ✅ (MangoHud) | 🔲 | 🔲 (PresentMon) |
 | ebpf | ✅ | 🔲 | ✅ | 🔲 | n/a |
@@ -65,10 +65,33 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 ## Active work package
 
-**C — Windows collectors (in progress, C.0–C.4 + C.6 done, dry-run verified).** Remaining: C.5 GPU (Session 3), C.7 audio. Then full ES shipping verification.
+**Milestone C complete.** All 8 Windows collectors implemented and dry-run verified. Next: Milestone E (Windows MSI packaging) or live ES shipping verification.
 See `docs/ROADMAP.md` for milestone structure and work package definitions.
 
 ## Completed work
+
+### Milestone C — Windows collectors (complete, 2026-04-25 session 3)
+
+- **C.5 — GPU collector**: Replaced `src/collectors/windows/gpu.rs` stub. Three data sources: (1) DXGI — `CoInitializeEx(COINIT_MULTITHREADED)` + `CreateDXGIFactory2(DXGI_CREATE_FACTORY_FLAGS(0))` + `EnumAdapterByGpuPreference(DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE)` → `IDXGIAdapter3::QueryVideoMemoryInfo(DXGI_MEMORY_SEGMENT_GROUP_LOCAL)` → `memory_used_mb` + `memory_total_mb`. COM init returns raw `HRESULT` in windows 0.58 (not `Result`) — matched on `.0` field (0=S_OK, 1=S_FALSE own it, `0x80010106`=RPC_E_CHANGED_MODE skip uninit). (2) PDH — `\GPU Engine(*engtype_3D*)\Utilization Percentage` wildcard counter, `counter_values_array()` filtered for `engtype_3D`, max taken across instances → `utilisation_pct`. (3) WMI — `wmi::query_thermal_zones()` with GPU zone name selection (prefers "GPU"/"VRAM"/"diode"/"VGA", falls back to hottest zone) → `temperature_c` + `temp_source: "wmi_acpi"`. Added `wmi.rs` shared helper factored from cpu.rs (cpu.rs refactored to use it). Added `Win32_System_Com` feature. Dry-run verified: 15428 MB VRAM total, 0.1% util at idle, no temperature (WMI returned no GPU zone on this system — correct graceful behavior).
+
+- **C.7 — Audio collector**: Replaced `src/collectors/windows/audio.rs` stub. Always emits `backend: "wasapi"`. GlitchListener scaffold included verbatim per spec with `TODO(C.7-xruns)` ETW upgrade path documented.
+
+- **`temp_source` field**: Added to `data_stream/gpu/fields/fields.yml` — keyword, describes provenance of `temperature_c` (`hwmon` on Linux, `wmi_acpi` on Windows).
+
+- **Full dry-run verification (all 8 collectors)**: cpu ✅, memory ✅, storage ✅, network ✅, power ✅, audio ✅ (`backend: wasapi`), gpu ✅ (VRAM + util), frame (stub, expected). No panics, no ERROR logs.
+
+### Phase C parity gap summary
+
+| Field | Linux | Windows | Upgrade path |
+|---|---|---|---|
+| `cpu.power_w` | RAPL sysfs | None | Vendor SDK |
+| `cpu.governor` | cpufreq | None | Windows power plan mapping |
+| `cpu.game_utilisation_pct` | /proc cgroup | None | ETW / Job Object |
+| `gpu.temperature_c` | hwmon exact | wmi_acpi approx | ADLX / NvAPI |
+| `gpu.power_w` | hwmon | None | ADLX / NvAPI |
+| `storage.game_io` | procfs | None | ETW kernel IO |
+| `audio.xruns` | pw-top | None (scaffold) | ETW Microsoft-Windows-Audio |
+| `power.battery_rate_w` | sysfs | None | WMI Win32_Battery |
 
 ### Milestone C — Windows collectors (partial, 2026-04-25 session 2)
 

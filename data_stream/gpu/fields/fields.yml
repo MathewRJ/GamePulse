@@ -85,3 +85,10 @@
         - name: thermal_throttle_warning
           type: boolean
           description: "True when hotspot or edge temperature exceeds 95°C (derived by ingest pipeline)"
+        - name: temp_source
+          type: keyword
+          description: >
+            Data source for temperature_c. 'hwmon' on Linux (amdgpu sysfs,
+            precise GPU die temperature). 'wmi_acpi' on Windows (ACPI thermal
+            zone — may report ambient, chassis, or GPU die depending on OEM
+            firmware). Present only when temperature_c is present.

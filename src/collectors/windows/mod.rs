@@ -1,4 +1,5 @@
 mod pdh;
+mod wmi;
 pub mod audio;
 pub mod cpu;
 pub mod frame;

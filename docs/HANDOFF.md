@@ -5,6 +5,51 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-25 (Phase C session 3 — C.5 GPU + C.7 audio, Milestone C complete)
+
+### What was built
+
+**`wmi.rs` shared helper**: `query_thermal_zones() -> Vec<(String, f64)>` runs `Get-WmiObject MSAcpi_ThermalZoneTemperature -Namespace root/wmi | ForEach-Object { "$($_.InstanceName)`t$($_.CurrentTemperature)" }`, parses tab-separated name/temperature lines, converts tenths-of-Kelvin to °C, filters 10–105 °C. Module uses `//!` inner doc style to avoid `empty_line_after_doc_comments` clippy lint. `cpu.rs` refactored to use this; `gpu.rs` uses it with GPU-zone selection logic.
+
+**C.5 — GPU collector** (`src/collectors/windows/gpu.rs`):
+- **COM**: `CoInitializeEx(None, COINIT_MULTITHREADED)` — in windows 0.58 this returns `HRESULT` directly (not `Result<()>`). Matched on `.0` field: `0` (S_OK) or `1` (S_FALSE) → `com_owner = true`, both need `CoUninitialize` on drop. `0x80010106_u32 as i32` (RPC_E_CHANGED_MODE) → `com_owner = false`, already owned by another thread.
+- **DXGI**: `CreateDXGIFactory2(DXGI_CREATE_FACTORY_FLAGS(0))` (must use newtype, not raw `0`). `factory.EnumAdapterByGpuPreference(0, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE)` → `IDXGIAdapter3`. `adapter.QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &mut info)` → `Budget`/`CurrentUsage` as `u64` bytes. Emits `memory_total_mb` + `memory_used_mb` (matching Linux field names — task spec said `used_vram_mb`/`total_vram_mb` but Linux uses `memory_*_mb`, so Linux names used to match schema).
+- **PDH**: `\GPU Engine(*engtype_3D*)\Utilization Percentage` wildcard counter. `counter_values_array()`, filter `contains("engtype_3D")`, take `f64::max` across all instances → `utilisation_pct`.
+- **WMI temp**: `select_gpu_temp()` checks zone names for "gpu"/"vram"/"diode"/"vga", falls back to hottest zone. 5s cache. Emits `temperature_c` + `temp_source: "wmi_acpi"` when present.
+- **Features added**: `Win32_System_Com`.
+
+**C.7 — Audio collector** (`src/collectors/windows/audio.rs`): Always emits `backend: "wasapi"`. `GlitchListener` struct scaffolded with `pending_xruns() -> 0` and `TODO(C.7-xruns)` ETW upgrade note.
+
+**`temp_source` schema field**: Added to `data_stream/gpu/fields/fields.yml`.
+
+### Dry-run output (all 8 collectors)
+
+```
+gamepulse.cpu     → total 3.6%, 16 cores, 4700 MHz
+gamepulse.memory  → 63 GB, 18.8% used
+gamepulse.storage → 4.9 MB/s read, 12.5 MB/s write
+gamepulse.network → 943 B/s recv, 55 B/s sent
+gamepulse.power   → ac_connected: true
+gamepulse.audio   → backend: wasapi
+gamepulse.gpu     → memory_total_mb: 15428, memory_used_mb: 0, utilisation_pct: 0.1
+gamepulse.frame   → no data (stub, expected)
+```
+
+GPU `temperature_c` absent — WMI returned no thermal zone matching GPU keywords on this system (no GPU-labelled ACPI zones in firmware). Graceful behavior confirmed.
+
+### windows 0.58 quirks found in this session
+
+1. `CoInitializeEx` returns `HRESULT` directly (not `Result<()>`). Match on `hr.0 == 0 || hr.0 == 1` for success.
+2. `CreateDXGIFactory2` requires `DXGI_CREATE_FACTORY_FLAGS(0)` newtype, not raw `0`.
+3. Doc comments: `///` followed by blank line before a function triggers `empty_line_after_doc_comments` lint — use `//!` inner doc for module-level comments, or remove the blank line.
+4. Doc list continuations that wrap lines require 2-space indent or a blank line separator (`doc_lazy_continuation` lint).
+
+### Milestone C status
+
+All 8 collectors implemented and verified. Frame (PresentMon) remains a stub — that is a separate milestone. Phase C is closed.
+
+---
+
 ## Session: 2026-04-25 (Phase C session 2 — C.3 storage + C.4 network + C.6 power, dry-run verified)
 
 ### What was built
