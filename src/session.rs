@@ -932,14 +932,181 @@ fn dxvk_version_from_env(env: &HashMap<String, String>) -> Option<String> {
     }
 }
 
+// ── Heroic detection ──────────────────────────────────────────────────────────
+
+#[derive(Clone, Copy)]
+enum HeroicStore {
+    Epic,
+    Gog,
+}
+
+/// Probe all known Heroic installed.json paths (native + Flatpak, Epic + GOG).
+/// Returns (app_name, display_title, store) for every non-DLC installed game.
+/// Deduplicates by app_name across all four candidate paths.
+fn heroic_installed_games() -> Vec<(String, String, HeroicStore)> {
+    let home = match std::env::var("HOME") {
+        Ok(h) => h,
+        Err(_) => return Vec::new(),
+    };
+
+    let candidates: &[(&str, HeroicStore)] = &[
+        (
+            ".config/heroic/legendaryConfig/legendary/installed.json",
+            HeroicStore::Epic,
+        ),
+        (
+            ".var/app/com.heroicgameslauncher.hgl/config/heroic/legendaryConfig/legendary/installed.json",
+            HeroicStore::Epic,
+        ),
+        (
+            ".config/heroic/gog_store/installed.json",
+            HeroicStore::Gog,
+        ),
+        (
+            ".var/app/com.heroicgameslauncher.hgl/config/heroic/gog_store/installed.json",
+            HeroicStore::Gog,
+        ),
+    ];
+
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut result: Vec<(String, String, HeroicStore)> = Vec::new();
+
+    for &(rel, store) in candidates {
+        let path = PathBuf::from(&home).join(rel);
+        if !path.exists() {
+            continue;
+        }
+        let content = match std::fs::read_to_string(&path) {
+            Ok(c) if !c.trim().is_empty() => c,
+            Ok(_) => continue,
+            Err(e) => {
+                tracing::warn!("Heroic: failed to read {:?}: {}", path, e);
+                continue;
+            }
+        };
+        let json: serde_json::Value = match serde_json::from_str(&content) {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!("Heroic: failed to parse {:?}: {}", path, e);
+                continue;
+            }
+        };
+
+        // Object format (Legendary: keyed by app_name UUID; newer GOG: keyed by appName).
+        if let Some(obj) = json.as_object() {
+            for (key, val) in obj {
+                let app_name = val
+                    .get("app_name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(key)
+                    .to_string();
+                let title = match val.get("title").and_then(|v| v.as_str()) {
+                    Some(t) => t.to_string(),
+                    None => continue,
+                };
+                if val.get("is_dlc").and_then(|v| v.as_bool()).unwrap_or(false) {
+                    continue;
+                }
+                if seen.insert(app_name.clone()) {
+                    result.push((app_name, title, store));
+                }
+            }
+        } else if let Some(arr) = json.as_array() {
+            // Array format (older GOG builds).
+            for val in arr {
+                let app_name = val
+                    .get("appName")
+                    .or_else(|| val.get("app_name"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                let title = val
+                    .get("title")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                if let (Some(app_name), Some(title)) = (app_name, title) {
+                    if !val.get("is_dlc").and_then(|v| v.as_bool()).unwrap_or(false)
+                        && seen.insert(app_name.clone())
+                    {
+                        result.push((app_name, title, store));
+                    }
+                }
+            }
+        }
+    }
+
+    result
+}
+
+/// Detect a running Heroic-managed game by scanning /proc/*/environ for
+/// `SteamGameId=heroic-<AppName>`. Heroic sets this env var on child processes
+/// for both Epic (via Legendary) and GOG (via gogdl) games. The app_name
+/// suffix is a UUID hash for Epic games (e.g. `a7594e61a4f24e6d9495ea959749598e`).
+pub(crate) fn scan_for_heroic_game() -> Option<Target> {
+    let installed = heroic_installed_games();
+    if installed.is_empty() {
+        return None;
+    }
+
+    let pids: Vec<u32> = std::fs::read_dir("/proc")
+        .ok()?
+        .filter_map(|e| e.ok())
+        .filter_map(|e| e.file_name().to_str()?.parse::<u32>().ok())
+        .collect();
+
+    let mut heroic_pids: HashMap<String, Vec<u32>> = HashMap::new();
+    for &pid in &pids {
+        if let Some(env) = read_environ(pid) {
+            if let Some(app_name) = env
+                .get("SteamGameId")
+                .and_then(|v| v.strip_prefix("heroic-"))
+            {
+                heroic_pids
+                    .entry(app_name.to_string())
+                    .or_default()
+                    .push(pid);
+            }
+        }
+    }
+
+    if heroic_pids.is_empty() {
+        return None;
+    }
+
+    for (app_name, title, store) in &installed {
+        if let Some(pids) = heroic_pids.get(app_name) {
+            let mut all_pids = pids.clone();
+            all_pids.sort_unstable();
+            let pid = all_pids[0];
+            let launcher = Some(match store {
+                HeroicStore::Epic => "Heroic \u{2014} Epic".to_string(),
+                HeroicStore::Gog => "Heroic \u{2014} GOG".to_string(),
+            });
+            return Some(Target {
+                source: TargetSource::Heroic,
+                display_name: title.clone(),
+                pid,
+                all_pids,
+                steam_app_id: None,
+                launcher,
+                graphics_api: None,
+                proton_version: None,
+                dxvk_version: None,
+            });
+        }
+    }
+
+    None
+}
+
 // ── Target scanner (dispatcher + per-source helpers) ──────────────────────────
 
 /// Try every detection source in order; return the first match.
 /// B2.1 only knows Steam. Future WPs slot launcher-specific scanners into this
 /// chain without restructuring callers.
 pub fn scan_for_game() -> Option<Target> {
-    scan_for_steam_game().or_else(scan_for_lutris_game)
-    // B2.4 will add: .or_else(scan_for_heroic_game)
+    scan_for_steam_game()
+        .or_else(scan_for_lutris_game)
+        .or_else(scan_for_heroic_game)
     // B2.5 will add: .or_else(scan_for_bottles_game)
     // B2.7 will add: .or_else(scan_for_user_specified_target)
 }
