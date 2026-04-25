@@ -7,7 +7,9 @@
 // Mirrors the structure of collector/gamepulse/cli.py exactly.
 
 #[cfg(all(feature = "ebpf", not(target_os = "linux")))]
-compile_error!("the 'ebpf' feature is only supported on Linux (aya/BPF syscalls have no Windows equivalent)");
+compile_error!(
+    "the 'ebpf' feature is only supported on Linux (aya/BPF syscalls have no Windows equivalent)"
+);
 
 mod collectors;
 mod config;
@@ -234,20 +236,20 @@ fn build_session_start_doc(
     doc
 }
 
-/// Ship an updated session document when a game is first detected.
+/// Ship an updated session document when a target is first detected.
 fn build_game_detected_doc(
     session: &session::SessionManager,
     host_snapshot: &Value,
     hostname: &str,
-    game: &session::DetectedGame,
+    target: &session::Target,
 ) -> Value {
     let base = session.base_doc(hostname);
     let ts = json!({ "@timestamp": utc_now() });
     let mut compat = serde_json::Map::new();
-    if let Some(v) = &game.proton_version {
+    if let Some(v) = &target.proton_version {
         compat.insert("proton_version".to_string(), Value::String(v.clone()));
     }
-    if let Some(v) = &game.dxvk_version {
+    if let Some(v) = &target.dxvk_version {
         compat.insert("dxvk_version".to_string(), Value::String(v.clone()));
     }
     let compat_overlay = if compat.is_empty() {
@@ -372,7 +374,7 @@ fn build_summary_doc(
     hostname: &str,
     duration_s: u64,
     acc: &SessionAccumulators,
-    last_game: Option<&session::DetectedGame>,
+    last_game: Option<&session::Target>,
 ) -> Value {
     let interval = 1.0_f64; // 1-second collection interval
 
@@ -427,13 +429,25 @@ fn build_summary_doc(
 
     let mut base = session.base_doc(hostname);
 
-    // If the game exited before the summary is built, session.current_game is None.
-    // Inject the last known game fields so gamepulse.game.* appear in the summary.
-    if let (Some(game), None) = (last_game, session.current_game.as_ref()) {
+    // If the target exited before the summary is built, session.current_game is None.
+    // Inject the last known target fields so gamepulse.game.* appear in the summary.
+    if let (Some(target), None) = (last_game, session.current_game.as_ref()) {
         let mut game_doc = serde_json::Map::new();
-        game_doc.insert("name".to_string(), Value::String(game.name.clone()));
-        game_doc.insert("steam_app_id".to_string(), Value::from(game.steam_app_id));
-        if let Some(api) = &game.graphics_api {
+        game_doc.insert(
+            "name".to_string(),
+            Value::String(target.display_name.clone()),
+        );
+        // B2.1: only Steam targets exist, so steam_app_id is always Some(_).
+        // B2.2 will make this conditional and add gamepulse.game.{source,launcher}.
+        game_doc.insert(
+            "steam_app_id".to_string(),
+            Value::from(
+                target
+                    .steam_app_id
+                    .expect("Steam target without steam_app_id — invariant violation"),
+            ),
+        );
+        if let Some(api) = &target.graphics_api {
             game_doc.insert("graphics_api".to_string(), Value::String(api.clone()));
         }
         let overlay = json!({ "gamepulse": { "game": game_doc } });
@@ -645,8 +659,8 @@ async fn main() -> Result<()> {
     let session_start = std::time::Instant::now();
     let mut tick: u64 = 0;
     let mut acc = SessionAccumulators::new();
-    // Track last seen game so summary doc includes game.name even after game exits.
-    let mut last_known_game: Option<session::DetectedGame> = None;
+    // Track last seen target so summary doc includes game.name even after the target exits.
+    let mut last_known_game: Option<session::Target> = None;
 
     // 1-second tick interval; skip missed ticks (don't burst-catch-up).
     let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
@@ -660,28 +674,28 @@ async fn main() -> Result<()> {
 
                 // ── Game detection ────────────────────────────────────────────
                 match session.poll() {
-                    SessionEvent::GameStarted(game) => {
+                    SessionEvent::GameStarted(target) => {
                         tracing::info!(
                             "Game detected: {} (pid {}, all_pids={:?})",
-                            game.name, game.pid, game.all_pids
+                            target.display_name, target.pid, target.all_pids
                         );
                         for c in &mut collectors {
-                            c.set_game_pid(Some(game.pid));
+                            c.set_game_pid(Some(target.pid));
                         }
-                        last_known_game = Some(game.clone());
+                        last_known_game = Some(target.clone());
                         let game_doc = build_game_detected_doc(
-                            &session, &host_snapshot, &hostname, &game,
+                            &session, &host_snapshot, &hostname, &target,
                         );
                         if let Err(e) = shipper::ship(&cfg, vec![game_doc]).await {
                             tracing::warn!("Failed to ship game-detected doc: {}", e);
                         }
                     }
-                    SessionEvent::GameEnded(old) => {
-                        tracing::info!("Game exited: {}", old.name);
+                    SessionEvent::GameEnded(target) => {
+                        tracing::info!("Game exited: {}", target.display_name);
                         for c in &mut collectors {
                             c.set_game_pid(None);
                         }
-                        last_known_game = Some(old);
+                        last_known_game = Some(target);
                     }
                     SessionEvent::NoChange => {}
                 }

@@ -21,33 +21,83 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
-// ── Detected game ──────────────────────────────────────────────────────────────
+// ── Target (detected game/app) ─────────────────────────────────────────────────
 
+/// Where a `Target` came from. Only `Steam` is constructed in B2.1; the other
+/// variants are reserved for B2.3-B2.7 (Lutris/Heroic/Bottles/UserSpecified)
+/// and B3 (AutoDetected). Per-crate `dead_code = "allow"` keeps them from
+/// tripping clippy until their detectors land.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TargetSource {
+    Steam,
+    Lutris,
+    Heroic,
+    Bottles,
+    UserSpecified,
+    AutoDetected,
+}
+
+/// A running game/application that GamePulse is scoped to. Generalises the
+/// previous Steam-only `DetectedGame`.
+///
+/// Runtime invariants (not compiler-checked):
+/// - `source == TargetSource::Steam` ⇒ `steam_app_id.is_some()`.
+/// - `source != TargetSource::Steam` ⇒ `steam_app_id.is_none()`.
+/// - `launcher` is `None` until B2.2 wires the schema field; constructors in
+///   later WPs will populate it (e.g. `"Steam"`, `"Lutris"`, `"Heroic — Epic"`).
+/// - `display_name` is non-empty.
 #[derive(Debug, Clone)]
-pub struct DetectedGame {
-    pub name: String,
-    pub steam_app_id: u32,
+pub struct Target {
+    pub source: TargetSource,
+    pub display_name: String,
     pub pid: u32,
-    /// All PIDs with this SteamAppId — used by eBPF daemon for TID filter.
+    /// All PIDs that belong to this target — used by the eBPF daemon for TID filtering.
     pub all_pids: Vec<u32>,
+    pub steam_app_id: Option<u32>,
+    pub launcher: Option<String>,
     pub graphics_api: Option<String>,
     pub proton_version: Option<String>,
     pub dxvk_version: Option<String>,
+}
+
+impl Target {
+    /// Construct a Steam-sourced `Target`. Used by `scan_for_steam_game`.
+    pub fn from_steam(
+        name: String,
+        steam_app_id: u32,
+        pid: u32,
+        all_pids: Vec<u32>,
+        graphics_api: Option<String>,
+        proton_version: Option<String>,
+        dxvk_version: Option<String>,
+    ) -> Self {
+        Target {
+            source: TargetSource::Steam,
+            display_name: name,
+            pid,
+            all_pids,
+            steam_app_id: Some(steam_app_id),
+            launcher: None, // populated by B2.2 schema work
+            graphics_api,
+            proton_version,
+            dxvk_version,
+        }
+    }
 }
 
 // ── Session events ─────────────────────────────────────────────────────────────
 
 pub enum SessionEvent {
     NoChange,
-    GameStarted(DetectedGame),
-    GameEnded(DetectedGame), // the game that just ended
+    GameStarted(Target),
+    GameEnded(Target), // the target that just ended
 }
 
 // ── Session manager ────────────────────────────────────────────────────────────
 
 pub struct SessionManager {
     pub session_id: String,
-    pub current_game: Option<DetectedGame>,
+    pub current_game: Option<Target>,
     /// Current label written to every doc. Auto-generated unless the user supplied
     /// a manual override via --label / [session].label in the config.
     ///
@@ -142,28 +192,29 @@ impl SessionManager {
                 SessionEvent::NoChange
             }
 
-            (None, Some(game)) => {
+            (None, Some(target)) => {
                 // Auto-generate a game slug label unless the user set a manual one.
                 if !self.label_is_manual {
-                    let slug = slug_from_game_name(&game.name);
+                    let slug = slug_from_game_name(&target.display_name);
                     let n = increment_session_counter(&slug);
                     self.sequence_number = Some(n);
                     self.label = Some(auto_label_game_n(&slug, n));
                 }
                 tracing::info!(
-                    "Game detected: {} (app_id={}, pid={}, api={:?}, label={:?})",
-                    game.name,
-                    game.steam_app_id,
-                    game.pid,
-                    game.graphics_api.as_deref().unwrap_or("unknown"),
+                    "Game detected: {} (source={:?}, app_id={:?}, pid={}, api={:?}, label={:?})",
+                    target.display_name,
+                    target.source,
+                    target.steam_app_id,
+                    target.pid,
+                    target.graphics_api.as_deref().unwrap_or("unknown"),
                     self.label.as_deref().unwrap_or("")
                 );
-                if let Err(e) = self.write_session_json(&game) {
+                if let Err(e) = self.write_session_json(&target) {
                     tracing::warn!("Failed to write session.json: {}", e);
                 }
-                self.current_game = Some(game.clone());
+                self.current_game = Some(target.clone());
                 self.last_no_game_log = None; // reset so "no game" logs resume if game exits
-                SessionEvent::GameStarted(game)
+                SessionEvent::GameStarted(target)
             }
 
             (Some(old), None) => {
@@ -171,17 +222,17 @@ impl SessionManager {
                 SessionEvent::GameEnded(old)
             }
 
-            (Some(old), Some(new_game)) => {
-                if old.pid != new_game.pid || old.steam_app_id != new_game.steam_app_id {
-                    // Game changed (or switched) — treat as new start.
-                    if let Err(e) = self.write_session_json(&new_game) {
+            (Some(old), Some(new_target)) => {
+                if old.pid != new_target.pid || old.steam_app_id != new_target.steam_app_id {
+                    // Target changed (or switched) — treat as new start.
+                    if let Err(e) = self.write_session_json(&new_target) {
                         tracing::warn!("Failed to write session.json: {}", e);
                     }
-                    self.current_game = Some(new_game.clone());
-                    SessionEvent::GameStarted(new_game)
+                    self.current_game = Some(new_target.clone());
+                    SessionEvent::GameStarted(new_target)
                 } else {
-                    // Same game — silently update all_pids (grows as Proton spins up threads).
-                    self.current_game = Some(new_game);
+                    // Same target — silently update all_pids (grows as Proton spins up threads).
+                    self.current_game = Some(new_target);
                     SessionEvent::NoChange
                 }
             }
@@ -212,11 +263,23 @@ impl SessionManager {
         let mut gp = serde_json::Map::new();
         gp.insert("session".to_string(), Value::Object(gp_session));
 
-        if let Some(game) = &self.current_game {
+        if let Some(target) = &self.current_game {
             let mut game_doc = serde_json::Map::new();
-            game_doc.insert("name".to_string(), Value::String(game.name.clone()));
-            game_doc.insert("steam_app_id".to_string(), Value::from(game.steam_app_id));
-            if let Some(api) = &game.graphics_api {
+            game_doc.insert(
+                "name".to_string(),
+                Value::String(target.display_name.clone()),
+            );
+            // B2.1: only Steam targets exist, so steam_app_id is always Some(_).
+            // B2.2 will make this conditional on source and add gamepulse.game.{source,launcher}.
+            game_doc.insert(
+                "steam_app_id".to_string(),
+                Value::from(
+                    target
+                        .steam_app_id
+                        .expect("Steam target without steam_app_id — invariant violation"),
+                ),
+            );
+            if let Some(api) = &target.graphics_api {
                 game_doc.insert("graphics_api".to_string(), Value::String(api.clone()));
             }
             gp.insert("game".to_string(), Value::Object(game_doc));
@@ -229,7 +292,11 @@ impl SessionManager {
     }
 
     /// Write /tmp/gamepulse/session.json for the eBPF daemon.
-    fn write_session_json(&self, game: &DetectedGame) -> Result<()> {
+    ///
+    /// On-disk format is UNCHANGED from the pre-B2.1 layout — the daemon's
+    /// `SessionInfo` reader expects exactly these fields. Format generalisation
+    /// (optional steam_app_id, source/launcher fields) is B2.2 work.
+    fn write_session_json(&self, target: &Target) -> Result<()> {
         let dir = self.session_json_path.parent().unwrap();
         std::fs::create_dir_all(dir)?;
         // Set mode 1777 so non-root processes can write session.json later.
@@ -238,18 +305,24 @@ impl SessionManager {
             use std::os::unix::fs::PermissionsExt;
             let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o1777));
         }
+        // B2.1: every target is source=Steam, so steam_app_id is always Some(_).
+        // B2.2 will replace this with optional emission once the daemon learns
+        // to handle non-Steam targets.
+        let steam_app_id = target
+            .steam_app_id
+            .expect("Steam target without steam_app_id — invariant violation");
         let doc = json!({
             "session_id": self.session_id,
-            "game_pid": game.pid,
-            "game_name": game.name,
-            "game_pids": game.all_pids,
-            "steam_app_id": game.steam_app_id,
+            "game_pid": target.pid,
+            "game_name": target.display_name,
+            "game_pids": target.all_pids,
+            "steam_app_id": steam_app_id,
         });
         std::fs::write(&self.session_json_path, serde_json::to_string(&doc)?)?;
         tracing::debug!(
             "wrote session.json: {} (pids: {:?})",
             self.session_json_path.display(),
-            game.all_pids
+            target.all_pids
         );
         Ok(())
     }
@@ -649,11 +722,22 @@ fn dxvk_version_from_env(env: &HashMap<String, String>) -> Option<String> {
     }
 }
 
-// ── Main game scanner ──────────────────────────────────────────────────────────
+// ── Target scanner (dispatcher + per-source helpers) ──────────────────────────
+
+/// Try every detection source in order; return the first match.
+/// B2.1 only knows Steam. Future WPs slot launcher-specific scanners into this
+/// chain without restructuring callers.
+pub fn scan_for_game() -> Option<Target> {
+    scan_for_steam_game()
+    // B2.3 will add: .or_else(scan_for_lutris_game)
+    // B2.4 will add: .or_else(scan_for_heroic_game)
+    // B2.5 will add: .or_else(scan_for_bottles_game)
+    // B2.7 will add: .or_else(scan_for_user_specified_target)
+}
 
 /// Scan /proc for a running Steam game. Returns the best candidate or None.
 /// Matches Python GameDetector._scan() exactly.
-fn scan_for_game() -> Option<DetectedGame> {
+pub(crate) fn scan_for_steam_game() -> Option<Target> {
     let pids: Vec<u32> = std::fs::read_dir("/proc")
         .ok()?
         .filter_map(|e| e.ok())
@@ -720,13 +804,13 @@ fn scan_for_game() -> Option<DetectedGame> {
         .cloned()
         .unwrap_or_else(|| vec![pid]);
 
-    Some(DetectedGame {
+    Some(Target::from_steam(
         name,
-        steam_app_id: app_id,
+        app_id,
         pid,
         all_pids,
         graphics_api,
         proton_version,
         dxvk_version,
-    })
+    ))
 }
