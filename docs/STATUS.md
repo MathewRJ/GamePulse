@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-25 by claude-code (B2.6 — populate graphics_api/proton_version/dxvk_version for non-Steam targets)
+Last updated: 2026-04-25 by claude-code (B2.7 — --target-pid / --target-name user-specified target override)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -20,7 +20,7 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 |---|---|---|
 | A  Docs reorganisation | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
 | B  Cross-platform refactor | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
-| B2 Launcher-agnostic game detection | 🟡 Partial | ▓▓░░░░░░░░ |
+| B2 Launcher-agnostic game detection | 🟡 Partial | ▓▓▓▓▓▓▓░░░ |
 | B3 Automatic game detection (TBD) | ⚪ Not started | ░░░░░░░░░░ |
 | C  Windows collectors | 🔒 Blocked on B2 | ░░░░░░░░░░ |
 | D  Linux portable packaging | 🟡 Partial | ▓▓▓▓▓░░░░░ |
@@ -65,12 +65,14 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 ## Active work package
 
-**B2.7 — User-specified target CLI.** Add `--game-pid <PID>` and `--game-name <NAME>` CLI flags so users can manually identify a running process as the target, populating `Target { source: UserSpecified, … }`. Wires into `scan_for_game()` dispatcher via the reserved `.or_else(scan_for_user_specified_target)` slot.
+**B2.8 — Dashboard / query updates.** Update Kibana dashboards and ES|QL queries to handle the new `gamepulse.game.source` and `gamepulse.game.launcher` fields added in B2.2, so dashboards show launcher provenance for non-Steam sessions. Review any hard-coded `source: steam` filters.
 See `docs/ROADMAP.md` for milestone structure and work package definitions.
 
 ## Completed work
 
 ### Milestone B2 — Launcher-agnostic game detection (partial, 2026-04-25)
+
+- **B2.7 — User-specified target override**: Added `--target-pid <PID>` and `--target-name <NAME>` CLI flags to `src/main.rs` Cli struct, and `target_pid`/`target_name` fields to `SessionConfig` in `src/config.rs` (config-file equivalents under `[session]`). Added `resolve_user_target(pid_override, name_override) -> Option<Target>` to `src/session.rs`: PID mode validates `/proc/<pid>` exists, reads comm/exe for display name, runs enrichment helpers; name mode scans `/proc/*/comm` and `/proc/*/exe` basename (case-insensitive, first match). Added `poll_pinned_target()` helper in `src/main.rs` that synthesises `GameStarted`/`GameEnded`/`NoChange` events by checking `/proc/<pid>` liveness — replaces `session.poll()` in the tick loop when a pinned target is active. CLI takes precedence over config; `--target-pid` over `--target-name` if both given. Fallback to auto-detection if process not found. Updated dispatcher comment in `scan_for_game()` explaining why UserSpecified bypasses the chain. 7/7 tests (added `test_resolve_user_target_invalid_pid` + `test_resolve_user_target_no_args`). Smoke test: `--dry-run --target-pid $SHELL_PID` and `--target-name fish` both parse without panic.
 
 - **B2.6 — Proton/Wine env var enrichment**: Called `read_environ(pid).unwrap_or_default()` + `detect_graphics_api` + `proton_version_from_env` + `dxvk_version_from_env` at the `Target` construction site in `scan_for_lutris_game`, `scan_for_heroic_game`, and `scan_for_bottles_game`. All three previously returned `None` for these fields. No new crates, no schema changes, no helper modifications — pure mechanical wiring. Added unit test `test_enrich_from_proton_env` confirming `PROTON_VERSION` + `DXVK_CONFIG_FILE` env produces `graphics_api = "dx11_via_dxvk"` and `proton_version = "GE-Proton9-20"`. Known limitation not fixed: Lutris umu-backed GOG games still show `launcher = "Lutris — Native"` (requires runner detection via process environ, deferred post-B2). Verification: `cargo check`, `cargo clippy -- -D warnings`, `cargo fmt --check`, `cargo test` (5/5) green.
 

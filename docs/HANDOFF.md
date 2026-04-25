@@ -5,6 +5,40 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-25 (B2.7 — User-specified target override)
+
+### What was done
+
+- Added `--target-pid` / `--target-name` CLI flags (Cli struct in `main.rs`) and matching `target_pid` / `target_name` config fields (SessionConfig in `config.rs`).
+- Added `resolve_user_target(pid_override, name_override) -> Option<Target>` in `session.rs`: PID mode checks `/proc/<pid>` existence; name mode scans `/proc/*/comm` + `/proc/*/exe` basename case-insensitively. Both run standard enrichment helpers on the matched process. Returns `Target { source: UserSpecified, launcher: "User-specified", … }`.
+- Added `poll_pinned_target(pinned, current) -> SessionEvent` in `main.rs`: checks `/proc/<pid>` liveness each tick, synthesises `GameStarted`/`GameEnded`/`NoChange` without touching `session.poll()`.
+- Wired in `main()`: resolves pinned target after config load, before `SessionManager` creation; tick loop dispatches to `poll_pinned_target` when pinned target is `Some`, otherwise falls through to `session.poll()`.
+- Updated dispatcher comment in `scan_for_game()`: explains UserSpecified bypasses the chain.
+- 7/7 tests green (2 new: invalid PID + no-args).
+
+### Key design decision: startup resolution vs polling
+
+User targets are resolved once at startup and then checked for liveness each tick — they are not re-scanned via the auto-detection chain. This is intentional: users specifying a PID/name want the agent to track that specific process, not switch to a different one if it restarts. If the user-specified process isn't found at startup, the agent falls back to auto-detection with a warning.
+
+### `poll_pinned_target` lifecycle
+
+- `(current=None, alive=true)` → `GameStarted` (first tick after target found)
+- `(current=Some, alive=false)` → `GameEnded` (process exited)
+- anything else → `NoChange`
+
+Session state (`session.current_game`) is mutated directly since `poll_pinned_target` takes `&mut Option<Target>`, bypassing `SessionManager::poll()` entirely.
+
+### Smoke test
+
+`--dry-run --target-pid $SHELL_PID` and `--dry-run --target-name fish` both parse without panic. Dry-run exits before the pinned-target path fires (ES ping + session-start happen before the tick loop), which is expected. Full live test requires a real non-Steam game launch.
+
+### State leaving this session
+
+- B2.7 complete. All seven B2 detectors implemented (Steam, Lutris, Heroic, Bottles + enrichment + user-specified).
+- B2.8 (dashboard/query updates for `source`/`launcher` fields) is next active WP.
+
+---
+
 ## Session: 2026-04-25 (B2.6 — Proton/Wine env var enrichment)
 
 ### What was done
