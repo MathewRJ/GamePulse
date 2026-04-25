@@ -1098,6 +1098,167 @@ pub(crate) fn scan_for_heroic_game() -> Option<Target> {
     None
 }
 
+// ── Bottles detection ─────────────────────────────────────────────────────────
+
+#[derive(serde::Deserialize, Default)]
+struct BottleConfig {
+    #[serde(rename = "Name")]
+    name: String,
+    #[serde(rename = "Programs", default)]
+    programs: std::collections::HashMap<String, BottleProgram>,
+}
+
+#[derive(serde::Deserialize, Default)]
+struct BottleProgram {
+    name: Option<String>,
+    executable: Option<String>,
+    #[serde(default)]
+    removed: Option<serde_json::Value>,
+}
+
+impl BottleProgram {
+    fn is_active(&self) -> bool {
+        match &self.removed {
+            None => true,
+            Some(serde_json::Value::Null) => true,
+            Some(serde_json::Value::Bool(b)) => !b,
+            Some(serde_json::Value::String(s)) => s.is_empty(),
+            _ => false,
+        }
+    }
+}
+
+/// Detect a running Bottles-managed game by scanning /proc/*/environ for a
+/// WINEPREFIX that matches a known bottle directory. Each bottle directory IS
+/// the WINEPREFIX. Uses /proc/<pid>/exe basename to identify which program
+/// within the bottle is running; falls back to the bottle Name if no match.
+pub(crate) fn scan_for_bottles_game() -> Option<Target> {
+    let home = std::env::var("HOME").ok()?;
+
+    let roots: Vec<PathBuf> = [
+        format!("{}/.local/share/bottles/bottles", home),
+        format!(
+            "{}/.var/app/com.usebottles.bottles/data/bottles/bottles",
+            home
+        ),
+    ]
+    .into_iter()
+    .map(PathBuf::from)
+    .filter(|p| p.exists())
+    .collect();
+
+    if roots.is_empty() {
+        return None;
+    }
+
+    // Collect all bottle dirs and their parsed configs.
+    let mut bottles: Vec<(PathBuf, BottleConfig)> = Vec::new();
+    for root in &roots {
+        let dir_iter = match std::fs::read_dir(root) {
+            Ok(it) => it,
+            Err(e) => {
+                tracing::warn!("Bottles: failed to read {:?}: {}", root, e);
+                continue;
+            }
+        };
+        for entry in dir_iter.filter_map(|e| e.ok()) {
+            let bottle_dir = entry.path();
+            if !bottle_dir.is_dir() {
+                continue;
+            }
+            let yml_path = bottle_dir.join("bottle.yml");
+            if !yml_path.exists() {
+                continue;
+            }
+            let content = match std::fs::read_to_string(&yml_path) {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::warn!("Bottles: failed to read {:?}: {}", yml_path, e);
+                    continue;
+                }
+            };
+            let config: BottleConfig = match serde_yaml::from_str(&content) {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::warn!("Bottles: failed to parse {:?}: {}", yml_path, e);
+                    continue;
+                }
+            };
+            bottles.push((bottle_dir, config));
+        }
+    }
+
+    if bottles.is_empty() {
+        return None;
+    }
+
+    // Build WINEPREFIX → PIDs map from /proc once, reused across all bottles.
+    let pids: Vec<u32> = std::fs::read_dir("/proc")
+        .ok()?
+        .filter_map(|e| e.ok())
+        .filter_map(|e| e.file_name().to_str()?.parse::<u32>().ok())
+        .collect();
+
+    let mut prefix_pids: HashMap<PathBuf, Vec<u32>> = HashMap::new();
+    for &pid in &pids {
+        if let Some(env) = read_environ(pid) {
+            if let Some(prefix) = env.get("WINEPREFIX") {
+                prefix_pids
+                    .entry(PathBuf::from(prefix))
+                    .or_default()
+                    .push(pid);
+            }
+        }
+    }
+
+    for (bottle_dir, config) in &bottles {
+        let matched = prefix_pids.get(bottle_dir);
+        let Some(pids_for_bottle) = matched else {
+            continue;
+        };
+
+        let mut all_pids = pids_for_bottle.clone();
+        all_pids.sort_unstable();
+        let pid = all_pids[0];
+
+        // Try to match running exe basename against Programs entries.
+        let exe_name = std::fs::read_link(format!("/proc/{}/exe", pid))
+            .ok()
+            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_lowercase()));
+
+        let display_name = exe_name
+            .as_deref()
+            .and_then(|exe_base| {
+                config
+                    .programs
+                    .iter()
+                    .filter(|(_, prog)| prog.is_active())
+                    .find(|(_, prog)| {
+                        prog.executable
+                            .as_deref()
+                            .map(|e| e.to_lowercase() == exe_base)
+                            .unwrap_or(false)
+                    })
+                    .map(|(slug, prog)| prog.name.clone().unwrap_or_else(|| slug.clone()))
+            })
+            .unwrap_or_else(|| config.name.clone());
+
+        return Some(Target {
+            source: TargetSource::Bottles,
+            display_name,
+            pid,
+            all_pids,
+            steam_app_id: None,
+            launcher: Some("Bottles".to_string()),
+            graphics_api: None,
+            proton_version: None,
+            dxvk_version: None,
+        });
+    }
+
+    None
+}
+
 // ── Target scanner (dispatcher + per-source helpers) ──────────────────────────
 
 /// Try every detection source in order; return the first match.
@@ -1107,7 +1268,7 @@ pub fn scan_for_game() -> Option<Target> {
     scan_for_steam_game()
         .or_else(scan_for_lutris_game)
         .or_else(scan_for_heroic_game)
-    // B2.5 will add: .or_else(scan_for_bottles_game)
+        .or_else(scan_for_bottles_game)
     // B2.7 will add: .or_else(scan_for_user_specified_target)
 }
 
