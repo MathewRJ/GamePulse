@@ -5,6 +5,40 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-25 (B2.5 — Bottles game detection)
+
+### Context coming in
+
+- B2.4 landed in previous context window (same day): Heroic scanner via `SteamGameId=heroic-<app_name>`. Dispatcher slot for B2.5 was a comment.
+- Host: CachyOS Linux. Bottles not installed on either path.
+
+### Reconnaissance findings
+
+- `~/.local/share/bottles/bottles/` — absent
+- `~/.var/app/com.usebottles.bottles/data/bottles/bottles/` — absent
+- Bottles not installed. Detector exits at the empty-roots guard and returns `None` immediately — correct behaviour.
+
+### What was done
+
+1. Added `BottleConfig` and `BottleProgram` serde_yaml structs with `is_active()` method that handles `removed` field variants (null/bool/string).
+2. Implemented `scan_for_bottles_game()`: enumerates both roots → parses `bottle.yml` files → builds `WINEPREFIX → PIDs` map once from `/proc/*/environ` → for each bottle with matching PIDs, resolves display name by matching `/proc/<pid>/exe` basename against `Programs` entries (case-insensitive); falls back to bottle `Name` if no program match.
+3. Wired into `scan_for_game()` dispatcher replacing the B2.5 comment slot.
+4. All 4 tests green; clippy + fmt clean.
+
+### Key decisions
+
+- **WINEPREFIX = bottle directory**: the bottle dir is the Wine prefix, so matching is exact path equality — no fuzzy matching needed.
+- **Display name priority**: exe-basename match against Programs → program `name` field or slug → bottle `Name`. This handles the common case where multiple programs exist in one bottle.
+- **`is_active()` on BottleProgram**: Bottles uses `removed: null` for active programs and `removed: true` or a non-empty string for removed ones. The method handles all JSON value variants defensively.
+- **No new tests**: WINEPREFIX+exe matching requires mock filesystem; pattern already validated by B2.3 Lutris Wine path. No unit-testable pure functions added in this WP.
+
+### State leaving this session
+
+- B2.5 complete. Bottles detection live in dispatcher.
+- B2.6 (Proton/Wine env var generalisation — populate `graphics_api`, `proton_version`, `dxvk_version` for non-Steam targets) is next active WP.
+
+---
+
 ## Session: 2026-04-25 (B2.4 — Heroic game detection)
 
 ### Context coming in

@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-25 by claude-code (B2.4 — Heroic game detection via SteamGameId=heroic-* env probe)
+Last updated: 2026-04-25 by claude-code (B2.5 — Bottles detection via bottle.yml WINEPREFIX scan)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -65,12 +65,14 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 ## Active work package
 
-**B2.5 — Bottles detection.** Detect running Bottles-managed game processes via `~/.local/share/bottles/`. Populate `Target` with `source: Bottles`, `launcher: "Bottles"`. Integrates into `scan_for_game()` dispatcher via the reserved `.or_else(scan_for_bottles_game)` slot.
+**B2.6 — Proton/Wine env var generalisation.** Enrich non-Steam `Target`s with `graphics_api`, `proton_version`, and `dxvk_version` by reading process environ vars (PROTON_VERSION, DXVK_VERSION, etc.) at detection time. Currently these fields are always `None` for Lutris/Heroic/Bottles targets.
 See `docs/ROADMAP.md` for milestone structure and work package definitions.
 
 ## Completed work
 
 ### Milestone B2 — Launcher-agnostic game detection (partial, 2026-04-25)
+
+- **B2.5 — Bottles detection**: Added `scan_for_bottles_game() -> Option<Target>` in `src/session.rs`. Enumerates `bottle.yml` files across two roots (native + Flatpak), parses each with serde_yaml into `BottleConfig` / `BottleProgram` structs, then scans `/proc/*/environ` for `WINEPREFIX` matching the bottle directory (which IS the WINEPREFIX). `BottleProgram::is_active()` filters removed entries (handles null/bool/string variants). Display name resolved by matching `/proc/<pid>/exe` basename against `Programs` entries (case-insensitive); falls back to the bottle `Name` field if no program matches. Both roots absent → immediate `None` (Bottles not installed). Wired into `scan_for_game()` dispatcher. Smoke test: Bottles absent on both paths (not installed); detector returns None immediately. Verification: `cargo check`, `cargo clippy -- -D warnings`, `cargo fmt --check`, `cargo test` (4/4) green. Commit: see feat commit below.
 
 - **B2.4 — Heroic detection**: Added `scan_for_heroic_game() -> Option<Target>` in `src/session.rs`. Probes four `installed.json` paths (native + Flatpak × Epic/GOG) via `heroic_installed_games()` which returns `Vec<(app_name, title, HeroicStore)>`. Detects running games by scanning `/proc/*/environ` for `SteamGameId=heroic-<app_name>` — the env var Heroic sets on all child processes. `HeroicStore` enum (Epic/Gog) drives `launcher` label: "Heroic — Epic" or "Heroic — GOG". Handles object format (Legendary/newer GOG) and array format (older GOG) defensively; skips DLC entries; deduplicates by app_name across all four paths; empty or malformed JSON files are silently skipped. Wired into `scan_for_game()` dispatcher. Smoke test: Heroic installed (non-Flatpak); one Epic game found (`911 Operator`, app_name UUID `a7594e61a4f24e6d9495ea959749598e`); GOG `installed.json` exists but empty (no GOG games installed). `gogdlConfig/heroic_gogdl/installed.json` also empty — not in spec paths, documented in HANDOFF. Verification: `cargo check`, `cargo clippy -- -D warnings`, `cargo fmt --check`, `cargo test` (4/4) green. Commit: see feat commit below.
 
