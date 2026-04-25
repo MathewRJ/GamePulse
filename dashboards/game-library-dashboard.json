@@ -12,7 +12,10 @@
     "GPU fields confirmed: utilisation_pct, power_w available in gpu stream.",
     "8 panels: 2 filter controls, avg FPS bar, 1% low FPS bar, FPS timeline by game, GPU util by game, GPU power by game, performance summary table.",
     "Default time range set to now-30d to capture multiple sessions.",
-    "stutter_count uses MAX (TSDS counter field — never avg/sum)."
+    "stutter_count uses MAX (TSDS counter field — never avg/sum).",
+    "B2.8 (2026-04-25): added ctrl-source and ctrl-launcher filter controls; added launcher-breakdown bar panel.",
+    "gamepulse.game.source and gamepulse.game.launcher are native keyword fields (no .keyword sub-field needed).",
+    "launcher-breakdown panel pins data_stream.dataset=gamepulse.session — source/launcher only live in session stream."
   ],
   "data": {
     "title": "GamePulse - Game Library",
@@ -50,6 +53,36 @@
           "title": "OS",
           "data_view_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2",
           "field_name": "host.os.name.keyword"
+        }
+      },
+      {
+        "type": "options_list_control",
+        "uid": "ctrl-source",
+        "grid": {
+          "x": 32,
+          "y": 0,
+          "w": 8,
+          "h": 4
+        },
+        "config": {
+          "title": "Source",
+          "data_view_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2",
+          "field_name": "gamepulse.game.source"
+        }
+      },
+      {
+        "type": "options_list_control",
+        "uid": "ctrl-launcher",
+        "grid": {
+          "x": 40,
+          "y": 0,
+          "w": 8,
+          "h": 4
+        },
+        "config": {
+          "title": "Launcher",
+          "data_view_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2",
+          "field_name": "gamepulse.game.launcher"
         }
       },
       {
@@ -378,6 +411,70 @@
                 "operation": "terms",
                 "fields": [
                   "gamepulse.game.name.keyword"
+                ]
+              }
+            ]
+          }
+        }
+      }
+      ,
+      {
+        "type": "lens",
+        "uid": "launcher-breakdown",
+        "grid": {
+          "x": 0,
+          "y": 56,
+          "w": 24,
+          "h": 12
+        },
+        "config": {
+          "attributes": {
+            "title": "Sessions by Launcher",
+            "type": "xy",
+            "axis": {
+              "x": {
+                "title": {
+                  "visible": false
+                }
+              },
+              "left": {
+                "title": {
+                  "visible": false
+                }
+              }
+            },
+            "layers": [
+              {
+                "type": "bar_horizontal",
+                "dataset": {
+                  "type": "dataView",
+                  "id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2"
+                },
+                "x": {
+                  "operation": "terms",
+                  "fields": [
+                    "gamepulse.game.source"
+                  ],
+                  "size": 10
+                },
+                "y": [
+                  {
+                    "operation": "count",
+                    "label": "Sessions"
+                  }
+                ],
+                "breakdown_by": {
+                  "operation": "terms",
+                  "fields": [
+                    "gamepulse.game.launcher"
+                  ],
+                  "size": 10
+                },
+                "filters": [
+                  {
+                    "field": "data_stream.dataset",
+                    "value": "gamepulse.session"
+                  }
                 ]
               }
             ]
