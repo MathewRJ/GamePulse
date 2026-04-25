@@ -5,6 +5,44 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-25 (B2.3 — Lutris game detection)
+
+### Context coming in
+
+- B2.2 landed earlier this day: `gamepulse.game.source`, `gamepulse.game.launcher`, conditional `steam_app_id`. Dispatcher `scan_for_game()` had a commented-out `.or_else(scan_for_lutris_game)` placeholder.
+- Host: CachyOS Linux (primary dev machine). Lutris is installed; one GOG game found.
+
+### What was done
+
+1. Added `serde_yaml = "0.9"` to `src/Cargo.toml`.
+2. Added private structs `LutrisGameConfig` / `LutrisGameSection` near the new scanner.
+3. Added `lutris_slug_to_title(stem: &str) -> String` helper: strips 10+-digit Unix timestamp suffix, then title-cases each hyphen-separated word.
+4. Implemented `scan_for_lutris_game() -> Option<Target>`: reads `~/.local/share/lutris/games/*.yml`, parses each with serde_yaml, cross-references `/proc/<pid>/exe` (native) and `/proc/<pid>/environ` WINEPREFIX (Wine), returns first match as `Target { source: Lutris, launcher: "Lutris — Wine"/"Lutris — Native", … }`.
+5. Wired into `scan_for_game()` dispatcher: replaced comment with `.or_else(scan_for_lutris_game)`.
+6. Added unit test `test_lutris_slug_to_title` (4 assertions). All 4 tests green.
+
+### Key decisions
+
+- **Slug-to-title from filename, not YAML `name` field**: spec explicitly forbids SQLite (pga.db is the authoritative name store); YAML `name` is unreliable for locally-added games (Lutris bug #5004). Using filename slug is consistent and deterministic.
+- **Wine detection via top-level `wine:` key**: spec heuristic. Real-world finding: the one installed game (Thronebreaker, GOG/umu) has no `wine:` key in its YAML — it will display "Lutris — Native" until B2.6 improves runner detection via process environ (PROTON_VERSION, etc.). Not a regression; B2.6 owns that improvement.
+- **Non-fatal filesystem errors throughout**: every parse error is a `tracing::warn!` + skip. Missing games directory returns None immediately (Lutris not installed).
+- **`serde_yaml::Value` for `wine` field**: presence/nullity signals runner type; content ignored until B2.6.
+
+### Smoke test results
+
+- Lutris games directory: `~/.local/share/lutris/games/thronebreaker-the-witcher-tal-gog-1777116393.yml`
+- YAML parses cleanly via `serde_yaml::from_str`. `game.exe = "drive_c/GOG Games/Thronebreaker/Thronebreaker.exe"` (relative path), `game.prefix = "/home/cachyos/Games/gog/thronebreaker-the-witcher-tales"`.
+- Game not running during session; no live detection test. Wine prefix match path would fire when game runs.
+- Slug output: `thronebreaker-the-witcher-tal-gog` → "Thronebreaker The Witcher Tal Gog" (Lutris truncated the slug; authoritative name is in pga.db, not addressable without SQLite).
+
+### State leaving this session
+
+- B2.3 complete. `scan_for_lutris_game` live in dispatcher.
+- B2.4 (Heroic detection) is next active WP.
+- No live game-session verification (game not running). Worth testing next time Thronebreaker is launched.
+
+---
+
 ## Session: 2026-04-25 (B2.2 — Schema generalisation)
 
 ### Context coming in

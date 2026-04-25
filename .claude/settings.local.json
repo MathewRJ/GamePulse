@@ -69,7 +69,8 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "mcp__elastic-agent-builder__recall_recent",
-      "mcp__elastic-agent-builder__recall_memory"
+      "mcp__elastic-agent-builder__recall_memory",
+      "Bash(cargo fmt *)"
     ]
   },
   "hooks": {

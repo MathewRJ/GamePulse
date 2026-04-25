@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-25 by claude-code (B2.2 — Schema generalisation: source, launcher, conditional steam_app_id)
+Last updated: 2026-04-25 by claude-code (B2.3 — Lutris game detection via ~/.local/share/lutris/games/*.yml)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -65,12 +65,14 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 ## Active work package
 
-**B2.3 — Lutris detection.** Parse `~/.local/share/lutris/games/*.yml` to detect running Lutris-managed game processes. Populate `Target` with `source: Lutris`, `launcher: "Lutris"`, game name from the YAML `name` field. No `steam_app_id`. Integrates into `scan_for_game()` dispatcher via the B2.1-reserved `.or_else(scan_for_lutris_game)` slot.
+**B2.4 — Heroic detection.** Parse `~/.config/heroic/` to detect running Heroic-managed game processes (Epic Games and GOG). Populate `Target` with `source: Heroic`, appropriate `launcher` string. Integrates into `scan_for_game()` dispatcher via the reserved `.or_else(scan_for_heroic_game)` slot.
 See `docs/ROADMAP.md` for milestone structure and work package definitions.
 
 ## Completed work
 
 ### Milestone B2 — Launcher-agnostic game detection (partial, 2026-04-25)
+
+- **B2.3 — Lutris detection**: Added `scan_for_lutris_game() -> Option<Target>` in `src/session.rs`. Scans `~/.local/share/lutris/games/*.yml`, deserialises each file into a minimal `LutrisGameConfig` struct (serde_yaml 0.9), derives display name from filename slug via `lutris_slug_to_title()` (strips 10+-digit Unix timestamp suffix, title-cases words), detects Wine vs native runner from presence of top-level `wine:` YAML key, cross-references `/proc/<pid>/exe` symlinks (native games) and `/proc/<pid>/environ` WINEPREFIX entries (Wine games). Wired into `scan_for_game()` dispatcher replacing the placeholder comment. Added `serde_yaml = "0.9"` to `src/Cargo.toml`. Unit test `test_lutris_slug_to_title` confirms 4 slug examples including numeric version segments and multi-word titles. Smoke test: one real Lutris game found (`thronebreaker-the-witcher-tal-gog-1777116393.yml`, GOG/umu Wine game) — YAML parses cleanly, Wine prefix `/home/cachyos/Games/gog/thronebreaker-the-witcher-tales` would be matched via WINEPREFIX scan when game is running. Note: real Lutris YAML uses no top-level `wine:` key for umu-backed games, so all GOG games will show "Lutris — Native" label until B2.6 improves runner detection. Verification: `cargo check`, `cargo clippy -- -D warnings`, `cargo fmt --check`, `cargo test` (4/4) green. Commit: see feat commit below.
 
 - **B2.2 — Schema generalisation**: Added `gamepulse.game.source` (keyword enum: steam|lutris|heroic|bottles|user_specified|auto_detected) and `gamepulse.game.launcher` (free-form keyword) to session and events streams (Path 2: per-tick metric streams receive description-only update, no new fields). Made `gamepulse.game.steam_app_id` conditionally emitted — only present when `source == steam`. New helpers `target_source_str()` + `target_to_game_doc()` in `src/session.rs` centralise emission logic; both `base_doc()` and `build_summary_doc()` in `src/main.rs` use the helper. Session.json on-disk format gains `target_source` field; `steam_app_id` now optional. `Target::from_steam()` sets `launcher: Some("Steam")`. Component template `gamepulse-session-context.json` updated with source + launcher properties. Lutris pipeline test fixture added (`test-session-pipeline-lutris.json` + expected) to prove schema accepts non-Steam targets without `steam_app_id`. Daemon compatibility confirmed: `SessionInfo` uses `serde(default)` + no `deny_unknown_fields` — new field silently ignored. Verification: `cargo check`, `cargo clippy -- -D warnings`, `cargo fmt --check`, `cargo test` (3/3) green. Live gaming-PC verification deferred (see follow-ups). Commit: aec9c24.
 
