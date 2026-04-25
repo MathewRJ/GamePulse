@@ -26,6 +26,22 @@ the "Previous sessions" chain for context on why decisions were made.
 | `page_cache_mb` / `shared_mb` / `swap_used_mb` | ✅ | ❌ omitted | Not exposed via MEMORYSTATUSEX |
 | `game_rss_mb` | ✅ (VmRSS) | ✅ (WorkingSetSize) | Different metric but closest equivalent |
 
+### windows crate 0.58 handle quirk — important for Session 2
+
+`windows` 0.58 does **not** export `PDH_HQUERY` or `PDH_HCOUNTER` as named types. The compiler will suggest `PDH_NO_COUNTERS` (a constant) as a "similar name" — that suggestion is wrong. The correct approach, used in `pdh.rs`, is raw `isize` for both handles:
+
+```rust
+let mut handle: isize = 0;
+PdhOpenQueryW(PCWSTR::null(), 0, &mut handle);
+
+let mut counter: isize = 0;
+PdhAddCounterW(handle, path, 0, &mut counter);
+```
+
+Session 2 collectors (storage, network, power) that use PDH counters must follow the same pattern — import the PDH functions from `windows::Win32::System::Performance` but use `isize` for any handle variables. The `PdhQuery` / `PdhCounter` newtypes in `pdh.rs` encapsulate this so callers never touch raw `isize` directly.
+
+Also note: any new Windows API module needed in Session 2 that isn't already in the `[target.'cfg(windows)'.dependencies]` features list will require adding a `Win32_*` feature — e.g. `Win32_NetworkManagement_IpHelper` for network counters. The compiler error message will name the missing feature explicitly (same pattern as the `Win32_System_Threading` addition in this session).
+
 ### PDH counter path deviations
 
 None found. The three counter paths specified in the task document compiled and ran without adjustment on Windows 11:
