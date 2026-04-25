@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-25 by claude-code (C.0 PDH infra + C.1 CPU + C.2 memory collectors — Windows cargo check + clippy clean)
+Last updated: 2026-04-25 by claude-code (C.3 storage + C.4 network + C.6 power — dry-run verified on Windows 11)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -22,7 +22,7 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 | B  Cross-platform refactor | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
 | B2 Launcher-agnostic game detection | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
 | B3 Automatic game detection (TBD) | ⚪ Not started | ░░░░░░░░░░ |
-| C  Windows collectors | 🟡 Partial (C.0–C.2) | ▓▓░░░░░░░░ |
+| C  Windows collectors | 🟡 Partial (C.0–C.4, C.6) | ▓▓▓▓▓░░░░░ |
 | D  Linux portable packaging | 🟡 Partial | ▓▓▓▓▓░░░░░ |
 | E  Windows packaging | ⚪ Not started | ░░░░░░░░░░ |
 | F  Cross-platform parity verification (M2) | 🔒 Blocked on B2+C+E | — |
@@ -55,22 +55,32 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 | cpu | ✅ | 🔲 | ✅ | 🔲 | 🟡 (PDH; no game_util) |
 | gpu | ✅ (AMD) | 🔲 | ✅ (AMD) | 🔲 | 🔲 |
 | memory | ✅ | 🔲 | ✅ | 🔲 | ✅ |
-| storage | ✅ | 🔲 | ✅ | 🔲 | 🔲 |
-| network | ✅ | 🔲 | ✅ | 🔲 | 🔲 |
+| storage | ✅ | 🔲 | ✅ | 🔲 | 🟡 (aggregate only; no per-disk/game IO) |
+| network | ✅ | 🔲 | ✅ | 🔲 | 🟡 (aggregate only; tunnels filtered) |
 | audio | ✅ | 🔲 | ✅ | 🔲 | 🔲 |
-| power | ✅ | 🔲 | ✅ | 🔲 | 🔲 |
+| power | ✅ | 🔲 | ✅ | 🔲 | 🟡 (AC + battery%; no rate_w) |
 | frame | ✅ (MangoHud) | 🔲 | ✅ (MangoHud) | 🔲 | 🔲 (PresentMon) |
 | ebpf | ✅ | 🔲 | ✅ | 🔲 | n/a |
 | session | ✅ | 🔲 | ✅ | 🔲 | 🔲 |
 
 ## Active work package
 
-**C — Windows collectors (in progress, C.0–C.2 done).** Remaining: C.3 storage, C.4 network, C.5 power, C.6 audio, C.7 GPU. Then dry-run verification on Windows hardware.
+**C — Windows collectors (in progress, C.0–C.4 + C.6 done, dry-run verified).** Remaining: C.5 GPU (Session 3), C.7 audio. Then full ES shipping verification.
 See `docs/ROADMAP.md` for milestone structure and work package definitions.
 
 ## Completed work
 
-### Milestone C — Windows collectors (partial, 2026-04-25)
+### Milestone C — Windows collectors (partial, 2026-04-25 session 2)
+
+- **C.3 — Storage collector**: Replaced `src/collectors/windows/storage.rs` stub. Two PDH scalar counters: `\PhysicalDisk(_Total)\Disk Read Bytes/sec` and `\PhysicalDisk(_Total)\Disk Write Bytes/sec`. Baseline collect in `new()`; `initialized` guard for graceful degradation. Emits `read_bytes_per_sec` + `write_bytes_per_sec` (u64, f64→u64 cast). Parity gap: per-disk breakdown and game-scoped IO omitted (ETW required). Dry-run verified: read 65 KB/s, write 260 KB/s on an active system.
+
+- **C.4 — Network collector**: Replaced `src/collectors/windows/network.rs` stub. Two PDH wildcard counters: `\Network Interface(*)\Bytes Sent/sec` and `\Network Interface(*)\Bytes Received/sec`. `counter_values_array()` result filtered (case-insensitive exclusion of isatap*, teredo*, loopback* tunnel/loopback adapters), then summed to aggregate. Emits `bytes_sent_per_sec` + `bytes_recv_per_sec` (u64). Dry-run verified: 398 B/s recv on idle desktop.
+
+- **C.6 — Power collector**: Replaced `src/collectors/windows/power.rs` stub. Pure Win32 — `GetSystemPowerStatus` (SYSTEM_POWER_STATUS). `ACLineStatus` 0/1/255 → `ac_connected` Some(bool)/None. `BatteryLifePercent` 0–100/255 → `battery_pct` Some(f64)/None. Returns `Ok(None)` when both fields are absent (desktop with no battery + unknown AC). Added `Win32_System_Power` feature to windows dep. Dry-run verified: `ac_connected: true`, no `battery_pct` (desktop, correct).
+
+- **Dry-run verification (C.0–C.4 + C.6)**: All five implemented collectors emit real data. `gamepulse.cpu` — 16 cores, 5.9% total, 4700 MHz. `gamepulse.memory` — 63 GB total, 18.4% used. `gamepulse.storage` — non-zero. `gamepulse.network` — non-zero recv. `gamepulse.power` — `ac_connected: true`. No panics, no ERROR logs.
+
+### Milestone C — Windows collectors (partial, 2026-04-25 session 1)
 
 - **C.0 — PDH infrastructure**: Created `src/collectors/windows/pdh.rs` with `PdhQuery` / `PdhCounter` newtypes wrapping raw `isize` PDH handles (windows crate 0.58 exposes these as raw `isize`, not named type aliases). `PdhQuery::new()` calls `PdhOpenQueryW`; `add_counter()` calls `PdhAddCounterW`; `collect()` calls `PdhCollectQueryData`; `counter_value_f64()` calls `PdhGetFormattedCounterValue` with `PDH_FMT_DOUBLE`; `counter_values_array()` calls `PdhGetFormattedCounterArrayW` with a two-pass buffer (size probe → fill). Drop impl calls `PdhCloseQuery`. Module-level doc explains why counters must be long-lived (rate-counter baseline semantics) and the ETW upgrade path. Added `Win32_System_Threading` + `Win32_Foundation` features to the `[target.'cfg(windows)'.dependencies]` block (needed by C.2 memory collector). Declared `mod pdh;` (private) in `windows/mod.rs`.
 

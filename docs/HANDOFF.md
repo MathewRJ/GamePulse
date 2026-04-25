@@ -5,7 +5,53 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
-## Session: 2026-04-25 (Phase C — C.0 PDH infra + C.1 CPU + C.2 memory collectors)
+## Session: 2026-04-25 (Phase C session 2 — C.3 storage + C.4 network + C.6 power, dry-run verified)
+
+### What was built
+
+**C.3 — Storage collector** (`src/collectors/windows/storage.rs`): Two PDH scalar counters (`\PhysicalDisk(_Total)\Disk Read Bytes/sec`, `\PhysicalDisk(_Total)\Disk Write Bytes/sec`) via `counter_value_f64()`. Baseline collect in `new()`; `initialized` guard. Emits `read_bytes_per_sec` + `write_bytes_per_sec` as u64. No new Cargo features needed.
+
+**C.4 — Network collector** (`src/collectors/windows/network.rs`): Two PDH wildcard counters (`\Network Interface(*)\Bytes Sent/sec`, `\Network Interface(*)\Bytes Received/sec`) via `counter_values_array()`. Filters out tunnel/loopback adapters (isatap*, teredo*, loopback* — case-insensitive prefix/contains match), sums remaining. Emits `bytes_sent_per_sec` + `bytes_recv_per_sec` as u64.
+
+**C.6 — Power collector** (`src/collectors/windows/power.rs`): Pure Win32, no PDH. `GetSystemPowerStatus` → `SYSTEM_POWER_STATUS`. `ACLineStatus` 0=battery/1=AC/255=unknown maps to `ac_connected: Option<bool>`. `BatteryLifePercent` 0–100=valid/255=unknown maps to `battery_pct: Option<f64>`. Returns `Ok(None)` when both absent. Added `Win32_System_Power` to windows features (same "configured out" error pattern as `Win32_System_Threading` in Session 1).
+
+### Dry-run verification (all collectors C.0–C.4 + C.6)
+
+Run: `GAMEPULSE_LOG=info timeout 8 ./gamepulse-agent --dry-run --config ../config/gamepulse.toml`
+
+| Collector | Output | Notes |
+|---|---|---|
+| cpu | total 5.9%, 16 cores, 4700 MHz | ✅ real values |
+| memory | 63 GB total, 18.4% used | ✅ real values |
+| storage | 65 KB/s read, 260 KB/s write | ✅ non-zero |
+| network | 398 B/s recv | ✅ non-zero (idle desktop) |
+| power | ac_connected: true | ✅ desktop = no battery_pct, correct |
+| audio | no data this tick | stub, expected |
+| frame | no data this tick | stub, expected |
+| gpu | no data this tick | stub, expected |
+
+No panics. No ERROR logs. C.0–C.2 from Session 1 confirmed working.
+
+### PDH counter path deviations
+
+None. All counter paths from the task spec compiled and returned data without adjustment:
+- `\PhysicalDisk(_Total)\Disk Read Bytes/sec` ✅
+- `\PhysicalDisk(_Total)\Disk Write Bytes/sec` ✅
+- `\Network Interface(*)\Bytes Sent/sec` ✅
+- `\Network Interface(*)\Bytes Received/sec` ✅
+
+### Cargo features added
+
+`Win32_System_Power` (for `GetSystemPowerStatus` in power collector).
+
+### Remaining Phase C work
+
+- **C.5 — GPU** (Session 3): DXGI adapter enumeration + PDH GPU counters. Separate session per original plan.
+- **C.7 — Audio** (Session 3 or later): Windows audio session API.
+
+---
+
+## Session: 2026-04-25 (Phase C session 1 — C.0 PDH infra + C.1 CPU + C.2 memory collectors)
 
 ### What was built
 
