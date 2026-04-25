@@ -70,9 +70,17 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "mcp__elastic-agent-builder__recall_recent",
       "mcp__elastic-agent-builder__recall_memory",
-      "Bash(cargo fmt *)"
+      "Bash(cargo fmt *)",
+      "Bash(xargs rg *)",
+      "Bash(rg -l \"gamepulse\" /c/Users/matma/Documents/coding/Gamepulse/data_stream/*/fields/fields.yml)",
+      "Bash(dir /c/Users/matma/Documents/coding/Gamepulse/elastic/)",
+      "Bash(python tools/index_memories.py)"
     ]
   },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "elastic-agent-builder"
+  ],
   "hooks": {
     "UserPromptSubmit": [
       {

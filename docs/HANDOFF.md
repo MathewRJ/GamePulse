@@ -5,6 +5,47 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-25 (Phase C — C.0 PDH infra + C.1 CPU + C.2 memory collectors)
+
+### What was built
+
+**C.0 — PDH infrastructure** (`src/collectors/windows/pdh.rs`): A `PdhQuery` struct that owns a long-lived PDH query handle (raw `isize` — the windows crate 0.58 does not export `PDH_HQUERY`/`PDH_HCOUNTER` as named types; they are raw `isize` handles). `PdhCounter` is a newtype over the counter handle. API: `new()`, `add_counter()`, `collect()`, `counter_value_f64()`, `counter_values_array()`. The two-pass `counter_values_array()` implementation size-probes first (`PDH_MORE_DATA`), then fills a byte buffer and reads `PDH_FMT_COUNTERVALUE_ITEM_W` structs manually (item layout: 8-byte name pointer + 4-byte CStatus + 4-byte pad + 8-byte f64 = 24 bytes per item on x64). Drop calls `PdhCloseQuery`.
+
+**C.1 — CPU collector** (`src/collectors/windows/cpu.rs`): Backed by a long-lived `PdhQuery` opened in `new()` with a baseline `collect()`. Three counters: total utilisation (`\Processor(_Total)\% Processor Time`), per-core wildcard (`\Processor(*)\% Processor Time`), and average frequency (`\Processor Information(_Total)\Processor Frequency`). Per-core instances: `_Total` filtered out; remaining sorted by numeric core index. Temperature via WMI PowerShell subprocess (`MSAcpi_ThermalZoneTemperature`), cached 5 seconds, validated 10–105 °C. `boost_state` hardcoded `true` (no cross-vendor API). `game_utilisation_pct` omitted — ETW/Job Object parity gap, `TODO(C.1-game-util)`.
+
+**C.2 — Memory collector** (`src/collectors/windows/memory.rs`): Pure Win32 — `GlobalMemoryStatusEx` for system RAM (`total_mb`, `used_mb`, `available_mb`, `used_pct`); `OpenProcess` + `GetProcessMemoryInfo(.WorkingSetSize)` for `game_rss_mb`. Handle closed via `CloseHandle` on all paths (success and failure).
+
+### Parity gaps vs Linux
+
+| Field | Linux | Windows | Reason |
+|---|---|---|---|
+| `game_utilisation_pct` | ✅ (cgroups) | ❌ omitted | ETW/Job Object required; PDH has no per-process CPU% |
+| `temperature_c` | ✅ (hwmon/k10temp) | 🟡 unreliable | WMI ACPI zones report ambient/zone not die temp |
+| `governor` | ✅ (cpufreq) | ❌ omitted | No Windows equivalent |
+| `power_w` | ✅ (Intel RAPL) | ❌ omitted | No cross-vendor API |
+| `page_cache_mb` / `shared_mb` / `swap_used_mb` | ✅ | ❌ omitted | Not exposed via MEMORYSTATUSEX |
+| `game_rss_mb` | ✅ (VmRSS) | ✅ (WorkingSetSize) | Different metric but closest equivalent |
+
+### PDH counter path deviations
+
+None found. The three counter paths specified in the task document compiled and ran without adjustment on Windows 11:
+- `\Processor(_Total)\% Processor Time` ✅
+- `\Processor(*)\% Processor Time` ✅  
+- `\Processor Information(_Total)\Processor Frequency` ✅
+
+### Cargo features added
+
+`Win32_System_Threading` and `Win32_Foundation` added to the `[target.'cfg(windows)'.dependencies]` windows feature list (needed by `OpenProcess` and `CloseHandle` in the memory collector).
+
+### Verification
+
+`cargo check --manifest-path src/Cargo.toml` — clean.
+`cargo clippy --manifest-path src/Cargo.toml -- -D warnings` — clean (one range-contains fix applied).
+Linux unaffected: windows crate dep is `[target.'cfg(windows)'.dependencies]` — Linux builds ignore it entirely.
+Live `--dry-run` verification on Windows hardware deferred to next session (needs the agent binary built + run on the gaming PC or this Windows dev machine).
+
+---
+
 ## Session: 2026-04-25 (bug fix — per-session summary ship + accumulator reset)
 
 ### Bug fixed: session summary only shipped at agent shutdown

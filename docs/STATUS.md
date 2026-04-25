@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-25 by claude-code (B2 live verification — Starfield/Steam + Thronebreaker/Lutris confirmed)
+Last updated: 2026-04-25 by claude-code (C.0 PDH infra + C.1 CPU + C.2 memory collectors — Windows cargo check + clippy clean)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -22,7 +22,7 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 | B  Cross-platform refactor | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
 | B2 Launcher-agnostic game detection | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
 | B3 Automatic game detection (TBD) | ⚪ Not started | ░░░░░░░░░░ |
-| C  Windows collectors | 🔒 Blocked on B2 | ░░░░░░░░░░ |
+| C  Windows collectors | 🟡 Partial (C.0–C.2) | ▓▓░░░░░░░░ |
 | D  Linux portable packaging | 🟡 Partial | ▓▓▓▓▓░░░░░ |
 | E  Windows packaging | ⚪ Not started | ░░░░░░░░░░ |
 | F  Cross-platform parity verification (M2) | 🔒 Blocked on B2+C+E | — |
@@ -52,9 +52,9 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 | Stream | Ubuntu 24.04 | Fedora 40 | Arch/CachyOS | SteamOS 3.6 | Windows 11 |
 |---|---|---|---|---|---|
-| cpu | ✅ | 🔲 | ✅ | 🔲 | 🔲 |
+| cpu | ✅ | 🔲 | ✅ | 🔲 | 🟡 (PDH; no game_util) |
 | gpu | ✅ (AMD) | 🔲 | ✅ (AMD) | 🔲 | 🔲 |
-| memory | ✅ | 🔲 | ✅ | 🔲 | 🔲 |
+| memory | ✅ | 🔲 | ✅ | 🔲 | ✅ |
 | storage | ✅ | 🔲 | ✅ | 🔲 | 🔲 |
 | network | ✅ | 🔲 | ✅ | 🔲 | 🔲 |
 | audio | ✅ | 🔲 | ✅ | 🔲 | 🔲 |
@@ -65,12 +65,18 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 ## Active work package
 
-**B3 — Automatic game detection (next milestone, not yet started).** Detect running games without any launcher context (e.g. Wine standalone, DOSBox, emulators) using heuristics on process name, window title, or known game exe patterns.
-
-**C — Windows collectors (unblocked by B2 completion).** Implement real collection in the 8 Windows stub collectors.
+**C — Windows collectors (in progress, C.0–C.2 done).** Remaining: C.3 storage, C.4 network, C.5 power, C.6 audio, C.7 GPU. Then dry-run verification on Windows hardware.
 See `docs/ROADMAP.md` for milestone structure and work package definitions.
 
 ## Completed work
+
+### Milestone C — Windows collectors (partial, 2026-04-25)
+
+- **C.0 — PDH infrastructure**: Created `src/collectors/windows/pdh.rs` with `PdhQuery` / `PdhCounter` newtypes wrapping raw `isize` PDH handles (windows crate 0.58 exposes these as raw `isize`, not named type aliases). `PdhQuery::new()` calls `PdhOpenQueryW`; `add_counter()` calls `PdhAddCounterW`; `collect()` calls `PdhCollectQueryData`; `counter_value_f64()` calls `PdhGetFormattedCounterValue` with `PDH_FMT_DOUBLE`; `counter_values_array()` calls `PdhGetFormattedCounterArrayW` with a two-pass buffer (size probe → fill). Drop impl calls `PdhCloseQuery`. Module-level doc explains why counters must be long-lived (rate-counter baseline semantics) and the ETW upgrade path. Added `Win32_System_Threading` + `Win32_Foundation` features to the `[target.'cfg(windows)'.dependencies]` block (needed by C.2 memory collector). Declared `mod pdh;` (private) in `windows/mod.rs`.
+
+- **C.1 — CPU collector**: Replaced `src/collectors/windows/cpu.rs` stub with a real PDH-backed implementation. Fields emitted under `gamepulse.cpu.*`: `total_utilisation_pct` (f64, PDH `\Processor(_Total)\% Processor Time`), `per_core` ([f64], `\Processor(*)\% Processor Time` wildcard — `_Total` instance filtered out, remaining sorted by numeric core index), `clock_mhz_avg` (u64, optional, `\Processor Information(_Total)\Processor Frequency`), `temperature_c` (f64, optional, WMI `MSAcpi_ThermalZoneTemperature` via PowerShell subprocess cached 5 s, plausibility-checked 10–105 °C), `boost_state` (bool, hardcoded `true` — no cross-vendor API without vendor SDK). PDH query opened + baseline collect in `new()`; if init fails, `initialized = false` and `collect()` returns `Ok(None)` gracefully. Parity gap: `game_utilisation_pct` omitted — requires ETW or Job Object, documented as `TODO(C.1-game-util)`. `governor` field omitted (Windows has no equivalent).
+
+- **C.2 — Memory collector**: Replaced `src/collectors/windows/memory.rs` stub. Uses `GlobalMemoryStatusEx` (MEMORYSTATUSEX) for system-wide stats; `OpenProcess` + `GetProcessMemoryInfo` (PROCESS_MEMORY_COUNTERS.WorkingSetSize) for `game_rss_mb`. Fields: `total_mb`, `used_mb`, `available_mb` (all from `ullTotalPhys`/`ullAvailPhys`), `used_pct` (f64, 1 decimal), `game_rss_mb` (optional). `set_game_pid` wired. Process handle closed via `CloseHandle` on all paths. `cargo check` + `cargo clippy -- -D warnings` both clean. Linux unaffected (windows crate dep is cfg-gated).
 
 ### Milestone B2 — Launcher-agnostic game detection (partial, 2026-04-25)
 
