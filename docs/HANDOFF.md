@@ -5,6 +5,34 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-25 (B2.6 — Proton/Wine env var enrichment)
+
+### What was done
+
+Mechanical wiring only. At each of the three non-Steam `Target` construction sites (`scan_for_lutris_game`, `scan_for_heroic_game`, `scan_for_bottles_game`), added:
+
+```rust
+let env = read_environ(pid).unwrap_or_default();
+let (graphics_api, _) = detect_graphics_api(&env);
+let proton_version = proton_version_from_env(&env);
+let dxvk_version = dxvk_version_from_env(&env);
+```
+
+Replaced the three `graphics_api: None, proton_version: None, dxvk_version: None` placeholders with the actual values. No helper changes, no new crates, no schema changes.
+
+Added `test_enrich_from_proton_env` unit test confirming the helpers work from a non-Steam call site. 5/5 tests green.
+
+### Known limitation (not fixed)
+
+Lutris umu-backed GOG games (e.g. Thronebreaker) still produce `launcher = "Lutris — Native"` because the top-level `wine:` key is absent from their YAML. Improving runner detection would require reading process environ for `UMU_ID`, `PROTON_*`, or similar signals — deferred as a follow-up after B2 ships.
+
+### State leaving this session
+
+- B2.6 complete. All four detectors (Steam, Lutris, Heroic, Bottles) now fully populate `graphics_api`, `proton_version`, `dxvk_version`.
+- B2.7 (user-specified target CLI) is next active WP.
+
+---
+
 ## Session: 2026-04-25 (B2.5 — Bottles game detection)
 
 ### Context coming in

@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-25 by claude-code (B2.5 — Bottles detection via bottle.yml WINEPREFIX scan)
+Last updated: 2026-04-25 by claude-code (B2.6 — populate graphics_api/proton_version/dxvk_version for non-Steam targets)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -65,12 +65,14 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 ## Active work package
 
-**B2.6 — Proton/Wine env var generalisation.** Enrich non-Steam `Target`s with `graphics_api`, `proton_version`, and `dxvk_version` by reading process environ vars (PROTON_VERSION, DXVK_VERSION, etc.) at detection time. Currently these fields are always `None` for Lutris/Heroic/Bottles targets.
+**B2.7 — User-specified target CLI.** Add `--game-pid <PID>` and `--game-name <NAME>` CLI flags so users can manually identify a running process as the target, populating `Target { source: UserSpecified, … }`. Wires into `scan_for_game()` dispatcher via the reserved `.or_else(scan_for_user_specified_target)` slot.
 See `docs/ROADMAP.md` for milestone structure and work package definitions.
 
 ## Completed work
 
 ### Milestone B2 — Launcher-agnostic game detection (partial, 2026-04-25)
+
+- **B2.6 — Proton/Wine env var enrichment**: Called `read_environ(pid).unwrap_or_default()` + `detect_graphics_api` + `proton_version_from_env` + `dxvk_version_from_env` at the `Target` construction site in `scan_for_lutris_game`, `scan_for_heroic_game`, and `scan_for_bottles_game`. All three previously returned `None` for these fields. No new crates, no schema changes, no helper modifications — pure mechanical wiring. Added unit test `test_enrich_from_proton_env` confirming `PROTON_VERSION` + `DXVK_CONFIG_FILE` env produces `graphics_api = "dx11_via_dxvk"` and `proton_version = "GE-Proton9-20"`. Known limitation not fixed: Lutris umu-backed GOG games still show `launcher = "Lutris — Native"` (requires runner detection via process environ, deferred post-B2). Verification: `cargo check`, `cargo clippy -- -D warnings`, `cargo fmt --check`, `cargo test` (5/5) green.
 
 - **B2.5 — Bottles detection**: Added `scan_for_bottles_game() -> Option<Target>` in `src/session.rs`. Enumerates `bottle.yml` files across two roots (native + Flatpak), parses each with serde_yaml into `BottleConfig` / `BottleProgram` structs, then scans `/proc/*/environ` for `WINEPREFIX` matching the bottle directory (which IS the WINEPREFIX). `BottleProgram::is_active()` filters removed entries (handles null/bool/string variants). Display name resolved by matching `/proc/<pid>/exe` basename against `Programs` entries (case-insensitive); falls back to the bottle `Name` field if no program matches. Both roots absent → immediate `None` (Bottles not installed). Wired into `scan_for_game()` dispatcher. Smoke test: Bottles absent on both paths (not installed); detector returns None immediately. Verification: `cargo check`, `cargo clippy -- -D warnings`, `cargo fmt --check`, `cargo test` (4/4) green. Commit: see feat commit below.
 
