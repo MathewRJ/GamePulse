@@ -19,7 +19,7 @@ the "Previous sessions" chain for context on why decisions were made.
 4. `SessionEvent::GameEnded` arm: after `set_game_pid(None)` loop, ships the session summary for the game that just ended (guarded by `session_tick > 0`), then resets `acc = SessionAccumulators::new()`, `session_start = Instant::now()`, and `session_tick = 0`. `last_known_game` is still set after the reset so the shutdown path has something to reference if the agent stops while no game is running.
 5. Shutdown cleanup block guard changed from `if tick > 0` to `if session_tick > 0` — correctly handles: (a) stopped mid-game → ship partial summary; (b) stopped after clean game-exit → `session_tick` is 0, skip (already shipped on exit); (c) never detected a game → `session_tick` is 0, skip.
 
-**Commit**: `fix: ship session summary and reset accumulators on game exit`
+**Commit**: `08d946b` — `fix: ship session summary and reset accumulators on game exit`
 
 ---
 
