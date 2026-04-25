@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-24 by claude-code (B.5 CI matrix + B.6 eBPF feature flag — Phase B complete pending Linux verification)
+Last updated: 2026-04-25 by claude-code (B2.1 — Target type + detection abstraction; behaviour-neutral refactor)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -20,7 +20,7 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 |---|---|---|
 | A  Docs reorganisation | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
 | B  Cross-platform refactor | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
-| B2 Launcher-agnostic game detection | ⚪ Not started | ░░░░░░░░░░ |
+| B2 Launcher-agnostic game detection | 🟡 Partial | ▓░░░░░░░░░ |
 | B3 Automatic game detection (TBD) | ⚪ Not started | ░░░░░░░░░░ |
 | C  Windows collectors | 🔒 Blocked on B2 | ░░░░░░░░░░ |
 | D  Linux portable packaging | 🟡 Partial | ▓▓▓▓▓░░░░░ |
@@ -65,10 +65,14 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 ## Active work package
 
-**None.** Phase B complete (all 8 WPs: B.1–B.8) pending Linux-side verification of B.1–B.3 and B.6's `--features ebpf` build. Next work package is B2.1 — introduce the `Target` enum in `src/session.rs` as the foundation for launcher-agnostic game detection. B2.1 is mostly host-agnostic (config plumbing + enum refactor) and can land on Windows; later WPs (B2.3 Lutris / B2.4 Heroic / B2.5 Bottles) need Linux for end-to-end verification.
+**B2.2 — Schema generalisation.** Make `gamepulse.game.steam_app_id` optional and add `gamepulse.game.source` (steam | lutris | heroic | bottles | user_specified | auto_detected) and `gamepulse.game.launcher` (human-readable) fields on the session stream. Backwards-compatible addition: existing dashboards keep working; new fields are additive. Touches `data_stream/session/fields/fields.yml`, the daemon's `SessionInfo` reader (`ebpf/gamepulse-ebpf-daemon/src/session.rs` already tolerates optional `steam_app_id`), and the `write_session_json` + `base_doc` emission paths in `src/session.rs` (currently use `.expect()` against a B2.1-locked invariant — B2.2 replaces with conditional emission).
 See `docs/ROADMAP.md` for milestone structure and work package definitions.
 
 ## Completed work
+
+### Milestone B2 — Launcher-agnostic game detection (partial, 2026-04-25)
+
+- **B2.1 — Target type + detection abstraction**: Renamed `DetectedGame` struct to `Target` and introduced a `TargetSource` enum (`Steam` | `Lutris` | `Heroic` | `Bottles` | `UserSpecified` | `AutoDetected`) in `src/session.rs`. Only `Steam` is constructed today via `Target::from_steam()`; the other variants are reserved for B2.3-B2.7 + B3 and rely on the per-crate `dead_code = "allow"` lint to stay quiet until their detectors land. `SessionEvent` variants kept their `Game{Started,Ended}` names but now carry `Target` instead of `DetectedGame`. `SessionManager::current_game` retyped to `Option<Target>`. `scan_for_game` is now a public dispatcher that calls `scan_for_steam_game` (the renamed Steam-specific helper); its body has commented-out `.or_else(scan_for_…)` lines documenting the slot for each future detector. Field accesses migrated: `game.name` → `target.display_name`, `game.steam_app_id: u32` → `target.steam_app_id: Option<u32>` with `.expect("Steam target without steam_app_id — invariant violation")` at the two emission sites (`write_session_json` and `base_doc`/summary `game_doc`). Behaviour-neutral: session.json on-disk format byte-for-byte unchanged (eBPF daemon reader untouched), and the ES schema is unchanged — `gamepulse.game.{source,launcher}` are deferred to B2.2 alongside making `steam_app_id` optional. Verification on Windows: `cargo check`, `cargo clippy -- -D warnings`, `cargo fmt --check`, `cargo test` (3/3) all green. Live game-session verification on the Linux gaming PC deferred (see follow-ups). Single migration commit + docs commit.
 
 ### Milestone B — Cross-platform refactor (complete, 2026-04-24 session 2)
 
@@ -161,6 +165,7 @@ Commit: 561dc78
 ## Follow-ups and migration notes
 
 - **Linux `cargo check` verification for B.1–B.3 + B.6 (`--features ebpf`) pending**: 2026-04-24 sessions were Windows-only (gaming PC offline). Windows `cargo check`, `cargo clippy -- -D warnings`, `cargo fmt --check`, and `cargo check --all-features` (expected-fail via compile_error) all green. The B.5 CI workflow exercises both Linux and Windows on push, so this is self-healing as soon as CI runs on main — but a gaming-PC session to run `cargo check --manifest-path src/Cargo.toml --features ebpf` and confirm the cfg gate doesn't accidentally exclude required modules on Linux is still worth doing.
+- **B2.1 live verification on gaming PC**: the Windows session can only smoke-test the migration via `cargo check`/`clippy`/`test`. The behaviour claim (session-start, in-tick, and session-summary docs are byte-for-byte identical to pre-B2.1, modulo timestamps) needs a live Linux session — boot a real game, capture a session-start doc and a session-summary doc, diff field-by-field against a known-good pre-B2.1 sample from ES Discover. Same trip should also confirm the eBPF daemon still parses `/tmp/gamepulse/session.json` cleanly (format wasn't supposed to change, but verify).
 - **Hook scope redesign — PostToolUse cargo check noise during structural refactors**: deferred from the 2026-04-24 sessions. The `post-edit-check.py` hook runs `cargo check` after every `.rs` edit, which is helpful for single-file fixes but creates N-times-expected-failure noise during multi-file structural refactors (see 2026-04-24 B.2+B.3 session for the python-via-bash workaround). Options: scope the hook to only fire on the final edit in a batch, add a way to suppress it during planned structural refactors, or move the cargo check to a manual command. Infrastructure session, defer until Phase C scheduling.
 - **B.8 label format migration**: ES docs indexed before B.8 carry `<slug>-YYYYMMDD-HHMMSS` labels. New sessions use `<slug>-YYYYMMDD-N`. Dashboard filters on `session.label` should use `*` wildcards or filter on `session.label_source` instead. No backfill needed.
 

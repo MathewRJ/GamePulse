@@ -5,6 +5,73 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-25 (B2.1 — Target type + detection abstraction)
+
+### Context coming in
+
+- Phase B closed at the end of 2026-04-24 session 2 with five commits (c556589, c92c310, 93ad4e6, ad1aa93, 46f50b0). `claude.ai` ran a planning session that locked the B2.1 design (Option B — generic `Target` struct + `TargetSource` enum, single source of detection in B2.1, schema/JSON format generalisation deferred to B2.2). The detailed step-by-step plan with name decisions, runtime invariants, dispatcher comment slots, and `.expect()` placement landed in the session-entry prompt.
+- Host: Windows 11 (gaming PC offline). B2.1 is host-agnostic refactor + can land on Windows; the only thing Windows can't do is the live game-session verification, which is deferred to a later gaming-PC session.
+- `origin/main` clean and up to date at session start.
+
+### What was done this session
+
+**Step 0 — call-site audit**: ripgrep for `DetectedGame`, `current_game`, `last_known_game`, `scan_for_game`, `GameStarted|GameEnded` over `src/`. Hits exactly as the plan predicted — confined to `src/session.rs` and `src/main.rs`, no leakage into collectors / config / shipper / tests. Confirmed scope before editing.
+
+**Steps 1–3 — type introduction + migration + removal of `DetectedGame`** (single commit):
+
+- `src/session.rs`: replaced the `DetectedGame` struct definition with `TargetSource` enum + `Target` struct + `Target::from_steam(...)` constructor in one Edit (Step 1's introduction and Step 3's deletion fold together when the replacement is a straight swap).
+- `SessionEvent::GameStarted` / `GameEnded` retyped to carry `Target`. Variant names kept `Game*` per the locked design — the public surface still says "Game" because that's the user-visible concept.
+- `SessionManager::current_game` retyped to `Option<Target>`; field name unchanged.
+- `poll()` body migrated: variable bindings renamed `game` → `target`, field accesses `game.name` → `target.display_name`. Added `source={:?}` to the detection log so future Lutris/Heroic detections will be visible without further log-line surgery; `target.steam_app_id` (now `Option<u32>`) printed via Debug formatter, which is fine for an info log.
+- `write_session_json` signature changed from `&DetectedGame` to `&Target`. Body explicitly unwraps `target.steam_app_id` via `.expect("Steam target without steam_app_id — invariant violation")`. Doc comment now states the on-disk format is UNCHANGED in B2.1 and that B2.2 will replace the expect() with conditional emission. The eBPF daemon reader (`ebpf/gamepulse-ebpf-daemon/src/session.rs`) was not touched — it already tolerates optional steam_app_id, but B2.1 doesn't actually exercise that tolerance because session.json bytes are identical to the pre-refactor output.
+- `base_doc` migrated similarly: same `expect()` pattern at the steam_app_id emission site, comment block on B2.2 plans.
+- Steam-specific scanner renamed `scan_for_game` → `scan_for_steam_game` (now `pub(crate)`). New `pub fn scan_for_game()` dispatcher added one block above with commented-out `.or_else(scan_for_lutris_game)` / `_heroic_game` / `_bottles_game` / `_user_specified_target` lines documenting the slots for B2.3-B2.7. Dispatcher's name preserves the call-site at `SessionManager::poll()` so no caller had to change.
+- Steam scanner's terminal `Some(DetectedGame { ... })` literal replaced with `Some(Target::from_steam(...))`.
+- `src/main.rs`: `build_game_detected_doc` and `build_summary_doc` parameter types renamed `&session::DetectedGame` → `&session::Target`. Field accesses and the in-body `game_doc` map migrated to `target.display_name` / `target.steam_app_id.expect(...)`. `last_known_game` retyped. `SessionEvent::GameStarted(game)` arm renamed `game` → `target`; `GameEnded(old)` arm renamed `old` → `target`. No call site needed match-on-`source` dispatch in B2.1, which validates the Option-B design assumption — the type checker passed on every callsite once each one's `name` → `display_name` swap was applied.
+
+**Step 4 — verification**:
+
+- `cargo check --manifest-path src/Cargo.toml`: OK.
+- `cargo clippy --manifest-path src/Cargo.toml -- -D warnings`: OK. The five unused TargetSource variants (Lutris/Heroic/Bottles/UserSpecified/AutoDetected) don't trigger dead_code because the per-crate `dead_code = "allow"` lint set in B.7 is still in effect.
+- `cargo fmt --manifest-path src/Cargo.toml -- --check`: initially flagged a pre-existing unfmt'd `compile_error!()` line in `src/main.rs` introduced by B.6 (commit ad1aa93) — not caused by B2.1. Per the verification step's "run `cargo fmt` to fix if not [passing]" instruction, applied `cargo fmt`; the resulting diff is one drive-by reformat of the compile_error line, folded into B2.1's commit and called out in the commit body. CI's fmt gate would have caught this on the next push regardless.
+- `cargo test --manifest-path src/Cargo.toml`: 3/3 pass (slug_from_name_examples, counter_increments_per_game_per_day, counter_prunes_old_entries).
+- `cargo run … -- --dry-run`: failed because no `gamepulse.toml` exists on this Windows dev host. Pre-existing host-specific behaviour (`config::Config::load` runs before the dry_run early-return); B2.1 didn't touch config loading. Treated as a non-signal — the cargo check / clippy / test results are the meaningful ones for a refactor of this shape.
+
+**Step 5 — docs**: `docs/STATUS.md` updated (B2 row → 🟡 Partial 1/8, B2.1 moved into a new "Milestone B2 — Launcher-agnostic game detection (partial)" subsection in completed work, active work package now B2.2 with a description of the schema work, follow-up added for live gaming-PC verification). HANDOFF.md prepended with this entry.
+
+### Judgment calls made without consultation
+
+- **fmt drive-by on B.6's `compile_error!` line**: ran `cargo fmt` to clear the pre-existing diff so B2.1 lands on a fmt-clean tree. Authorized by the verification step's instruction; flagged in the commit body so reviewers know the line wasn't B2.1's doing.
+- **Detection log format extended with `source={:?}`**: when migrating `tracing::info!("Game detected: {} (app_id={}, …)", game.name, game.steam_app_id, …)`, swapped `game.steam_app_id` (was `u32`) for `target.steam_app_id` (now `Option<u32>`) and added `source={:?}` in the same line. Could have kept the line shape identical by writing `target.steam_app_id.unwrap_or(0)` but that would silently lose information for non-Steam targets in B2.3+. No external consumer parses these logs — they're operator-facing only.
+- **`Game*` SessionEvent variant names kept**: design doc said keep them. Did. No deviation; flagging only because in B2.2+ when the public-facing "game" label gives way to "target" in the user-visible schema, these variant names become a pure-internal idiosyncrasy worth revisiting.
+
+### Validation results (on this Windows 11 host)
+
+| Command | Status |
+|---|---|
+| `cargo check --manifest-path src/Cargo.toml` | OK |
+| `cargo clippy --manifest-path src/Cargo.toml -- -D warnings` | OK |
+| `cargo fmt --manifest-path src/Cargo.toml -- --check` | OK (after one drive-by fmt of a pre-existing B.6 line) |
+| `cargo test --manifest-path src/Cargo.toml` | 3/3 pass |
+| `cargo run … -- --dry-run` | not exercised — no config on this host (pre-existing, unrelated to B2.1) |
+
+### Deferred / follow-ups
+
+- **Live gaming-PC verification of B2.1**: boot a real Linux game session, capture session-start + session-summary docs, diff against a pre-B2.1 baseline from ES Discover. Same trip should confirm the eBPF daemon still parses `/tmp/gamepulse/session.json` (format unchanged, but verify by inspecting daemon logs). Recorded in `docs/STATUS.md` follow-ups.
+- **Hook noise during multi-edit refactors**: this session triggered the `post-edit-check.py` cargo-check hook ~9 times, each emitting an expected mid-refactor compile error until the final edit. Same pattern as B.1–B.3 (2026-04-24 session 1). Already on the Phase C scheduling backlog as "scope the hook to only fire on the final edit in a batch / suppress during planned structural refactors". No new action this session.
+- **B2.2 (next WP)**: schema generalisation — `gamepulse.game.steam_app_id` becomes optional, add `gamepulse.game.source` + `gamepulse.game.launcher`. Touches `data_stream/session/fields/fields.yml` (protected — needs `pre-edit-check` bypass via in-chat confirmation) and the two `.expect()` sites in `src/session.rs` that B2.1 left as documented invariants. Daemon's `SessionInfo` reader already tolerates optional steam_app_id so format generalisation is unblocked there.
+
+### Current state
+
+- B2.1 commit + docs commit pending. Once pushed, `origin/main` advances by two commits.
+- Branch clean apart from the in-flight B2.1 changes; no other untracked work.
+- Phase B2: 1/8 WPs complete (B2.1).
+- Next session: B2.2 — schema generalisation. Can land on either host.
+
+### Previous session: 2026-04-24 session 2 (Phase B finish — B.5 CI + B.6 eBPF feature flag, plus B2/B3 roadmap)
+
+---
+
 ## Session: 2026-04-24 session 2 (Phase B finish — B.5 CI + B.6 eBPF feature flag, plus B2/B3 roadmap)
 
 ### Context coming in
