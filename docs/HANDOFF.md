@@ -5,6 +5,44 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-25 (B2.4 — Heroic game detection)
+
+### Context coming in
+
+- B2.3 landed in previous context window (same day): Lutris scanner via `~/.local/share/lutris/games/*.yml` + slug-to-title. Dispatcher slot for B2.4 was a comment at line 942.
+- Host: CachyOS Linux. Heroic confirmed installed at `~/.config/heroic/` (non-Flatpak only).
+
+### Reconnaissance findings
+
+- `legendaryConfig/legendary/installed.json` present: one Epic game — `"911 Operator"` with `app_name = "a7594e61a4f24e6d9495ea959749598e"` (UUID hash, not human-readable). Title and `is_dlc: false` confirmed.
+- `gog_store/installed.json` present but empty (no GOG games installed).
+- `gogdlConfig/heroic_gogdl/installed.json` also exists but empty — this path was NOT in the spec. Not added to probe list; noted here for future reference if GOG detection gaps surface.
+- `nile_store/installed.json` present but empty (Amazon Games; not in B2.4 scope).
+- No Flatpak variant present.
+
+### What was done
+
+1. Added private `HeroicStore` enum (`Epic` / `Gog`, `#[derive(Clone, Copy)]`).
+2. Added `heroic_installed_games() -> Vec<(String, String, HeroicStore)>`: probes 4 paths, handles object format (Legendary / newer GOG) and array format (older GOG), filters DLC entries, deduplicates by app_name.
+3. Implemented `scan_for_heroic_game()`: scans `/proc/*/environ` for `SteamGameId=heroic-<app_name>`, cross-references against installed list, returns `Target { source: Heroic, launcher: "Heroic — Epic"/"Heroic — GOG", … }`.
+4. Wired into `scan_for_game()` dispatcher replacing the B2.4 comment slot.
+5. All 4 tests green; clippy + fmt clean.
+
+### Key decisions
+
+- **`SteamGameId=heroic-<app_name>` as the matching signal**: cleaner than exe-path matching; works for both Epic and GOG via the same code path. Confirmed this is what Heroic sets in practice.
+- **Epic app_name is a UUID hash**: `a7594e61a4f24e6d9495ea959749598e` is the real key for "911 Operator". The `installed.json` object key equals the `app_name` field value. Matching must use app_name, not title.
+- **Empty file guard**: `content.trim().is_empty()` check before JSON parse avoids a spurious `warn!` for the empty GOG file.
+- **`gogdlConfig/heroic_gogdl/` not added**: this path exists on this machine but isn't in the spec's path list. Deferring to a follow-up if GOG detection is confirmed broken in practice.
+
+### State leaving this session
+
+- B2.4 complete. Heroic Epic + GOG detection live in dispatcher.
+- B2.5 (Bottles detection) is next active WP.
+- No live game-session verification (game not running during session).
+
+---
+
 ## Session: 2026-04-25 (B2.3 — Lutris game detection)
 
 ### Context coming in

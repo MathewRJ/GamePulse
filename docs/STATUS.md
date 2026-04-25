@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-25 by claude-code (B2.3 — Lutris game detection via ~/.local/share/lutris/games/*.yml)
+Last updated: 2026-04-25 by claude-code (B2.4 — Heroic game detection via SteamGameId=heroic-* env probe)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -65,12 +65,14 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 ## Active work package
 
-**B2.4 — Heroic detection.** Parse `~/.config/heroic/` to detect running Heroic-managed game processes (Epic Games and GOG). Populate `Target` with `source: Heroic`, appropriate `launcher` string. Integrates into `scan_for_game()` dispatcher via the reserved `.or_else(scan_for_heroic_game)` slot.
+**B2.5 — Bottles detection.** Detect running Bottles-managed game processes via `~/.local/share/bottles/`. Populate `Target` with `source: Bottles`, `launcher: "Bottles"`. Integrates into `scan_for_game()` dispatcher via the reserved `.or_else(scan_for_bottles_game)` slot.
 See `docs/ROADMAP.md` for milestone structure and work package definitions.
 
 ## Completed work
 
 ### Milestone B2 — Launcher-agnostic game detection (partial, 2026-04-25)
+
+- **B2.4 — Heroic detection**: Added `scan_for_heroic_game() -> Option<Target>` in `src/session.rs`. Probes four `installed.json` paths (native + Flatpak × Epic/GOG) via `heroic_installed_games()` which returns `Vec<(app_name, title, HeroicStore)>`. Detects running games by scanning `/proc/*/environ` for `SteamGameId=heroic-<app_name>` — the env var Heroic sets on all child processes. `HeroicStore` enum (Epic/Gog) drives `launcher` label: "Heroic — Epic" or "Heroic — GOG". Handles object format (Legendary/newer GOG) and array format (older GOG) defensively; skips DLC entries; deduplicates by app_name across all four paths; empty or malformed JSON files are silently skipped. Wired into `scan_for_game()` dispatcher. Smoke test: Heroic installed (non-Flatpak); one Epic game found (`911 Operator`, app_name UUID `a7594e61a4f24e6d9495ea959749598e`); GOG `installed.json` exists but empty (no GOG games installed). `gogdlConfig/heroic_gogdl/installed.json` also empty — not in spec paths, documented in HANDOFF. Verification: `cargo check`, `cargo clippy -- -D warnings`, `cargo fmt --check`, `cargo test` (4/4) green. Commit: see feat commit below.
 
 - **B2.3 — Lutris detection**: Added `scan_for_lutris_game() -> Option<Target>` in `src/session.rs`. Scans `~/.local/share/lutris/games/*.yml`, deserialises each file into a minimal `LutrisGameConfig` struct (serde_yaml 0.9), derives display name from filename slug via `lutris_slug_to_title()` (strips 10+-digit Unix timestamp suffix, title-cases words), detects Wine vs native runner from presence of top-level `wine:` YAML key, cross-references `/proc/<pid>/exe` symlinks (native games) and `/proc/<pid>/environ` WINEPREFIX entries (Wine games). Wired into `scan_for_game()` dispatcher replacing the placeholder comment. Added `serde_yaml = "0.9"` to `src/Cargo.toml`. Unit test `test_lutris_slug_to_title` confirms 4 slug examples including numeric version segments and multi-word titles. Smoke test: one real Lutris game found (`thronebreaker-the-witcher-tal-gog-1777116393.yml`, GOG/umu Wine game) — YAML parses cleanly, Wine prefix `/home/cachyos/Games/gog/thronebreaker-the-witcher-tales` would be matched via WINEPREFIX scan when game is running. Note: real Lutris YAML uses no top-level `wine:` key for umu-backed games, so all GOG games will show "Lutris — Native" label until B2.6 improves runner detection. Verification: `cargo check`, `cargo clippy -- -D warnings`, `cargo fmt --check`, `cargo test` (4/4) green. Commit: see feat commit below.
 
