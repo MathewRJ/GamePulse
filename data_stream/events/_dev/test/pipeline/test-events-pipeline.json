@@ -23,6 +23,8 @@
         },
         "game": {
           "name": "Cyberpunk 2077",
+          "source": "steam",
+          "launcher": "Steam",
           "steam_app_id": 1091500
         },
         "event": {

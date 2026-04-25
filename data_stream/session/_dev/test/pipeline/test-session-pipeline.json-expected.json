@@ -10,7 +10,9 @@
             "gamepulse": {
                 "game": {
                     "graphics_api": "vulkan",
+                    "launcher": "Steam",
                     "name": "Cyberpunk 2077",
+                    "source": "steam",
                     "steam_app_id": 1091500
                 },
                 "hardware": {

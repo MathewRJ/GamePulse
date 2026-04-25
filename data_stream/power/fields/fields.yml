@@ -30,7 +30,7 @@
           description: "Game title"
         - name: steam_app_id
           type: long
-          description: "Steam application ID"
+          description: "Steam application ID (present only when source == steam)"
 
     # Power-specific metrics
     - name: power

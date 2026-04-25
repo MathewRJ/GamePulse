@@ -57,6 +57,14 @@
                 }
               }
             },
+            "source": {
+              "type": "keyword",
+              "ignore_above": 32
+            },
+            "launcher": {
+              "type": "keyword",
+              "ignore_above": 128
+            },
             "steam_app_id": {
               "type": "long"
             },

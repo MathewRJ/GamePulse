@@ -1,16 +1,17 @@
-/// Game session lifecycle and Steam game detection.
-///
-/// Mirrors collector/gamepulse/detector/game.py and the session-related
-/// logic in collector/gamepulse/cli.py.
+/// Game session lifecycle and target detection (Steam + future launchers).
 ///
 /// Detection: scans /proc/*/environ every 5 s for processes with SteamAppId
 /// set. Groups all matching PIDs by app_id; picks a non-helper representative
 /// for metadata. Resolves the game name from Steam appmanifest ACF files.
+/// B2.3-B2.7 will add Lutris / Heroic / Bottles / user-specified detectors.
 ///
-/// Session.json: written to /tmp/gamepulse/session.json when a game is
-/// detected; removed on game exit or agent shutdown. Format matches what the
-/// eBPF daemon's SessionInfo struct expects:
-///   {"session_id":"…","game_pid":N,"game_name":"…","game_pids":[…],"steam_app_id":N}
+/// Session.json: written to /tmp/gamepulse/session.json when a target is
+/// detected; removed on game exit or agent shutdown. Fields read by the
+/// eBPF daemon's SessionInfo struct:
+///   {"session_id":"…","game_pid":N,"game_name":"…","game_pids":[…],
+///    "target_source":"steam","steam_app_id":N}
+/// `steam_app_id` is optional (absent for non-Steam sources). `target_source`
+/// is new in B2.2 — daemon ignores it via default serde behaviour.
 use anyhow::Result;
 use chrono::Utc;
 use fs2::FileExt;
@@ -23,7 +24,7 @@ use uuid::Uuid;
 
 // ── Target (detected game/app) ─────────────────────────────────────────────────
 
-/// Where a `Target` came from. Only `Steam` is constructed in B2.1; the other
+/// Where a `Target` came from. Only `Steam` is constructed today; the other
 /// variants are reserved for B2.3-B2.7 (Lutris/Heroic/Bottles/UserSpecified)
 /// and B3 (AutoDetected). Per-crate `dead_code = "allow"` keeps them from
 /// tripping clippy until their detectors land.
@@ -43,8 +44,8 @@ pub enum TargetSource {
 /// Runtime invariants (not compiler-checked):
 /// - `source == TargetSource::Steam` ⇒ `steam_app_id.is_some()`.
 /// - `source != TargetSource::Steam` ⇒ `steam_app_id.is_none()`.
-/// - `launcher` is `None` until B2.2 wires the schema field; constructors in
-///   later WPs will populate it (e.g. `"Steam"`, `"Lutris"`, `"Heroic — Epic"`).
+/// - `launcher` mirrors `source` in human-readable form (e.g. "Steam", "Lutris",
+///   "Heroic — Epic"). Absent only if the source doesn't have a launcher concept.
 /// - `display_name` is non-empty.
 #[derive(Debug, Clone)]
 pub struct Target {
@@ -77,7 +78,7 @@ impl Target {
             pid,
             all_pids,
             steam_app_id: Some(steam_app_id),
-            launcher: None, // populated by B2.2 schema work
+            launcher: Some("Steam".to_string()),
             graphics_api,
             proton_version,
             dxvk_version,
@@ -264,25 +265,10 @@ impl SessionManager {
         gp.insert("session".to_string(), Value::Object(gp_session));
 
         if let Some(target) = &self.current_game {
-            let mut game_doc = serde_json::Map::new();
-            game_doc.insert(
-                "name".to_string(),
-                Value::String(target.display_name.clone()),
+            gp.insert(
+                "game".to_string(),
+                Value::Object(target_to_game_doc(target)),
             );
-            // B2.1: only Steam targets exist, so steam_app_id is always Some(_).
-            // B2.2 will make this conditional on source and add gamepulse.game.{source,launcher}.
-            game_doc.insert(
-                "steam_app_id".to_string(),
-                Value::from(
-                    target
-                        .steam_app_id
-                        .expect("Steam target without steam_app_id — invariant violation"),
-                ),
-            );
-            if let Some(api) = &target.graphics_api {
-                game_doc.insert("graphics_api".to_string(), Value::String(api.clone()));
-            }
-            gp.insert("game".to_string(), Value::Object(game_doc));
         }
 
         json!({
@@ -291,11 +277,12 @@ impl SessionManager {
         })
     }
 
-    /// Write /tmp/gamepulse/session.json for the eBPF daemon.
+    /// Write session.json for the eBPF daemon.
     ///
-    /// On-disk format is UNCHANGED from the pre-B2.1 layout — the daemon's
-    /// `SessionInfo` reader expects exactly these fields. Format generalisation
-    /// (optional steam_app_id, source/launcher fields) is B2.2 work.
+    /// The daemon's `SessionInfo` reads: session_id, game_pid, game_name,
+    /// game_pids (optional, falls back to game_pid), steam_app_id (optional).
+    /// `target_source` is new in B2.2 — the daemon silently ignores unknown
+    /// fields via default serde behaviour (no `deny_unknown_fields`).
     fn write_session_json(&self, target: &Target) -> Result<()> {
         let dir = self.session_json_path.parent().unwrap();
         std::fs::create_dir_all(dir)?;
@@ -305,20 +292,31 @@ impl SessionManager {
             use std::os::unix::fs::PermissionsExt;
             let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o1777));
         }
-        // B2.1: every target is source=Steam, so steam_app_id is always Some(_).
-        // B2.2 will replace this with optional emission once the daemon learns
-        // to handle non-Steam targets.
-        let steam_app_id = target
-            .steam_app_id
-            .expect("Steam target without steam_app_id — invariant violation");
-        let doc = json!({
-            "session_id": self.session_id,
-            "game_pid": target.pid,
-            "game_name": target.display_name,
-            "game_pids": target.all_pids,
-            "steam_app_id": steam_app_id,
-        });
-        std::fs::write(&self.session_json_path, serde_json::to_string(&doc)?)?;
+        let mut doc = serde_json::Map::new();
+        doc.insert(
+            "session_id".to_string(),
+            Value::String(self.session_id.clone()),
+        );
+        doc.insert("game_pid".to_string(), Value::from(target.pid));
+        doc.insert(
+            "game_name".to_string(),
+            Value::String(target.display_name.clone()),
+        );
+        doc.insert(
+            "game_pids".to_string(),
+            Value::Array(target.all_pids.iter().map(|&p| Value::from(p)).collect()),
+        );
+        doc.insert(
+            "target_source".to_string(),
+            Value::String(target_source_str(target.source).to_string()),
+        );
+        if let Some(app_id) = target.steam_app_id {
+            doc.insert("steam_app_id".to_string(), Value::from(app_id));
+        }
+        std::fs::write(
+            &self.session_json_path,
+            serde_json::to_string(&Value::Object(doc))?,
+        )?;
         tracing::debug!(
             "wrote session.json: {} (pids: {:?})",
             self.session_json_path.display(),
@@ -335,6 +333,47 @@ impl SessionManager {
             Err(e) => tracing::warn!("Failed to remove session.json: {}", e),
         }
     }
+}
+
+// ── Target helpers ────────────────────────────────────────────────────────────
+
+/// Canonical wire-format string for a `TargetSource`.
+/// Must stay in sync with the `gamepulse.game.source` enum in fields.yml.
+/// Exhaustive match forces an update here whenever a new variant is added.
+fn target_source_str(source: TargetSource) -> &'static str {
+    match source {
+        TargetSource::Steam => "steam",
+        TargetSource::Lutris => "lutris",
+        TargetSource::Heroic => "heroic",
+        TargetSource::Bottles => "bottles",
+        TargetSource::UserSpecified => "user_specified",
+        TargetSource::AutoDetected => "auto_detected",
+    }
+}
+
+/// Build the `gamepulse.game.*` doc map for a target.
+/// Shared by `SessionManager::base_doc` (per-tick context) and
+/// `build_summary_doc` in main.rs (session-end summary).
+pub fn target_to_game_doc(target: &Target) -> serde_json::Map<String, Value> {
+    let mut game_doc = serde_json::Map::new();
+    game_doc.insert(
+        "name".to_string(),
+        Value::String(target.display_name.clone()),
+    );
+    game_doc.insert(
+        "source".to_string(),
+        Value::String(target_source_str(target.source).to_string()),
+    );
+    if let Some(app_id) = target.steam_app_id {
+        game_doc.insert("steam_app_id".to_string(), Value::from(app_id));
+    }
+    if let Some(launcher) = &target.launcher {
+        game_doc.insert("launcher".to_string(), Value::String(launcher.clone()));
+    }
+    if let Some(api) = &target.graphics_api {
+        game_doc.insert("graphics_api".to_string(), Value::String(api.clone()));
+    }
+    game_doc
 }
 
 // ── Label helpers ──────────────────────────────────────────────────────────────

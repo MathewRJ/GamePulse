@@ -1167,7 +1167,11 @@ meaningless.
                                                     Heroic / Bottles /      registry / user-
                                                     user-specified target   specified target
 
-  Steam App ID                       Critical       Steam client API / env  Steam client API /
+  gamepulse.game.source              Critical       Detection dispatcher    Detection dispatcher
+  + gamepulse.game.launcher          (added B2.2)   (steam | lutris |       (steam | ...)
+                                                    heroic | bottles | ...)
+
+  Steam App ID (steam source only)   High           Steam client API / env  Steam client API /
                                                                             registry
 
   Game version / patch / build       Critical       Steam manifest          File version info

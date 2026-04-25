@@ -432,25 +432,7 @@ fn build_summary_doc(
     // If the target exited before the summary is built, session.current_game is None.
     // Inject the last known target fields so gamepulse.game.* appear in the summary.
     if let (Some(target), None) = (last_game, session.current_game.as_ref()) {
-        let mut game_doc = serde_json::Map::new();
-        game_doc.insert(
-            "name".to_string(),
-            Value::String(target.display_name.clone()),
-        );
-        // B2.1: only Steam targets exist, so steam_app_id is always Some(_).
-        // B2.2 will make this conditional and add gamepulse.game.{source,launcher}.
-        game_doc.insert(
-            "steam_app_id".to_string(),
-            Value::from(
-                target
-                    .steam_app_id
-                    .expect("Steam target without steam_app_id — invariant violation"),
-            ),
-        );
-        if let Some(api) = &target.graphics_api {
-            game_doc.insert("graphics_api".to_string(), Value::String(api.clone()));
-        }
-        let overlay = json!({ "gamepulse": { "game": game_doc } });
+        let overlay = json!({ "gamepulse": { "game": session::target_to_game_doc(target) } });
         base = deep_merge(base, overlay);
     }
 
