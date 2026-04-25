@@ -617,6 +617,19 @@ mod tests {
     }
 
     #[test]
+    fn test_enrich_from_proton_env() {
+        let mut env = std::collections::HashMap::new();
+        env.insert("PROTON_VERSION".to_string(), "GE-Proton9-20".to_string());
+        env.insert("DXVK_CONFIG_FILE".to_string(), "/tmp/dxvk.conf".to_string());
+
+        let (graphics_api, _) = detect_graphics_api(&env);
+        let proton_version = proton_version_from_env(&env);
+
+        assert_eq!(graphics_api.as_deref(), Some("dx11_via_dxvk"));
+        assert_eq!(proton_version.as_deref(), Some("GE-Proton9-20"));
+    }
+
+    #[test]
     fn slug_from_name_examples() {
         assert_eq!(slug_from_game_name("Starfield"), "starfield");
         assert_eq!(slug_from_game_name("Cyberpunk 2077"), "cyberpunk-2077");
@@ -764,6 +777,10 @@ pub(crate) fn scan_for_lutris_game() -> Option<Target> {
 
         if !matched_pids.is_empty() {
             let pid = matched_pids[0];
+            let env = read_environ(pid).unwrap_or_default();
+            let (graphics_api, _) = detect_graphics_api(&env);
+            let proton_version = proton_version_from_env(&env);
+            let dxvk_version = dxvk_version_from_env(&env);
             return Some(Target {
                 source: TargetSource::Lutris,
                 display_name: display_name.clone(),
@@ -771,9 +788,9 @@ pub(crate) fn scan_for_lutris_game() -> Option<Target> {
                 all_pids: matched_pids,
                 steam_app_id: None,
                 launcher,
-                graphics_api: None,
-                proton_version: None,
-                dxvk_version: None,
+                graphics_api,
+                proton_version,
+                dxvk_version,
             });
         }
     }
@@ -1081,6 +1098,10 @@ pub(crate) fn scan_for_heroic_game() -> Option<Target> {
                 HeroicStore::Epic => "Heroic \u{2014} Epic".to_string(),
                 HeroicStore::Gog => "Heroic \u{2014} GOG".to_string(),
             });
+            let env = read_environ(pid).unwrap_or_default();
+            let (graphics_api, _) = detect_graphics_api(&env);
+            let proton_version = proton_version_from_env(&env);
+            let dxvk_version = dxvk_version_from_env(&env);
             return Some(Target {
                 source: TargetSource::Heroic,
                 display_name: title.clone(),
@@ -1088,9 +1109,9 @@ pub(crate) fn scan_for_heroic_game() -> Option<Target> {
                 all_pids,
                 steam_app_id: None,
                 launcher,
-                graphics_api: None,
-                proton_version: None,
-                dxvk_version: None,
+                graphics_api,
+                proton_version,
+                dxvk_version,
             });
         }
     }
@@ -1243,6 +1264,10 @@ pub(crate) fn scan_for_bottles_game() -> Option<Target> {
             })
             .unwrap_or_else(|| config.name.clone());
 
+        let env = read_environ(pid).unwrap_or_default();
+        let (graphics_api, _) = detect_graphics_api(&env);
+        let proton_version = proton_version_from_env(&env);
+        let dxvk_version = dxvk_version_from_env(&env);
         return Some(Target {
             source: TargetSource::Bottles,
             display_name,
@@ -1250,9 +1275,9 @@ pub(crate) fn scan_for_bottles_game() -> Option<Target> {
             all_pids,
             steam_app_id: None,
             launcher: Some("Bottles".to_string()),
-            graphics_api: None,
-            proton_version: None,
-            dxvk_version: None,
+            graphics_api,
+            proton_version,
+            dxvk_version,
         });
     }
 
