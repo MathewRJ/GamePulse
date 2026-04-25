@@ -32,6 +32,8 @@ pub struct SessionConfig {
     pub label: Option<String>,
     #[serde(default)]
     pub settings: SessionSettingsConfig,
+    pub target_pid: Option<u32>,
+    pub target_name: Option<String>,
 }
 
 /// Tier 1 manual settings capture — populated from [session.settings] in the config

@@ -77,6 +77,17 @@ struct Cli {
     /// Free-text notes for this session, e.g. "engineering sample GPU"
     #[arg(long, value_name = "TEXT")]
     notes: Option<String>,
+
+    // ── Target override (B2.7) ────────────────────────────────────────────────
+    /// Skip auto-detection and monitor a specific process ID.
+    /// The process must be running when the agent starts.
+    #[arg(long, value_name = "PID")]
+    target_pid: Option<u32>,
+
+    /// Skip auto-detection; find a process by name (matched against /proc/*/comm
+    /// and /proc/*/exe basename, case-insensitive). First match wins.
+    #[arg(long, value_name = "NAME")]
+    target_name: Option<String>,
 }
 
 // ── Utilities ──────────────────────────────────────────────────────────────────
@@ -107,6 +118,25 @@ fn deep_merge(mut base: Value, overlay: Value) -> Value {
         (base, overlay) => *base = overlay,
     }
     base
+}
+
+/// Check liveness of a user-pinned target and synthesise the appropriate SessionEvent.
+fn poll_pinned_target(
+    pinned: &session::Target,
+    current: &mut Option<session::Target>,
+) -> session::SessionEvent {
+    let alive = std::path::Path::new(&format!("/proc/{}", pinned.pid)).exists();
+    match (current.is_some(), alive) {
+        (false, true) => {
+            *current = Some(pinned.clone());
+            session::SessionEvent::GameStarted(pinned.clone())
+        }
+        (true, false) => {
+            let old = current.take().unwrap();
+            session::SessionEvent::GameEnded(old)
+        }
+        _ => session::SessionEvent::NoChange,
+    }
 }
 
 /// Add data_stream routing fields to a doc so the shipper can derive the index.
@@ -595,6 +625,23 @@ async fn main() -> Result<()> {
         notes,
     );
 
+    // Resolve CLI/config target override (B2.7) — takes precedence over auto-detection.
+    let pinned_pid = cli.target_pid.or(cfg.session.target_pid);
+    let pinned_name = cli
+        .target_name
+        .as_deref()
+        .or(cfg.session.target_name.as_deref())
+        .map(|s| s.to_string());
+    let pinned_target: Option<session::Target> = if pinned_pid.is_some() || pinned_name.is_some() {
+        let t = session::resolve_user_target(pinned_pid, pinned_name.as_deref());
+        if t.is_none() {
+            tracing::warn!("User-specified target not found — falling back to auto-detection");
+        }
+        t
+    } else {
+        None
+    };
+
     let mut session = session::SessionManager::new_with_label_and_settings(
         session_label.clone(),
         settings_overlay,
@@ -655,7 +702,11 @@ async fn main() -> Result<()> {
                 let ts = utc_now();
 
                 // ── Game detection ────────────────────────────────────────────
-                match session.poll() {
+                match if let Some(ref pinned) = pinned_target {
+                    poll_pinned_target(pinned, &mut session.current_game)
+                } else {
+                    session.poll()
+                } {
                     SessionEvent::GameStarted(target) => {
                         tracing::info!(
                             "Game detected: {} (pid {}, all_pids={:?})",

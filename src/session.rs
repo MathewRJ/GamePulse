@@ -617,6 +617,18 @@ mod tests {
     }
 
     #[test]
+    fn test_resolve_user_target_invalid_pid() {
+        let result = resolve_user_target(Some(9_999_999), None);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_resolve_user_target_no_args() {
+        let result = resolve_user_target(None, None);
+        assert!(result.is_none());
+    }
+
+    #[test]
     fn test_enrich_from_proton_env() {
         let mut env = std::collections::HashMap::new();
         env.insert("PROTON_VERSION".to_string(), "GE-Proton9-20".to_string());
@@ -1294,7 +1306,8 @@ pub fn scan_for_game() -> Option<Target> {
         .or_else(scan_for_lutris_game)
         .or_else(scan_for_heroic_game)
         .or_else(scan_for_bottles_game)
-    // B2.7 will add: .or_else(scan_for_user_specified_target)
+    // B2.7 (UserSpecified) is resolved at startup via resolve_user_target() in main.rs,
+    // not polled here — user targets are pinned, not re-scanned every 5 s.
 }
 
 /// Scan /proc for a running Steam game. Returns the best candidate or None.
@@ -1375,4 +1388,88 @@ pub(crate) fn scan_for_steam_game() -> Option<Target> {
         proton_version,
         dxvk_version,
     ))
+}
+
+// ── User-specified target ──────────────────────────────────────────────────────
+
+/// Resolve a user-specified target by PID or process name.
+/// Called from main.rs at startup when --target-pid or --target-name is given.
+/// Returns None if the process cannot be found; caller falls back to auto-detection.
+///
+/// PID mode: validates the PID exists, reads comm/exe for a display name, runs
+/// standard enrichment helpers on the process environ.
+///
+/// Name mode: scans /proc for a process whose comm or exe basename matches
+/// case-insensitively; uses the first match as the PID and proceeds as PID mode.
+pub fn resolve_user_target(
+    pid_override: Option<u32>,
+    name_override: Option<&str>,
+) -> Option<Target> {
+    let pid = match (pid_override, name_override) {
+        (Some(p), _) => {
+            if !std::path::Path::new(&format!("/proc/{}", p)).exists() {
+                tracing::warn!("--target-pid {}: process not found", p);
+                return None;
+            }
+            p
+        }
+        (None, Some(name)) => {
+            let found = std::fs::read_dir("/proc")
+                .ok()?
+                .filter_map(|e| e.ok())
+                .filter_map(|e| e.file_name().to_str()?.parse::<u32>().ok())
+                .find(|&pid| {
+                    let comm = std::fs::read_to_string(format!("/proc/{}/comm", pid))
+                        .map(|s| s.trim().to_lowercase())
+                        .unwrap_or_default();
+                    if comm == name.to_lowercase() {
+                        return true;
+                    }
+                    std::fs::read_link(format!("/proc/{}/exe", pid))
+                        .ok()
+                        .and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_lowercase()))
+                        .map(|base| base == name.to_lowercase())
+                        .unwrap_or(false)
+                });
+            match found {
+                Some(p) => p,
+                None => {
+                    tracing::warn!("--target-name {:?}: no running process found", name);
+                    return None;
+                }
+            }
+        }
+        (None, None) => return None,
+    };
+
+    let comm = std::fs::read_to_string(format!("/proc/{}/comm", pid))
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default();
+    let exe_base = std::fs::read_link(format!("/proc/{}/exe", pid))
+        .ok()
+        .and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string()));
+    let display_name = if !comm.is_empty() {
+        comm
+    } else if let Some(base) = exe_base {
+        base
+    } else {
+        format!("pid-{}", pid)
+    };
+
+    let env = read_environ(pid).unwrap_or_default();
+    let (graphics_api, _) = detect_graphics_api(&env);
+    let proton_version = proton_version_from_env(&env);
+    let dxvk_version = dxvk_version_from_env(&env);
+
+    Some(Target {
+        source: TargetSource::UserSpecified,
+        display_name,
+        pid,
+        all_pids: vec![pid],
+        steam_app_id: None,
+        launcher: Some("User-specified".to_string()),
+        graphics_api,
+        proton_version,
+        dxvk_version,
+    })
 }
