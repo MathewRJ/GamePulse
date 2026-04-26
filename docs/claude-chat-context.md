@@ -3,7 +3,7 @@
 This file is updated by Claude Code at milestone boundaries. Claude.ai reads it at the start
 of planning sessions to establish project state without reading the full HANDOFF.md history.
 
-Last updated: 2026-04-25 (B2 complete)
+Last updated: 2026-04-26 (Phase C complete — all 8 Windows collectors)
 
 ---
 
@@ -15,7 +15,7 @@ Last updated: 2026-04-25 (B2 complete)
 | B  Cross-platform refactor | 🟢 Done |
 | B2 Launcher-agnostic game detection | 🟢 Done (all 8 WPs) |
 | B3 Automatic game detection | ⚪ Not started (placeheld) |
-| C  Windows collectors | 🔓 Unblocked by B2 |
+| C  Windows collectors | 🟢 Done (all 8 WPs, C.0 PDH infra + C.1–C.8) |
 | D  Linux portable packaging | 🟡 Partial |
 | E  Windows packaging | ⚪ Not started |
 | F  Cross-platform parity verification | 🔒 Blocked on B2+C+E |
@@ -35,6 +35,45 @@ All 8 work packages complete:
 - **B2.6** — Enrichment: `detect_graphics_api`, `proton_version_from_env`, `dxvk_version_from_env` wired into all three non-Steam detectors.
 - **B2.7** — `--target-pid` / `--target-name` CLI flags + `[session].target_pid` / `target_name` config. `resolve_user_target()` + `poll_pinned_target()` in main.rs. Pinned targets bypass `session.poll()` entirely.
 - **B2.8** — Dashboard: `ctrl-source` + `ctrl-launcher` filter controls and `launcher-breakdown` Lens panel added to Game Library dashboard. Component template + backing index mapping updated in live ES.
+
+---
+
+## C — What shipped (2026-04-25 → 2026-04-26)
+
+All Windows collectors implemented, dry-run verified on Windows 11. Per-collector parity gaps documented in `docs/STATUS.md` ("Phase C parity gap summary").
+
+- **C.0** — `src/collectors/windows/pdh.rs` PDH infra. `PdhQuery`/`PdhCounter` newtypes wrap raw `isize` handles (windows 0.58 quirk). `counter_value_f64` + `counter_values_array` (two-pass).
+- **C.1** — CPU: PDH `\Processor(*)\% Processor Time` + `\Processor Information(_Total)\Processor Frequency` + WMI temperature subprocess.
+- **C.2** — Memory: `GlobalMemoryStatusEx` + `GetProcessMemoryInfo`. `game_rss_mb` from `WorkingSetSize`.
+- **C.3** — Storage: PDH `\PhysicalDisk(_Total)\Disk Read|Write Bytes/sec`. Aggregate only (no per-disk, no game IO — ETW required).
+- **C.4** — Network: PDH `\Network Interface(*)\Bytes Sent|Received/sec` summed across non-tunnel adapters.
+- **C.5** — GPU: COM init + DXGI `IDXGIAdapter3::QueryVideoMemoryInfo` for VRAM + PDH `\GPU Engine(*engtype_3D*)\Utilization Percentage` + WMI thermal-zone temperature with `temp_source: "wmi_acpi"`.
+- **C.6** — Power: `GetSystemPowerStatus` → `ac_connected` + `battery_pct` (Option types; absent on desktops).
+- **C.7** — Audio: scaffold emitting `backend: "wasapi"`. `GlitchListener` stub for future ETW xrun upgrade.
+- **C.8** — Frame: PresentMon subprocess via `std::process::Command`, background `std::thread` reader, bounded `mpsc::sync_channel`, 120-sample `VecDeque` ring. CSV header parsed by name (resilient to PresentMon 1.x→2.x renames). Discovery: `GAMEPULSE_PRESENTMON` → binary directory → `where`.
+
+### IMPORTANT: frame collector field-path quirk
+
+The frame collector's **dataset name** is `gamepulse.frame` (used for routing to the `metrics-gamepulse.frame-*` data stream), but the **emitted JSON field group** is `gamepulse.fps.*` — not `gamepulse.frame.*`. This mirrors the Linux MangoHud collector (`src/collectors/linux/mangohud.rs:270`) and matches `SessionAccumulators` in `src/main.rs:359-368`, which reads `gp.get("fps")` and aggregates `avg_1s`, `frametime_ms`, `stutter_count`.
+
+Concrete fields emitted under `gamepulse.fps.*`:
+- `avg_1s` (f64) — smoothed FPS over the source's rolling ring
+- `current` (i64) — most recent frame's instantaneous FPS
+- `low_1pct` (i64), `low_01pct` (i64) — percentile lows from sorted ring
+- `frametime_ms` (f64) — per-tick mean frametime
+- `frametime_variance` (f64) — per-tick variance
+- `stutter_count` (i64) — frames in the tick > 2× tick mean
+
+When building dashboard panels for FPS / frametime / stutters, query the `metrics-gamepulse.frame-*` index pattern but reference the `gamepulse.fps.*` field paths. The same convention has been in place since the Linux collector landed; do not assume `gamepulse.frame.*` is the field path — it is the dataset only.
+
+### Windows-specific notes for dashboard / parity work
+
+- PresentMon binary is **not bundled**. Users must install it themselves (github.com/GameTechDev/PresentMon) and either set `GAMEPULSE_PRESENTMON=...` or place `PresentMon.exe` alongside `gamepulse-agent.exe`. If absent, `gamepulse.fps.*` stays empty for that session — the other 7 streams continue normally. Dashboards must tolerate missing frame data on Windows hosts.
+- GPU `temperature_c` may be absent on Windows even when emitted on Linux — WMI ACPI thermal zones don't always include a GPU-labelled zone. `temp_source: "wmi_acpi"` in the doc signals that the reading (when present) is approximate, vs Linux `temp_source: "hwmon"` which is exact.
+- CPU has no `game_utilisation_pct` on Windows (parity gap, ETW required). CPU has no `governor` field (no Windows equivalent).
+- Storage on Windows is aggregate only — no per-disk breakdown, no game-scoped IO.
+- Audio on Windows always reports `backend: "wasapi"` and emits no xruns (scaffold).
+- Power on Windows lacks `battery_rate_w`.
 
 ---
 
@@ -74,9 +113,10 @@ session docs predate B2.2. Fields will populate on the next real session.
 
 ## Next decisions needed (for claude.ai planning)
 
-1. **B3 vs C priority**: B3 (auto-detection heuristics) adds coverage for unlaunched games; C (Windows collectors) completes the cross-platform parity goal. Which ships first depends on whether the primary testing platform is Linux or Windows.
-2. **B3 scope**: What heuristics? Window title scraping (xtitle), known exe name database, `/proc/<pid>/maps` scanning for game engine patterns? Needs scoping before implementation.
-3. **C sequencing**: 8 Windows stub collectors need real implementations (ETW for CPU/GPU, etc.). Suggests breaking into C.1-C.8 sub-WPs like B2.
+1. **E vs B3 priority**: With Phase C done, the next significant milestone is either Phase E (Windows MSI packaging — gives users a real install path on Windows) or Phase B3 (auto-detection heuristics — improves UX on Linux first, would need to be redone for Windows). E is the natural follow-on if Windows users are the next audience; B3 if Linux user-acquisition is the priority.
+2. **Windows live verification**: Phase C is dry-run verified on Windows 11 only. Live ES shipping from Windows (real game session, real PresentMon, real ES docs in Discover) has not been done. Worth doing before E lands so any Windows-specific shipper bugs surface before the MSI ships.
+3. **PresentMon distribution**: Phase E must decide whether to bundle PresentMon.exe in the MSI (license-permissive, MIT) or direct users to download it. Bundling is friendlier; downloading keeps the MSI small.
+4. **B3 scope** (unchanged): What heuristics? Window title scraping (xtitle), known exe name database, `/proc/<pid>/maps` scanning for game engine patterns? Needs scoping before implementation.
 
 ---
 
