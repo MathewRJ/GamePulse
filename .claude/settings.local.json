@@ -79,7 +79,10 @@
       "Bash(GAMEPULSE_LOG=info timeout 7 ../target/debug/gamepulse-agent --dry-run)",
       "Bash(GAMEPULSE_LOG=info timeout 8 ../target/debug/gamepulse-agent --dry-run --config ../config/gamepulse.toml)",
       "Bash(GAMEPULSE_LOG=info timeout 8 target/debug/gamepulse-agent --dry-run --config config/gamepulse.toml)",
-      "Bash(echo \"exit=$?\")"
+      "Bash(echo \"exit=$?\")",
+      "Bash(target/debug/gamepulse-agent --dry-run --target-name \"fish\")",
+      "mcp__elastic-agent-builder__platform_core_execute_esql",
+      "Bash(node scripts/kibana-dashboards.js test)"
     ]
   },
   "enableAllProjectMcpServers": true,
