@@ -106,6 +106,190 @@ Most `gamepulse.*` fields are gauges (use any aggregation). Check `fields.yml` `
 
 ---
 
+## Kibana 9.5.0 Dashboards API — schema breaking changes
+
+Discovered 2026-04-26 when building the Games dashboard against Kibana 9.5.0 serverless.
+**These replace the patterns in the `kibana-dashboards` SKILL.md**, which was written for the 9.4 SNAPSHOT.
+Apply to every subsequent dashboard build (Environment, Hardware, Compare, Engine).
+
+### 1. `Elastic-Api-Version` header format
+
+| Before (9.4 SNAPSHOT) | After (9.5.0) |
+|---|---|
+| `"Elastic-Api-Version": "1"` | `"Elastic-Api-Version": "2023-10-31"` |
+
+The integer form is rejected with HTTP 400 `"Invalid version. Received "1", expected a valid date string formatted as YYYY-MM-DD."`. The `kibana-dashboards` script in `.agents/skills/kibana-dashboards/scripts/kibana-dashboards.js` must have the four `getDashboard` / `createDashboard` / `updateDashboard` / `deleteDashboard` calls patched to `"2023-10-31"` before use (the skill directory is in `.gitignore` and won't re-apply automatically).
+
+### 2. Panel type: `"lens"` → `"vis"`
+
+All inline visualization panels now use `"type": "vis"`. The old `"type": "lens"` is not in the allowed set and returns HTTP 400.
+
+```json
+// Before
+{ "type": "lens", "uid": "...", "grid": {...}, "config": { "attributes": { ... } } }
+
+// After
+{ "type": "vis", "id": "...", "grid": {...}, "config": { ... } }
+```
+
+### 3. Panel identifier: `uid` → `id`
+
+The panel-level unique identifier key changed. `uid` on any panel type causes a validation error. `options_list_control` panels silently dropped uid in 9.4; in 9.5.0 it is an explicit schema error.
+
+### 4. Data source key: `dataset` → `data_source`, and type values changed
+
+The visualization dataset descriptor moved out of `config.attributes` and into `config` directly, with renamed keys:
+
+| Before (9.4) | After (9.5.0) |
+|---|---|
+| `"dataset": { "type": "dataView", "id": "..." }` | `"data_source": { "type": "data_view_reference", "ref_id": "..." }` |
+| `"dataset": { "type": "esql", "query": "..." }` | `"data_source": { "type": "esql", "query": "..." }` *(type string unchanged)* |
+
+For `xy` charts, `data_source` goes inside each layer (same as before). For `metric` and `data_table`, `data_source` goes at the `config` level.
+
+`"data_view_spec"` is also accepted as a `data_source.type` (for inline index patterns without a saved data view).
+
+### 5. ES|QL metric items: `operation` field removed
+
+For ES|QL-backed metric panels, the `operation` field is not allowed. Reference the query output column by name only:
+
+```json
+// Before
+{ "type": "primary", "operation": "value", "column": "Total Sessions", "label": "..." }
+
+// After
+{ "type": "primary", "column": "Total Sessions", "label": "..." }
+```
+
+dataView metric items are **unchanged** — they still use `{ "type": "primary", "operation": "average", "field": "...", "label": "..." }`.
+
+### 6. `last_value` metrics: `sort_by` → `time_field`, `show_array_values` → `multi_value`
+
+```json
+// Before
+{ "operation": "last_value", "field": "game_name", "sort_by": "@timestamp", "show_array_values": false }
+
+// After
+{ "operation": "last_value", "field": "game_name", "time_field": "@timestamp", "multi_value": false }
+```
+
+### 7. `data_table` rows `rank_by`: `"column"` type removed
+
+Valid `rank_by.type` values in 9.5.0: `"alphabetical"`, `"rare"`, `"significant"`, `"metric"`, `"custom"`. The `"column"` type (used in SKILL.md examples) is no longer accepted.
+
+Use `"alphabetical"` for default ordering. In-dashboard column-click sorting still works for the user.
+
+```json
+// Before (9.4)
+{ "operation": "terms", "fields": ["session_id"], "rank_by": { "type": "column", "metric": 0, "direction": "desc" } }
+
+// After (9.5.0)
+{ "operation": "terms", "fields": ["session_id"], "limit": 50, "rank_by": { "type": "alphabetical", "direction": "asc" } }
+```
+
+### 8. XY chart axis key: `"left"` → `"y"`
+
+The left/primary y-axis is now addressed as `"y"` in the `axis` config object. `"left"` silently has no effect.
+
+```json
+// Before
+"axis": { "x": { "title": { "visible": false } }, "left": { "title": { "visible": false } } }
+
+// After
+"axis": { "x": { "title": { "visible": false } }, "y": { "title": { "visible": false } } }
+```
+
+### 9. Config structure flattened: `config.attributes` → `config`
+
+In 9.4, inline Lens definitions were nested under `config.attributes`. In 9.5.0, the visualization definition sits directly in `config`. The `"attributes"` wrapper key is gone.
+
+```json
+// Before (9.4)
+"config": {
+  "attributes": { "title": "...", "type": "metric", "dataset": {...}, "metrics": [...] }
+}
+
+// After (9.5.0)
+"config": {
+  "title": "...", "type": "metric", "data_source": {...}, "metrics": [...]
+}
+```
+
+### Quick-reference: working panel skeletons for 9.5.0
+
+**ES|QL metric tile:**
+```json
+{
+  "type": "vis", "id": "my-tile",
+  "grid": { "x": 0, "y": 0, "w": 12, "h": 6 },
+  "config": {
+    "type": "metric",
+    "data_source": { "type": "esql", "query": "FROM idx | STATS `My Value` = COUNT(*)" },
+    "metrics": [{ "type": "primary", "column": "My Value", "label": "My Value" }]
+  }
+}
+```
+
+**dataView metric tile:**
+```json
+{
+  "type": "vis", "id": "my-tile",
+  "grid": { "x": 0, "y": 0, "w": 12, "h": 6 },
+  "config": {
+    "type": "metric",
+    "data_source": { "type": "data_view_reference", "ref_id": "<data-view-id>" },
+    "metrics": [{ "type": "primary", "operation": "average", "field": "my_field", "label": "My Label" }]
+  }
+}
+```
+
+**XY line chart (dataView, split by field):**
+```json
+{
+  "type": "vis", "id": "my-chart",
+  "grid": { "x": 0, "y": 6, "w": 48, "h": 12 },
+  "config": {
+    "type": "xy",
+    "axis": { "x": { "title": { "visible": false } }, "y": { "title": { "visible": false } } },
+    "layers": [{
+      "type": "line",
+      "data_source": { "type": "data_view_reference", "ref_id": "<data-view-id>" },
+      "x": { "operation": "date_histogram", "field": "@timestamp" },
+      "y": [{ "operation": "average", "field": "my_metric", "label": "My Metric" }],
+      "breakdown_by": { "operation": "terms", "fields": ["my_keyword_field"] }
+    }]
+  }
+}
+```
+
+**data_table (dataView):**
+```json
+{
+  "type": "vis", "id": "my-table",
+  "grid": { "x": 0, "y": 18, "w": 48, "h": 14 },
+  "config": {
+    "type": "data_table",
+    "data_source": { "type": "data_view_reference", "ref_id": "<data-view-id>" },
+    "metrics": [
+      { "operation": "last_value", "field": "my_keyword", "time_field": "@timestamp", "multi_value": false, "label": "Label" },
+      { "operation": "max", "field": "my_numeric", "label": "Label" }
+    ],
+    "rows": [{ "operation": "terms", "fields": ["group_field"], "limit": 50, "rank_by": { "type": "alphabetical", "direction": "asc" } }]
+  }
+}
+```
+
+**options_list_control (unchanged except no uid/no attributes wrapper):**
+```json
+{
+  "type": "options_list_control", "id": "ctrl-game",
+  "grid": { "x": 0, "y": 0, "w": 24, "h": 4 },
+  "config": { "title": "Game", "data_view_id": "<data-view-id>", "field_name": "game_name" }
+}
+```
+
+---
+
 ## Serverless constraints
 
 | Constraint | Detail |
