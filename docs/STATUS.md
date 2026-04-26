@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-26 by claude-code (Games dashboard deployed — 9 panels, Kibana 9.5.0 schema deviations discovered and documented)
+Last updated: 2026-04-26 by claude-code (Environment dashboard deployed — 11 panels, dual-axis XY confirmed with axis:"y2")
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -65,7 +65,9 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 ## Active work package
 
-**Games dashboard complete.** `dashboards/games-dashboard.json` (ID `5e898d7c-8de1-45b8-ae04-4cdc745f046d`) deployed against gamepulse-game-timeline; verify-dashboard.sh PASS. Kibana 9.5.0 schema deviations documented in `docs/dashboards.md` schema_notes. Next: Environment dashboard (build against metrics-gamepulse.* wildcard data view for CPU/GPU/OS telemetry per session).
+**Environment dashboard complete.** `dashboards/environment-dashboard.json` (ID `3a55c257-0537-42a8-94a7-24dc773a703b`) deployed against metrics-gamepulse.* wildcard data view; verify-dashboard.sh PASS. 11 panels: 3 filter controls, 4 KPI tiles (CPU temp, GPU temp, GPU util, RAM MB), GPU dual-axis timeline, CPU dual-axis timeline, memory area chart, session environment table. Dual-axis: confirmed `"axis": "y2"` works; documented as schema note #10 in `docs/dashboards.md`. Memory field adjustment: spec used `used_pct`/`total_mb` which don't exist; actual field is `system_used_mb`. Next: Hardware dashboard.
+
+**Games dashboard complete.** `dashboards/games-dashboard.json` (ID `5e898d7c-8de1-45b8-ae04-4cdc745f046d`) deployed against gamepulse-game-timeline; verify-dashboard.sh PASS. Kibana 9.5.0 schema deviations documented in `docs/dashboards.md` schema_notes.
 
 **Milestone C complete (all 8 collectors).** C.8 PresentMon frame timing landed; the agent now ships an end-to-end Windows collector set. Next: Milestone E (Windows MSI packaging) or live ES shipping verification on Windows hardware.
 

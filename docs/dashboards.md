@@ -12,6 +12,7 @@
 | Game Library | `dashboards/game-library-dashboard.json` | `e7d878d0-e2d6-454b-9a95-d93a4aeb70a8` |
 | Scheduler Analysis | `dashboards/scheduler-analysis-dashboard.json` | `89ca0908-5639-45f7-9a70-edadfe7d7124` |
 | Games | `dashboards/games-dashboard.json` | `5e898d7c-8de1-45b8-ae04-4cdc745f046d` |
+| Environment | `dashboards/environment-dashboard.json` | `3a55c257-0537-42a8-94a7-24dc773a703b` |
 | Baseline (UI export) | `dashboards/gamepulse-dashboard.ndjson` | — |
 
 ---
@@ -214,6 +215,25 @@ In 9.4, inline Lens definitions were nested under `config.attributes`. In 9.5.0,
   "title": "...", "type": "metric", "data_source": {...}, "metrics": [...]
 }
 ```
+
+### 10. Dual y-axis XY charts: `"axis": "y2"` for right axis (discovered in Environment dashboard)
+
+XY chart `y` metric items accept an `"axis"` property to assign them to a right axis. Valid values: `"y"` (left, default) and `"y2"` (right). Both metrics can be in the same layer's `y` array — no need for a separate layer.
+
+```json
+// Single layer with two y-metrics on different axes
+"layers": [{
+  "type": "line",
+  "data_source": { "type": "data_view_reference", "ref_id": "..." },
+  "x": { "operation": "date_histogram", "field": "@timestamp" },
+  "y": [
+    { "operation": "average", "field": "gamepulse.gpu.utilisation_pct", "label": "GPU Util %" },
+    { "operation": "max", "field": "gamepulse.gpu.temperature_c", "label": "GPU Temp °C", "axis": "y2" }
+  ]
+}]
+```
+
+`"axis": "right"` is rejected. The schema error exposes the allowed enum: `"y"` | `"y2"`.
 
 ### Quick-reference: working panel skeletons for 9.5.0
 

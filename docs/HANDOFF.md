@@ -5,6 +5,46 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-26 (Environment dashboard — dual-axis XY confirmed)
+
+### What was built
+
+**`dashboards/environment-dashboard.json`** — Environment dashboard deployed against `metrics-gamepulse.*` wildcard data view (ID `18dd83e8-6f88-474f-b434-a4b6c14a04a2`). 11 panels: 3 filter controls (game, session, OS), 4 KPI tiles (peak CPU temp, peak GPU temp, avg GPU util, peak RAM MB), GPU dual-axis timeline, CPU dual-axis timeline, memory area chart, session environment table. Dashboard ID: `3a55c257-0537-42a8-94a7-24dc773a703b`. verify-dashboard.sh: PASS (all 4 checks).
+
+Kibana URL: `https://gamepulse-af41f9.kb.us-central1.gcp.elastic.cloud/app/dashboards#/view/3a55c257-0537-42a8-94a7-24dc773a703b`
+
+### Step 0 field validation results
+
+- `gamepulse.cpu.temperature_c`: PRESENT (avg 53.2°C, max 66.9°C) — tile-cpu-temp included
+- `gamepulse.gpu.temperature_c`: PRESENT (avg 40.6°C, max 46°C) — tile-gpu-temp included
+- `gamepulse.gpu.utilisation_pct`: PRESENT (avg 77.1%) — tile-gpu-util included
+- `gamepulse.memory.used_pct` / `gamepulse.memory.total_mb`: NOT PRESENT — these fields do not exist in the memory stream. Actual fields: `system_used_mb` (max 16268 MB) and `swap_used_mb`. Dashboard uses `system_used_mb`, label changed to "Peak RAM Used MB" / "System RAM Used MB".
+- `gamepulse.compatibility.proton_version`: absent from session docs — omitted from session table
+- `gamepulse.audio.backend`: NOT a session stream field (it's in the audio stream) — omitted from session table
+- Power stream: 3558 docs present (stream has data, no panel needed for this dashboard)
+- Audio stream: 3558 docs, `backend="pipewire"` — stream has data, no session-table use
+- Session table columns confirmed present: `gamepulse.game.name`, `gamepulse.hardware.gpu.model` (AMD Radeon RX 9070 XT), `gamepulse.hardware.gpu.driver_version` (26.0.5), `host.os.kernel` (7.0.1-1-cachyos-deckify)
+
+### New schema discovery: dual-axis XY charts
+
+Discovered and confirmed during Environment dashboard build. **Dual-axis XY is supported in Kibana 9.5.0.** Format: single layer, second `y`-metric gets `"axis": "y2"`.
+
+```json
+"y": [
+  { "operation": "average", "field": "gamepulse.gpu.utilisation_pct", "label": "GPU Util %" },
+  { "operation": "max", "field": "gamepulse.gpu.temperature_c", "label": "GPU Temp °C", "axis": "y2" }
+]
+```
+
+Valid `axis` values: `"y"` (left, default) and `"y2"` (right). `"right"` is rejected — error message reveals the allowed enum. Documented as schema note #10 in `docs/dashboards.md`.
+
+### Next steps
+
+- Hardware dashboard (next in sequence): per-session GPU model, driver version, VRAM, CPU model breakdown. Uses session stream.
+- Thronebreaker FPS sentinel (1252 fps, `avg=min=max`) — MangoHud not attaching to Lutris/umu process. Non-blocking for dashboards; separate investigation.
+
+---
+
 ## Session: 2026-04-26 (Games dashboard — Kibana 9.5.0 schema migration)
 
 ### What was built

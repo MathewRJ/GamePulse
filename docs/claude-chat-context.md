@@ -111,6 +111,16 @@ session docs predate B2.2. Fields will populate on the next real session.
 
 ---
 
+## Dashboard build status
+
+| Dashboard | Status | ID |
+|---|---|---|
+| Games | Done | `5e898d7c-8de1-45b8-ae04-4cdc745f046d` |
+| Environment | Done | `3a55c257-0537-42a8-94a7-24dc773a703b` |
+| Hardware | Next | — |
+| Compare | — | — |
+| Engine | — | — |
+
 ## Next decisions needed (for claude.ai planning)
 
 1. **E vs B3 priority**: With Phase C done, the next significant milestone is either Phase E (Windows MSI packaging — gives users a real install path on Windows) or Phase B3 (auto-detection heuristics — improves UX on Linux first, would need to be redone for Windows). E is the natural follow-on if Windows users are the next audience; B3 if Linux user-acquisition is the priority.
@@ -128,6 +138,8 @@ session docs predate B2.2. Fields will populate on the next real session.
 - Data view ID (wildcard): `18dd83e8-6f88-474f-b434-a4b6c14a04a2`
 - Game Library dashboard ID: `e7d878d0-e2d6-454b-9a95-d93a4aeb70a8`
 - Games dashboard ID: `5e898d7c-8de1-45b8-ae04-4cdc745f046d` (gamepulse-game-timeline, 9 panels, PASS verify)
+- Environment dashboard ID: `3a55c257-0537-42a8-94a7-24dc773a703b` (metrics-gamepulse.* wildcard, 11 panels, PASS verify)
 - Kibana 9.5.0 schema breaking changes: panel type "lens"→"vis", uid→id, dataset→data_source w/ data_view_reference, Elastic-Api-Version "1"→"2023-10-31"; documented in games-dashboard.json schema_notes
+- Dual-axis XY: `"axis": "y2"` for right axis (not "right"); confirmed working in Environment dashboard; documented as schema note #10 in docs/dashboards.md
 - Heroic installed: one Epic game (`911 Operator`, app_name UUID), GOG installed.json empty
 - Lutris installed: one GOG/umu game (Thronebreaker), will show "Lutris — Native" until follow-up
