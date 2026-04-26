@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-25 by claude-code (C.5 GPU DXGI+PDH+WMI + C.7 audio — all 8 collectors dry-run verified on Windows 11)
+Last updated: 2026-04-26 by claude-code (C.8 PresentMon frame timing — Phase C complete; all 8 Windows collectors implemented, dry-run verified)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -22,7 +22,7 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 | B  Cross-platform refactor | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
 | B2 Launcher-agnostic game detection | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
 | B3 Automatic game detection (TBD) | ⚪ Not started | ░░░░░░░░░░ |
-| C  Windows collectors | 🟢 Done (C.0–C.7) | ▓▓▓▓▓▓▓▓▓▓ |
+| C  Windows collectors | 🟢 Done (C.0–C.8) | ▓▓▓▓▓▓▓▓▓▓ |
 | D  Linux portable packaging | 🟡 Partial | ▓▓▓▓▓░░░░░ |
 | E  Windows packaging | ⚪ Not started | ░░░░░░░░░░ |
 | F  Cross-platform parity verification (M2) | 🔒 Blocked on B2+C+E | — |
@@ -41,7 +41,7 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 | Feature | Linux | Windows | Offline |
 |---|---|---|---|
-| Core metrics (8 streams) | ✅ | 🔲 scaffolded | ✅ (inherited) |
+| Core metrics (8 streams) | ✅ | 🟡 (8/8 implemented; gaps documented) | ✅ (inherited) |
 | eBPF deep probes | ✅ | n/a | ✅ (inherited) |
 | Settings Tier 1 — manual CLI/config | ✅ | 🔲 | ✅ (inherited) |
 | Settings Tier 2 — auto-detect (DLL/ETW) | 🔲 | 🔲 | 🔲 |
@@ -59,16 +59,28 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 | network | ✅ | 🔲 | ✅ | 🔲 | 🟡 (aggregate only; tunnels filtered) |
 | audio | ✅ | 🔲 | ✅ | 🔲 | 🟡 (backend=wasapi; no xruns) |
 | power | ✅ | 🔲 | ✅ | 🔲 | 🟡 (AC + battery%; no rate_w) |
-| frame | ✅ (MangoHud) | 🔲 | ✅ (MangoHud) | 🔲 | 🔲 (PresentMon) |
+| frame | ✅ (MangoHud) | 🔲 | ✅ (MangoHud) | 🔲 | 🟡 (PresentMon subprocess; external binary required) |
 | ebpf | ✅ | 🔲 | ✅ | 🔲 | n/a |
 | session | ✅ | 🔲 | ✅ | 🔲 | 🔲 |
 
 ## Active work package
 
-**Milestone C complete.** All 8 Windows collectors implemented and dry-run verified. Next: Milestone E (Windows MSI packaging) or live ES shipping verification.
+**Milestone C complete (all 8 collectors).** C.8 PresentMon frame timing landed; the agent now ships an end-to-end Windows collector set. Next: Milestone E (Windows MSI packaging) or live ES shipping verification on Windows hardware.
+
+PresentMon discovery order (used by `src/collectors/windows/frame.rs::find_presentmon`):
+1. `GAMEPULSE_PRESENTMON` env var (full path to `PresentMon.exe`)
+2. Same directory as the agent binary (`std::env::current_exe()`)
+3. PATH lookup via `where PresentMon.exe`
+
+Users who install PresentMon to a non-standard path should set `GAMEPULSE_PRESENTMON`. If none of the three paths resolve, the agent logs a one-time warning per game-attach and `gamepulse.frame` returns no data — the other 7 collectors continue normally.
+
 See `docs/ROADMAP.md` for milestone structure and work package definitions.
 
 ## Completed work
+
+### Milestone C — Windows collectors (complete, 2026-04-26 session 4 — C.8 PresentMon)
+
+- **C.8 — Frame timing collector**: Replaced `src/collectors/windows/frame.rs` stub. Defines a `pub(crate) FrameSource` trait (`next_sample`, `attach`, `detach`) so the backend can swap (e.g., to ETW-direct via the Microsoft PresentMon SDK) without touching `FrameCollector` or `main.rs`. `PresentMonSource` spawns `PresentMon.exe --process_id <pid> --output_stdout --stop_existing_session`, parses the CSV header to discover the `MsBetweenPresents` column index by name (resilient to PresentMon 1.x→2.x column renames), and runs a background `std::thread` reader that pushes raw frametime `f64` values onto a bounded `mpsc::sync_channel` (cap 256). `next_sample()` drains the channel non-blocking, maintains a 120-sample ring (`VecDeque<f64>`, ~2 s @ 60 FPS), and returns a `FrameSample` with avg-FPS-over-ring, mean/variance frametime over this tick, current FPS, low_1pct/low_01pct from sorted ring, and per-tick stutter count (frames > 2× tick mean). Discovery order: `GAMEPULSE_PRESENTMON` env var → agent binary directory → PATH via `where`. One-time warn if not found; reader thread exits silently if `MsBetweenPresents` column absent. `Drop` impl on `PresentMonSource` kills child + drops rx (reader thread exits on next send failure). No new crates; pure `std::process` / `std::sync::mpsc` / `std::thread`. Field path emitted under `gamepulse.fps.*` (not `gamepulse.frame.*`) to match Linux MangoHud collector and `SessionAccumulators` in `main.rs:359-368`. Dataset name remains `gamepulse.frame`. `cargo check` + `cargo clippy -- -D warnings` + `cargo test` (7/7) all green. Dry-run verified (no game pid attached) — collector reports "no data this tick" without panic; PresentMon "not found" warning path verified by code review (Windows game-pid resolution is gated on `/proc` and not exercisable in dry-run on Windows; live verification deferred to Phase E packaging).
 
 ### Milestone C — Windows collectors (complete, 2026-04-25 session 3)
 

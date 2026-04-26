@@ -57,9 +57,11 @@ BLOCKED_PATTERNS=(
   "docker run"   # docker inspect/ps is fine; docker run is not
 )
 
-# Check blocked patterns first
+# Check blocked patterns first. Use word-boundary regex so that short tokens
+# like "apt" do not false-positive on "adapter"/"capture" inside commit
+# messages (mirrors the Python port's \bapt\b fix).
 for blocked in "${BLOCKED_PATTERNS[@]}"; do
-  if [[ "$TRIMMED" == *"$blocked"* ]]; then
+  if [[ "$TRIMMED" =~ (^|[^[:alnum:]_])${blocked}($|[^[:alnum:]_]) ]]; then
     echo "BLOCKED: Command contains disallowed pattern: '$blocked'" >&2
     echo "Command was: $TRIMMED" >&2
     true

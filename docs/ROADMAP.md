@@ -86,9 +86,11 @@ Windows equivalent uses ETW providers (DxgKrnl, Win32k, PresentMon) for the same
 
 ---
 
-## Phase C — Windows collectors
+## Phase C — Windows collectors 🟢 Complete
 
 **Goal:** feature parity with Linux for all collectors that have Windows equivalents. eBPF has no Windows equivalent in v1.
+
+All 8 work packages (C.1–C.8) shipped. Per-collector parity gaps and upgrade paths are documented in `docs/STATUS.md` ("Phase C parity gap summary" + platform parity matrix).
 
 | WP | Collector | Data source |
 |---|---|---|

@@ -74,7 +74,12 @@
       "Bash(xargs rg *)",
       "Bash(rg -l \"gamepulse\" /c/Users/matma/Documents/coding/Gamepulse/data_stream/*/fields/fields.yml)",
       "Bash(dir /c/Users/matma/Documents/coding/Gamepulse/elastic/)",
-      "Bash(python tools/index_memories.py)"
+      "Bash(python tools/index_memories.py)",
+      "Bash(../target/debug/gamepulse-agent --dry-run --once)",
+      "Bash(GAMEPULSE_LOG=info timeout 7 ../target/debug/gamepulse-agent --dry-run)",
+      "Bash(GAMEPULSE_LOG=info timeout 8 ../target/debug/gamepulse-agent --dry-run --config ../config/gamepulse.toml)",
+      "Bash(GAMEPULSE_LOG=info timeout 8 target/debug/gamepulse-agent --dry-run --config config/gamepulse.toml)",
+      "Bash(echo \"exit=$?\")"
     ]
   },
   "enableAllProjectMcpServers": true,

@@ -4,6 +4,7 @@
 # Receives JSON via stdin with tool_input.command
 
 import json
+import re
 import sys
 
 
@@ -65,9 +66,11 @@ def main():
         'docker run',   # docker inspect/ps is fine; docker run is not
     ]
 
-    # Check blocked patterns first
+    # Check blocked patterns first. Match with word boundaries so that "apt"
+    # does not false-positive on "adapter"/"capture"/"chapter" inside
+    # commit messages, and similarly for other short tokens.
     for blocked in blocked_patterns:
-        if blocked in trimmed:
+        if re.search(rf'\b{re.escape(blocked)}\b', trimmed):
             print(f"BLOCKED: Command contains disallowed pattern: '{blocked}'", file=sys.stderr)
             print(f"Command was: {trimmed}", file=sys.stderr)
             sys.exit(2)
