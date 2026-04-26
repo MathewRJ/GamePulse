@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-26 by claude-code (C.8 PresentMon frame timing — Phase C complete; all 8 Windows collectors implemented, dry-run verified)
+Last updated: 2026-04-26 by claude-code (Games dashboard deployed — 9 panels, Kibana 9.5.0 schema deviations discovered and documented)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -64,6 +64,8 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 | session | ✅ | 🔲 | ✅ | 🔲 | 🔲 |
 
 ## Active work package
+
+**Games dashboard complete.** `dashboards/games-dashboard.json` (ID `5e898d7c-8de1-45b8-ae04-4cdc745f046d`) deployed against gamepulse-game-timeline; verify-dashboard.sh PASS. Kibana 9.5.0 schema deviations documented in `docs/dashboards.md` schema_notes. Next: Environment dashboard (build against metrics-gamepulse.* wildcard data view for CPU/GPU/OS telemetry per session).
 
 **Milestone C complete (all 8 collectors).** C.8 PresentMon frame timing landed; the agent now ships an end-to-end Windows collector set. Next: Milestone E (Windows MSI packaging) or live ES shipping verification on Windows hardware.
 

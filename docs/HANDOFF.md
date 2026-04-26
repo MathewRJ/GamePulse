@@ -5,6 +5,49 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-26 (Games dashboard — Kibana 9.5.0 schema migration)
+
+### What was built
+
+**`dashboards/games-dashboard.json`** — Games dashboard deployed against `gamepulse-game-timeline` (data view `gp-dv-timeline`). 9 panels: 2 filter controls (game, gpu), 4 KPI tiles (total sessions, games played, total hours, avg FPS), FPS trend line chart (avg + 1% low, split by game), session history table, FPS-by-game horizontal bar chart. ID: `5e898d7c-8de1-45b8-ae04-4cdc745f046d`.
+
+### Step 0 field validation results
+
+- 13 total sessions: 11 Starfield + 2 Thronebreaker The Witcher Tales
+- Fields with full data (13/13): `avg_fps`, `low_1pct_fps`, `p99_frametime_ms`, `peak_gpu_temp_c`, `peak_cpu_temp_c`, `stutter_count`, `duration_s`, `peak_gpu_power_w`
+- Fields with sparse data (1/13): `gpu_model`, `bottleneck_dominant`, `driver_version`, `kernel_version`
+- `cumulative_playtime_hours`: 1/13, value=0 — omitted from KPI tiles (misleading)
+- `proton_version`: absent from index — omitted per instructions
+
+### Kibana 9.5.0 schema deviations (NEW — not in SKILL.md)
+
+Critical changes from Kibana 9.4 SNAPSHOT to 9.5.0 serverless:
+1. `Elastic-Api-Version` header: integer `"1"` rejected; must be date string `"2023-10-31"`
+2. Panel type `"lens"` renamed to `"vis"` for inline visualization panels
+3. Panel identifier `uid` renamed to `id`; `uid` on options_list_control causes validation error
+4. Data source key changed: `dataset` → `data_source`, and `{ type: "dataView" }` → `{ type: "data_view_reference" }` (or `data_view_spec`)
+5. ES|QL metric items: `operation` field not allowed; use `{ type: "primary", column: "...", label: "..." }`
+6. `last_value` metrics: `sort_by` → `time_field`, `show_array_values` → `multi_value`
+7. `data_table` rows `rank_by`: `"column"` type removed; use `"alphabetical"`, `"metric"`, `"rare"`, `"significant"`, or `"custom"`
+8. XY chart `axis` key: `"left"` renamed to `"y"` for the primary y-axis
+9. `kibana-dashboards` script updated to use `Elastic-Api-Version: 2023-10-31` for all dashboard API calls (this skill is in .gitignore; re-apply the fix at `.agents/skills/kibana-dashboards/scripts/kibana-dashboards.js` lines 224, 248, 272, 284 if the script is reinstalled)
+
+All deviations documented in `games-dashboard.json` schema_notes and `docs/dashboards.md`.
+
+### Verify result
+
+`scripts/verify-dashboard.sh 5e898d7c-8de1-45b8-ae04-4cdc745f046d` — PASS (4/4 checks: export, Lens invariants, internal loader).
+
+### Dashboard Kibana URL
+
+https://gamepulse-af41f9.kb.us-central1.gcp.elastic.cloud/app/dashboards#/view/5e898d7c-8de1-45b8-ae04-4cdc745f046d
+
+### Next
+
+Environment dashboard: build against `metrics-gamepulse.*` wildcard data view, showing CPU/GPU temps, utilisation, RAM, and OS info per session. Time field: `@timestamp`.
+
+---
+
 ## Session: 2026-04-26 (Phase C session 4 — C.8 PresentMon frame timing, Phase C complete for real)
 
 ### What was built

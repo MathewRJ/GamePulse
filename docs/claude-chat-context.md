@@ -127,5 +127,7 @@ session docs predate B2.2. Fields will populate on the next real session.
 - Kibana: `https://gamepulse-af41f9.kb.us-central1.gcp.elastic.cloud`
 - Data view ID (wildcard): `18dd83e8-6f88-474f-b434-a4b6c14a04a2`
 - Game Library dashboard ID: `e7d878d0-e2d6-454b-9a95-d93a4aeb70a8`
+- Games dashboard ID: `5e898d7c-8de1-45b8-ae04-4cdc745f046d` (gamepulse-game-timeline, 9 panels, PASS verify)
+- Kibana 9.5.0 schema breaking changes: panel type "lens"→"vis", uid→id, dataset→data_source w/ data_view_reference, Elastic-Api-Version "1"→"2023-10-31"; documented in games-dashboard.json schema_notes
 - Heroic installed: one Epic game (`911 Operator`, app_name UUID), GOG installed.json empty
 - Lutris installed: one GOG/umu game (Thronebreaker), will show "Lutris — Native" until follow-up

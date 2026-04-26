@@ -11,6 +11,7 @@
 | System Health | `dashboards/system-health-dashboard.json` | `1b2a1b70-a315-4ed4-91c4-11aa0abe5e1d` |
 | Game Library | `dashboards/game-library-dashboard.json` | `e7d878d0-e2d6-454b-9a95-d93a4aeb70a8` |
 | Scheduler Analysis | `dashboards/scheduler-analysis-dashboard.json` | `89ca0908-5639-45f7-9a70-edadfe7d7124` |
+| Games | `dashboards/games-dashboard.json` | `5e898d7c-8de1-45b8-ae04-4cdc745f046d` |
 | Baseline (UI export) | `dashboards/gamepulse-dashboard.ndjson` | — |
 
 ---

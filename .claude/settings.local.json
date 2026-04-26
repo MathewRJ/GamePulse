@@ -82,7 +82,8 @@
       "Bash(echo \"exit=$?\")",
       "Bash(target/debug/gamepulse-agent --dry-run --target-name \"fish\")",
       "mcp__elastic-agent-builder__platform_core_execute_esql",
-      "Bash(node scripts/kibana-dashboards.js test)"
+      "Bash(node scripts/kibana-dashboards.js test)",
+      "Bash(KIBANA_URL=\"https://gamepulse-af41f9.kb.us-central1.gcp.elastic.cloud\" KIBANA_API_KEY=\"S05xanFaMEJoT3RoZ1pGRmVab0g6Z2ZQZUFnWm9IS2k3V25WUGtuakdadw==\" node *)"
     ]
   },
   "enableAllProjectMcpServers": true,

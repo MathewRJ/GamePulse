@@ -1,0 +1,664 @@
+{
+  "id": "5e898d7c-8de1-45b8-ae04-4cdc745f046d",
+  "kibana_url": "https://gamepulse-af41f9.kb.us-central1.gcp.elastic.cloud/app/dashboards#/view/5e898d7c-8de1-45b8-ae04-4cdc745f046d",
+  "created": "2026-04-26",
+  "api_version": "Elastic-Api-Version: 2023-10-31",
+  "notes": [
+    "Created via Kibana Dashboards API (kibana-dashboards skill) against Kibana 9.5.0 serverless.",
+    "All field paths validated via ES|QL before building (Step 0).",
+    "Data view: gp-dv-timeline (index: gamepulse-game-timeline, time field: session_start).",
+    "13 total sessions: 11 Starfield + 2 Thronebreaker The Witcher Tales.",
+    "peak_gpu_power_w populated in 13/13 docs \u2014 included in session table.",
+    "gpu_model populated in 1/13 docs \u2014 included in table + GPU filter control (sparse but valid).",
+    "bottleneck_dominant populated in 1/13 docs \u2014 included in session table (sparse).",
+    "driver_version populated in 1/13 docs \u2014 included in session table (sparse).",
+    "kernel_version populated in 1/13 docs \u2014 included in session table (sparse).",
+    "cumulative_playtime_hours populated in 1/13 docs (value=0) \u2014 omitted from KPI tiles (misleading).",
+    "proton_version absent from index \u2014 omitted per instructions.",
+    "9 panels: 2 filter controls, 4 KPI metric tiles, 1 FPS trend line chart, 1 session history table, 1 FPS-by-game bar chart.",
+    "KPI tiles: Total Sessions and Games Played use ES|QL COUNT; Total Hours uses ES|QL ROUND(SUM(duration_s)/3600.0, 1); Avg FPS uses dataView average.",
+    "FPS trend: two line layers (avg_fps and low_1pct_fps), each split by game_name.",
+    "Session table rows grouped by session_id (terms), sorted alphabetically; user can re-sort in UI.",
+    "FPS by game: horizontal bar chart with both avg_fps and low_1pct_fps on same layer."
+  ],
+  "schema_notes": [
+    "Kibana 9.5.0 renamed panel type 'lens' to 'vis' \u2014 all inline visualization panels use type='vis'.",
+    "API version header changed from integer '1' to date string '2023-10-31'; integer form rejected with HTTP 400.",
+    "Panel identifier changed from 'uid' to 'id'; 'uid' on options_list_control causes validation error.",
+    "data_source replaces dataset: use { type: 'data_view_reference', ref_id: '<id>' } for dataView panels.",
+    "data_source for ES|QL metrics: { type: 'esql', query: '...' } \u2014 accepted by metric panels.",
+    "ES|QL metric items: { type: 'primary', column: '<col>', label: '<lbl>' } \u2014 'operation' field not allowed.",
+    "dataView metric items: { type: 'primary', operation: '<op>', field: '<f>', label: '<lbl>' } unchanged.",
+    "last_value metrics: use time_field (not sort_by) and multi_value (not show_array_values).",
+    "data_table rows rank_by: valid types are 'alphabetical', 'rare', 'significant', 'metric', 'custom'; 'column' type no longer valid.",
+    "XY axis key changed from 'left' to 'y' for the left/primary y-axis.",
+    "data_source goes inside each XY layer (unchanged from SKILL.md) but uses data_view_reference format."
+  ],
+  "data": {
+    "description": "Per-session game performance: FPS, frame time, thermals, and stutter trend over time",
+    "options": {
+      "hide_panel_titles": false,
+      "hide_panel_borders": false,
+      "use_margins": true,
+      "auto_apply_filters": true,
+      "sync_colors": false,
+      "sync_cursor": true,
+      "sync_tooltips": false
+    },
+    "time_range": {
+      "from": "now-30d",
+      "to": "now"
+    },
+    "title": "GamePulse - Games",
+    "panels": [
+      {
+        "grid": {
+          "x": 0,
+          "y": 0,
+          "w": 24,
+          "h": 4
+        },
+        "config": {
+          "use_global_filters": true,
+          "ignore_validations": false,
+          "title": "Game",
+          "data_view_id": "gp-dv-timeline",
+          "field_name": "game_name",
+          "exclude": false,
+          "sort": {
+            "by": "_count",
+            "direction": "desc"
+          },
+          "exists_selected": false,
+          "run_past_timeout": false,
+          "search_technique": "wildcard",
+          "selected_options": [],
+          "single_select": false
+        },
+        "id": "ctrl-game",
+        "type": "options_list_control"
+      },
+      {
+        "grid": {
+          "x": 24,
+          "y": 0,
+          "w": 24,
+          "h": 4
+        },
+        "config": {
+          "use_global_filters": true,
+          "ignore_validations": false,
+          "title": "GPU",
+          "data_view_id": "gp-dv-timeline",
+          "field_name": "gpu_model",
+          "exclude": false,
+          "sort": {
+            "by": "_count",
+            "direction": "desc"
+          },
+          "exists_selected": false,
+          "run_past_timeout": false,
+          "search_technique": "wildcard",
+          "selected_options": [],
+          "single_select": false
+        },
+        "id": "ctrl-gpu",
+        "type": "options_list_control"
+      },
+      {
+        "grid": {
+          "x": 0,
+          "y": 4,
+          "w": 12,
+          "h": 6
+        },
+        "config": {
+          "data_source": {
+            "type": "esql",
+            "query": "FROM gamepulse-game-timeline | STATS `Total Sessions` = COUNT(*)"
+          },
+          "type": "metric",
+          "sampling": 1,
+          "ignore_global_filters": false,
+          "metrics": [
+            {
+              "type": "primary",
+              "column": "Total Sessions",
+              "label": "Total Sessions",
+              "color": {
+                "type": "auto"
+              }
+            }
+          ],
+          "styling": {
+            "primary": {
+              "position": "bottom",
+              "labels": {
+                "alignment": "left"
+              },
+              "value": {
+                "sizing": "auto",
+                "alignment": "right"
+              }
+            }
+          }
+        },
+        "id": "tile-sessions",
+        "type": "vis"
+      },
+      {
+        "grid": {
+          "x": 12,
+          "y": 4,
+          "w": 12,
+          "h": 6
+        },
+        "config": {
+          "data_source": {
+            "type": "esql",
+            "query": "FROM gamepulse-game-timeline | STATS `Games Played` = COUNT_DISTINCT(game_name)"
+          },
+          "type": "metric",
+          "sampling": 1,
+          "ignore_global_filters": false,
+          "metrics": [
+            {
+              "type": "primary",
+              "column": "Games Played",
+              "label": "Games Played",
+              "color": {
+                "type": "auto"
+              }
+            }
+          ],
+          "styling": {
+            "primary": {
+              "position": "bottom",
+              "labels": {
+                "alignment": "left"
+              },
+              "value": {
+                "sizing": "auto",
+                "alignment": "right"
+              }
+            }
+          }
+        },
+        "id": "tile-games",
+        "type": "vis"
+      },
+      {
+        "grid": {
+          "x": 24,
+          "y": 4,
+          "w": 12,
+          "h": 6
+        },
+        "config": {
+          "data_source": {
+            "type": "esql",
+            "query": "FROM gamepulse-game-timeline | STATS `Total Hours` = ROUND(SUM(duration_s) / 3600.0, 1)"
+          },
+          "type": "metric",
+          "sampling": 1,
+          "ignore_global_filters": false,
+          "metrics": [
+            {
+              "type": "primary",
+              "column": "Total Hours",
+              "label": "Total Hours",
+              "color": {
+                "type": "auto"
+              }
+            }
+          ],
+          "styling": {
+            "primary": {
+              "position": "bottom",
+              "labels": {
+                "alignment": "left"
+              },
+              "value": {
+                "sizing": "auto",
+                "alignment": "right"
+              }
+            }
+          }
+        },
+        "id": "tile-playtime",
+        "type": "vis"
+      },
+      {
+        "grid": {
+          "x": 36,
+          "y": 4,
+          "w": 12,
+          "h": 6
+        },
+        "config": {
+          "data_source": {
+            "type": "data_view_reference",
+            "ref_id": "gp-dv-timeline"
+          },
+          "type": "metric",
+          "sampling": 1,
+          "ignore_global_filters": false,
+          "metrics": [
+            {
+              "type": "primary",
+              "operation": "average",
+              "field": "avg_fps",
+              "label": "Avg FPS (all sessions)",
+              "color": {
+                "type": "auto"
+              }
+            }
+          ],
+          "styling": {
+            "primary": {
+              "position": "bottom",
+              "labels": {
+                "alignment": "left"
+              },
+              "value": {
+                "sizing": "auto",
+                "alignment": "right"
+              }
+            }
+          }
+        },
+        "id": "tile-avg-fps",
+        "type": "vis"
+      },
+      {
+        "grid": {
+          "x": 0,
+          "y": 10,
+          "w": 48,
+          "h": 12
+        },
+        "config": {
+          "type": "xy",
+          "layers": [
+            {
+              "type": "line",
+              "data_source": {
+                "type": "data_view_reference",
+                "ref_id": "gp-dv-timeline"
+              },
+              "sampling": 1,
+              "ignore_global_filters": false,
+              "x": {
+                "operation": "date_histogram",
+                "field": "session_start",
+                "suggested_interval": "auto",
+                "use_original_time_range": false,
+                "include_empty_rows": true,
+                "drop_partial_intervals": false
+              },
+              "y": [
+                {
+                  "operation": "average",
+                  "field": "avg_fps",
+                  "label": "Avg FPS"
+                }
+              ],
+              "breakdown_by": {
+                "operation": "terms",
+                "fields": [
+                  "game_name"
+                ],
+                "limit": 5,
+                "rank_by": {
+                  "type": "metric",
+                  "metric_index": 0,
+                  "direction": "desc"
+                },
+                "color": {
+                  "mode": "categorical",
+                  "palette": "elastic_line_optimized",
+                  "mapping": []
+                }
+              }
+            },
+            {
+              "type": "line",
+              "data_source": {
+                "type": "data_view_reference",
+                "ref_id": "gp-dv-timeline"
+              },
+              "sampling": 1,
+              "ignore_global_filters": false,
+              "x": {
+                "operation": "date_histogram",
+                "field": "session_start",
+                "suggested_interval": "auto",
+                "use_original_time_range": false,
+                "include_empty_rows": true,
+                "drop_partial_intervals": false
+              },
+              "y": [
+                {
+                  "operation": "average",
+                  "field": "low_1pct_fps",
+                  "label": "1% Low FPS"
+                }
+              ],
+              "breakdown_by": {
+                "operation": "terms",
+                "fields": [
+                  "game_name"
+                ],
+                "limit": 5,
+                "rank_by": {
+                  "type": "metric",
+                  "metric_index": 0,
+                  "direction": "desc"
+                },
+                "color": {
+                  "mode": "categorical",
+                  "palette": "elastic_line_optimized",
+                  "mapping": []
+                }
+              }
+            }
+          ],
+          "axis": {
+            "x": {
+              "title": {
+                "visible": false
+              },
+              "ticks": {
+                "visible": true
+              },
+              "grid": {
+                "visible": true
+              },
+              "domain": {
+                "type": "fit",
+                "rounding": false
+              },
+              "labels": {
+                "orientation": "horizontal"
+              }
+            },
+            "y": {
+              "title": {
+                "visible": false
+              },
+              "scale": "linear",
+              "ticks": {
+                "visible": true
+              },
+              "grid": {
+                "visible": true
+              },
+              "domain": {
+                "type": "full",
+                "rounding": true
+              },
+              "labels": {
+                "orientation": "horizontal"
+              }
+            }
+          },
+          "styling": {
+            "overlays": {
+              "partial_buckets": {
+                "visible": false
+              },
+              "current_time_marker": {
+                "visible": false
+              }
+            },
+            "interpolation": "linear",
+            "points": {
+              "visibility": "auto"
+            }
+          },
+          "legend": {
+            "visibility": "hidden",
+            "placement": "outside",
+            "position": "right",
+            "layout": {
+              "type": "grid",
+              "truncate": {
+                "max_lines": 1
+              }
+            }
+          }
+        },
+        "id": "chart-fps-trend",
+        "type": "vis"
+      },
+      {
+        "grid": {
+          "x": 0,
+          "y": 22,
+          "w": 48,
+          "h": 14
+        },
+        "config": {
+          "type": "data_table",
+          "data_source": {
+            "type": "data_view_reference",
+            "ref_id": "gp-dv-timeline"
+          },
+          "sampling": 1,
+          "ignore_global_filters": false,
+          "metrics": [
+            {
+              "operation": "max",
+              "field": "session_start",
+              "label": "Session Start"
+            },
+            {
+              "operation": "last_value",
+              "field": "game_name",
+              "time_field": "session_start",
+              "multi_value": false,
+              "label": "Game"
+            },
+            {
+              "operation": "max",
+              "field": "duration_s",
+              "label": "Duration (s)"
+            },
+            {
+              "operation": "max",
+              "field": "avg_fps",
+              "label": "Avg FPS"
+            },
+            {
+              "operation": "max",
+              "field": "low_1pct_fps",
+              "label": "1% Low FPS"
+            },
+            {
+              "operation": "max",
+              "field": "p99_frametime_ms",
+              "label": "p99 Frame (ms)"
+            },
+            {
+              "operation": "max",
+              "field": "stutter_count",
+              "label": "Stutters"
+            },
+            {
+              "operation": "max",
+              "field": "peak_gpu_temp_c",
+              "label": "Peak GPU \u00b0C"
+            },
+            {
+              "operation": "max",
+              "field": "peak_cpu_temp_c",
+              "label": "Peak CPU \u00b0C"
+            },
+            {
+              "operation": "max",
+              "field": "peak_gpu_power_w",
+              "label": "Peak GPU W"
+            },
+            {
+              "operation": "last_value",
+              "field": "bottleneck_dominant",
+              "time_field": "session_start",
+              "multi_value": false,
+              "label": "Bottleneck"
+            },
+            {
+              "operation": "last_value",
+              "field": "driver_version",
+              "time_field": "session_start",
+              "multi_value": false,
+              "label": "Driver"
+            },
+            {
+              "operation": "last_value",
+              "field": "kernel_version",
+              "time_field": "session_start",
+              "multi_value": false,
+              "label": "Kernel"
+            }
+          ],
+          "rows": [
+            {
+              "operation": "terms",
+              "fields": [
+                "session_id"
+              ],
+              "limit": 50,
+              "rank_by": {
+                "type": "alphabetical",
+                "direction": "asc"
+              }
+            }
+          ]
+        },
+        "id": "table-sessions",
+        "type": "vis"
+      },
+      {
+        "grid": {
+          "x": 0,
+          "y": 36,
+          "w": 48,
+          "h": 12
+        },
+        "config": {
+          "type": "xy",
+          "layers": [
+            {
+              "type": "bar_horizontal",
+              "data_source": {
+                "type": "data_view_reference",
+                "ref_id": "gp-dv-timeline"
+              },
+              "sampling": 1,
+              "ignore_global_filters": false,
+              "x": {
+                "operation": "terms",
+                "fields": [
+                  "game_name"
+                ],
+                "limit": 5,
+                "rank_by": {
+                  "type": "metric",
+                  "metric_index": 0,
+                  "direction": "desc"
+                }
+              },
+              "y": [
+                {
+                  "operation": "average",
+                  "field": "avg_fps",
+                  "label": "Avg FPS",
+                  "color": {
+                    "type": "auto"
+                  }
+                },
+                {
+                  "operation": "average",
+                  "field": "low_1pct_fps",
+                  "label": "1% Low FPS",
+                  "color": {
+                    "type": "auto"
+                  }
+                }
+              ]
+            }
+          ],
+          "axis": {
+            "x": {
+              "title": {
+                "visible": false
+              },
+              "ticks": {
+                "visible": true
+              },
+              "grid": {
+                "visible": true
+              },
+              "domain": {
+                "type": "fit",
+                "rounding": false
+              },
+              "labels": {
+                "orientation": "horizontal"
+              }
+            },
+            "y": {
+              "title": {
+                "visible": false
+              },
+              "scale": "linear",
+              "ticks": {
+                "visible": true
+              },
+              "grid": {
+                "visible": true
+              },
+              "domain": {
+                "type": "full",
+                "rounding": true
+              },
+              "labels": {
+                "orientation": "horizontal"
+              }
+            }
+          },
+          "styling": {
+            "overlays": {
+              "partial_buckets": {
+                "visible": false
+              },
+              "current_time_marker": {
+                "visible": false
+              }
+            },
+            "bars": {
+              "minimum_height": 1,
+              "data_labels": {
+                "visible": false
+              }
+            }
+          },
+          "legend": {
+            "visibility": "hidden",
+            "placement": "outside",
+            "position": "right",
+            "layout": {
+              "type": "grid",
+              "truncate": {
+                "max_lines": 1
+              }
+            }
+          }
+        },
+        "id": "chart-fps-by-game",
+        "type": "vis"
+      }
+    ],
+    "pinned_panels": []
+  }
+}
