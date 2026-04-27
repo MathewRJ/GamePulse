@@ -374,5 +374,5 @@
           type: keyword
           description: "Data confidence: high | medium | low"
         - name: notes
-          type: text
+          type: keyword
           description: "User-supplied free-text notes for this session"
