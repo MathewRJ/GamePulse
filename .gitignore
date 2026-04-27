@@ -38,3 +38,6 @@ build/
 # Git worktrees for Codex implementation tasks — local only, never commit
 worktrees/
 .claude/worktrees/
+
+# gpx orchestrator local state — log of every agent invocation
+.gpx/

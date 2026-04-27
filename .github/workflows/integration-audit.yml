@@ -1,0 +1,114 @@
+name: integration-audit
+
+# Manual-only deterministic pre-check before opening a PR against
+# elastic/integrations. Runs the deterministic build/check/test commands
+# and uploads a `state.md` artifact for local LLM review.
+#
+# The actual LLM audit runs LOCALLY:
+#
+#   gh run download <run-id> -n integration-state-<version>
+#   gpx audit integration < state.md
+#
+# The user runs on Pro / Plus / free subscriptions and has no Anthropic
+# API key — this workflow does not call any LLM.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_version:
+        description: "Package version being submitted (must match manifest.yml)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  audit-precheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install yq
+        run: |
+          sudo curl -fsSL -o /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Verify version matches manifest
+        run: |
+          mft_version=$(yq '.version' manifest.yml)
+          if [[ "${mft_version}" != "${{ inputs.target_version }}" ]]; then
+            echo "::error::manifest.yml version (${mft_version}) does not match input (${{ inputs.target_version }})"
+            exit 1
+          fi
+
+      - name: Verify changelog has entry for this version
+        run: |
+          if ! yq '.[] | select(.version == "${{ inputs.target_version }}")' changelog.yml | grep -q .; then
+            echo "::error::changelog.yml has no entry for version ${{ inputs.target_version }}"
+            exit 1
+          fi
+
+      - name: Install elastic-package
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL \
+            https://github.com/elastic/elastic-package/releases/latest/download/elastic-package_linux_amd64.tar.gz \
+            | tar -xz -C "$HOME/.local/bin" elastic-package
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: elastic-package check
+        run: elastic-package check
+
+      - name: elastic-package build
+        run: elastic-package build
+
+      - name: elastic-package test static
+        run: elastic-package test static
+
+      - name: elastic-package test asset
+        run: elastic-package test asset
+
+      - name: Collect package state for local auditor
+        run: |
+          {
+            echo "## manifest.yml"
+            cat manifest.yml
+            echo
+            echo "## changelog.yml (top 5 versions)"
+            yq '.[0:5]' changelog.yml
+            echo
+            echo "## data streams"
+            for d in data_stream/*/; do
+              echo "### ${d}"
+              cat "${d}/manifest.yml"
+              echo
+              ls "${d}/fields/" 2>/dev/null || true
+              echo
+              ls "${d}/_dev/test/pipeline/" 2>/dev/null || true
+              echo
+            done
+            echo "## kibana/dashboard"
+            ls kibana/dashboard/ 2>/dev/null || echo "no dashboards"
+            echo
+            echo "## docs/README.md (first 200 lines)"
+            head -200 docs/README.md 2>/dev/null || echo "no README"
+          } > state.md
+
+      - name: Upload state for local audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-state-${{ inputs.target_version }}
+          path: state.md
+          retention-days: 30
+
+      - name: Next steps
+        run: |
+          echo "::notice::Deterministic pre-check passed."
+          echo "::notice::Now run locally:"
+          echo "::notice::  gh run download ${{ github.run_id }} -n integration-state-${{ inputs.target_version }}"
+          echo "::notice::  gpx audit integration"
