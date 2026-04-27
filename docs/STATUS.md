@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-26 by claude-code (Environment dashboard deployed — 11 panels, dual-axis XY confirmed with axis:"y2")
+Last updated: 2026-04-27 by claude-code (Codex pipeline wired: AGENT-COLLABORATION.md created, CLAUDE.md routing updated, broken worktree gitlink removed)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file

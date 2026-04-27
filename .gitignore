@@ -34,3 +34,7 @@ build/
 
 # MCP server config — contains credentials; .example is committed, real file is not
 .mcp.json
+
+# Git worktrees for Codex implementation tasks — local only, never commit
+worktrees/
+.claude/worktrees/

@@ -67,10 +67,17 @@ Use the cheapest capable agent for each task type:
 | Read file + extract value, summaries, boilerplate code | haiku-worker |
 | Large file reads (SCOPE.md, HANDOFF.md), web research, multi-file scans | gemini-researcher |
 | Open-ended codebase exploration spanning many files | Explore subagent |
+| Mechanical file edits matching a clear pattern (Codex pipeline) | Codex (worktree) |
 | Code changes, Rust edits, judgment calls requiring context | Sonnet (main) |
 | Architecture strategy, high-level planning | Opus (ultrathink only) |
 
 Before any large file read: call `recall_memory("topic")` first — if the answer is in ES memory, no file read needed.
+
+## Codex pipeline
+
+For mechanical implementation tasks: claude.ai plans → Codex implements in `worktrees/codex-<task-id>/` → Claude Code verifies → user merges.
+
+See `docs/AGENT-COLLABORATION.md` for the full pipeline, prompt templates, work-package format, and guardrails. Worktrees are gitignored; branch naming is `codex/<task-id>`.
 
 ## Grep-first rule
 
