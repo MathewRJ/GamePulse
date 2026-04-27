@@ -67,12 +67,13 @@ jobs:
         if: steps.gate.outputs.run == 'true'
         run: elastic-package test static
 
-      - name: elastic-package test asset
-        if: steps.gate.outputs.run == 'true'
-        run: elastic-package test asset
+      # NOTE: `elastic-package test asset` requires a running stack and is
+      # therefore in the stack-bootstrapped `pipeline-tests` job below, not
+      # here. Keep this job as the fast lint-only gate.
 
   # ---------------------------------------------------------------------------
-  # Stage 2: pipeline tests (boots a stack via elastic-package)
+  # Stage 2: stack-dependent tests (asset + pipeline)
+  # Boots an Elastic stack via elastic-package and runs tests that need it.
   # ---------------------------------------------------------------------------
   pipeline-tests:
     runs-on: ubuntu-latest
@@ -108,7 +109,11 @@ jobs:
         if: steps.gate.outputs.run == 'true'
         run: elastic-package stack up -d --version 8.15.0
 
-      - name: Run pipeline tests
+      - name: elastic-package test asset
+        if: steps.gate.outputs.run == 'true'
+        run: elastic-package test asset
+
+      - name: elastic-package test pipeline
         if: steps.gate.outputs.run == 'true'
         run: elastic-package test pipeline
 
