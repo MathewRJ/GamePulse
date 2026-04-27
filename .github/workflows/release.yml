@@ -1,0 +1,184 @@
+name: release
+
+# Runs on every version tag push (e.g. v0.1.0).
+# Builds the Linux agent binary once, then fans out to three parallel packaging
+# jobs (.deb / .rpm / .pkg.tar.zst), and finally creates a GitHub Release with
+# all three attached.
+#
+# Note: eBPF probes and the eBPF daemon are NOT included in these packages —
+# they require nightly Rust + bpf-linker and are shipped separately.
+# The packages contain: gamepulse-agent binary, gamepulse launcher script,
+# systemd user unit, and an example config file.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write  # required by softprops/action-gh-release to create releases
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+
+  # ── 1. Build Linux x86_64 release binary ───────────────────────────────────
+  build:
+    name: build (linux x86_64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry + build artefacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src -> target
+
+      - name: cargo build --release
+        run: cargo build --release --manifest-path src/Cargo.toml --locked
+
+      - name: Upload binary artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-binary-linux-x86_64
+          path: target/release/gamepulse-agent
+
+  # ── 2. .deb (Debian / Ubuntu) ──────────────────────────────────────────────
+  package-deb:
+    name: package .deb
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Download release binary
+        uses: actions/download-artifact@v4
+        with:
+          name: agent-binary-linux-x86_64
+          path: target/release/
+
+      - name: Mark binary executable
+        run: chmod +x target/release/gamepulse-agent
+
+      - name: Install cargo-binstall (fast binary installer)
+        uses: cargo-bins/cargo-binstall@main
+
+      - name: Install cargo-deb
+        run: cargo binstall cargo-deb --no-confirm
+
+      - name: Build .deb
+        run: cargo deb --manifest-path src/Cargo.toml --no-build --no-strip
+
+      - name: Upload .deb artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-package
+          path: target/debian/*.deb
+
+  # ── 3. .rpm (Fedora / RHEL / openSUSE) ─────────────────────────────────────
+  package-rpm:
+    name: package .rpm
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Download release binary
+        uses: actions/download-artifact@v4
+        with:
+          name: agent-binary-linux-x86_64
+          path: target/release/
+
+      - name: Mark binary executable
+        run: chmod +x target/release/gamepulse-agent
+
+      - name: Install cargo-binstall
+        uses: cargo-bins/cargo-binstall@main
+
+      - name: Install cargo-generate-rpm
+        run: cargo binstall cargo-generate-rpm --no-confirm
+
+      - name: Build .rpm
+        run: cargo generate-rpm --manifest-path src/Cargo.toml
+
+      - name: Upload .rpm artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpm-package
+          path: target/generate-rpm/*.rpm
+
+  # ── 4. .pkg.tar.zst (Arch Linux) ───────────────────────────────────────────
+  package-arch:
+    name: package .pkg.tar.zst
+    needs: build
+    runs-on: ubuntu-latest
+    container: archlinux/archlinux:latest
+    steps:
+      - name: Install base-devel and git
+        run: pacman -Syu --noconfirm base-devel git
+
+      - uses: actions/checkout@v4
+
+      - name: Download release binary
+        uses: actions/download-artifact@v4
+        with:
+          name: agent-binary-linux-x86_64
+          path: target/release/
+
+      - name: Mark binary executable
+        run: chmod +x target/release/gamepulse-agent
+
+      - name: Extract version from tag
+        run: echo "PKGVER=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+
+      - name: Create unprivileged build user (makepkg refuses to run as root)
+        run: |
+          useradd -m builder
+          chown -R builder:builder "$(pwd)"
+
+      - name: Build Arch package
+        run: |
+          su builder -c "
+            cd .github/packaging
+            sed -i 's/^pkgver=.*/pkgver=${{ env.PKGVER }}/' PKGBUILD
+            REPOROOT=$(realpath ../..) makepkg --nodeps --noextract --nosign
+          "
+
+      - name: Upload .pkg.tar.zst artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: arch-package
+          path: .github/packaging/*.pkg.tar.zst
+
+  # ── 5. Create GitHub Release ────────────────────────────────────────────────
+  release:
+    name: create github release
+    needs: [package-deb, package-rpm, package-arch]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all package artefacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '*-package'
+          merge-multiple: true
+          path: dist/
+
+      - name: List release assets
+        run: ls -lh dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true

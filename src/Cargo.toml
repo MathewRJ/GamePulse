@@ -56,3 +56,39 @@ seek_from_current = "allow"
 needless_lifetimes = "allow"
 manual_div_ceil = "allow"
 bind_instead_of_map = "allow"
+
+# ── Debian package metadata (cargo-deb) ─────────────────────────────────────
+# Paths are relative to this file's directory (src/).
+# Run: cargo deb --manifest-path src/Cargo.toml --no-build --no-strip
+[package.metadata.deb]
+maintainer = "MathewRJ <https://github.com/MathewRJ>"
+copyright = "2026, MathewRJ"
+license-file = ["../LICENSE", "0"]
+extended-description = """\
+GamePulse gaming performance telemetry agent.
+Ships CPU, GPU, memory, storage, network, audio, power, and frame metrics
+to Elasticsearch for live analysis and historical comparison."""
+section = "utils"
+priority = "optional"
+# Binary auto-inclusion is disabled when assets is set; list it explicitly.
+# $auto resolves shared-library dependencies (glibc, etc.) from the binary.
+depends = "$auto"
+assets = [
+    ["../target/release/gamepulse-agent", "usr/bin/gamepulse-agent", "755"],
+    ["../packaging/gamepulse-launcher.sh", "usr/bin/gamepulse", "755"],
+    ["../packaging/systemd/gamepulse-agent.service", "usr/lib/systemd/user/gamepulse-agent.service", "644"],
+    ["../packaging/config/gamepulse.toml.example", "etc/gamepulse/gamepulse.toml", "644"],
+]
+
+# ── RPM package metadata (cargo-generate-rpm) ────────────────────────────────
+# Paths are relative to this file's directory (src/).
+# Run: cargo generate-rpm --manifest-path src/Cargo.toml
+[package.metadata.generate-rpm]
+license = "MIT"
+summary = "GamePulse gaming performance telemetry agent"
+assets = [
+    { source = "../target/release/gamepulse-agent", dest = "/usr/bin/gamepulse-agent", mode = "755" },
+    { source = "../packaging/gamepulse-launcher.sh", dest = "/usr/bin/gamepulse", mode = "755" },
+    { source = "../packaging/systemd/gamepulse-agent.service", dest = "/usr/lib/systemd/user/gamepulse-agent.service", mode = "644" },
+    { source = "../packaging/config/gamepulse.toml.example", dest = "/etc/gamepulse/gamepulse.toml", mode = "644", config = true },
+]
