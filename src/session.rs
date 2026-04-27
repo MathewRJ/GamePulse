@@ -790,7 +790,7 @@ pub(crate) fn scan_for_lutris_game() -> Option<Target> {
         if !matched_pids.is_empty() {
             let pid = matched_pids[0];
             let env = read_environ(pid).unwrap_or_default();
-            let (graphics_api, _) = detect_graphics_api(&env);
+            let (graphics_api, _) = graphics_api_with_maps_fallback(&env, pid);
             let proton_version = proton_version_from_env(&env);
             let dxvk_version = dxvk_version_from_env(&env);
             return Some(Target {
@@ -914,6 +914,16 @@ fn detect_graphics_api(env: &HashMap<String, String>) -> (Option<String>, bool) 
         return (Some("dx_via_proton".to_string()), uses_proton);
     }
     (None, false)
+}
+
+/// Detect graphics API from environment; fall back to `/proc/<pid>/maps` scanning
+/// when env-var detection returns `None` (e.g. native games that skip Wine env vars).
+fn graphics_api_with_maps_fallback(env: &HashMap<String, String>, pid: u32) -> (Option<String>, bool) {
+    let (api, uses_proton) = detect_graphics_api(env);
+    if api.is_some() {
+        return (api, uses_proton);
+    }
+    (crate::dllscan::graphics_api_from_maps(pid), false)
 }
 
 fn proton_version_from_env(env: &HashMap<String, String>) -> Option<String> {
@@ -1111,7 +1121,7 @@ pub(crate) fn scan_for_heroic_game() -> Option<Target> {
                 HeroicStore::Gog => "Heroic \u{2014} GOG".to_string(),
             });
             let env = read_environ(pid).unwrap_or_default();
-            let (graphics_api, _) = detect_graphics_api(&env);
+            let (graphics_api, _) = graphics_api_with_maps_fallback(&env, pid);
             let proton_version = proton_version_from_env(&env);
             let dxvk_version = dxvk_version_from_env(&env);
             return Some(Target {
@@ -1277,7 +1287,7 @@ pub(crate) fn scan_for_bottles_game() -> Option<Target> {
             .unwrap_or_else(|| config.name.clone());
 
         let env = read_environ(pid).unwrap_or_default();
-        let (graphics_api, _) = detect_graphics_api(&env);
+        let (graphics_api, _) = graphics_api_with_maps_fallback(&env, pid);
         let proton_version = proton_version_from_env(&env);
         let dxvk_version = dxvk_version_from_env(&env);
         return Some(Target {
@@ -1371,7 +1381,7 @@ pub(crate) fn scan_for_steam_game() -> Option<Target> {
     };
 
     let name = game_name_from_appid(app_id).unwrap_or_else(|| format!("App {}", app_id));
-    let (graphics_api, _uses_proton) = detect_graphics_api(&env);
+    let (graphics_api, _uses_proton) = graphics_api_with_maps_fallback(&env, pid);
     let proton_version = proton_version_from_env(&env);
     let dxvk_version = dxvk_version_from_env(&env);
     let all_pids = all_pids_by_appid
@@ -1457,7 +1467,7 @@ pub fn resolve_user_target(
     };
 
     let env = read_environ(pid).unwrap_or_default();
-    let (graphics_api, _) = detect_graphics_api(&env);
+    let (graphics_api, _) = graphics_api_with_maps_fallback(&env, pid);
     let proton_version = proton_version_from_env(&env);
     let dxvk_version = dxvk_version_from_env(&env);
 

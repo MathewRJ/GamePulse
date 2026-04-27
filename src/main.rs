@@ -15,6 +15,7 @@ mod collectors;
 mod config;
 mod diagnose;
 mod host;
+mod dllscan;
 mod profiles;
 mod session;
 mod shipper;
@@ -790,6 +791,19 @@ async fn main() -> Result<()> {
                                 session.settings_overlay =
                                     Some(deep_merge(profile_ov, base));
                             }
+                        }
+
+                        // D.8: maps auto-detection (upscaler, frame-gen) — lowest precedence.
+                        let maps_ov = dllscan::settings_overlay_from_maps(target.pid);
+                        if !maps_ov.is_null() {
+                            tracing::info!(
+                                "Maps auto-detection: upscaler/frame-gen hints applied (pid {})",
+                                target.pid
+                            );
+                            let existing =
+                                session.settings_overlay.take().unwrap_or_else(|| json!({}));
+                            // existing wins on conflict — profile/CLI/config have higher precedence.
+                            session.settings_overlay = Some(deep_merge(maps_ov, existing));
                         }
 
                         let game_doc = build_game_detected_doc(

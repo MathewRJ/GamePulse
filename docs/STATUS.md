@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-27 by claude-code (D.7 shipped: game profile loader + 3 starter profiles; 12/12 tests green)
+Last updated: 2026-04-27 by claude-code (D.8 shipped: /proc/maps DLL scan for Tier 2 settings auto-detect; 26/26 tests green; Milestone D complete)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -23,7 +23,7 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 | B2 Launcher-agnostic game detection | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
 | B3 Automatic game detection (TBD) | ⚪ Not started | ░░░░░░░░░░ |
 | C  Windows collectors | 🟢 Done (C.0–C.8) | ▓▓▓▓▓▓▓▓▓▓ |
-| D  Linux portable packaging | 🟡 Partial | ▓▓▓▓▓░░░░░ |
+| D  Linux portable packaging | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
 | E  Windows packaging | ⚪ Not started | ░░░░░░░░░░ |
 | F  Cross-platform parity verification (M2) | 🔒 Blocked on B2+C+E | — |
 | G  elastic/integrations PR (M4) | 🔒 Blocked on F | — |
@@ -44,8 +44,8 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 | Core metrics (8 streams) | ✅ | 🟡 (8/8 implemented; gaps documented) | ✅ (inherited) |
 | eBPF deep probes | ✅ | n/a | ✅ (inherited) |
 | Settings Tier 1 — manual CLI/config | ✅ | 🔲 | ✅ (inherited) |
-| Settings Tier 2 — auto-detect (DLL/ETW) | 🔲 | 🔲 | 🔲 |
-| Settings Tier 3 — per-game config profiles | 🔲 | 🔲 | 🔲 |
+| Settings Tier 2 — auto-detect (DLL/ETW) | ✅ (/proc/maps) | 🔲 | ✅ (inherited) |
+| Settings Tier 3 — per-game config profiles | ✅ | 🔲 | ✅ (inherited) |
 | Session label (per-game-per-day counter) | ✅ | 🔲 | ✅ (inherited) |
 
 ## Platform parity matrix (populated during M2)
@@ -65,7 +65,7 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 ## Active work package
 
-**Milestone D in progress.** D.7 complete; D.8 next (Linux DLL scan via `/proc/<pid>/maps` for Tier 2 settings auto-detect).
+**Milestone D complete.** D.3 → D.5 → D.6 → D.7 → D.8 all shipped. Next: Milestone E (Windows MSI packaging) or D.1/D.2 Debian/RPM smoke tests.
 
 **Dashboard suite complete (Home → Games → Environment → Hardware → Compare → Engine).** All 6 primary dashboards deployed and verified.
 
@@ -88,7 +88,9 @@ See `docs/ROADMAP.md` for milestone structure and work package definitions.
 
 ## Completed work
 
-### Milestone D — Linux portable packaging (partial, 2026-04-27)
+### Milestone D — Linux portable packaging (complete, 2026-04-27)
+
+- **D.8 — `/proc/<pid>/maps` DLL scan — Tier 2 settings auto-detection**: New `src/dllscan.rs` module. `read_mapped_paths(pid)` parses `/proc/<pid>/maps`, extracts file-backed paths (those starting with '/'), lowercases them for case-insensitive matching, and returns an empty Vec gracefully on any read error (cross-platform safe). Three detection functions (all `pub(crate)`, tested with mock path slices): `detect_graphics_api_from_paths` — priority chain VKD3D > DXVK D3D9 > DXVK D3D11 > Vulkan > OpenGL (all fragments lowercase to match lowercased paths); `detect_upscaler_from_paths` — DLSS (nvngx_dlss) > XeSS (xess) > FSR (ffx_fsr/libffx_fsr/amd_fidelityfx_vk/openfsr); `detect_frame_gen_from_paths` — DLSS3 (nvngx_dlssg/dlss_fg/dlssg.dll) > FSR3 (ffx_framegeneration/ffx_fsr3framegen) > AFMF. Two public functions: `graphics_api_from_maps(pid)` and `settings_overlay_from_maps(pid)` (builds `{ gamepulse.settings.* }` with `source="auto_detected"`, `confidence="medium"`, returns Null when nothing detected). Wired in `session.rs`: new `graphics_api_with_maps_fallback(env, pid)` helper calls `detect_graphics_api(env)` first; falls back to `graphics_api_from_maps(pid)` when env returns None. Replaces all 5 `detect_graphics_api` call sites (Lutris, Heroic, Bottles, Steam, UserSpecified). Wired in `main.rs` `GameStarted` arm: `settings_overlay_from_maps(target.pid)` merged after the D.7 profile block with existing overlay winning (maps is lowest precedence). 13 dllscan unit tests + bug fix (libGL.so/libGLX.so fragments lowercased). 26/26 tests green.
 
 - **D.7 — Game profile loader + three starter profiles (Tier 3 settings)**: New `src/profiles.rs` module: `GameProfile`/`GameMeta`/`ProfileSettings` structs (TOML Deserialize); `find_profile(target)` — searches profile dirs with Steam AppID exact-match taking precedence over case-insensitive name/alias substring match; `to_overlay(profile)` — builds `{ gamepulse.settings.* }` JSON with `source="profile"` `confidence="medium"`, returns Null when no fields set; `profile_dirs()` — ordered search: `$GAMEPULSE_PROFILES_DIR` → `~/.config/gamepulse/profiles/` → `/etc/gamepulse/profiles/` → `/usr/share/gamepulse/profiles/` → `{exe}/../../profiles/` (dev fallback). `main.rs` integration: `base_settings_overlay` snapshot taken after session creation; `GameStarted` calls `find_profile()` and if matched, `deep_merge(profile_ov, base)` (CLI/config wins), updates `session.settings_overlay` before `build_game_detected_doc()`; `GameEnded` restores base overlay after summary ships so next game starts clean. Three starter profiles at `profiles/`: Starfield (app 1716740, FSR 2, ray tracing, ultra), Cyberpunk 2077 (app 1091500, DLSS 3.5/FSR 3/XeSS, path tracing, dlss3 frame-gen), Baldur's Gate 3 (app 1086940, Vulkan, no native upscaler). Packaging: profiles added to cargo-deb, cargo-generate-rpm, and CI PKGBUILD (installs to `/usr/share/gamepulse/profiles/`). `cargo check` + `cargo clippy -- -D warnings` + `cargo test` (12/12) green.
 
