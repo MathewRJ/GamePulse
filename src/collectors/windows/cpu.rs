@@ -49,7 +49,10 @@ impl TempCache {
 
         if stale {
             self.last_queried = Some(now);
-            self.value = wmi::query_thermal_zones().into_iter().next().map(|(_, t)| t);
+            self.value = wmi::query_thermal_zones()
+                .into_iter()
+                .next()
+                .map(|(_, t)| t);
         }
         self.value
     }
@@ -95,10 +98,8 @@ impl CpuCollector {
 
     fn try_init_pdh(&mut self) -> Result<()> {
         let mut query = PdhQuery::new()?;
-        let counter_total =
-            query.add_counter(r"\Processor(_Total)\% Processor Time")?;
-        let counter_per_core =
-            query.add_counter(r"\Processor(*)\% Processor Time")?;
+        let counter_total = query.add_counter(r"\Processor(_Total)\% Processor Time")?;
+        let counter_per_core = query.add_counter(r"\Processor(*)\% Processor Time")?;
         let counter_freq =
             query.add_counter(r"\Processor Information(_Total)\Processor Frequency")?;
         // Baseline collect — establishes the rate denominator. First real tick

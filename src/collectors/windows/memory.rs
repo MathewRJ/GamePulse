@@ -17,14 +17,8 @@ use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_INFORMATION, 
 const MB: u64 = 1_048_576;
 
 fn game_working_set_mb(pid: u32) -> Option<u64> {
-    let handle = unsafe {
-        OpenProcess(
-            PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
-            false,
-            pid,
-        )
-        .ok()?
-    };
+    let handle =
+        unsafe { OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid).ok()? };
     let mut pmc = PROCESS_MEMORY_COUNTERS::default();
     let ok = unsafe {
         GetProcessMemoryInfo(
@@ -34,7 +28,9 @@ fn game_working_set_mb(pid: u32) -> Option<u64> {
         )
     };
     // SAFETY: CloseHandle is always called, even on failure.
-    unsafe { let _ = windows::Win32::Foundation::CloseHandle(handle); }
+    unsafe {
+        let _ = windows::Win32::Foundation::CloseHandle(handle);
+    }
     if ok.is_err() {
         return None;
     }

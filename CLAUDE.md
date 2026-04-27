@@ -79,6 +79,23 @@ For mechanical implementation tasks: claude.ai plans → Codex implements in `wo
 
 See `docs/AGENT-COLLABORATION.md` for the full pipeline, prompt templates, work-package format, and guardrails. Worktrees are gitignored; branch naming is `codex/<task-id>`.
 
+## Multi-agent pipeline (`gpx`)
+
+Beyond Codex handoff, the project has a full agent system mapped onto Claude / Codex / Gemini. Entry point is `bin/gpx`.
+
+- `gpx plan` → planner picks next task
+- `gpx architect <topic>` → data-model / package-structure design (read-only)
+- `gpx implement <task-id>` → Codex in worktree (loads `tasks/<task-id>.yaml`)
+- `gpx review` → reviewer on diff vs `origin/main`
+- `gpx test` → cargo + elastic-package validation
+- `gpx audit security|integration` → Opus auditor (local, no API key)
+- `gpx ci` → review → test → audit chain
+- `gpx doctor` → verify CLIs and login state
+
+Agents added under `.claude/agents/`: `architect`, `dashboard-designer`, `devops`, `security-auditor`, `integration-auditor`, `docs-writer`. Existing five agents (`planner`, `implementer`, `reviewer`, `tester`, `progress-auditor`) unchanged.
+
+CI is deterministic-only — no API keys. LLM gates run locally via `gpx` or the opt-in pre-push hook (`.githooks/pre-push`, enable with `git config core.hooksPath .githooks`). Full design: `docs/AGENT-SYSTEM.md`.
+
 ## Grep-first rule
 
 For any file over 100 lines: Grep for the specific content first, then Read only the matching lines using offset/limit. Never read `docs/SCOPE.md` (~1700 lines) in full — delegate to gemini-researcher or use targeted Grep.

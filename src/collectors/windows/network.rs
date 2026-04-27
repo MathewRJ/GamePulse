@@ -47,10 +47,8 @@ impl NetworkCollector {
 
     fn try_init_pdh(&mut self) -> Result<()> {
         let mut query = PdhQuery::new()?;
-        let counter_sent =
-            query.add_counter(r"\Network Interface(*)\Bytes Sent/sec")?;
-        let counter_recv =
-            query.add_counter(r"\Network Interface(*)\Bytes Received/sec")?;
+        let counter_sent = query.add_counter(r"\Network Interface(*)\Bytes Sent/sec")?;
+        let counter_recv = query.add_counter(r"\Network Interface(*)\Bytes Received/sec")?;
         query.collect()?;
         self.query = Some(query);
         self.counter_sent = Some(counter_sent);

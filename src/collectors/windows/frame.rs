@@ -199,7 +199,10 @@ impl FrameSource for PresentMonSource {
                 Ok(_) => {}
             }
             let cols: Vec<&str> = header.trim_end().split(',').collect();
-            let col_idx = match cols.iter().position(|c| c.trim() == COL_MS_BETWEEN_PRESENTS) {
+            let col_idx = match cols
+                .iter()
+                .position(|c| c.trim() == COL_MS_BETWEEN_PRESENTS)
+            {
                 Some(i) => i,
                 None => {
                     tracing::warn!(
@@ -294,8 +297,11 @@ impl FrameSource for PresentMonSource {
         let n_new = new_this_tick.len() as f64;
         let mean_ft_tick: f64 = new_this_tick.iter().sum::<f64>() / n_new;
         let frametime_ms = (mean_ft_tick * 1000.0).round() / 1000.0;
-        let variance: f64 =
-            new_this_tick.iter().map(|x| (x - mean_ft_tick).powi(2)).sum::<f64>() / n_new;
+        let variance: f64 = new_this_tick
+            .iter()
+            .map(|x| (x - mean_ft_tick).powi(2))
+            .sum::<f64>()
+            / n_new;
         let frametime_variance = (variance * 1000.0).round() / 1000.0;
 
         // Stutter: frames this tick where ft exceeds 2× tick mean.
