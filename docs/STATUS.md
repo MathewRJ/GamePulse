@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-27 by claude-code (D.6 shipped: GitHub Actions release workflow; 8/8 tests green)
+Last updated: 2026-04-27 by claude-code (D.7 shipped: game profile loader + 3 starter profiles; 12/12 tests green)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -65,7 +65,7 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 ## Active work package
 
-**Milestone D in progress.** D.6 complete; D.7 next (game profile loader + three starter profiles for Tier 3 settings capture).
+**Milestone D in progress.** D.7 complete; D.8 next (Linux DLL scan via `/proc/<pid>/maps` for Tier 2 settings auto-detect).
 
 **Dashboard suite complete (Home → Games → Environment → Hardware → Compare → Engine).** All 6 primary dashboards deployed and verified.
 
@@ -89,6 +89,8 @@ See `docs/ROADMAP.md` for milestone structure and work package definitions.
 ## Completed work
 
 ### Milestone D — Linux portable packaging (partial, 2026-04-27)
+
+- **D.7 — Game profile loader + three starter profiles (Tier 3 settings)**: New `src/profiles.rs` module: `GameProfile`/`GameMeta`/`ProfileSettings` structs (TOML Deserialize); `find_profile(target)` — searches profile dirs with Steam AppID exact-match taking precedence over case-insensitive name/alias substring match; `to_overlay(profile)` — builds `{ gamepulse.settings.* }` JSON with `source="profile"` `confidence="medium"`, returns Null when no fields set; `profile_dirs()` — ordered search: `$GAMEPULSE_PROFILES_DIR` → `~/.config/gamepulse/profiles/` → `/etc/gamepulse/profiles/` → `/usr/share/gamepulse/profiles/` → `{exe}/../../profiles/` (dev fallback). `main.rs` integration: `base_settings_overlay` snapshot taken after session creation; `GameStarted` calls `find_profile()` and if matched, `deep_merge(profile_ov, base)` (CLI/config wins), updates `session.settings_overlay` before `build_game_detected_doc()`; `GameEnded` restores base overlay after summary ships so next game starts clean. Three starter profiles at `profiles/`: Starfield (app 1716740, FSR 2, ray tracing, ultra), Cyberpunk 2077 (app 1091500, DLSS 3.5/FSR 3/XeSS, path tracing, dlss3 frame-gen), Baldur's Gate 3 (app 1086940, Vulkan, no native upscaler). Packaging: profiles added to cargo-deb, cargo-generate-rpm, and CI PKGBUILD (installs to `/usr/share/gamepulse/profiles/`). `cargo check` + `cargo clippy -- -D warnings` + `cargo test` (12/12) green.
 
 - **D.6 — GitHub Actions release workflow**: On `git push` of a `v*` tag: (1) `build` job compiles the agent release binary on `ubuntu-latest`; (2) `package-deb` uses `cargo-deb` (via cargo-binstall) to produce a `.deb` with binary + gamepulse launcher + systemd user unit + example config — files in `/etc/` auto-marked conffiles; (3) `package-rpm` uses `cargo-generate-rpm` for `.rpm` with `config=true` on the TOML; (4) `package-arch` runs `makepkg` in `archlinux/archlinux:latest` using a CI-only PKGBUILD at `.github/packaging/PKGBUILD` (agent-only, no eBPF, pre-built binary, unprivileged builder user, PKGVER injected via sed); (5) `release` uses `softprops/action-gh-release` to create the GitHub Release and attach all three artifacts with auto-generated release notes. `[package.metadata.deb]` and `[package.metadata.generate-rpm]` added to `src/Cargo.toml`; asset paths relative to `src/` (manifest dir). eBPF excluded from CI packages (nightly + bpf-linker toolchain not available); AUR PKGBUILD unchanged. `cargo check` + `cargo test` (8/8) green.
 
