@@ -71,8 +71,7 @@ fn try_init_com() -> bool {
 }
 
 fn try_init_dxgi() -> Option<(IDXGIFactory6, IDXGIAdapter3)> {
-    let factory: IDXGIFactory6 =
-        unsafe { CreateDXGIFactory2(DXGI_CREATE_FACTORY_FLAGS(0)).ok()? };
+    let factory: IDXGIFactory6 = unsafe { CreateDXGIFactory2(DXGI_CREATE_FACTORY_FLAGS(0)).ok()? };
     let adapter: IDXGIAdapter3 = unsafe {
         factory
             .EnumAdapterByGpuPreference(0, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE)
@@ -174,7 +173,8 @@ impl GpuCollector {
             self.wmi_cache = Some((temp.unwrap_or(f64::NAN), now));
         }
 
-        self.wmi_cache.and_then(|(t, _)| if t.is_nan() { None } else { Some(t) })
+        self.wmi_cache
+            .and_then(|(t, _)| if t.is_nan() { None } else { Some(t) })
     }
 }
 
@@ -223,8 +223,7 @@ impl Collector for GpuCollector {
 
         // ── DXGI VRAM ────────────────────────────────────────────────────────
         if let Some(adapter) = &self.dxgi_adapter {
-            let mut info =
-                windows::Win32::Graphics::Dxgi::DXGI_QUERY_VIDEO_MEMORY_INFO::default();
+            let mut info = windows::Win32::Graphics::Dxgi::DXGI_QUERY_VIDEO_MEMORY_INFO::default();
             if unsafe {
                 adapter.QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &mut info)
             }

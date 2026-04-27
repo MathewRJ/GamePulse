@@ -43,10 +43,8 @@ impl StorageCollector {
 
     fn try_init_pdh(&mut self) -> Result<()> {
         let mut query = PdhQuery::new()?;
-        let counter_read =
-            query.add_counter(r"\PhysicalDisk(_Total)\Disk Read Bytes/sec")?;
-        let counter_write =
-            query.add_counter(r"\PhysicalDisk(_Total)\Disk Write Bytes/sec")?;
+        let counter_read = query.add_counter(r"\PhysicalDisk(_Total)\Disk Read Bytes/sec")?;
+        let counter_write = query.add_counter(r"\PhysicalDisk(_Total)\Disk Write Bytes/sec")?;
         query.collect()?;
         self.query = Some(query);
         self.counter_read = Some(counter_read);

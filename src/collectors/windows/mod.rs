@@ -1,13 +1,13 @@
-mod pdh;
-mod wmi;
 pub mod audio;
 pub mod cpu;
 pub mod frame;
 pub mod gpu;
 pub mod memory;
 pub mod network;
+mod pdh;
 pub mod power;
 pub mod storage;
+mod wmi;
 
 pub use audio::AudioCollector;
 pub use cpu::CpuCollector;

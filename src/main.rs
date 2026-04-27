@@ -821,7 +821,11 @@ async fn main() -> Result<()> {
             &acc,
             last_known_game.as_ref(),
         );
-        tracing::info!("Shipping session summary ({}s, {} ticks)", duration_s, session_tick);
+        tracing::info!(
+            "Shipping session summary ({}s, {} ticks)",
+            duration_s,
+            session_tick
+        );
         if let Err(e) = shipper::ship(&cfg, vec![summary_doc]).await {
             tracing::warn!("Failed to ship summary doc: {}", e);
         } else {

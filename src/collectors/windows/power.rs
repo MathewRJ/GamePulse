@@ -19,7 +19,9 @@ pub struct PowerCollector {
 
 impl PowerCollector {
     pub fn new(game_pid: Option<u32>) -> Self {
-        PowerCollector { _game_pid: game_pid }
+        PowerCollector {
+            _game_pid: game_pid,
+        }
     }
 }
 
