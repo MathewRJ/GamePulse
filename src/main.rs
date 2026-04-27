@@ -13,19 +13,31 @@ compile_error!(
 
 mod collectors;
 mod config;
+mod diagnose;
 mod host;
 mod session;
 mod shipper;
 
 use anyhow::{Context, Result};
 use chrono::Utc;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use collectors::Collector;
 use serde_json::{json, Value};
 use session::SessionEvent;
 use std::path::PathBuf;
 
 // ── CLI ───────────────────────────────────────────────────────────────────────
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Collect a bug-report snapshot: kernel, GPU driver, ES reachability, and
+    /// a log of every probe step. Prints to stdout; use --output for a file.
+    Diagnose {
+        /// Write the report to a file instead of stdout.
+        #[arg(short, long, value_name = "PATH")]
+        output: Option<PathBuf>,
+    },
+}
 
 #[derive(Parser)]
 #[command(
@@ -101,6 +113,9 @@ struct Cli {
     /// and /proc/*/exe basename, case-insensitive). First match wins.
     #[arg(long, value_name = "NAME")]
     target_name: Option<String>,
+
+    #[command(subcommand)]
+    command: Option<Commands>,
 }
 
 // ── Utilities ──────────────────────────────────────────────────────────────────
@@ -584,6 +599,10 @@ async fn main() -> Result<()> {
             toml::to_string_pretty(&display).context("serialising config for --print-config")?
         );
         return Ok(());
+    }
+
+    if let Some(Commands::Diagnose { output }) = cli.command {
+        return diagnose::run(&cfg, cli.config.as_deref(), output.as_deref()).await;
     }
 
     if cli.dry_run {
