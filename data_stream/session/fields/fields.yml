@@ -247,7 +247,7 @@
               type: float
               description: "Configured TDP limit in watts (relevant for handhelds)"
         - name: monitors
-          type: nested
+          type: group
           description: "Connected display monitors at session start"
           fields:
             - name: name
