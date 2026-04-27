@@ -34,6 +34,40 @@ Build in Kibana UI → Stack Management → Saved Objects → Export → commit 
 
 **Never hand-author NDJSON.** These files are version-sensitive and will fail to import on Serverless. Always export from a live Kibana instance.
 
+### Verification gates (run both before declaring a dashboard done)
+
+The API gate and the browser-UI gate catch different failures. A dashboard
+can be import-valid (API gate green) yet render as a blank panel in the
+browser (UI gate red), typically when a Lens datasource layer is intact in
+the saved object but a referenced field is missing from the index mapping
+or the panel migration version is stale.
+
+1. **`scripts/verify-dashboard.sh <id>`** — API gate. Exports the dashboard,
+   asserts panel inventory, validates Lens datasource layers, and checks
+   that the Kibana internal loader returns no `statusCode` error.
+
+2. **`scripts/verify-dashboard-ui.sh <id>`** — browser-render gate.
+   Headless Chromium loads the dashboard with a real browser-auth
+   `storageState`, waits for the dashboard title and every panel title to
+   be visible, scans for failure strings (`Cannot read properties`,
+   `No embeddable factory found`, `Field not found`, `Error loading
+   dashboard`, etc.), and saves a full-page PNG to
+   `artifacts/dashboard-ui/<id>.png`. Adapted from
+   `chatgpt-codex-test/test/playwright/`.
+
+   **One-time setup** (Playwright + a captured browser-auth session):
+   ```sh
+   npm install --no-save playwright
+   npx playwright install chromium
+   scripts/capture-kibana-auth.sh                  # opens headed Chromium for login
+   export KIBANA_BROWSER_AUTH_STATE=.gpx/kibana-auth.storage-state.json
+   ```
+   The state file is gitignored; refresh it whenever Elastic Cloud
+   invalidates the session (MFA / OTP).
+
+`scripts/verify-dashboard.sh` chains the UI gate automatically when
+`KIBANA_BROWSER_AUTH_STATE` is set, so one command runs both.
+
 ---
 
 ## Build guide

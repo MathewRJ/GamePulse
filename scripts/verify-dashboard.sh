@@ -186,3 +186,10 @@ if [ "$skip_internal" -eq 0 ]; then
 fi
 
 echo "PASS $dashboard_id"
+
+# 5. Optional browser-UI gate (chained when KIBANA_BROWSER_AUTH_STATE is set).
+#    Catches Lens render failures the API gate cannot see.
+if [ -n "${KIBANA_BROWSER_AUTH_STATE:-}" ] && [ -x "$script_dir/verify-dashboard-ui.sh" ]; then
+  echo "Chaining browser-UI gate (KIBANA_BROWSER_AUTH_STATE detected)"
+  "$script_dir/verify-dashboard-ui.sh" "$dashboard_id"
+fi

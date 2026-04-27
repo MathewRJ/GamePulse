@@ -41,3 +41,13 @@ worktrees/
 
 # gpx orchestrator local state — log of every agent invocation
 .gpx/
+
+# Browser-auth storage-state for the Kibana UI verifier — never commit
+*.storage-state.json
+.gpx/kibana-auth.storage-state.json
+
+# UI verification artefacts — screenshots and failure dumps
+artifacts/dashboard-ui/
+
+# Playwright local install (we recommend npm install --no-save)
+node_modules/

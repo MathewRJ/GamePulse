@@ -110,14 +110,57 @@ new section (which means a SCOPE update), or it belongs in a saved search.
 elastic-package check
 elastic-package test asset
 elastic-package test static
-git diff -- kibana/
-git status -- kibana/
+git diff -- kibana/ dashboards/
+git status -- kibana/ dashboards/
 python3 tools/strip_dashboard_tokens.py  # if it exists; do not invoke if missing
-jq '.' kibana/dashboard/*.json
+jq '.' kibana/dashboard/*.json dashboards/*.json
+node .agents/skills/kibana-dashboards/scripts/kibana-dashboards.js test
+node .agents/skills/kibana-dashboards/scripts/kibana-dashboards.js dashboard get <id>
+bash scripts/verify-dashboard.sh <id>
+bash scripts/verify-dashboard-ui.sh <id>      # browser-render gate (Playwright)
 ```
 
-You MUST NOT run any command that mutates Kibana state via API. Authoring
-is in the UI. This agent only validates the export.
+`dashboard create / update / delete` against Kibana mutates state. Run those
+only as part of a planner-assigned task and only via the skill script —
+never hand-write NDJSON.
+
+## Verification gates — run both, in order
+
+The API gate (`scripts/verify-dashboard.sh`) and the browser-UI gate
+(`scripts/verify-dashboard-ui.sh`) catch different failures. A dashboard
+can be import-valid (API gate green) and yet render as a blank panel in
+the browser (UI gate red), typically when a Lens datasource layer is
+intact in the saved object but a referenced field is missing from the
+mapping or the panel migration is stale.
+
+1. **`scripts/verify-dashboard.sh <id>`** — API-level gate. Asserts:
+   - Dashboard round-trips via `_export`.
+   - Every panel listed; Lens panels have non-empty datasource layers.
+   - Internal loader (`/internal/dashboards/app/<id>`) returns no
+     `statusCode` error payload.
+
+2. **`scripts/verify-dashboard-ui.sh <id>`** — browser-rendering gate.
+   Opens the dashboard in headless Chromium with a real browser-auth
+   `storageState`, then asserts:
+   - The dashboard title is visible.
+   - Every panel title from the saved object is visible.
+   - The body contains none of the well-known Lens / Kibana embeddable
+     failure strings (`Cannot read properties`, `No embeddable factory
+     found`, `Field not found`, `Error loading dashboard`, etc.).
+   - Saves a full-page PNG to `artifacts/dashboard-ui/<id>.png` (or
+     `<id>.failure.png` on failure).
+
+   First-time setup:
+   ```
+   scripts/capture-kibana-auth.sh                 # one-time, headed login
+   export KIBANA_BROWSER_AUTH_STATE=.gpx/kibana-auth.storage-state.json
+   npm install --no-save playwright               # one-time
+   npx playwright install chromium                # one-time
+   ```
+   Re-capture whenever Elastic Cloud invalidates the session (MFA/OTP).
+
+A new dashboard is not "done" until both gates are green and the
+screenshot has been eyeballed.
 
 ## Output format
 
