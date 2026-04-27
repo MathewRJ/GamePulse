@@ -3,10 +3,10 @@
 /// Mirrors the Python collector's config.py exactly so both agents
 /// read the same file without conflict.
 use anyhow::{Context, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
     pub elasticsearch: ElasticsearchConfig,
     #[serde(default)]
@@ -25,7 +25,7 @@ pub struct Config {
 /// [session.settings]
 /// preset = "ultra"
 /// upscaler_tech = "dlss"
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct SessionConfig {
     /// A short human-readable annotation for this session (e.g. "proton-9-test").
     /// Written to every doc as gamepulse.session.label for easy dashboard filtering.
@@ -38,7 +38,7 @@ pub struct SessionConfig {
 
 /// Tier 1 manual settings capture — populated from [session.settings] in the config
 /// and/or CLI flags. All fields optional; unset fields are omitted from session docs.
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct SessionSettingsConfig {
     pub preset: Option<String>,
     pub upscaler_tech: Option<String>,
@@ -50,7 +50,7 @@ pub struct SessionSettingsConfig {
     pub notes: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ElasticsearchConfig {
     pub endpoint: String,
     pub api_key: Option<String>,
@@ -88,7 +88,7 @@ impl Default for ElasticsearchConfig {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CollectionConfig {
     #[serde(default = "default_interval_ms")]
     pub interval_ms: u64,
@@ -139,7 +139,7 @@ impl Default for CollectionConfig {
     }
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct PrivacyConfig {
     #[serde(default)]
     pub opt_in_public: bool,
@@ -186,6 +186,23 @@ impl Config {
                 .collect::<Vec<_>>()
                 .join(", ")
         )
+    }
+
+    /// Return a clone suitable for display: api_key / username / password are
+    /// replaced with "<redacted>" so the output is safe to print or log.
+    pub fn redacted_for_display(&self) -> Self {
+        let mut out = self.clone();
+        let es = &mut out.elasticsearch;
+        if es.api_key.is_some() {
+            es.api_key = Some("<redacted>".to_string());
+        }
+        if es.username.is_some() {
+            es.username = Some("<redacted>".to_string());
+        }
+        if es.password.is_some() {
+            es.password = Some("<redacted>".to_string());
+        }
+        out
     }
 
     /// Apply ES_API_KEY and ES_URL env vars on top of whatever was in the TOML file.

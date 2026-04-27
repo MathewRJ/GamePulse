@@ -17,7 +17,7 @@ mod host;
 mod session;
 mod shipper;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::Utc;
 use clap::Parser;
 use collectors::Collector;
@@ -41,6 +41,19 @@ struct Cli {
     /// Run one collection cycle, print output, exit without shipping to ES
     #[arg(long)]
     dry_run: bool,
+
+    /// Enable debug-level logging. Equivalent to --log-level debug.
+    #[arg(short = 'v', long)]
+    verbose: bool,
+
+    /// Log verbosity level: error | warn | info | debug | trace
+    /// Overrides --verbose and GAMEPULSE_LOG when set.
+    #[arg(long, value_name = "LEVEL", value_parser = ["error", "warn", "info", "debug", "trace"])]
+    log_level: Option<String>,
+
+    /// Print the resolved configuration (credentials redacted) to stdout and exit.
+    #[arg(long)]
+    print_config: bool,
 
     /// Short annotation for this session (e.g. "after-driver-update").
     /// Overrides [session].label in the config file.
@@ -538,19 +551,40 @@ async fn dry_run() -> Result<()> {
 
 // ── Main loop ─────────────────────────────────────────────────────────────────
 
+/// Resolve the effective log filter string from CLI flags and environment.
+/// Precedence (highest first): --log-level > --verbose > GAMEPULSE_LOG > "info"
+fn resolve_log_filter(verbose: bool, log_level: Option<&str>) -> String {
+    if let Some(level) = log_level {
+        return level.to_string();
+    }
+    if verbose {
+        return "debug".to_string();
+    }
+    std::env::var("GAMEPULSE_LOG").unwrap_or_else(|_| "info".to_string())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_env("GAMEPULSE_LOG")
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
+        .with_env_filter(tracing_subscriber::EnvFilter::new(resolve_log_filter(
+            cli.verbose,
+            cli.log_level.as_deref(),
+        )))
         .with_writer(std::io::stderr)
         .init();
 
     let cfg = config::Config::load(cli.config.as_ref())?;
+
+    if cli.print_config {
+        let display = cfg.redacted_for_display();
+        print!(
+            "{}",
+            toml::to_string_pretty(&display).context("serialising config for --print-config")?
+        );
+        return Ok(());
+    }
 
     if cli.dry_run {
         return dry_run().await;
@@ -839,4 +873,30 @@ async fn main() -> Result<()> {
 
     tracing::info!("GamePulse agent stopped after {} ticks", tick);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_log_level_from_cli() {
+        // --log-level wins over everything
+        assert_eq!(resolve_log_filter(false, Some("warn")), "warn");
+        assert_eq!(resolve_log_filter(true, Some("warn")), "warn");
+        assert_eq!(resolve_log_filter(true, Some("trace")), "trace");
+
+        // --verbose produces "debug" when no --log-level
+        assert_eq!(resolve_log_filter(true, None), "debug");
+
+        // Neither flag → falls back to GAMEPULSE_LOG or "info"
+        // Remove the env var so the test is deterministic.
+        std::env::remove_var("GAMEPULSE_LOG");
+        assert_eq!(resolve_log_filter(false, None), "info");
+
+        // GAMEPULSE_LOG is honoured when no CLI flags
+        std::env::set_var("GAMEPULSE_LOG", "error");
+        assert_eq!(resolve_log_filter(false, None), "error");
+        std::env::remove_var("GAMEPULSE_LOG");
+    }
 }
