@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-27 by claude-code (D.5 shipped: gamepulse diagnose subcommand; 8/8 tests green)
+Last updated: 2026-04-27 by claude-code (D.6 shipped: GitHub Actions release workflow; 8/8 tests green)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -65,7 +65,7 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 ## Active work package
 
-**Milestone D in progress.** D.5 complete; D.6 next (GitHub Actions release workflow — on tag `v*` builds .deb, .rpm, Arch pkg.tar.zst; attaches to GitHub Release).
+**Milestone D in progress.** D.6 complete; D.7 next (game profile loader + three starter profiles for Tier 3 settings capture).
 
 **Dashboard suite complete (Home → Games → Environment → Hardware → Compare → Engine).** All 6 primary dashboards deployed and verified.
 
@@ -89,6 +89,8 @@ See `docs/ROADMAP.md` for milestone structure and work package definitions.
 ## Completed work
 
 ### Milestone D — Linux portable packaging (partial, 2026-04-27)
+
+- **D.6 — GitHub Actions release workflow**: On `git push` of a `v*` tag: (1) `build` job compiles the agent release binary on `ubuntu-latest`; (2) `package-deb` uses `cargo-deb` (via cargo-binstall) to produce a `.deb` with binary + gamepulse launcher + systemd user unit + example config — files in `/etc/` auto-marked conffiles; (3) `package-rpm` uses `cargo-generate-rpm` for `.rpm` with `config=true` on the TOML; (4) `package-arch` runs `makepkg` in `archlinux/archlinux:latest` using a CI-only PKGBUILD at `.github/packaging/PKGBUILD` (agent-only, no eBPF, pre-built binary, unprivileged builder user, PKGVER injected via sed); (5) `release` uses `softprops/action-gh-release` to create the GitHub Release and attach all three artifacts with auto-generated release notes. `[package.metadata.deb]` and `[package.metadata.generate-rpm]` added to `src/Cargo.toml`; asset paths relative to `src/` (manifest dir). eBPF excluded from CI packages (nightly + bpf-linker toolchain not available); AUR PKGBUILD unchanged. `cargo check` + `cargo test` (8/8) green.
 
 - **D.5 — `gamepulse diagnose` subcommand**: Added `gamepulse-agent diagnose [--output <PATH>]` — a single-file bug-report snapshot covering kernel version, OS, CPU, RAM, GPU (vendor/model/VRAM/driver/Mesa/Vulkan), Elasticsearch reachability (endpoint + auth kind + ping status; api_key redacted), resolved config file path, and a trailing log of every probe step taken during the run. Converted flat `Cli` struct to a `Commands` subcommand enum; dispatch order is `--print-config` → `diagnose` → `--dry-run` → main loop (fully backward-compatible). New `src/diagnose.rs` module (~160 lines); no new crate deps. `cargo check`, `cargo clippy -- -D warnings`, `cargo test` (8/8) all green. Live smoke test: ES REACHABLE, full report emitted cleanly to stdout.
 
