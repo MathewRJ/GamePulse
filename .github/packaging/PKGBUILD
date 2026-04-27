@@ -44,6 +44,12 @@ package() {
     install -Dm644 "${_reporoot}/packaging/config/gamepulse.toml.example" \
         "${pkgdir}/etc/gamepulse/gamepulse.toml"
 
+    # ---- Starter game profiles ----
+    for _profile in "${_reporoot}"/profiles/*.toml; do
+        install -Dm644 "${_profile}" \
+            "${pkgdir}/usr/share/gamepulse/profiles/$(basename "${_profile}")"
+    done
+
     install -Dm644 "${_reporoot}/LICENSE" \
         "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
 }

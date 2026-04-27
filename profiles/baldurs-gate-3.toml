@@ -1,0 +1,11 @@
+[game]
+name = "Baldur's Gate 3"
+steam_app_id = 1086940
+aliases = ["baldurs gate 3", "baldur", "bg3"]
+
+[settings]
+# Larian Studios RPG (2023) — Vulkan renderer.
+# No native upscaler; FSR 1 (spatial-only) via driver on AMD.
+# High GPU memory usage at ultra; recommend 8 GB+ VRAM for 1440p ultra.
+preset = "ultra"
+notes = "Vulkan renderer; no native upscaler; FSR 1 via AMD driver only"

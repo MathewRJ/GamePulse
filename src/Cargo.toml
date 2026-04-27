@@ -78,6 +78,9 @@ assets = [
     ["../packaging/gamepulse-launcher.sh", "usr/bin/gamepulse", "755"],
     ["../packaging/systemd/gamepulse-agent.service", "usr/lib/systemd/user/gamepulse-agent.service", "644"],
     ["../packaging/config/gamepulse.toml.example", "etc/gamepulse/gamepulse.toml", "644"],
+    ["../profiles/starfield.toml", "usr/share/gamepulse/profiles/starfield.toml", "644"],
+    ["../profiles/cyberpunk-2077.toml", "usr/share/gamepulse/profiles/cyberpunk-2077.toml", "644"],
+    ["../profiles/baldurs-gate-3.toml", "usr/share/gamepulse/profiles/baldurs-gate-3.toml", "644"],
 ]
 
 # ── RPM package metadata (cargo-generate-rpm) ────────────────────────────────
@@ -91,4 +94,7 @@ assets = [
     { source = "../packaging/gamepulse-launcher.sh", dest = "/usr/bin/gamepulse", mode = "755" },
     { source = "../packaging/systemd/gamepulse-agent.service", dest = "/usr/lib/systemd/user/gamepulse-agent.service", mode = "644" },
     { source = "../packaging/config/gamepulse.toml.example", dest = "/etc/gamepulse/gamepulse.toml", mode = "644", config = true },
+    { source = "../profiles/starfield.toml", dest = "/usr/share/gamepulse/profiles/starfield.toml", mode = "644" },
+    { source = "../profiles/cyberpunk-2077.toml", dest = "/usr/share/gamepulse/profiles/cyberpunk-2077.toml", mode = "644" },
+    { source = "../profiles/baldurs-gate-3.toml", dest = "/usr/share/gamepulse/profiles/baldurs-gate-3.toml", mode = "644" },
 ]

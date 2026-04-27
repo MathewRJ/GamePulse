@@ -15,6 +15,7 @@ mod collectors;
 mod config;
 mod diagnose;
 mod host;
+mod profiles;
 mod session;
 mod shipper;
 
@@ -699,6 +700,8 @@ async fn main() -> Result<()> {
         session_label.clone(),
         settings_overlay,
     );
+    // Keep the CLI+config overlay unchanged so we can restore it after each game ends.
+    let base_settings_overlay = session.settings_overlay.clone();
     tracing::info!(
         "Session {} started{}",
         session.session_id,
@@ -771,6 +774,24 @@ async fn main() -> Result<()> {
                             c.set_game_pid(Some(target.pid));
                         }
                         last_known_game = Some(target.clone());
+
+                        // D.7: augment settings with a game profile (profile fills
+                        // gaps; CLI/config overlay takes precedence).
+                        if let Some(profile) = profiles::find_profile(&target) {
+                            let profile_ov = profiles::to_overlay(&profile);
+                            if !profile_ov.is_null() {
+                                tracing::info!(
+                                    "Applied game profile: {} (source: profile)",
+                                    profile.game.name
+                                );
+                                let base =
+                                    base_settings_overlay.clone().unwrap_or(json!({}));
+                                // deep_merge(profile_ov, base): base wins on conflicts.
+                                session.settings_overlay =
+                                    Some(deep_merge(profile_ov, base));
+                            }
+                        }
+
                         let game_doc = build_game_detected_doc(
                             &session, &host_snapshot, &hostname, &target,
                         );
@@ -784,6 +805,8 @@ async fn main() -> Result<()> {
                             c.set_game_pid(None);
                         }
                         // Ship summary for the session that just ended.
+                        // Summary uses the profile-augmented overlay (session.settings_overlay
+                        // still holds the merged value from GameStarted).
                         if session_tick > 0 {
                             let duration_s = session_start.elapsed().as_secs();
                             let summary_doc = build_summary_doc(
@@ -806,6 +829,8 @@ async fn main() -> Result<()> {
                                 }
                             }
                         }
+                        // Restore CLI+config overlay so the next game starts clean.
+                        session.settings_overlay = base_settings_overlay.clone();
                         // Reset per-session state for next game.
                         acc = SessionAccumulators::new();
                         session_start = std::time::Instant::now();

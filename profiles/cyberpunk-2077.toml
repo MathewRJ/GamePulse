@@ -1,0 +1,15 @@
+[game]
+name = "Cyberpunk 2077"
+steam_app_id = 1091500
+aliases = ["cyberpunk", "cp2077", "cyberpunk2077"]
+
+[settings]
+# CD Projekt RED RPG (2020) — DirectX 12 / Vulkan.
+# Native DLSS 3.5 (Frame Generation + Ray Reconstruction), FSR 3, XeSS 1.2+.
+# Path tracing (Overdrive Mode) available on RTX 30/40 series via DLSS 3.5.
+preset = "ultra"
+upscaler_tech = "dlss"
+upscaler_preset = "quality"
+frame_gen_tech = "dlss3"
+features_active = ["path_tracing", "ray_tracing"]
+notes = "Native DLSS 3.5 / FSR 3 / XeSS 1.2; path tracing on RTX"
