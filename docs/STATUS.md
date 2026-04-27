@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-27 by claude-code (D.3 shipped: --verbose/-v, --log-level, --print-config flags; 8/8 tests green)
+Last updated: 2026-04-27 by claude-code (D.5 shipped: gamepulse diagnose subcommand; 8/8 tests green)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -65,7 +65,7 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 ## Active work package
 
-**Milestone D in progress.** D.3 complete; D.5 next (diagnose subcommand, unblocked by D.3 logging flags).
+**Milestone D in progress.** D.5 complete; D.6 next (GitHub Actions release workflow — on tag `v*` builds .deb, .rpm, Arch pkg.tar.zst; attaches to GitHub Release).
 
 **Dashboard suite complete (Home → Games → Environment → Hardware → Compare → Engine).** All 6 primary dashboards deployed and verified.
 
@@ -89,6 +89,8 @@ See `docs/ROADMAP.md` for milestone structure and work package definitions.
 ## Completed work
 
 ### Milestone D — Linux portable packaging (partial, 2026-04-27)
+
+- **D.5 — `gamepulse diagnose` subcommand**: Added `gamepulse-agent diagnose [--output <PATH>]` — a single-file bug-report snapshot covering kernel version, OS, CPU, RAM, GPU (vendor/model/VRAM/driver/Mesa/Vulkan), Elasticsearch reachability (endpoint + auth kind + ping status; api_key redacted), resolved config file path, and a trailing log of every probe step taken during the run. Converted flat `Cli` struct to a `Commands` subcommand enum; dispatch order is `--print-config` → `diagnose` → `--dry-run` → main loop (fully backward-compatible). New `src/diagnose.rs` module (~160 lines); no new crate deps. `cargo check`, `cargo clippy -- -D warnings`, `cargo test` (8/8) all green. Live smoke test: ES REACHABLE, full report emitted cleanly to stdout.
 
 - **D.3 — Unified CLI logging flags + --print-config**: Added `-v`/`--verbose` (sets debug level), `--log-level <LEVEL>` (error|warn|info|debug|trace; validated by clap, overrides --verbose and GAMEPULSE_LOG), and `--print-config` (prints resolved config as TOML with api_key/username/password redacted, exits 0). Precedence: --log-level > --verbose > GAMEPULSE_LOG > "info". `resolve_log_filter()` helper is a pure function — unit tested (`test_log_level_from_cli`, 8/8 total tests pass). `Config` and all sub-structs now derive `Clone + Serialize`; `redacted_for_display()` method masks sensitive fields. No new crate deps (uses existing `toml` + `tracing-subscriber`). `cargo check`, `cargo clippy -- -D warnings`, `cargo test` all green. Smoke tests: invalid `--log-level banana` gives clean clap error; `--print-config` on live config outputs valid TOML with `api_key = "<redacted>"`. Unblocks D.5 (diagnose subcommand needs --log-level to control verbosity).
 
