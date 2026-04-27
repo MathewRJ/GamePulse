@@ -13,6 +13,7 @@
 | Scheduler Analysis | `dashboards/scheduler-analysis-dashboard.json` | `89ca0908-5639-45f7-9a70-edadfe7d7124` |
 | Games | `dashboards/games-dashboard.json` | `5e898d7c-8de1-45b8-ae04-4cdc745f046d` |
 | Environment | `dashboards/environment-dashboard.json` | `3a55c257-0537-42a8-94a7-24dc773a703b` |
+| Hardware | `dashboards/hardware-dashboard.json` | `ed9d9b94-2003-429c-b294-9d3f2ef737e7` |
 | Baseline (UI export) | `dashboards/gamepulse-dashboard.ndjson` | — |
 
 ---

@@ -5,6 +5,40 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-27 (Hardware dashboard + agent-system pipeline)
+
+### What was built
+
+**`feat/agent-system` branch** — full multi-agent pipeline (`bin/gpx` orchestrator, 6 new agents under `.claude/agents/`, deterministic-only CI gates, opt-in pre-push hook). No API keys required — all LLM gates run locally via Pro / Plus / free CLIs. See `docs/AGENT-SYSTEM.md` for the design and routing matrix; `docs/AGENT-COLLABORATION.md` remains the Codex-handoff contract. 18 files, 2150 LOC, additive.
+
+**`dashboards/hardware-dashboard.json`** — Hardware dashboard, first dashboard built end-to-end through the new agent pipeline. Deployed against `metrics-gamepulse.*` wildcard (data view ID `18dd83e8-6f88-474f-b434-a4b6c14a04a2`). 12 panels: 3 filter controls (game / session / OS kernel), 4 hardware tiles (GPU model, VRAM MB, driver, RAM MB), 4 timeline charts (GPU util+VRAM dual-axis, GPU power+temp dual-axis, CPU util+clock dual-axis, VRAM used vs total area), session hardware table. Dashboard ID `ed9d9b94-2003-429c-b294-9d3f2ef737e7`. `verify-dashboard.sh`: PASS (all 4 checks).
+
+Kibana URL: `https://gamepulse-af41f9.kb.us-central1.gcp.elastic.cloud/app/dashboards#/view/ed9d9b94-2003-429c-b294-9d3f2ef737e7`
+
+### Step 0 field validation (last 30d)
+
+POPULATED: `gamepulse.hardware.gpu.{model, driver_version, vram_mb, vendor}` (AMD Radeon RX 9070 XT / 16 304 MB / driver 26.0.5–26.0.4 / amd), `gamepulse.hardware.ram.total_mb` (61 908), `host.os.{kernel, name}` (`7.0.1-1-cachyos-deckify` and `6.19.11-1-cachyos-deckify` / CachyOS Linux), all `gamepulse.cpu.*` (util 29.9 / 55.9 %, clock 5010 / 5442 MHz, temp 53.2 / 66.9 °C), all `gamepulse.gpu.*` (util 77.2 / 100 %, VRAM 6157 / 9056 MB used of 16 304 total, power 250 / 516 W, temp 40.6 / 46 °C), `gamepulse.power.tdp_current_w` (constant 330 W).
+
+ABSENT: `gamepulse.hardware.ram.{speed_mhz, type}`, `gamepulse.hardware.storage.game_drive.{type, model}` — `tile-ram-speed` dropped, three table columns dropped, tile widths rebalanced (gpu-model 16 + gpu-vram 8 + gpu-driver 8 + ram-total 16 = 48).
+
+### New rule discovered: bare keyword paths on the wildcard data view
+
+Verified against all existing dashboards: modern dashboards (Environment, Games) use bare field paths (no `.keyword`) against `18dd83e8-…`; legacy dashboards (system-health, session-deep-dive, storage-io, config-comparison) still carry `.keyword` from older mappings. `gamepulse.game.name`, `gamepulse.session.id`, `host.os.name`, `host.os.kernel` are native `keyword` — `.keyword` returns empty results in filter controls and `last_value` lookups. Documented as rule #6 in `.claude/agents/dashboard-designer.md` so the agent doesn't reintroduce the legacy pattern.
+
+### Workflow validation
+
+This was the first end-to-end run of the new agent pipeline. Findings:
+- The original `dashboard-designer.md` agent (from claude.ai's bundle) had a hard rule "never generate dashboard NDJSON programmatically" that contradicted GamePulse practice. Patched to recognise the two real authoring paths (skill-driven via `kibana-dashboards.js` is preferred; UI export is the fallback).
+- `gpx doctor` correctly surfaced login state for all three CLIs (Claude Pro, ChatGPT Plus, Google free).
+- Codex MCP `platform_core_execute_esql` tool was used for Step 0 — runs against Pro subscription auth, no API key.
+- `verify-dashboard.sh` is the API-level gate (export round-trip, panel inventory, Lens datasource, internal loader). The browser-UI gap (Lens render failure that the API doesn't catch) is covered by the Playwright framework at `/home/cachyos/coding/chatgpt-codex-test/` — flagged as task #17 to integrate.
+
+### Next dashboards
+
+Compare and Engine — to be designed by the next claude.ai planning session per the queued sequence.
+
+---
+
 ## Session: 2026-04-26 (Environment dashboard — dual-axis XY confirmed)
 
 ### What was built

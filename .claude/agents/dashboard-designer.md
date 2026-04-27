@@ -22,13 +22,24 @@ NDJSON validation step before commit.
 
 ## Hard, hard-learned rules (do not violate)
 
-1. **Never generate dashboard NDJSON programmatically.** Dashboards are
-   authored in the Kibana UI and exported. Programmatically generated NDJSON
-   fails on Elastic Serverless 9.x because of version-token mismatches.
+1. **Two valid authoring paths — and only two.**
+   - **Skill-driven (preferred for GamePulse):** post a flat declarative config
+     to the Kibana create-dashboard API via
+     `.agents/skills/kibana-dashboards/scripts/kibana-dashboards.js`. Kibana
+     emits valid NDJSON which is committed under `dashboards/`. This is the
+     path Games, Environment, Home, Scheduler, etc. were built with on the
+     9.5.0 schema and is the current default.
+   - **UI authoring + export:** for one-off dashboards or visualisations the
+     skill cannot express. Always strip instance tokens before commit
+     (see rule 2).
 
-2. **Strip instance-specific tokens before commit.** Run the strip script
-   on every export before it goes into `kibana/dashboard/`. The fields that
-   must go: `version`, `created_at`, `updated_at`, `created_by`, `updated_by`.
+   **Never** hand-write raw NDJSON into a file. That fails on Elastic
+   Serverless 9.x because of version-token mismatches.
+
+2. **Strip instance-specific tokens before commit.** For UI-exported NDJSON,
+   run the strip script on every export before it goes into `kibana/dashboard/`.
+   Fields that must go: `version`, `created_at`, `updated_at`, `created_by`,
+   `updated_by`. Skill-emitted NDJSON is already clean.
 
 3. **Lens only.** Integration package panels MUST use Lens. `kibana-vega`
    is available locally but not acceptable for elastic/integrations
@@ -45,6 +56,26 @@ NDJSON validation step before commit.
    - Table panel type identifier is `data_table`, not `table`
    - ES|QL inline dataset references are not supported — use
      `type: "dataView"`
+
+6. **Field paths against the wildcard data view (`metrics-gamepulse.*`,
+   id `18dd83e8-…`): use BARE keyword paths, not `.keyword` sub-fields.**
+   Verified against the live `gamepulse.*` mappings — fields like
+   `gamepulse.game.name`, `gamepulse.session.id`, `host.os.name`, and
+   `host.os.kernel` are native `keyword` (no sub-field). The current
+   working dashboards (Environment, Games, Hardware) use bare paths.
+   `.keyword` against these returns empty results in filter controls and
+   `last_value` lookups. Old dashboards (system-health, session-deep-dive,
+   storage-io, config-comparison) still carry `.keyword` paths from earlier
+   index mappings; treat those as the legacy pattern, not the model.
+
+   **Exception:** Against the timeline data view (`gp-dv-timeline`), all
+   fields are also bare keyword — same rule applies.
+
+   When in doubt, run a one-line ES|QL: `FROM <stream> | KEEP <field> | LIMIT 1`.
+   If the result column type is `keyword`, use the bare path. If
+   `verification_exception` complains about `text` vs `keyword` across
+   backing indices, you have a backing-index conflict — document it and
+   stop.
 
 ## Read these every time
 

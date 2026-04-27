@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-27 by claude-code (Codex pipeline wired: AGENT-COLLABORATION.md created, CLAUDE.md routing updated, broken worktree gitlink removed)
+Last updated: 2026-04-27 by claude-code (Hardware dashboard deployed, 12 panels, PASS verify; agent system + gpx CLI on feat/agent-system)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
