@@ -118,8 +118,8 @@ session docs predate B2.2. Fields will populate on the next real session.
 | Games | Done | `5e898d7c-8de1-45b8-ae04-4cdc745f046d` |
 | Environment | Done | `3a55c257-0537-42a8-94a7-24dc773a703b` |
 | Hardware | Done | `ed9d9b94-2003-429c-b294-9d3f2ef737e7` |
-| Compare | Next | — |
-| Engine | — | — |
+| Compare | Done | `828db140-b330-4d26-8045-40a7895bfc41` |
+| Engine | Next | — |
 
 ## Next decisions needed (for claude.ai planning)
 
@@ -140,6 +140,7 @@ session docs predate B2.2. Fields will populate on the next real session.
 - Games dashboard ID: `5e898d7c-8de1-45b8-ae04-4cdc745f046d` (gamepulse-game-timeline, 9 panels, PASS verify)
 - Environment dashboard ID: `3a55c257-0537-42a8-94a7-24dc773a703b` (metrics-gamepulse.* wildcard, 11 panels, PASS verify)
 - Hardware dashboard ID: `ed9d9b94-2003-429c-b294-9d3f2ef737e7` (metrics-gamepulse.* wildcard, 12 panels, PASS verify, AMD RX 9070 XT)
+- Compare dashboard ID: `828db140-b330-4d26-8045-40a7895bfc41` (gp-dv-timeline, 9 panels, PASS API verify; built via dashboard-designer agent — first agent-driven dashboard with no claude.ai prompt round-trip)
 - Field-path rule on wildcard view: BARE keyword paths only (no `.keyword`) — Environment + Games + Hardware all bare; documented as rule #6 in `.claude/agents/dashboard-designer.md`
 - Kibana 9.5.0 schema breaking changes: panel type "lens"→"vis", uid→id, dataset→data_source w/ data_view_reference, Elastic-Api-Version "1"→"2023-10-31"; documented in games-dashboard.json schema_notes
 - Dual-axis XY: `"axis": "y2"` for right axis (not "right"); confirmed working in Environment dashboard; documented as schema note #10 in docs/dashboards.md

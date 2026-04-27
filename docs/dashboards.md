@@ -14,6 +14,7 @@
 | Games | `dashboards/games-dashboard.json` | `5e898d7c-8de1-45b8-ae04-4cdc745f046d` |
 | Environment | `dashboards/environment-dashboard.json` | `3a55c257-0537-42a8-94a7-24dc773a703b` |
 | Hardware | `dashboards/hardware-dashboard.json` | `ed9d9b94-2003-429c-b294-9d3f2ef737e7` |
+| Compare | `dashboards/compare-dashboard.json` | `828db140-b330-4d26-8045-40a7895bfc41` |
 | Baseline (UI export) | `dashboards/gamepulse-dashboard.ndjson` | — |
 
 ---

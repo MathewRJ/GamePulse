@@ -5,6 +5,42 @@ the "Previous sessions" chain for context on why decisions were made.
 
 ---
 
+## Session: 2026-04-27 (Compare dashboard — first agent-driven build)
+
+### What was built
+
+**`dashboards/compare-dashboard.json`** — Compare dashboard, 9 panels, against `gp-dv-timeline` (gamepulse-game-timeline transform; per-session aggregates, time field `session_start`). Layout: 2 filter controls (ctrl-session multi-select, ctrl-game) + 4 single-metric KPI bars (avg_fps, low_1pct_fps, p99_frametime_ms, stutter_count) + chart-fps-compare (avg + low_1pct on shared y) + chart-thermals-power (GPU+CPU temp on y, GPU power on y2) + table-compare (16 metric columns, terms-by session_id, alphabetical asc). Compare concept: user picks 2 sessions in `ctrl-session`; all panels filter to those sessions and present them as side-by-side bars on a categorical x-axis. Dashboard ID `828db140-b330-4d26-8045-40a7895bfc41`. `verify-dashboard.sh`: PASS (all 4 API gates). UI gate skipped — user's `KIBANA_BROWSER_AUTH_STATE` (Apr 17 capture) is expired.
+
+Kibana URL: `https://gamepulse-af41f9.kb.us-central1.gcp.elastic.cloud/app/dashboards#/view/828db140-b330-4d26-8045-40a7895bfc41`
+
+### First end-to-end agent-driven build
+
+This is the first dashboard built without a claude.ai prompt round-trip:
+
+1. **Planner agent** (invoked via Agent tool, subagent_type=planner) — read STATUS.md and claude-chat-context.md, confirmed Compare is next per the queued sequence, produced AC and validation commands.
+2. **Dashboard-designer agent** (invoked via `claude --agent dashboard-designer -p "..."`) — produced the 749-line work package with Step 0 ES|QL queries, Step 1 panel JSON, Step 2 deploy invocation, Step 3 verify, Step 4 docs updates, plus design rationale (e.g. why `x=terms(session_id)` rather than `breakdown_by`, why no y2 on chart-fps-compare, why sparse keyword fields in table only).
+3. **Step 0** — three ES|QL probes confirmed all headline metrics populate across 14 sessions; sparse keyword fields (gpu_model / bottleneck_dominant / driver_version / kernel_version) populate ~20% — table-only, not bar charts.
+4. **Implementation** — composed `.gpx/compare-dashboard-input.json` from the agent's design with two small schema fixes (its `field: "session_id"` should be `fields: ["session_id"]` array; `rank_by.metric: 0` should be `metric_index: 0` per Games dashboard precedent).
+
+### Step 0 field validation (last 30d, 14 sessions, gp-dv-timeline)
+
+POPULATED EVERY ROW: `avg_fps` (avg 475 / max 1252), `low_1pct_fps` (avg 273), `p99_frametime_ms` (avg 9.4 / max 16.1), `stutter_count` (avg 2158 / max 12104), `peak_gpu_temp_c` (avg 40 / max 46), `peak_cpu_temp_c` (avg 60 / max 67), `peak_gpu_power_w` (avg 296 / max 516), `total_frames` (avg 48563 / max 342543), `duration_s` (avg 942), `session_id`, `game_name` (Starfield, Thronebreaker).
+
+SPARSE (~20% populated in last 30d): `gpu_model`, `bottleneck_dominant`, `driver_version`, `kernel_version` — included in `table-compare` (16 columns) but excluded from bar charts where empty bars would mislead users.
+
+### Workflow learnings
+
+- The `gpx dashboard new <description>` arg-parser swallows the whole quoted description into `name` and leaves `rest` empty. Bypassed by calling `claude --agent dashboard-designer -p "..."` directly. **Tracked as a follow-up fix in `bin/gpx.py` (`cmd_dashboard` should treat `name + rest` as the description for the `new` action).**
+- Piping the agent's output through `tail -200` truncated the design at line 200, losing Step 0 + the first 7 panels. Re-invoked with output redirected to a real file (`/tmp/compare-design.md`) — 749 lines captured. **Lesson: never pipe agent output through tail when the response can be long.**
+- Designer's design used `field: "X"` (singular) for x-axis terms, but the working precedent (Games, Environment, Hardware dashboards) uses `fields: ["X"]` (plural array). Caught at compose time, not at deploy time. **Worth adding to the dashboard-designer agent rules.**
+- Pre-push hook is opt-in (`git config core.hooksPath .githooks`); user has not enabled it.
+
+### Next dashboard
+
+Engine — last in the queued sequence (Home → Games → Environment → Hardware → Compare → **Engine**). Workflow same: planner agent → dashboard-designer agent → implement.
+
+---
+
 ## Session: 2026-04-27 (Hardware dashboard + agent-system pipeline)
 
 ### What was built
