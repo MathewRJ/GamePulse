@@ -1,7 +1,4 @@
 {
-  "_meta": {
-    "description": "B2.2 schema generalisation fixture: proves source + launcher accepted with no steam_app_id. This represents a Lutris-detected target; steam_app_id is intentionally absent."
-  },
   "events": [
     {
       "@timestamp": "2026-04-25T12:00:00.000Z",
