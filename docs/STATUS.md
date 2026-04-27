@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-27 by claude-code (Compare dashboard deployed via agent system, 9 panels, API gate PASS; dashboard-designer agent drove the design — no claude.ai courier)
+Last updated: 2026-04-27 by claude-code (Engine dashboard deployed, 15 panels, API + Playwright UI gate PASS; gemini-researcher + Explore + dashboard-designer agent pipeline drove design — no claude.ai courier)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -65,9 +65,13 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 ## Active work package
 
-**Environment dashboard complete.** `dashboards/environment-dashboard.json` (ID `3a55c257-0537-42a8-94a7-24dc773a703b`) deployed against metrics-gamepulse.* wildcard data view; verify-dashboard.sh PASS. 11 panels: 3 filter controls, 4 KPI tiles (CPU temp, GPU temp, GPU util, RAM MB), GPU dual-axis timeline, CPU dual-axis timeline, memory area chart, session environment table. Dual-axis: confirmed `"axis": "y2"` works; documented as schema note #10 in `docs/dashboards.md`. Memory field adjustment: spec used `used_pct`/`total_mb` which don't exist; actual field is `system_used_mb`. Next: Hardware dashboard.
+**Dashboard suite complete (Home → Games → Environment → Hardware → Compare → Engine).** All 6 primary dashboards deployed and verified.
 
-**Games dashboard complete.** `dashboards/games-dashboard.json` (ID `5e898d7c-8de1-45b8-ae04-4cdc745f046d`) deployed against gamepulse-game-timeline; verify-dashboard.sh PASS. Kibana 9.5.0 schema deviations documented in `docs/dashboards.md` schema_notes.
+**Engine dashboard complete.** `dashboards/engine-dashboard.json` (ID `7ec220c4-0c7a-4538-9b86-9a664b4a7d2f`) deployed against wildcard data view `18dd83e8-6f88-474f-b434-a4b6c14a04a2`; API gate + Playwright UI gate PASS. 15 panels: 2 filter controls (Session, Game), 12 eBPF/frame metric charts (GPU sched latency, GPU fence wait, GPU cmd submissions, CPU runqueue latency, futex contention, CPU migrations, block I/O latency, memory pressure, VFS latency, frame time/variance, stutter severity, FPS percentiles), 1 session summary table. Data powered by kernel-level eBPF probes — invisible to overlay tools like MangoHud or CapFrameX. Design driven by gemini-researcher (competitive landscape + panel spec) + Explore agent (field map) + dashboard-designer agent.
+
+**Environment dashboard complete.** `dashboards/environment-dashboard.json` (ID `3a55c257-0537-42a8-94a7-24dc773a703b`) deployed against metrics-gamepulse.* wildcard data view; verify-dashboard.sh PASS. 11 panels.
+
+**Games dashboard complete.** `dashboards/games-dashboard.json` (ID `5e898d7c-8de1-45b8-ae04-4cdc745f046d`) deployed against gamepulse-game-timeline; verify-dashboard.sh PASS.
 
 **Milestone C complete (all 8 collectors).** C.8 PresentMon frame timing landed; the agent now ships an end-to-end Windows collector set. Next: Milestone E (Windows MSI packaging) or live ES shipping verification on Windows hardware.
 
