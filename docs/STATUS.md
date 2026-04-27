@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-27 by claude-code (Engine dashboard deployed, 15 panels, API + Playwright UI gate PASS; gemini-researcher + Explore + dashboard-designer agent pipeline drove design — no claude.ai courier)
+Last updated: 2026-04-27 by claude-code (D.3 shipped: --verbose/-v, --log-level, --print-config flags; 8/8 tests green)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -65,6 +65,8 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 ## Active work package
 
+**Milestone D in progress.** D.3 complete; D.5 next (diagnose subcommand, unblocked by D.3 logging flags).
+
 **Dashboard suite complete (Home → Games → Environment → Hardware → Compare → Engine).** All 6 primary dashboards deployed and verified.
 
 **Engine dashboard complete.** `dashboards/engine-dashboard.json` (ID `7ec220c4-0c7a-4538-9b86-9a664b4a7d2f`) deployed against wildcard data view `18dd83e8-6f88-474f-b434-a4b6c14a04a2`; API gate + Playwright UI gate PASS. 15 panels: 2 filter controls (Session, Game), 12 eBPF/frame metric charts (GPU sched latency, GPU fence wait, GPU cmd submissions, CPU runqueue latency, futex contention, CPU migrations, block I/O latency, memory pressure, VFS latency, frame time/variance, stutter severity, FPS percentiles), 1 session summary table. Data powered by kernel-level eBPF probes — invisible to overlay tools like MangoHud or CapFrameX. Design driven by gemini-researcher (competitive landscape + panel spec) + Explore agent (field map) + dashboard-designer agent.
@@ -85,6 +87,10 @@ Users who install PresentMon to a non-standard path should set `GAMEPULSE_PRESEN
 See `docs/ROADMAP.md` for milestone structure and work package definitions.
 
 ## Completed work
+
+### Milestone D — Linux portable packaging (partial, 2026-04-27)
+
+- **D.3 — Unified CLI logging flags + --print-config**: Added `-v`/`--verbose` (sets debug level), `--log-level <LEVEL>` (error|warn|info|debug|trace; validated by clap, overrides --verbose and GAMEPULSE_LOG), and `--print-config` (prints resolved config as TOML with api_key/username/password redacted, exits 0). Precedence: --log-level > --verbose > GAMEPULSE_LOG > "info". `resolve_log_filter()` helper is a pure function — unit tested (`test_log_level_from_cli`, 8/8 total tests pass). `Config` and all sub-structs now derive `Clone + Serialize`; `redacted_for_display()` method masks sensitive fields. No new crate deps (uses existing `toml` + `tracing-subscriber`). `cargo check`, `cargo clippy -- -D warnings`, `cargo test` all green. Smoke tests: invalid `--log-level banana` gives clean clap error; `--print-config` on live config outputs valid TOML with `api_key = "<redacted>"`. Unblocks D.5 (diagnose subcommand needs --log-level to control verbosity).
 
 ### Milestone C — Windows collectors (complete, 2026-04-26 session 4 — C.8 PresentMon)
 
