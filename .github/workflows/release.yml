@@ -250,7 +250,11 @@ jobs:
         uses: cargo-bins/cargo-binstall@main
 
       - name: Install cargo-wix
-        run: cargo binstall cargo-wix --no-confirm --locked
+        # --force because Swatinem/rust-cache restores ~/.cargo/.crates2.json
+        # but does NOT cache ~/.cargo/bin/. Without --force, binstall sees
+        # the metadata, declares cargo-wix "already installed", and skips —
+        # but the actual cargo-wix.exe binary is missing from the runner.
+        run: cargo binstall cargo-wix --no-confirm --locked --force
 
       - name: Build .msi
         shell: pwsh
