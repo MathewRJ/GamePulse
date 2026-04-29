@@ -262,8 +262,8 @@ Commit: 561dc78
 
 - **Dashboard integration-compliance gap (Milestone G blocker)**: All 6 new-suite dashboards (`home`, `games`, `environment`, `hardware`, `compare`, `engine`) have zero `data_stream.dataset` filters. Each panel needs a `data_stream.dataset` filter in its `embeddableConfig` for elastic/integrations submission. The old `gamepulse-dashboard.ndjson` that previously held this note has been archived to `dashboards/archive/`. Fix all 6 new-suite dashboards in Kibana UI, re-export as NDJSON, then run `scripts/verify-dashboard.sh --require-dataset-filter` before Milestone G.
 - **Dev install: systemd unit ExecStart path and `--config` path require drop-in override** when installing to `/usr/local/bin`. Unit ships with `ExecStart=/usr/bin/gamepulse-agent` and `--config /etc/gamepulse/gamepulse.toml`; user credentials land at `~/.config/gamepulse/gamepulse.toml`. Consider updating the unit to try `/usr/local/bin` first, or document the override in `docs/install.md`. PKGBUILD installs to `/usr/bin/` and is unaffected.
-- `bottleneck_dominant` null in session summary docs vs populated in `gamepulse-game-timeline` — ingest pipeline enrichment issue on 2026-04-12 backing index
-- HOME env fallback via `getpwuid` in `game_name_from_appid()` (src/session.rs)
+- `bottleneck_dominant` null in April-12 session summaries — historical: those sessions predate the accumulator code; new sessions populate it correctly when both GPU and CPU collectors are active
+- HOME env fallback fixed: `home_dir()` helper in session.rs now checks HOME → SUDO_USER → None instead of falling back to `/root`; `game_name_from_appid()` and `counter_file_path()` both updated
+- Startup ES credential validation: already implemented (`shipper::ping` called at startup in main.rs)
 - No-game system metrics dashboard panel (system health without game filter)
-- Startup ES credential validation (ping at startup)
 - `docs/BETA-INSTALL.md` merged into `docs/install.md` and deleted (D.1/D.2 smoke tests still pending)

@@ -410,6 +410,34 @@ fn auto_label_game_n(slug: &str, n: u32) -> String {
     format!("{}-{}-{}", slug, date, n)
 }
 
+// ── Home directory resolution ──────────────────────────────────────────────────
+
+/// Resolve the invoking user's home directory without assuming $HOME is set.
+///
+/// Priority:
+///   1. `$HOME` (set by PAM for interactive sessions and systemd user services)
+///   2. `$SUDO_USER` → `/home/<username>` (when the agent is run via sudo)
+///   3. None — callers must handle the missing-home case gracefully
+///
+/// Does not use getpwuid to avoid a libc dependency; the env-var chain covers
+/// all practical deployment scenarios (user session, sudo, systemd user unit).
+fn home_dir() -> Option<PathBuf> {
+    if let Ok(home) = std::env::var("HOME") {
+        if !home.is_empty() {
+            return Some(PathBuf::from(home));
+        }
+    }
+    if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        if !sudo_user.is_empty() {
+            let p = PathBuf::from("/home").join(&sudo_user);
+            if p.exists() {
+                return Some(p);
+            }
+        }
+    }
+    None
+}
+
 // ── Session counter (B.8) ──────────────────────────────────────────────────────
 
 /// Path to the per-game-per-day session counter file.
@@ -419,8 +447,9 @@ fn counter_file_path() -> PathBuf {
         let state_dir = std::env::var("XDG_STATE_HOME")
             .map(PathBuf::from)
             .unwrap_or_else(|_| {
-                let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
-                PathBuf::from(home).join(".local/state")
+                home_dir()
+                    .map(|h| h.join(".local/state"))
+                    .unwrap_or_else(|| PathBuf::from("/var/lib/gamepulse"))
             });
         state_dir.join("gamepulse/session-counters.json")
     }
@@ -838,15 +867,12 @@ fn read_environ(pid: u32) -> Option<HashMap<String, String>> {
 /// Search Steam library paths for appmanifest_{app_id}.acf and extract the
 /// "name" field. Matches Python _game_name_from_appid().
 fn game_name_from_appid(app_id: u32) -> Option<String> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+    let home = home_dir()?;
 
     let mut roots: Vec<PathBuf> = vec![
-        PathBuf::from(format!("{}/.steam/steam/steamapps", home)),
-        PathBuf::from(format!("{}/.local/share/Steam/steamapps", home)),
-        PathBuf::from(format!(
-            "{}/.var/app/com.valvesoftware.Steam/data/Steam/steamapps",
-            home
-        )),
+        home.join(".steam/steam/steamapps"),
+        home.join(".local/share/Steam/steamapps"),
+        home.join(".var/app/com.valvesoftware.Steam/data/Steam/steamapps"),
     ];
 
     // Also scan libraryfolders.vdf for extra library paths.
