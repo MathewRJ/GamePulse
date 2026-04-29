@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-29 by claude-code (v0.1.0 GitHub Release published — .deb 2.4MB / .rpm 2.5MB / .pkg.tar.zst 2.7MB + debug; release notes + user guide at .github/RELEASE_NOTES.md)
+Last updated: 2026-04-29 by claude-code (release workflow: added workflow_dispatch trigger + Windows zip job; next = Milestone E Windows MSI on Windows machine)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -66,6 +66,8 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 ## Active work package
 
 **v0.1.0 released 2026-04-29.** GitHub Release at https://github.com/MathewRJ/GamePulse/releases/tag/v0.1.0 — .deb (Debian/Ubuntu), .rpm (Fedora/RHEL), .pkg.tar.zst (Arch/CachyOS/Manjaro) all verified. Release notes + user guide (install, quick-start, config, profiles, troubleshooting, FAQ) at `.github/RELEASE_NOTES.md`.
+
+**Release workflow updated 2026-04-29.** Added `workflow_dispatch` with `version` input (no git tag needed — trigger from GitHub UI). Added Windows zip job (`windows-latest`, `gamepulse-agent-{v}-windows-x86_64.zip`). Arch PKGVER now reads `needs.setup.outputs.version` (works for both trigger modes). Windows job is a placeholder — upgrade to MSI (cargo-wix) in Milestone E.
 
 **Milestone D fully complete (D.1/D.2 + Phase 7.2 + Phase 8).** All pre-Milestone-E gates passed on 2026-04-29. Next: Milestone E (Windows MSI packaging).
 
