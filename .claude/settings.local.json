@@ -100,7 +100,12 @@
       "Bash(powershell *)",
       "Bash(echo \"---exit---$?\")",
       "Bash(gh run *)",
-      "Bash(grep -v \"^$\")"
+      "Bash(grep -v \"^$\")",
+      "Bash(./target/release/gamepulse-agent.exe --dry-run)",
+      "Bash(./target/release/gamepulse-agent.exe)",
+      "Bash(tee /tmp/gamepulse-live.log)",
+      "Bash(./target/release/gamepulse-agent.exe dllscan *)",
+      "Bash(./target/release/gamepulse-agent.exe --help)"
     ]
   },
   "enableAllProjectMcpServers": true,

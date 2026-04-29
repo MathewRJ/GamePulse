@@ -72,6 +72,8 @@ Established `docs/STATUS.md` as single source of truth; stripped planning docs; 
 
 **Architectural note:** Inspired by behavioural-classification patterns from EDR systems (e.g. Elastic Defend) — specifically the insight that "is this process X-type" is better answered by observing kernel-level runtime behaviour than by matching allowlists. Implementation is a lightweight in-agent classifier reusing GamePulse's existing eBPF infrastructure (gpu_sched, gpu_submit, page fault probes). **No third-party EDR dependency, no Elastic Defend integration** — the pattern is borrowed, the product is not. Licensing, performance overhead, installation friction, and data-model pollution all rule out literal reuse of Defend.
 
+**B3.0 — small precursor (committed)**: cfg-gate the existing Linux `/proc/*/environ` Steam scanner in `src/session.rs` so it doesn't run on Windows. Currently the Windows agent logs `No game detected — scanning /proc every 5 s` indefinitely (harmless but noisy). This is a prerequisite to any Windows game-detection work and is small enough to ship independently of the larger B3 design effort.
+
 Sketch of likely work packages (not committed):
 - Per-PID signal aggregation on top of existing eBPF probes (rolling-window GPU submission rate)
 - Graphics API detection via library load events (libvulkan, libGL, d3d11)
@@ -105,6 +107,7 @@ All 8 work packages (C.1–C.8) shipped. Per-collector parity gaps and upgrade p
 | C.9 | Game detection | Steam registry `HKCU\Software\Valve\Steam\Apps\<appid>\Running` + process scan |
 | C.10 | Session lifecycle | Port `src/session.rs` paths — `%APPDATA%\GamePulse\session.json` |
 | C.11 | ETW image-load subscription for Tier 2 settings auto-detect |
+| C.12 | Port `src/host.rs` hardware enrichment to Windows — `cpu_info()`, `gpu_info()`, `ram_info()` currently read `/proc` and `/sys` and produce empty `gamepulse.hardware.*` blocks on Windows session docs. Re-use the data we already collect via PDH (cpu model/cores), DXGI (gpu vendor/model/VRAM), and `GlobalMemoryStatusEx` (ram). Surfaced 2026-04-29 by live ES smoke test from GAMINGPC2. |
 
 ---
 
@@ -122,6 +125,7 @@ All 8 work packages (C.1–C.8) shipped. Per-collector parity gaps and upgrade p
 | D.6 | GitHub Actions release workflow — on tag `v*` builds .deb, .rpm, Arch pkg.tar.zst; attaches to GitHub Release |
 | D.7 | Game profile loader + three starter profiles (Starfield, Cyberpunk 2077, Baldur's Gate 3) for Tier 3 settings capture |
 | D.8 | Linux DLL scan via `/proc/<pid>/maps` for Tier 2 settings auto-detect |
+| D.9 | Extend `dllscan` + `gamepulse.settings.graphics_api` schema for native (non-DXVK) D3D11 / D3D12 detection on Windows. Today the chain only detects D3D12-via-VKD3D and D3D11-via-DXVK; native Windows games returning only `d3d11.dll`/`d3d12.dll` produce `graphics_api: None`. Add `dx11` and `dx12` enum values (no `_via_*` suffix) and matcher fragments. Extension of D.8 (Linux) and the post-Milestone-E Windows EnumProcessModules backend. |
 
 ---
 
@@ -145,6 +149,7 @@ All 8 work packages (C.1–C.8) shipped. Per-collector parity gaps and upgrade p
 
 | WP | Target |
 |---|---|
+| F.0 | Pre-flight: redeploy `gpu.temp_source` field mapping to live ES. The field has been in `data_stream/gpu/fields/fields.yml` since C.7 but the pipeline was never re-pushed; queries for it 404 the column. Without this, F.6 Windows parity can't validate `temp_source = "wmi_acpi"`. |
 | F.1 | Define `docs/QA-MATRIX.md` — the parity test oracle |
 | F.2 | Ubuntu 24.04 parity run |
 | F.3 | Fedora 40 parity run |
