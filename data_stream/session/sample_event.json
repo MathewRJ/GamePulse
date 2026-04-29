@@ -19,11 +19,16 @@
     "session": {
       "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
       "agent_version": "0.1.0",
-      "opt_in_public": true
+      "opt_in_public": true,
+      "label": "cyberpunk-2077-20260404-1",
+      "label_source": "auto",
+      "sequence_number": 1
     },
     "game": {
       "name": "Cyberpunk 2077",
       "steam_app_id": 1091500,
+      "source": "steam",
+      "launcher": "Steam",
       "version": "2.13",
       "launch_args": "PROTON_ENABLE_NVAPI=1 %command%",
       "graphics_api": "vulkan",
@@ -101,6 +106,22 @@
           "current_vrr_enabled": false
         }
       ]
+    },
+    "settings": {
+      "preset": "ultra",
+      "upscaler": {
+        "tech": "fsr",
+        "preset": "quality"
+      },
+      "frame_gen": {
+        "tech": "none"
+      },
+      "features_active": ["ray_tracing"],
+      "render": {
+        "vsync": "off"
+      },
+      "source": "manual",
+      "confidence": "high"
     },
     "summary": {
       "ended": false

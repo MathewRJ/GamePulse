@@ -20,7 +20,9 @@
       "upscaler": {
         "type": "fsr",
         "quality": "quality"
-      }
+      },
+      "source": "steam",
+      "launcher": "Steam"
     },
     "fps": {
       "current": 87,

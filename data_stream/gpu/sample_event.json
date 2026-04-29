@@ -29,7 +29,8 @@
       "fan_pct": 68.0,
       "fan_speed_rpm": 2340,
       "voltage": 1.15,
-      "thermal_throttle_warning": false
+      "thermal_throttle_warning": false,
+      "temp_source": "hwmon"
     }
   }
 }

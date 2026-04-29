@@ -22,7 +22,9 @@
     },
     "game": {
       "name": "Cyberpunk 2077",
-      "steam_app_id": 1091500
+      "steam_app_id": 1091500,
+      "source": "steam",
+      "launcher": "Steam"
     },
     "event": {
       "kind": "shader_compile",
