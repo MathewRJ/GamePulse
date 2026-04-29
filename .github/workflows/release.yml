@@ -202,7 +202,12 @@ jobs:
       - name: Build Arch package
         run: |
           WORKSPACE="$(pwd)"
+          # Arch makepkg disallows hyphens / colons / slashes in pkgver, but
+          # semver pre-release tags (e.g. 0.2.0-rc1) and our own dispatch test
+          # versions (e.g. 0.1.1-msitest1) contain hyphens. Translate hyphens
+          # to underscores — Arch convention for pre-release versions.
           PKGVER="${{ needs.setup.outputs.version }}"
+          PKGVER="${PKGVER//-/_}"
           su builder -c "
             cd '$WORKSPACE/.github/packaging'
             sed -i 's/^pkgver=.*/pkgver=$PKGVER/' PKGBUILD
