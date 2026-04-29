@@ -64,46 +64,86 @@ fn read_int(path: &str) -> Option<i64> {
 
 /// Return the machine hostname.
 pub fn hostname() -> String {
-    read_str("/proc/sys/kernel/hostname").unwrap_or_else(|| "unknown".to_string())
+    #[cfg(unix)]
+    {
+        read_str("/proc/sys/kernel/hostname").unwrap_or_else(|| "unknown".to_string())
+    }
+    #[cfg(windows)]
+    {
+        std::env::var("COMPUTERNAME").unwrap_or_else(|_| "unknown".to_string())
+    }
 }
 
 // ── OS release ────────────────────────────────────────────────────────────────
 
 fn os_info() -> Map<String, Value> {
-    let mut release: std::collections::HashMap<String, String> = std::collections::HashMap::new();
-    if let Ok(content) = std::fs::read_to_string("/etc/os-release") {
-        for line in content.lines() {
-            if let Some(pos) = line.find('=') {
-                let k = line[..pos].trim().to_string();
-                let v = line[pos + 1..].trim().trim_matches('"').to_string();
-                release.insert(k, v);
+    let mut m = Map::new();
+    // ECS host.os.type expects one of: linux | macos | windows | ios | android | unix.
+    // std::env::consts::OS returns the matching lowercase token at compile time.
+    m.insert(
+        "type".to_string(),
+        Value::String(std::env::consts::OS.to_string()),
+    );
+
+    #[cfg(target_os = "linux")]
+    {
+        let mut release: std::collections::HashMap<String, String> =
+            std::collections::HashMap::new();
+        if let Ok(content) = std::fs::read_to_string("/etc/os-release") {
+            for line in content.lines() {
+                if let Some(pos) = line.find('=') {
+                    let k = line[..pos].trim().to_string();
+                    let v = line[pos + 1..].trim().trim_matches('"').to_string();
+                    release.insert(k, v);
+                }
+            }
+        }
+
+        // kernel version from uname
+        if let Ok(uname) = std::fs::read_to_string("/proc/sys/kernel/osrelease") {
+            m.insert(
+                "kernel".to_string(),
+                Value::String(uname.trim().to_string()),
+            );
+        }
+
+        if let Some(name) = release.get("NAME").or_else(|| release.get("PRETTY_NAME")) {
+            m.insert("name".to_string(), Value::String(name.clone()));
+        }
+        if let Some(version) = release
+            .get("VERSION_ID")
+            .or_else(|| release.get("BUILD_ID"))
+        {
+            m.insert("version".to_string(), Value::String(version.clone()));
+        }
+        if let Some(id) = release.get("ID") {
+            m.insert("platform".to_string(), Value::String(id.clone()));
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // `cmd /c ver` prints "Microsoft Windows [Version 10.0.26100.4061]".
+        // No deps; falls back gracefully if cmd or the parse fails.
+        m.insert(
+            "name".to_string(),
+            Value::String("Microsoft Windows".to_string()),
+        );
+        m.insert("platform".to_string(), Value::String("windows".to_string()));
+        if let Some(out) = run_cmd("cmd", &["/c", "ver"], 1000) {
+            if let Some(open) = out.find('[') {
+                if let Some(close) = out[open..].find(']') {
+                    // out[open+1..open+close] = "Version 10.0.26100.4061"
+                    let inside = &out[open + 1..open + close];
+                    if let Some(rest) = inside.strip_prefix("Version ") {
+                        m.insert("kernel".to_string(), Value::String(rest.to_string()));
+                        m.insert("version".to_string(), Value::String(rest.to_string()));
+                    }
+                }
             }
         }
     }
 
-    let mut m = Map::new();
-    m.insert("type".to_string(), Value::String("linux".to_string()));
-
-    // kernel version from uname
-    if let Ok(uname) = std::fs::read_to_string("/proc/sys/kernel/osrelease") {
-        m.insert(
-            "kernel".to_string(),
-            Value::String(uname.trim().to_string()),
-        );
-    }
-
-    if let Some(name) = release.get("NAME").or_else(|| release.get("PRETTY_NAME")) {
-        m.insert("name".to_string(), Value::String(name.clone()));
-    }
-    if let Some(version) = release
-        .get("VERSION_ID")
-        .or_else(|| release.get("BUILD_ID"))
-    {
-        m.insert("version".to_string(), Value::String(version.clone()));
-    }
-    if let Some(id) = release.get("ID") {
-        m.insert("platform".to_string(), Value::String(id.clone()));
-    }
     m
 }
 
