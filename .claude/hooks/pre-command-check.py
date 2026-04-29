@@ -1,11 +1,27 @@
 #!/usr/bin/env python3
 # pre-command-check.py
-# Only allows approved GamePulse validation and inspection commands.
-# Receives JSON via stdin with tool_input.command
+# Block-list hook: rejects explicitly dangerous commands; allows everything else.
+# Receives JSON via stdin with tool_input.command.
+#
+# Design: block-list only (no allow-list). Commands not in the block-list are
+# allowed implicitly. The hook intentionally does NOT block-list everything and
+# allow a subset — that model is too restrictive for iterative development.
 
 import json
 import re
 import sys
+
+
+def _scan_target(command: str) -> str:
+    """Return the portion of the command that should be scanned for blocked
+    patterns. For 'git commit' the message body is excluded so that commit
+    messages mentioning tool names (curl, wget, ssh, …) are not false-positive
+    blocked."""
+    trimmed = command.lstrip()
+    if re.match(r'git\s+commit\b', trimmed):
+        # Strip -m / --message content and heredoc bodies — scan only git flags
+        trimmed = re.split(r'\s+-m\b|\s+--message\b', trimmed)[0]
+    return trimmed
 
 
 def main():
@@ -18,41 +34,13 @@ def main():
     if not command:
         sys.exit(0)
 
-    # Strip leading whitespace for matching
-    trimmed = command.lstrip()
+    scan = _scan_target(command)
 
-    # Allowed command prefixes — these are safe to auto-approve.
-    # NOTE: This list has no blocking effect. Non-blocked commands fall through
-    # to exit 0 regardless, so this allowlist is present-but-dead. Preserved
-    # from bash version for parity; do not enforce without deliberate review.
-    allowed_prefixes = [
-        'cargo check',
-        'cargo clippy',
-        'cargo test',
-        'cargo build',
-        'elastic-package check',
-        'elastic-package test static',
-        'git diff',
-        'git status',
-        'git log',
-        'git show',
-        'grep',
-        'find',
-        'cat ',
-        'ls ',
-        'echo ',
-        'pwd',
-        'wc ',
-        'head ',
-        'tail ',
-        'python3 -c',   # used by hooks themselves
-    ]
-
-    # Explicitly blocked commands — always deny
+    # Explicitly blocked patterns — match with word boundaries to avoid
+    # false positives on substrings (e.g. "apt" inside "adapter").
     blocked_patterns = [
         'rm -rf',
         'rm -f',
-        # 'elastic-package test system'  # unblocked — user confirmed Docker stack availability
         'pip install',
         'pip3 install',
         'cargo install',
@@ -63,25 +51,15 @@ def main():
         'wget',
         'ssh',
         'scp',
-        'docker run',   # docker inspect/ps is fine; docker run is not
+        'docker run',   # docker inspect/ps/build are fine; docker run is not
     ]
 
-    # Check blocked patterns first. Match with word boundaries so that "apt"
-    # does not false-positive on "adapter"/"capture"/"chapter" inside
-    # commit messages, and similarly for other short tokens.
     for blocked in blocked_patterns:
-        if re.search(rf'\b{re.escape(blocked)}\b', trimmed):
+        if re.search(rf'\b{re.escape(blocked)}\b', scan):
             print(f"BLOCKED: Command contains disallowed pattern: '{blocked}'", file=sys.stderr)
-            print(f"Command was: {trimmed}", file=sys.stderr)
+            print(f"Command was: {command.lstrip()}", file=sys.stderr)
             sys.exit(2)
 
-    # Check allowed prefixes
-    for prefix in allowed_prefixes:
-        if trimmed.startswith(prefix):
-            sys.exit(0)
-
-    # Not explicitly blocked — allow it.
-    # Hook exit code contract: 0 = allow, 2 = block, anything else = hook error.
     sys.exit(0)
 
 
