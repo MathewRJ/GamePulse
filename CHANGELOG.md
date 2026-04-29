@@ -4,6 +4,57 @@ All notable changes to GamePulse will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Milestone D — Linux portable packaging (2026-04-27)
+
+- `/proc/<pid>/maps` DLL scan for Tier 2 settings auto-detection: detects graphics API
+  (VKD3D > DXVK D3D9/D3D11 > Vulkan > OpenGL), upscaler (DLSS/XeSS/FSR), and frame
+  generation technology from loaded shared libraries (`src/dllscan.rs`)
+- Game profile loader and three starter profiles — Starfield, Cyberpunk 2077, Baldur's
+  Gate 3 — for Tier 3 settings capture (`src/profiles.rs`, `profiles/`)
+- GitHub Actions release workflow: `.deb` (cargo-deb), `.rpm` (cargo-generate-rpm), and
+  Arch `.pkg.tar.zst` (makepkg) attached to GitHub Releases on `v*` tag pushes
+- `gamepulse-agent diagnose` subcommand: single-file bug-report dump covering kernel,
+  GPU, Elasticsearch reachability, and resolved config path
+- Unified logging flags: `--verbose` / `--log-level LEVEL` / `--print-config` (redacted)
+
+### Milestone C — Windows collectors (2026-04-26)
+
+- Full 8-stream Windows support: CPU (PDH), memory (Win32), storage (PDH), network (PDH),
+  power (GetSystemPowerStatus), audio (WASAPI), GPU (DXGI VRAM + PDH util + WMI temperature),
+  frame timing (PresentMon subprocess with auto-discovery)
+- PDH infrastructure (`src/collectors/windows/pdh.rs`) wrapping Windows Performance Counters
+- `gamepulse.gpu.temp_source` field distinguishing `hwmon` (Linux) from `wmi_acpi` (Windows)
+- Platform parity gaps documented: `cpu.game_utilisation_pct`, `gpu.power_w`, `audio.xruns`,
+  `storage.game_io` require ETW/vendor SDK and are deferred to later milestones
+
+### Milestone B2 — Launcher-agnostic game detection (2026-04-25)
+
+- Multi-launcher game detection: Lutris (YAML game configs + WINEPREFIX scan), Heroic
+  (Epic and GOG via installed.json), Bottles (bottle.yml + WINEPREFIX), plus manual
+  `--target-pid` / `--target-name` override flags
+- `gamepulse.game.source` and `gamepulse.game.launcher` fields on all session and metric docs
+- Proton/Wine env var enrichment (`PROTON_VERSION`, `DXVK_CONFIG_FILE`) wired to all launchers
+- `steam_app_id` made conditional (present only when `source == steam`)
+
+### Milestone B — Cross-platform refactor (2026-04-24)
+
+- Unified `Collector` trait (`Send + 'static`) with platform-gated `linux::*` / `windows::*`
+  implementations; `build_collectors()` dispatch replaces per-platform main.rs branches
+- Linux collectors relocated to `src/collectors/linux/`; Windows stubs added in
+  `src/collectors/windows/` (replaced with real implementations in Milestone C)
+- GitHub Actions CI matrix: `cargo check` + `cargo clippy -- -D warnings` on
+  `ubuntu-latest` and `windows-latest` for every push to `main` and every PR
+- eBPF feature flag (`--features ebpf`) with compile-time Linux guard
+- Session label counter: format changed from `<slug>-YYYYMMDD-HHMMSS` to `<slug>-YYYYMMDD-N`;
+  counter persisted atomically to `$XDG_STATE_HOME/gamepulse/session-counters.json`
+- Tier 1 settings capture: `[session.settings]` TOML section and CLI flags `--preset`,
+  `--upscaler`, `--frame-gen`, `--features`, `--resolution`, `--vsync`, `--notes`
+- Signal handling ported to cross-platform (`tokio::signal::ctrl_c` on Windows)
+
+---
+
 ## [0.1.0] — 2026-03-30
 
 ### Added

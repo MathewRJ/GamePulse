@@ -5,159 +5,139 @@ This guide walks you through installing GamePulse, connecting it to Elasticsearc
 ## Prerequisites
 
 - A Linux gaming PC (Steam Deck, desktop, or laptop)
-- An Elasticsearch instance (Elastic Cloud free tier works great for testing)
-- Games installed via Steam (other launchers coming soon)
+- An Elasticsearch instance — [Elastic Cloud](https://cloud.elastic.co/) free tier works for personal use
+- Games installed via Steam, Lutris, Heroic (Epic/GOG), or Bottles — or specify any process manually
 
 ## Step 1: Install
 
-### Option A: One-line installer (recommended)
+### Arch Linux / CachyOS / Steam Deck (AUR)
 
 ```bash
-curl -sSL https://install.gamepulse.dev | bash
+yay -S gamepulse
 ```
 
-This auto-detects your hardware, prompts for Elasticsearch credentials, and sets up a systemd service.
-
-### Option B: Build from source
+### Debian / Ubuntu
 
 ```bash
-# Install Rust
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source ~/.cargo/env
+sudo apt install ./gamepulse_*.deb   # download from GitHub releases
+```
 
-# Build
-git clone https://github.com/gamepulse/agent.git
-cd agent
+### Fedora / RHEL
+
+```bash
+sudo dnf install ./gamepulse-*.rpm   # download from GitHub releases
+```
+
+### Build from source
+
+```bash
+git clone https://github.com/MathewRJ/GamePulse.git
+cd GamePulse/src
 cargo build --release
+sudo cp target/release/gamepulse-agent /usr/local/bin/gamepulse-agent
+sudo install -Dm755 ../packaging/gamepulse-launcher.sh /usr/local/bin/gamepulse
 ```
 
-### Option C: Package manager
+## Step 2: Configure
+
+### Option A — Interactive setup (recommended)
 
 ```bash
-# Arch Linux / Steam Deck
-yay -S gamepulse-agent
-
-# Debian / Ubuntu
-sudo dpkg -i gamepulse-agent_0.1.0_amd64.deb
+gamepulse setup
 ```
 
-## Step 2: Set up Elasticsearch
+Prompts for your Elasticsearch endpoint and API key, tests connectivity, and writes
+`~/.config/gamepulse/gamepulse.toml` (mode 600).
 
-If you don't have an Elasticsearch instance, the easiest option is [Elastic Cloud](https://cloud.elastic.co/) — the free tier includes enough storage for personal use.
-
-Once you have an instance, you need two things:
-1. The **endpoint URL** (e.g. `https://my-deployment.es.us-central1.gcp.cloud.es.io:9243`)
-2. An **API key** (create one in Kibana → Stack Management → API Keys)
-
-### Deploy index templates and dashboards
+### Option B — Edit the config file directly
 
 ```bash
-./scripts/setup-elasticsearch.sh YOUR_ES_ENDPOINT YOUR_API_KEY
-```
-
-This creates ILM policies, index templates, ingest pipelines, and analytics transforms.
-
-## Step 3: Configure
-
-Edit the config file:
-
-```bash
-# System install
-sudo vim /etc/gamepulse/gamepulse.toml
-
-# User install (Steam Deck)
-vim ~/.config/gamepulse/gamepulse.toml
-
-# Source build
-cp config/gamepulse.toml ~/.config/gamepulse/gamepulse.toml
-vim ~/.config/gamepulse/gamepulse.toml
-```
-
-At minimum, set the Elasticsearch endpoint and API key:
-
-```toml
+mkdir -p ~/.config/gamepulse
+cat > ~/.config/gamepulse/gamepulse.toml << 'EOF'
 [elasticsearch]
-endpoint = "https://my-deployment.es.us-central1.gcp.cloud.es.io:9243"
-api_key = "your-api-key-here"
+endpoint = "https://your-deployment.es.us-central1.gcp.elastic.cloud"
+api_key = "your-api-key"
+EOF
 ```
 
-See [Configuration Reference](configuration.md) for all options.
+The API key needs `monitor` on the cluster and `auto_configure`/`create_doc`/`create_index`
+on `metrics-gamepulse.*` and `logs-gamepulse.*`. See [install.md](install.md) for details.
 
-## Step 4: Test
-
-Run a quick test without Elasticsearch:
+## Step 3: Verify
 
 ```bash
-gamepulse-agent --debug --once
+gamepulse-agent diagnose
 ```
 
-You should see a JSON dump of system metrics (CPU, GPU, memory, storage). If a game is running, you'll also see game detection info.
+Prints kernel version, GPU info, Elasticsearch reachability, and the resolved config path.
+Pass `--output report.txt` to save a bug report.
 
-For continuous monitoring:
+## Step 4: Start collecting
+
+### Steam launch option (per-game)
+
+In Steam → right-click game → Properties → Launch Options:
+
+```
+gamepulse run %command%
+```
+
+### Always-on service
 
 ```bash
-gamepulse-agent --debug
-```
-
-Output looks like:
-
-```
-CPU:45% GPU:92%/72°C MEM:12400/16384MB FPS:60 (1%:52 0.1%:44) ft:16.7ms IO:R85/W2MB/s PROC:RSS8200MB/24thr [Starfield]
-```
-
-## Step 5: Start the service
-
-```bash
-# System-wide (with eBPF support)
-sudo systemctl enable --now gamepulse-agent
-
-# User-level (Steam Deck, no root needed)
+# User-level agent (no root)
 systemctl --user enable --now gamepulse-agent
+
+# System-level eBPF daemon (requires sudo, for kernel-level tracing)
+sudo systemctl enable --now gamepulse-ebpf
 ```
 
-## Step 6: Enable frame timing
+### Other launchers
 
-For FPS and frame time data, launch games with MangoHud logging. Add this to Steam launch options for each game:
+GamePulse auto-detects games from Steam, Lutris, Heroic (Epic/GOG), and Bottles.
+No extra configuration is needed — just run the agent alongside your launcher.
 
-```
-MANGOHUD=1 MANGOHUD_LOG=1 %command%
-```
-
-Or set it globally in `~/.config/MangoHud/MangoHud.conf`:
-
-```ini
-log_duration=0
-output_folder=/tmp/MangoHud
-```
-
-On Steam Deck, MangoHud is pre-installed — just enable the performance overlay in Quick Access.
-
-## Step 7: View data in Kibana
-
-Import the pre-built dashboards:
+To monitor a specific process regardless of launcher:
 
 ```bash
-curl -X POST "https://your-kibana:5601/api/saved_objects/_import" \
-  -H "kbn-xsrf: true" \
-  --form file=@kibana/gamepulse-dashboard.ndjson
+gamepulse-agent --target-name cyberpunk2077
+# or
+gamepulse-agent --target-pid 12345
 ```
-
-Then open Kibana → Dashboards → "[GamePulse] Gaming Performance".
 
 ## What happens automatically
 
-Once the agent is running:
+Once the agent is running and a game is detected:
 
-1. It detects when you launch a game via Steam
-2. It identifies the game name, Steam App ID, and graphics API
-3. If running under Proton, it detects Proton/DXVK/VKD3D versions
-4. It starts collecting metrics at 1-second intervals
-5. When the game exits, it ships a session summary
-6. The ES ingest pipeline classifies hardware tier, tags stutters, and detects throttling
+1. It identifies the game name, launcher, and graphics API (Vulkan/D3D/OpenGL)
+2. If running under Proton, it detects Proton/DXVK/VKD3D versions from `/proc/<pid>/maps`
+3. It collects 8 metric streams at 1-second intervals: CPU, GPU, memory, storage,
+   network, audio, frame timing, and power
+4. When the game exits, it ships a session summary with peak values and FPS percentiles
+5. The ES ingest pipeline classifies hardware tier, tags stutters, and detects throttling
+
+## Frame timing (optional)
+
+Frame data (`gamepulse.frame`) requires MangoHud. All other 7 metric streams work without it.
+
+```bash
+# Enable MangoHud logging globally
+cat >> ~/.config/MangoHud/MangoHud.conf << 'EOF'
+log_duration=0
+output_folder=/tmp/MangoHud
+EOF
+```
+
+Or per-game in Steam launch options:
+```
+MANGOHUD=1 MANGOHUD_LOG=1 gamepulse run %command%
+```
+
+On Steam Deck, MangoHud is pre-installed — enable the overlay in Quick Access.
 
 ## Next steps
 
-- [Configure the agent](configuration.md) for your needs
-- [Set up eBPF](ebpf.md) for deep kernel-level tracing
-- [Steam Deck specific setup](steam-deck.md)
-- [Elasticsearch setup details](install.md)
+- [Configuration reference](configuration.md) — all TOML fields and CLI flags
+- [eBPF deep telemetry](ebpf.md) — kernel-level scheduler, I/O, and GPU tracing
+- [Steam Deck setup](steam-deck.md)
+- [Full installation guide](install.md)
