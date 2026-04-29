@@ -1,9 +1,11 @@
 name: release
 
 # Triggers:
-#   • git push of a v* tag (e.g. v0.2.0) — the traditional release flow
-#   • workflow_dispatch — click "Run workflow" in the GitHub UI and type the
-#     version number; the tag is created automatically by the release step
+#   • git push of a v* tag (e.g. v0.2.0) — full release flow: build + package + publish
+#   • workflow_dispatch — CI test mode: build + package only (no publish, no tag)
+#     Use to verify packaging on GitHub runners before cutting a real release.
+#     Build artefacts (.deb / .rpm / .pkg.tar.zst / .msi) are uploaded to the
+#     workflow run and downloadable from the Actions UI.
 #
 # Fan-out packaging jobs (Linux + Windows run in parallel):
 #   Linux:   .deb (Debian/Ubuntu) · .rpm (Fedora/RHEL/openSUSE) · .pkg.tar.zst (Arch)
@@ -259,10 +261,13 @@ jobs:
           path: target/wix/*.msi
 
   # ── 7. Create GitHub Release ─────────────────────────────────────────────────
+  # Only runs on a real tag push. workflow_dispatch is for CI testing — the
+  # build + package jobs run, but no release is published.
   release:
     name: create github release
     needs: [setup, package-deb, package-rpm, package-arch, package-windows]
     runs-on: ubuntu-latest
+    if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
 
