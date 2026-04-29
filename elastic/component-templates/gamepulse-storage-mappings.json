@@ -2,78 +2,82 @@
   "template": {
     "mappings": {
       "properties": {
-        "storage": {
+        "gamepulse": {
           "properties": {
-            "read_mbps": {
-              "type": "float"
-            },
-            "write_mbps": {
-              "type": "float"
-            },
-            "read_iops": {
-              "type": "long"
-            },
-            "write_iops": {
-              "type": "long"
-            },
-            "io_latency_read_us": {
+            "storage": {
               "properties": {
-                "avg": {
+                "read_mbps": {
+                  "type": "float"
+                },
+                "write_mbps": {
+                  "type": "float"
+                },
+                "read_iops": {
                   "type": "long"
                 },
-                "p50": {
+                "write_iops": {
                   "type": "long"
                 },
-                "p95": {
+                "io_latency_read_us": {
+                  "properties": {
+                    "avg": {
+                      "type": "long"
+                    },
+                    "p50": {
+                      "type": "long"
+                    },
+                    "p95": {
+                      "type": "long"
+                    },
+                    "p99": {
+                      "type": "long"
+                    }
+                  }
+                },
+                "io_latency_write_us": {
+                  "properties": {
+                    "avg": {
+                      "type": "long"
+                    },
+                    "p50": {
+                      "type": "long"
+                    },
+                    "p95": {
+                      "type": "long"
+                    },
+                    "p99": {
+                      "type": "long"
+                    }
+                  }
+                },
+                "queue_depth_current": {
+                  "type": "integer"
+                },
+                "queue_depth_max": {
+                  "type": "integer"
+                },
+                "io_wait_pct": {
+                  "type": "float"
+                },
+                "merged_reads": {
                   "type": "long"
                 },
-                "p99": {
+                "merged_writes": {
                   "type": "long"
+                },
+                "game_process_read_mb": {
+                  "type": "float"
+                },
+                "game_process_write_mb": {
+                  "type": "float"
+                },
+                "game_process_read_ops": {
+                  "type": "long"
+                },
+                "drive_temperature_c": {
+                  "type": "float"
                 }
               }
-            },
-            "io_latency_write_us": {
-              "properties": {
-                "avg": {
-                  "type": "long"
-                },
-                "p50": {
-                  "type": "long"
-                },
-                "p95": {
-                  "type": "long"
-                },
-                "p99": {
-                  "type": "long"
-                }
-              }
-            },
-            "queue_depth_current": {
-              "type": "integer"
-            },
-            "queue_depth_max": {
-              "type": "integer"
-            },
-            "io_wait_pct": {
-              "type": "float"
-            },
-            "merged_reads": {
-              "type": "long"
-            },
-            "merged_writes": {
-              "type": "long"
-            },
-            "game_process_read_mb": {
-              "type": "float"
-            },
-            "game_process_write_mb": {
-              "type": "float"
-            },
-            "game_process_read_ops": {
-              "type": "long"
-            },
-            "drive_temperature_c": {
-              "type": "float"
             }
           }
         }
@@ -82,6 +86,6 @@
   },
   "_meta": {
     "description": "Storage I/O telemetry: throughput (read/write MB/s), IOPS, latency percentiles (avg/p50/p95/p99), queue depth, I/O wait, merged ops, game-process I/O, and drive temperature.",
-    "version": "1.0.0"
+    "version": "1.1.0"
   }
 }

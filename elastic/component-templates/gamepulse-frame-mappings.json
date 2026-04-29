@@ -2,40 +2,44 @@
   "template": {
     "mappings": {
       "properties": {
-        "fps": {
+        "gamepulse": {
           "properties": {
-            "current": {
-              "type": "integer"
+            "fps": {
+              "properties": {
+                "current": {
+                  "type": "integer"
+                },
+                "avg_1s": {
+                  "type": "float"
+                },
+                "low_1pct": {
+                  "type": "integer"
+                },
+                "low_01pct": {
+                  "type": "integer"
+                },
+                "frametime_ms": {
+                  "type": "float"
+                },
+                "frametime_variance": {
+                  "type": "float"
+                },
+                "present_mode": {
+                  "type": "keyword",
+                  "ignore_above": 32
+                },
+                "stutter_count": {
+                  "type": "integer"
+                }
+              }
             },
-            "avg_1s": {
-              "type": "float"
-            },
-            "low_1pct": {
-              "type": "integer"
-            },
-            "low_01pct": {
-              "type": "integer"
-            },
-            "frametime_ms": {
-              "type": "float"
-            },
-            "frametime_variance": {
-              "type": "float"
-            },
-            "present_mode": {
-              "type": "keyword",
-              "ignore_above": 32
-            },
-            "stutter_count": {
-              "type": "integer"
-            }
-          }
-        },
-        "performance": {
-          "properties": {
-            "bottleneck": {
-              "type": "keyword",
-              "ignore_above": 16
+            "performance": {
+              "properties": {
+                "bottleneck": {
+                  "type": "keyword",
+                  "ignore_above": 16
+                }
+              }
             }
           }
         }
@@ -43,7 +47,7 @@
     }
   },
   "_meta": {
-    "description": "Frame performance metrics collected at 1-second intervals. Includes current FPS, 1-second average, 1% and 0.1% lows, frame time, variance, present mode, stutter count per tick, and per-tick bottleneck classification.",
-    "version": "1.0.0"
+    "description": "Frame performance metrics: current FPS, 1-second average, 1% and 0.1% lows, frame time, variance, present mode, stutter count, and bottleneck classification.",
+    "version": "1.1.0"
   }
 }

@@ -231,6 +231,7 @@ impl Collector for GpuAmdCollector {
                     "temperature_c".to_string(),
                     Value::from((v as f64 / 1000.0 * 10.0).round() / 10.0),
                 );
+                gpu.insert("temp_source".to_string(), Value::from("hwmon"));
             }
             if let Some(v) = read_int(&hw.join("temp2_input")) {
                 gpu.insert(

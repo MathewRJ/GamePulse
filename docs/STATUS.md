@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-29 by claude-code (B3.0 complete: cfg-gate all /proc/environ scanner functions #[cfg(unix)]; scan_for_game() returns None on Windows; log message de-Linux-ified. 29/29 tests green. Next = B3.1 design (heuristic auto-detection) or Milestone F)
+Last updated: 2026-04-29 by claude-code (F.0 complete: fixed all component templates gamepulse.* wrapper; added temp_source keyword to GPU template + @package on live ES; rolled over GPU stream — temp_source now in index mapping. Linux AMD GPU collector now emits temp_source=hwmon. deploy_component_templates.py created. Next = F.1 QA-MATRIX.md + Docker parity runs)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file

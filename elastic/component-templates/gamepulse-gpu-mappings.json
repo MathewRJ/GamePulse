@@ -2,40 +2,51 @@
   "template": {
     "mappings": {
       "properties": {
-        "gpu": {
+        "gamepulse": {
           "properties": {
-            "utilisation_pct": {
-              "type": "float"
-            },
-            "clock_mhz": {
-              "type": "integer"
-            },
-            "memory_used_mb": {
-              "type": "integer"
-            },
-            "memory_total_mb": {
-              "type": "integer"
-            },
-            "temperature_c": {
-              "type": "float"
-            },
-            "hotspot_c": {
-              "type": "float"
-            },
-            "memory_temperature_c": {
-              "type": "float"
-            },
-            "power_w": {
-              "type": "float"
-            },
-            "fan_pct": {
-              "type": "float"
-            },
-            "fan_speed_rpm": {
-              "type": "integer"
-            },
-            "voltage": {
-              "type": "float"
+            "gpu": {
+              "properties": {
+                "utilisation_pct": {
+                  "type": "float"
+                },
+                "clock_mhz": {
+                  "type": "integer"
+                },
+                "memory_used_mb": {
+                  "type": "integer"
+                },
+                "memory_total_mb": {
+                  "type": "integer"
+                },
+                "temperature_c": {
+                  "type": "float"
+                },
+                "hotspot_c": {
+                  "type": "float"
+                },
+                "memory_temperature_c": {
+                  "type": "float"
+                },
+                "power_w": {
+                  "type": "float"
+                },
+                "fan_pct": {
+                  "type": "float"
+                },
+                "fan_speed_rpm": {
+                  "type": "integer"
+                },
+                "voltage": {
+                  "type": "float"
+                },
+                "thermal_throttle_warning": {
+                  "type": "boolean"
+                },
+                "temp_source": {
+                  "type": "keyword",
+                  "ignore_above": 16
+                }
+              }
             }
           }
         }
@@ -43,7 +54,7 @@
     }
   },
   "_meta": {
-    "description": "GPU telemetry metrics: utilisation, clock speed, VRAM usage, temperatures (edge, hotspot, memory), power draw, fan speed, and voltage.",
-    "version": "1.0.0"
+    "description": "GPU telemetry metrics: utilisation, clock speed, VRAM usage, temperatures (edge, hotspot, memory), power draw, fan speed, voltage, throttle warning, and temperature source.",
+    "version": "1.1.0"
   }
 }

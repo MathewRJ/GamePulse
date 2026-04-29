@@ -2,72 +2,76 @@
   "template": {
     "mappings": {
       "properties": {
-        "ebpf": {
+        "gamepulse": {
           "properties": {
-            "syscall_latency_us": {
-              "type": "histogram"
-            },
-            "scheduler_latency_us": {
-              "type": "histogram"
-            },
-            "irq_latency_us": {
-              "type": "histogram"
-            },
-            "page_fault_distribution": {
-              "type": "histogram"
-            },
-            "file_io_patterns": {
-              "type": "nested",
+            "ebpf": {
               "properties": {
-                "path": {
-                  "type": "keyword",
-                  "ignore_above": 512
+                "syscall_latency_us": {
+                  "type": "histogram"
                 },
-                "latency_us": {
+                "scheduler_latency_us": {
+                  "type": "histogram"
+                },
+                "irq_latency_us": {
+                  "type": "histogram"
+                },
+                "page_fault_distribution": {
+                  "type": "histogram"
+                },
+                "file_io_patterns": {
+                  "type": "nested",
+                  "properties": {
+                    "path": {
+                      "type": "keyword",
+                      "ignore_above": 512
+                    },
+                    "latency_us": {
+                      "type": "long"
+                    },
+                    "size_bytes": {
+                      "type": "long"
+                    },
+                    "operation": {
+                      "type": "keyword",
+                      "ignore_above": 8
+                    }
+                  }
+                },
+                "memory_allocation_patterns": {
+                  "properties": {
+                    "mmap_count": {
+                      "type": "long"
+                    },
+                    "brk_count": {
+                      "type": "long"
+                    },
+                    "total_allocated_bytes": {
+                      "type": "long"
+                    }
+                  }
+                },
+                "tcp_retransmits": {
                   "type": "long"
                 },
-                "size_bytes": {
+                "tcp_rtt_ms": {
+                  "type": "float"
+                },
+                "futex_contention": {
                   "type": "long"
                 },
-                "operation": {
-                  "type": "keyword",
-                  "ignore_above": 8
+                "drm_gpu_submit_latency_us": {
+                  "type": "histogram"
+                },
+                "gpu_fence_wait_time_us": {
+                  "type": "histogram"
+                },
+                "shader_compilation_duration_ms": {
+                  "type": "float"
+                },
+                "wine_proton_translation_overhead_us": {
+                  "type": "histogram"
                 }
               }
-            },
-            "memory_allocation_patterns": {
-              "properties": {
-                "mmap_count": {
-                  "type": "long"
-                },
-                "brk_count": {
-                  "type": "long"
-                },
-                "total_allocated_bytes": {
-                  "type": "long"
-                }
-              }
-            },
-            "tcp_retransmits": {
-              "type": "long"
-            },
-            "tcp_rtt_ms": {
-              "type": "float"
-            },
-            "futex_contention": {
-              "type": "long"
-            },
-            "drm_gpu_submit_latency_us": {
-              "type": "histogram"
-            },
-            "gpu_fence_wait_time_us": {
-              "type": "histogram"
-            },
-            "shader_compilation_duration_ms": {
-              "type": "float"
-            },
-            "wine_proton_translation_overhead_us": {
-              "type": "histogram"
             }
           }
         }
@@ -76,6 +80,6 @@
   },
   "_meta": {
     "description": "eBPF deep telemetry: syscall/scheduler/IRQ latency distributions, file I/O patterns, memory allocation, TCP metrics, futex contention, DRM GPU submit latency, shader compilation, and Wine/Proton translation overhead.",
-    "version": "1.0.0"
+    "version": "1.1.0"
   }
 }

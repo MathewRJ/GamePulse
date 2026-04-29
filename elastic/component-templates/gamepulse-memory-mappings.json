@@ -2,34 +2,38 @@
   "template": {
     "mappings": {
       "properties": {
-        "memory": {
+        "gamepulse": {
           "properties": {
-            "system_used_mb": {
-              "type": "integer"
-            },
-            "game_rss_mb": {
-              "type": "integer"
-            },
-            "virtual_mb": {
-              "type": "integer"
-            },
-            "page_cache_mb": {
-              "type": "integer"
-            },
-            "shared_mb": {
-              "type": "integer"
-            },
-            "swap_used_mb": {
-              "type": "integer"
-            },
-            "page_faults_major": {
-              "type": "long"
-            },
-            "page_faults_minor": {
-              "type": "long"
-            },
-            "oom_events": {
-              "type": "integer"
+            "memory": {
+              "properties": {
+                "system_used_mb": {
+                  "type": "integer"
+                },
+                "game_rss_mb": {
+                  "type": "integer"
+                },
+                "virtual_mb": {
+                  "type": "integer"
+                },
+                "page_cache_mb": {
+                  "type": "integer"
+                },
+                "shared_mb": {
+                  "type": "integer"
+                },
+                "swap_used_mb": {
+                  "type": "integer"
+                },
+                "page_faults_major": {
+                  "type": "long"
+                },
+                "page_faults_minor": {
+                  "type": "long"
+                },
+                "oom_events": {
+                  "type": "integer"
+                }
+              }
             }
           }
         }
@@ -38,6 +42,6 @@
   },
   "_meta": {
     "description": "Memory telemetry metrics: system and game-process usage, virtual/page-cache/shared memory, swap, page faults, and OOM events.",
-    "version": "1.0.0"
+    "version": "1.1.0"
   }
 }

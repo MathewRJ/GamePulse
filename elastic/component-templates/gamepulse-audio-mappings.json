@@ -2,23 +2,27 @@
   "template": {
     "mappings": {
       "properties": {
-        "audio": {
+        "gamepulse": {
           "properties": {
-            "backend": {
-              "type": "keyword",
-              "ignore_above": 32
-            },
-            "sample_rate_hz": {
-              "type": "integer"
-            },
-            "buffer_size": {
-              "type": "integer"
-            },
-            "latency_ms": {
-              "type": "float"
-            },
-            "xruns": {
-              "type": "integer"
+            "audio": {
+              "properties": {
+                "backend": {
+                  "type": "keyword",
+                  "ignore_above": 32
+                },
+                "sample_rate_hz": {
+                  "type": "integer"
+                },
+                "buffer_size": {
+                  "type": "integer"
+                },
+                "latency_ms": {
+                  "type": "float"
+                },
+                "xruns": {
+                  "type": "integer"
+                }
+              }
             }
           }
         }
@@ -26,7 +30,7 @@
     }
   },
   "_meta": {
-    "description": "Audio telemetry: backend (PipeWire/PulseAudio/ALSA), sample rate, buffer size, latency, and buffer underrun/overrun count.",
-    "version": "1.0.0"
+    "description": "Audio telemetry: backend (PipeWire/PulseAudio/ALSA/WASAPI), sample rate, buffer size, latency, and buffer underrun/overrun count.",
+    "version": "1.1.0"
   }
 }

@@ -2,32 +2,36 @@
   "template": {
     "mappings": {
       "properties": {
-        "cpu": {
+        "gamepulse": {
           "properties": {
-            "total_utilisation_pct": {
-              "type": "float"
-            },
-            "game_utilisation_pct": {
-              "type": "float"
-            },
-            "per_core": {
-              "type": "float"
-            },
-            "clock_mhz_avg": {
-              "type": "integer"
-            },
-            "temperature_c": {
-              "type": "float"
-            },
-            "power_w": {
-              "type": "float"
-            },
-            "governor": {
-              "type": "keyword",
-              "ignore_above": 32
-            },
-            "boost_state": {
-              "type": "boolean"
+            "cpu": {
+              "properties": {
+                "total_utilisation_pct": {
+                  "type": "float"
+                },
+                "game_utilisation_pct": {
+                  "type": "float"
+                },
+                "per_core": {
+                  "type": "float"
+                },
+                "clock_mhz_avg": {
+                  "type": "integer"
+                },
+                "temperature_c": {
+                  "type": "float"
+                },
+                "power_w": {
+                  "type": "float"
+                },
+                "governor": {
+                  "type": "keyword",
+                  "ignore_above": 32
+                },
+                "boost_state": {
+                  "type": "boolean"
+                }
+              }
             }
           }
         }
@@ -36,6 +40,6 @@
   },
   "_meta": {
     "description": "CPU telemetry metrics: total and game-process utilisation, per-core usage array, average clock, temperature, power, governor, and boost state.",
-    "version": "1.0.0"
+    "version": "1.1.0"
   }
 }

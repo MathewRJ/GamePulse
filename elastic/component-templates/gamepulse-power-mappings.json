@@ -2,23 +2,27 @@
   "template": {
     "mappings": {
       "properties": {
-        "power": {
+        "gamepulse": {
           "properties": {
-            "profile": {
-              "type": "keyword",
-              "ignore_above": 32
-            },
-            "battery_pct": {
-              "type": "float"
-            },
-            "battery_rate_w": {
-              "type": "float"
-            },
-            "ac_connected": {
-              "type": "boolean"
-            },
-            "tdp_current_w": {
-              "type": "float"
+            "power": {
+              "properties": {
+                "profile": {
+                  "type": "keyword",
+                  "ignore_above": 32
+                },
+                "battery_pct": {
+                  "type": "float"
+                },
+                "battery_rate_w": {
+                  "type": "float"
+                },
+                "ac_connected": {
+                  "type": "boolean"
+                },
+                "tdp_current_w": {
+                  "type": "float"
+                }
+              }
             }
           }
         }
@@ -27,6 +31,6 @@
   },
   "_meta": {
     "description": "Power telemetry for portable devices: power profile, battery level and discharge rate, AC connection state, and current TDP.",
-    "version": "1.0.0"
+    "version": "1.1.0"
   }
 }
