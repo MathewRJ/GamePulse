@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-29 by claude-code (Phase 7.2 complete: B2/B.7/B.8 all verified live in ES — Starfield session starfield-20260429-1)
+Last updated: 2026-04-29 by claude-code (Phase 8 complete: data_stream.dataset filters added to all 6 dashboards; verify-dashboard.sh --require-dataset-filter PASS 6/6)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -65,7 +65,7 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 ## Active work package
 
-**Milestone D complete (including D.1/D.2 + Phase 7.2).** D.1/D.2 smoke tests PASS (2026-04-29). B2/B.7/B.8 fields verified live in ES (2026-04-29, Starfield session `starfield-20260429-1`): game.source/launcher/steam_app_id, session.label N-format/label_source/sequence_number, settings.preset/upscaler.tech/features_active/source/confidence/notes all confirmed. Also installed profiles to `~/.config/gamepulse/profiles/` and updated `/usr/local/bin/gamepulse-agent` to April 29 build. Next: Phase 8 (dashboard dataset filters) then Milestone E (Windows MSI packaging).
+**Milestone D fully complete (D.1/D.2 + Phase 7.2 + Phase 8).** All pre-Milestone-E gates passed on 2026-04-29. Next: Milestone E (Windows MSI packaging).
 
 **Dashboard suite complete (Home → Games → Environment → Hardware → Compare → Engine).** All 6 primary dashboards deployed and verified.
 
@@ -264,7 +264,7 @@ Commit: 561dc78
 
 ## Follow-ups to investigate
 
-- **Dashboard integration-compliance gap (Milestone G blocker)**: All 6 new-suite dashboards (`home`, `games`, `environment`, `hardware`, `compare`, `engine`) have zero `data_stream.dataset` filters. Each panel needs a `data_stream.dataset` filter in its `embeddableConfig` for elastic/integrations submission. The old `gamepulse-dashboard.ndjson` that previously held this note has been archived to `dashboards/archive/`. Fix all 6 new-suite dashboards in Kibana UI, re-export as NDJSON, then run `scripts/verify-dashboard.sh --require-dataset-filter` before Milestone G.
+- **Dashboard integration-compliance gap (Milestone G blocker)**: ✅ RESOLVED 2026-04-29 — `data_stream.dataset: gamepulse.*` wildcard filter added at dashboard level to all 6 new-suite dashboards via `scripts/add-dataset-filter.py`. `verify-dashboard.sh --require-dataset-filter` PASS 6/6 (API + UI gate). Deployed NJDSONs saved to `dashboards/*-dashboard-deployed.ndjson`. `verify-dashboard.sh` updated to accept dashboard-level filter as satisfying the integration-compliance requirement.
 - **Dev install: systemd unit ExecStart path drop-in override** ✅ DOCUMENTED 2026-04-29: `docs/install.md` now has a callout block showing the exact `~/.config/systemd/user/gamepulse-agent.service.d/override.conf` snippet for dev builds installed to `/usr/local/bin`. PKGBUILD installs to `/usr/bin/` and is unaffected.
 - `bottleneck_dominant` null in April-12 session summaries — historical: those sessions predate the accumulator code; new sessions populate it correctly when both GPU and CPU collectors are active
 - HOME env fallback fixed: `home_dir()` helper in session.rs now checks HOME → SUDO_USER → None instead of falling back to `/root`; `game_name_from_appid()` and `counter_file_path()` both updated

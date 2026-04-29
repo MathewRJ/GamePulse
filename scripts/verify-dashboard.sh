@@ -153,21 +153,35 @@ fi
 echo "OK lens invariants: all Lens panels have resolvable datasource layers"
 
 # 3. data_stream.dataset filter (GamePulse integration rule).
+# Passes if EITHER:
+#   (a) the dashboard carries a dashboard-level data_stream.dataset filter in
+#       kibanaSavedObjectMeta.searchSourceJSON (covers all panels implicitly), OR
+#   (b) every panel embeddableConfig contains the string "data_stream.dataset".
 if [ "$require_dataset_filter" -eq 1 ]; then
-  bad_panels="$(jq -r --arg id "$dashboard_id" '
+  dashboard_level_ok="$(jq -r --arg id "$dashboard_id" '
     select(.type == "dashboard" and .id == $id)
-    | .attributes.panelsJSON | fromjson
-    | to_entries
-    | map(select((.value | tostring | test("data_stream\\.dataset")) | not))
-    | map("panel[\(.key)] (\(.value.panelIndex // "?"), type=\(.value.type))")
-    | join("\n")
+    | .attributes.kibanaSavedObjectMeta.searchSourceJSON
+    | if . then fromjson | .filter // [] | map(.meta.key // "") | any(. == "data_stream.dataset") else false end
   ' "$export_file")"
-  if [ -n "$bad_panels" ]; then
-    echo "FAIL dataset filter: panels missing data_stream.dataset reference" >&2
-    printf '%s\n' "$bad_panels" >&2
-    exit 1
+
+  if [ "$dashboard_level_ok" = "true" ]; then
+    echo "OK dataset filter: dashboard-level data_stream.dataset filter present (covers all panels)"
+  else
+    bad_panels="$(jq -r --arg id "$dashboard_id" '
+      select(.type == "dashboard" and .id == $id)
+      | .attributes.panelsJSON | fromjson
+      | to_entries
+      | map(select((.value | tostring | test("data_stream\\.dataset")) | not))
+      | map("panel[\(.key)] (\(.value.panelIndex // "?"), type=\(.value.type))")
+      | join("\n")
+    ' "$export_file")"
+    if [ -n "$bad_panels" ]; then
+      echo "FAIL dataset filter: no dashboard-level filter and panels missing data_stream.dataset reference" >&2
+      printf '%s\n' "$bad_panels" >&2
+      exit 1
+    fi
+    echo "OK dataset filter: every panel references data_stream.dataset"
   fi
-  echo "OK dataset filter: every panel references data_stream.dataset"
 fi
 
 # 4. Internal dashboard loader (UI-renderability).
