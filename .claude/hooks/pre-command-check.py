@@ -16,12 +16,17 @@ def _scan_target(command: str) -> str:
     """Return the portion of the command that should be scanned for blocked
     patterns. For 'git commit' the message body is excluded so that commit
     messages mentioning tool names (curl, wget, ssh, …) are not false-positive
-    blocked."""
-    trimmed = command.lstrip()
-    if re.match(r'git\s+commit\b', trimmed):
-        # Strip -m / --message content and heredoc bodies — scan only git flags
-        trimmed = re.split(r'\s+-m\b|\s+--message\b', trimmed)[0]
-    return trimmed
+    blocked. Handles compound commands (e.g. 'git add X && git commit -m ...')."""
+    # Split on shell operators so each segment is examined independently
+    segments = re.split(r'\s*(?:&&|\|\||;)\s*', command)
+    cleaned = []
+    for seg in segments:
+        trimmed = seg.lstrip()
+        if re.match(r'git\s+commit\b', trimmed):
+            # Strip -m / --message content and heredoc bodies — scan only git flags
+            trimmed = re.split(r'\s+-m\b|\s+--message\b', trimmed)[0]
+        cleaned.append(trimmed)
+    return ' '.join(cleaned)
 
 
 def main():
