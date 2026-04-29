@@ -1,18 +1,25 @@
-/// Linux `/proc/<pid>/maps` scanner — Tier 2 settings auto-detection (D.8).
+/// Loaded-module scanner — Tier 2 settings auto-detection (D.8 + Windows).
 ///
-/// Reads the memory-map of a running process and infers:
+/// Reads the loaded-module list of a running process and infers:
 ///   - Graphics API  → written to `Target.graphics_api` as an env-based fallback
 ///   - Upscaler tech → written to `gamepulse.settings.upscaler.tech` in the overlay
 ///   - Frame-gen tech → written to `gamepulse.settings.frame_gen` in the overlay
 ///
-/// Detection works because games (and Proton) memory-map DLLs/SOs whose names
-/// encode the technology: `libdxvk.so.2`, `nvngx_dlss.dll`, `libxess.so`, etc.
-/// Env-var detection (session.rs `detect_graphics_api`) is preferred when available
-/// — maps detection is used as a fallback for native games that don't set Wine env vars.
+/// Detection works because games (and Proton) load DLLs/SOs whose names encode
+/// the technology: `libdxvk.so.2`, `nvngx_dlss.dll`, `libxess.so`,
+/// `ffx_framegeneration_x64.dll`, etc.
 ///
-/// All functions are cross-platform: on non-Linux systems `/proc/<pid>/maps`
-/// doesn't exist, so `read_mapped_paths` returns an empty Vec and every caller
-/// returns `None`.
+/// Source of the module list:
+///   - Linux:   `/proc/<pid>/maps` (file-backed memory mappings)
+///   - Windows: `EnumProcessModules` + `GetModuleFileNameExW` (psapi)
+///
+/// Env-var detection (session.rs `detect_graphics_api`) is preferred when available
+/// on Linux — maps detection is used as a fallback for native games that don't
+/// set Wine env vars. On Windows, this scanner is the primary detection path
+/// (Wine env vars don't exist).
+///
+/// All functions are cross-platform: on platforms without an implementation,
+/// `read_mapped_paths` returns an empty Vec and every caller returns `None`.
 use serde_json::{json, Value};
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -126,16 +133,17 @@ pub(crate) fn detect_frame_gen_from_paths(paths: &[String]) -> Option<String> {
     None
 }
 
-// ── /proc/<pid>/maps reader ───────────────────────────────────────────────────
+// ── Loaded-module readers (per-platform) ──────────────────────────────────────
 
-/// Read `/proc/<pid>/maps` and return all file-backed mapping paths (lowercase).
-/// Returns an empty Vec if the file cannot be read (non-Linux, process gone, etc.).
-fn read_mapped_paths(pid: u32) -> Vec<String> {
-    let content =
-        match std::fs::read_to_string(format!("/proc/{}/maps", pid)) {
-            Ok(s) => s,
-            Err(_) => return Vec::new(),
-        };
+/// Read the loaded modules of `pid` and return all file paths (lowercase).
+/// Returns an empty Vec on any error (process gone, access denied, unsupported
+/// platform). All callers tolerate empty results by returning `None`.
+#[cfg(target_os = "linux")]
+pub(crate) fn read_mapped_paths(pid: u32) -> Vec<String> {
+    let content = match std::fs::read_to_string(format!("/proc/{}/maps", pid)) {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
 
     content
         .lines()
@@ -143,7 +151,6 @@ fn read_mapped_paths(pid: u32) -> Vec<String> {
             // Format: address perms offset dev inode [pathname]
             // Split on whitespace; the pathname is the 6th token (index 5) when present.
             let mut fields = line.splitn(6, char::is_whitespace);
-            // Skip first 5 fields.
             for _ in 0..5 {
                 fields.next();
             }
@@ -156,6 +163,61 @@ fn read_mapped_paths(pid: u32) -> Vec<String> {
             }
         })
         .collect()
+}
+
+#[cfg(target_os = "windows")]
+pub(crate) fn read_mapped_paths(pid: u32) -> Vec<String> {
+    use windows::Win32::Foundation::{CloseHandle, HMODULE};
+    use windows::Win32::System::ProcessStatus::{EnumProcessModules, GetModuleFileNameExW};
+    use windows::Win32::System::Threading::{
+        OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
+    };
+
+    // PROCESS_VM_READ is required by GetModuleFileNameExW even though we're
+    // not reading process memory directly. PROCESS_QUERY_LIMITED_INFORMATION
+    // is not enough on its own — psapi needs the VM_READ right.
+    let handle =
+        match unsafe { OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid) } {
+            Ok(h) => h,
+            Err(_) => return Vec::new(),
+        };
+
+    // 1024 HMODULEs is enough for any sane process (a heavy game loads ~300).
+    let mut modules: Vec<HMODULE> = vec![HMODULE::default(); 1024];
+    let cb_in = (modules.len() * std::mem::size_of::<HMODULE>()) as u32;
+    let mut needed: u32 = 0;
+
+    let enum_ok =
+        unsafe { EnumProcessModules(handle, modules.as_mut_ptr(), cb_in, &mut needed).is_ok() };
+
+    let mut paths: Vec<String> = Vec::new();
+
+    if enum_ok {
+        let count = (needed as usize / std::mem::size_of::<HMODULE>()).min(modules.len());
+        // Use a long buffer (4096 wide chars) — long-path Windows installs can
+        // exceed MAX_PATH (260). GetModuleFileNameExW truncates silently if too
+        // small, which would cause matcher misses.
+        let mut buf = [0u16; 4096];
+        for h_module in modules.iter().take(count).copied() {
+            let len = unsafe { GetModuleFileNameExW(handle, h_module, &mut buf) } as usize;
+            if len == 0 {
+                continue;
+            }
+            paths.push(String::from_utf16_lossy(&buf[..len]).to_lowercase());
+        }
+    }
+
+    // SAFETY: CloseHandle is always called, even on EnumProcessModules failure.
+    unsafe {
+        let _ = CloseHandle(handle);
+    }
+
+    paths
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
+pub(crate) fn read_mapped_paths(_pid: u32) -> Vec<String> {
+    Vec::new()
 }
 
 // ── Unit tests ────────────────────────────────────────────────────────────────
@@ -256,6 +318,32 @@ mod tests {
     fn test_upscaler_none() {
         let p = paths(&["/usr/lib/x86_64-linux-gnu/libvulkan.so.1"]);
         assert!(detect_upscaler_from_paths(&p).is_none());
+    }
+
+    // ── Windows native-style paths (no Wine prefix) ──────────────────────────
+
+    #[test]
+    fn test_windows_path_dlss() {
+        // Native Windows path: drive letter + backslashes, lowercased.
+        let p = paths(&[
+            r"c:\program files (x86)\steam\steamapps\common\game\nvngx_dlss.dll",
+            r"c:\windows\system32\d3d12.dll",
+        ]);
+        assert_eq!(detect_upscaler_from_paths(&p).as_deref(), Some("dlss"));
+        assert_eq!(
+            detect_graphics_api_from_paths(&p).as_deref(),
+            Some("dx12_via_vkd3d")
+        );
+    }
+
+    #[test]
+    fn test_windows_path_dlss3_frame_gen() {
+        let p = paths(&[
+            r"c:\program files (x86)\steam\steamapps\common\game\nvngx_dlssg.dll",
+            r"c:\program files (x86)\steam\steamapps\common\game\nvngx_dlss.dll",
+        ]);
+        assert_eq!(detect_upscaler_from_paths(&p).as_deref(), Some("dlss"));
+        assert_eq!(detect_frame_gen_from_paths(&p).as_deref(), Some("dlss3"));
     }
 
     // ── Frame generation ─────────────────────────────────────────────────────

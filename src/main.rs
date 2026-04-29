@@ -39,6 +39,16 @@ enum Commands {
         #[arg(short, long, value_name = "PATH")]
         output: Option<PathBuf>,
     },
+
+    /// Dump the loaded-module list and Tier 2 detection result for a target
+    /// process. Reads /proc/<PID>/maps on Linux or EnumProcessModules on
+    /// Windows. Useful for debugging upscaler / frame-gen / graphics-API
+    /// auto-detection without launching a full session.
+    Dllscan {
+        /// Process ID to inspect.
+        #[arg(value_name = "PID")]
+        pid: u32,
+    },
 }
 
 #[derive(Parser)]
@@ -572,6 +582,25 @@ async fn dry_run() -> Result<()> {
 
 /// Resolve the effective log filter string from CLI flags and environment.
 /// Precedence (highest first): --log-level > --verbose > GAMEPULSE_LOG > "info"
+/// Print loaded modules + Tier 2 detection result for `pid`. Implements the
+/// `dllscan` debug subcommand. Output goes to stdout; ranges from "0 modules
+/// (process gone or access denied)" to a full enumeration with the inferred
+/// graphics API + settings overlay.
+fn run_dllscan(pid: u32) -> Result<()> {
+    let paths = dllscan::read_mapped_paths(pid);
+    println!("--- {} modules loaded by pid {} ---", paths.len(), pid);
+    for p in &paths {
+        println!("  {p}");
+    }
+    println!();
+    println!("graphics_api: {:?}", dllscan::graphics_api_from_maps(pid));
+    println!(
+        "settings_overlay: {}",
+        serde_json::to_string_pretty(&dllscan::settings_overlay_from_maps(pid))?
+    );
+    Ok(())
+}
+
 fn resolve_log_filter(verbose: bool, log_level: Option<&str>) -> String {
     if let Some(level) = log_level {
         return level.to_string();
@@ -605,8 +634,14 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    if let Some(Commands::Diagnose { output }) = cli.command {
-        return diagnose::run(&cfg, cli.config.as_deref(), output.as_deref()).await;
+    match cli.command {
+        Some(Commands::Diagnose { output }) => {
+            return diagnose::run(&cfg, cli.config.as_deref(), output.as_deref()).await;
+        }
+        Some(Commands::Dllscan { pid }) => {
+            return run_dllscan(pid);
+        }
+        None => {}
     }
 
     if cli.dry_run {
