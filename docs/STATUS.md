@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-29 by claude-code (Milestone E fully verified — workflow_dispatch run 25129025256 green across all 4 packages; release-publish guard works; two follow-up fixes shipped (Arch hyphen→underscore, cargo-wix --force). Next = Windows-side work before rebooting to Linux: Tier 2 settings auto-detect via EnumProcessModules, profile_dirs() Windows paths, live ES shipping smoke test)
+Last updated: 2026-04-29 by claude-code (Milestone E + Windows post-E sweep complete: profile_dirs Windows paths, host.name/host.os.type fixed, EnumProcessModules dllscan + dllscan debug subcommand. Live ES shipping verified end-to-end from GAMINGPC2. Next = Linux-side B3 (automatic game detection design) or Milestone F (cross-platform parity verification))
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -44,7 +44,7 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 | Core metrics (8 streams) | ✅ | 🟡 (8/8 implemented; gaps documented) | ✅ (inherited) |
 | eBPF deep probes | ✅ | n/a | ✅ (inherited) |
 | Settings Tier 1 — manual CLI/config | ✅ | 🔲 | ✅ (inherited) |
-| Settings Tier 2 — auto-detect (DLL/ETW) | ✅ (/proc/maps) | 🔲 | ✅ (inherited) |
+| Settings Tier 2 — auto-detect (DLL/ETW) | ✅ (/proc/maps) | ✅ (EnumProcessModules) | ✅ (inherited) |
 | Settings Tier 3 — per-game config profiles | ✅ | 🔲 | ✅ (inherited) |
 | Session label (per-game-per-day counter) | ✅ | 🔲 | ✅ (inherited) |
 
@@ -67,7 +67,22 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 **Milestone E complete + CI-verified 2026-04-29.** Windows MSI packaging via cargo-wix 0.3.9 + WiX Toolset 3.14. Hand-authored `main.wxs` mirrors Linux package layout: install root `C:\Program Files\GamePulse\` with `bin\`, `config\`, `profiles\` subfolders; system PATH gains `bin\`; stable upgrade GUID + MajorUpgrade for in-place upgrades; `perMachine` install scope. `release.yml` Windows job rewired from zip → MSI (cargo-binstall installs cargo-wix in CI, `--force` to bypass rust-cache vs binstall metadata staleness). `Config::load()` now searches `%APPDATA%\GamePulse\gamepulse.toml` then `%PROGRAMDATA%\GamePulse\gamepulse.toml` on Windows, cfg-gated separately from the Linux chain. CLI help strings de-Linux-ified (about-string, `--config` description). Local install/uninstall round-trip on Windows 11 (UAC `/qb!`): exit 0, all 5 files present, PATH added on install + removed on uninstall, `gamepulse-agent --help` runs from PATH. CI workflow_dispatch verified on run 25129025256 — all 4 packages green (deb 2.47 MB, rpm 2.65 MB, arch 3.19 MB, msi 2.81 MB), release-publish job correctly skipped via `if: github.event_name == 'push'` guard. Two follow-up CI fixes also shipped: hyphen→underscore translation in Arch pkgver (handles semver pre-release tags), and `--force` on cargo-binstall (rust-cache caches `.crates2.json` metadata but not `~/.cargo/bin/`, leaving binstall thinking cargo-wix was installed when it wasn't).
 
-**Known follow-up exposed by E.7 install test:** `src/profiles.rs::profile_dirs()` only searches Linux paths (`~/.config/gamepulse/profiles`, `/etc/gamepulse/profiles`, `/usr/share/gamepulse/profiles`). The MSI installs profiles to `C:\Program Files\GamePulse\profiles\` but the loader can't find them. Small cfg-gated edit to add `%APPDATA%\GamePulse\profiles\`, `%PROGRAMDATA%\GamePulse\profiles\`, and the binary's sibling `profiles\` folder.
+**Post-E Windows sweep complete 2026-04-29.** While the Windows machine was set up, four bugs got fixed and one feature gap closed:
+
+1. **`profile_dirs()` Windows paths** (commit cf71c18) — D.7 only searched Linux paths so the MSI-installed profiles at `C:\Program Files\GamePulse\profiles\` were unreachable. Added cfg-gated chain: `%APPDATA%\GamePulse\profiles\`, `%PROGRAMDATA%\GamePulse\profiles\`, and a binary-relative one-up fallback (`<exe>/../profiles/`) that picks up the MSI install layout.
+
+2. **`host.name = "unknown"` and `host.os.type = "linux"`** (commit a6fbb1b) — caught by live ES shipping smoke test from `GAMINGPC2` (session `a78c7eb2-...`). `hostname()` was reading `/proc/sys/kernel/hostname` unconditionally; now uses `COMPUTERNAME` env var on Windows. `os_info()` was hard-coding `type = "linux"`; now reads `std::env::consts::OS` and on Windows runs `cmd /c ver` to extract the kernel/version (e.g. `10.0.26100.8246`). Verified end-to-end in ES — every per-tick doc now has `host.name = "GAMINGPC2"`.
+
+3. **Settings Tier 2 — Windows EnumProcessModules** (commit 59465f9) — closes the largest remaining Windows feature gap. `read_mapped_paths` is now cfg-gated between `/proc/<pid>/maps` (Linux) and `OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ) + EnumProcessModules + GetModuleFileNameExW` (Windows, via psapi). 4096-wide-char buffer avoids silent truncation on long-path installs. Detection chains in `dllscan.rs` (graphics_api, upscaler, frame_gen) were already cross-platform — they just needed a Windows module enumerator. New `gamepulse-agent dllscan <PID>` debug subcommand prints loaded modules + inferred Tier 2 detection. Smoke-tested against explorer.exe (356 modules enumerated; correctly returned `graphics_api: None` and `settings_overlay: null` since no DLSS/XeSS/FSR/DXVK/D3D12 DLLs present).
+
+**Live ES shipping verification on Windows 11 (run a78c7eb2-...).** First end-to-end proof that the Windows agent populates ES from a real desktop. Agent ran for ~2 min, shipped 164 docs/stream across 7 active streams (cpu/memory/storage/network/audio/power/gpu) + 1 session doc. `gamepulse.audio.backend = "wasapi"` ✅. `gamepulse.gpu.memory_total_mb = 15428` (DXGI working) ✅. `gamepulse.frame` correctly empty (no PresentMon, no game).
+
+**Remaining gaps (separate follow-ups, not Milestone-E blockers):**
+
+- `gamepulse.gpu.temp_source` field is in `data_stream/gpu/fields/fields.yml` (added in C.7) but not in the live ES mapping — pipeline never got redeployed. Worth closing in a Phase-4 maintenance pass.
+- `gamepulse.hardware.{cpu,gpu,ram}` is empty on Windows: `host.rs::cpu_info()/gpu_info()/ram_info()` still read `/proc` and `/sys`. Larger Windows port — could re-use the data we already collect via PDH/DXGI.
+- Linux Steam scanner runs uselessly on Windows (`No game detected — scanning /proc every 5 s` log spam). Should cfg-gate or replace with Windows game detection (Steam-on-Windows-native, Epic Games Launcher, etc.).
+- `detect_graphics_api_from_paths` doesn't match `d3d11.dll` natively — only dxvk-translated D3D11 → `dx11_via_dxvk`. Native Windows D3D11 games will return `graphics_api: None` until the schema gains non-via-DXVK enum values and the matcher chain extends.
 
 **v0.1.0 released 2026-04-29.** GitHub Release at https://github.com/MathewRJ/GamePulse/releases/tag/v0.1.0 — .deb (Debian/Ubuntu), .rpm (Fedora/RHEL), .pkg.tar.zst (Arch/CachyOS/Manjaro) all verified. Release notes + user guide (install, quick-start, config, profiles, troubleshooting, FAQ) at `.github/RELEASE_NOTES.md`.
 
