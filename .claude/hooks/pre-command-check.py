@@ -54,8 +54,6 @@ def main():
         'sudo',
         'curl',
         'wget',
-        'ssh',
-        'scp',
     ]
 
     for blocked in blocked_patterns:

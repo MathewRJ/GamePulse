@@ -160,20 +160,22 @@ Docker: eBPF probe loading typically fails without `--privileged` — acceptable
 
 ## Platform results
 
-| Stream | Ubuntu 24.04 | Fedora 40 | Arch (clean) | SteamOS 3.6 | Windows 11 |
+| Stream | Ubuntu 24.04 | Fedora 40 | Arch (clean) | SteamOS 3.9¹ | Windows 11 |
 |---|---|---|---|---|---|
-| cpu | ✅ | ✅ | ✅ | 🔲 | 🟡 (PDH; no game_util) |
-| gpu | ✅ | ✅ | ✅ | 🔲 | 🟡 (DXGI+PDH; wmi_acpi temp) |
-| memory | ✅ | ✅ | ✅ | 🔲 | ✅ |
-| storage | ✅ | ✅ | ✅ | 🔲 | 🟡 (aggregate only) |
-| network | ✅ | ✅ | ✅ | 🔲 | 🟡 (aggregate only) |
-| audio | 🟡 (no server in Docker) | 🟡 (no server in Docker) | 🟡 (no server in Docker) | 🔲 | 🟡 (wasapi; no xruns) |
-| power | 🟡 (tdp_current_w only; desktop=no AC/BAT) | 🟡 (tdp_current_w only) | 🟡 (tdp_current_w only) | 🔲 | 🟡 (AC+battery%; no rate_w) |
-| frame | 🟡 (no MangoHud) | 🟡 (no MangoHud) | 🟡 (no MangoHud) | 🔲 | 🟡 (PresentMon required) |
-| ebpf | 🟡 (no --privileged) | 🟡 (no --privileged) | 🟡 (no --privileged) | 🔲 | n/a |
-| session | ✅ (os.type+platform in host snapshot) | ✅ | ✅ | 🔲 | 🟡 (label counter not wired) |
+| cpu | ✅ | ✅ | ✅ | 🟡 (temp_c absent; APU thermal path differs) | 🟡 (PDH; no game_util) |
+| gpu | ✅ | ✅ | ✅ | ✅ (VanGogh APU; no hotspot/fan — expected) | 🟡 (DXGI+PDH; wmi_acpi temp) |
+| memory | ✅ | ✅ | ✅ | ✅ | ✅ |
+| storage | ✅ | ✅ | ✅ | ✅ | 🟡 (aggregate only) |
+| network | ✅ | ✅ | ✅ | ✅ (wifi; connection_type=wifi) | 🟡 (aggregate only) |
+| audio | 🟡 (no server in Docker) | 🟡 (no server in Docker) | 🟡 (no server in Docker) | ✅ (pipewire) | 🟡 (wasapi; no xruns) |
+| power | 🟡 (tdp_current_w only; desktop=no AC/BAT) | 🟡 (tdp_current_w only) | 🟡 (tdp_current_w only) | ✅ (ac_connected+battery_pct+battery_rate_w+tdp) | 🟡 (AC+battery%; no rate_w) |
+| frame | 🟡 (no MangoHud) | 🟡 (no MangoHud) | 🟡 (no MangoHud) | 🟡 (SSH session; no game running) | 🟡 (PresentMon required) |
+| ebpf | 🟡 (no --privileged) | 🟡 (no --privileged) | 🟡 (no --privileged) | 🟡 (needs CAP_BPF/root) | n/a |
+| session | ✅ (os.type+platform in host snapshot) | ✅ | ✅ | ✅ (platform=steamos; device=laptop; model=Jupiter) | 🟡 (label counter not wired) |
 
-*Table updated as parity runs complete. F.2/F.3/F.4 Docker runs 2026-04-29 with --pid=host (host AMD GPU visible). Windows column pre-filled from live ES verification (2026-04-29 GAMINGPC2 run). SteamOS requires physical Steam Deck.*
+¹ QA matrix targeted SteamOS 3.6; actual device runs 3.9 (Valve rolling release). Results apply to both.
+
+*Table updated as parity runs complete. F.2/F.3/F.4 Docker runs 2026-04-29 with --pid=host. F.5 SteamOS run 2026-04-29 via SSH to Steam Deck (Jupiter, kernel 6.18.22-valve1). Windows column pre-filled from live ES verification (2026-04-29 GAMINGPC2 run).*
 
 ---
 
@@ -189,6 +191,8 @@ Docker: eBPF probe loading typically fails without `--privileged` — acceptable
 | Windows | power | No `battery_rate_w` | WMI BatteryStatus rate unreliable |
 | Windows | frame | Requires `PresentMon.exe` on PATH | External binary dependency |
 | Windows | session | Session label counter not wired | `$LOCALAPPDATA` counter path TBD |
+| SteamOS | cpu | No `temperature_c` | APU thermal sensors not in `/sys/class/hwmon` path probed by CPU collector |
+| SteamOS | gpu | No `hotspot_c`, `fan_speed_rpm`, `fan_pct` | VanGogh APU shares thermals with CPU; no discrete fan hwmon |
 | SteamOS | gpu | AMD only | Hardware constraint |
 | Docker | gpu | No output | No /sys/class/drm passthrough |
 | Docker | ebpf | No output | Requires --privileged |
