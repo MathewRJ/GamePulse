@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-29 by claude-code (F.5 SteamOS parity run complete via SSH to Steam Deck Jupiter — power stream ✅ fully populated for first time: ac_connected+battery_pct+battery_rate_w+tdp_current_w; audio=pipewire ✅; gpu VanGogh APU ✅ (no hotspot/fan expected); cpu missing temperature_c (APU thermal path differs — documented). Network wifi ✅. Known limitations table updated. Next = F.6 Windows formalize in QA matrix, F.7 CI smoke test)
+Last updated: 2026-04-29 by claude-code (Milestone F complete: F.6 Windows known limitations finalized (hardware.* empty on Windows added); F.7 CI smoke test implemented — scripts/smoke-test.sh + smoke-test job in ci.yml; 14/14 required fields pass locally. All parity runs done: Ubuntu/Fedora/Arch/SteamOS/Windows. Next = Milestone G — elastic/integrations PR submission)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file

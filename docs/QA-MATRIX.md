@@ -184,6 +184,7 @@ Docker: eBPF probe loading typically fails without `--privileged` — acceptable
 | Platform | Stream | Limitation | Reason |
 |---|---|---|---|
 | Windows | cpu | No `game_utilisation_pct` | ETW/job objects required |
+| Windows | session | `gamepulse.hardware.{cpu,gpu,ram}` empty in host snapshot | `host.rs` cpu_info/gpu_info/ram_info still read `/proc`; Windows port pending |
 | Windows | gpu | `temp_source = "wmi_acpi"` (not precise) | No WinRing0 / ADLX in v0.1 |
 | Windows | storage | Aggregate only; no game-process IO | No ETW disk I/O tracking |
 | Windows | network | Aggregate only; tunnels filtered | No per-process network tracking |

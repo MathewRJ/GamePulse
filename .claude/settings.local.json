@@ -159,7 +159,11 @@
       "Bash(tee /tmp/gp-parity-arch.log)",
       "Bash(GAMEPULSE_LOG=debug ./target/release/gamepulse-agent --dry-run --log-level debug)",
       "Read(//sys/class/power_supply/**)",
-      "Bash(GAMEPULSE_LOG=info ./target/release/gamepulse-agent --dry-run --log-level debug)"
+      "Bash(GAMEPULSE_LOG=info ./target/release/gamepulse-agent --dry-run --log-level debug)",
+      "Bash(objdump -p target/release/gamepulse-agent)",
+      "Bash(ssh-copy-id -o StrictHostKeyChecking=no deck@192.168.50.105)",
+      "Bash(ssh *)",
+      "Bash(scp *)"
     ]
   },
   "enableAllProjectMcpServers": true,

@@ -63,3 +63,25 @@ jobs:
 
       - name: cargo fmt --check
         run: cargo fmt --manifest-path src/Cargo.toml -- --check
+
+  smoke-test:
+    name: smoke test (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry + build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src -> target
+          key: ubuntu-smoke
+
+      - name: Build agent (debug)
+        run: cargo build --manifest-path src/Cargo.toml --locked
+
+      - name: Run smoke test
+        run: bash scripts/smoke-test.sh ./target/debug/gamepulse-agent
