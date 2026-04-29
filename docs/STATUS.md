@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-29 by claude-code (Linux cleanup complete: repo drift corrected, all sample_event.json files updated, docs rewritten, pre-command-check hook fixed)
+Last updated: 2026-04-29 by claude-code (Phase 6 complete: .deb smoke test PASS on Ubuntu 24.04, .rpm smoke test PASS on Fedora 40)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -65,7 +65,7 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 ## Active work package
 
-**Milestone D complete.** D.3 → D.5 → D.6 → D.7 → D.8 all shipped. Next: Milestone E (Windows MSI packaging) or D.1/D.2 Debian/RPM smoke tests.
+**Milestone D complete (including D.1/D.2).** D.1 (.deb Ubuntu 24.04 smoke test) and D.2 (.rpm Fedora 40 smoke test) PASS — 2026-04-29. All packages install cleanly, binary runs, all assets land in correct paths. Next: Milestone E (Windows MSI packaging).
 
 **Dashboard suite complete (Home → Games → Environment → Hardware → Compare → Engine).** All 6 primary dashboards deployed and verified.
 
@@ -88,7 +88,11 @@ See `docs/ROADMAP.md` for milestone structure and work package definitions.
 
 ## Completed work
 
-### Milestone D — Linux portable packaging (complete, 2026-04-27)
+### Milestone D — Linux portable packaging (complete, 2026-04-29 — D.1/D.2 smoke tests done)
+
+- **D.2 — Fedora 40 `.rpm` smoke test**: Built `gamepulse-agent-0.1.0-1.x86_64.rpm` via `cargo generate-rpm`. Ran `rpm -ivh` in a clean `fedora:40` container. Install PASS. All assets verified: `/usr/bin/gamepulse-agent` (755), `/usr/bin/gamepulse` launcher (755), `/etc/gamepulse/gamepulse.toml` (644, config=true), `/usr/lib/systemd/user/gamepulse-agent.service` (644), three profile files under `/usr/share/gamepulse/profiles/`. Binary runs (`--help` prints usage). Container: Docker 29.4.1 on kernel 7.0.2.
+
+- **D.1 — Ubuntu 24.04 `.deb` smoke test**: Built `gamepulse-agent_0.1.0-1_amd64.deb` via `cargo deb --no-build --no-strip`. Ran `dpkg -i` in a clean `ubuntu:24.04` container. Install PASS. All assets verified: `/usr/bin/gamepulse-agent` (755, 8.5 MB), `/usr/bin/gamepulse` launcher (755), `/etc/gamepulse/gamepulse.toml` (644), `/usr/lib/systemd/user/gamepulse-agent.service` (644), three profile files under `/usr/share/gamepulse/profiles/`. Binary runs (`--help` prints usage). Note: `dpkg-shlibdeps` unavailable on build host (CachyOS) so `$auto` deps resolved to none — acceptable for initial smoke test; CI build on `ubuntu-latest` will resolve correctly. Container: Docker 29.4.1 on kernel 7.0.2.
 
 - **D.8 — `/proc/<pid>/maps` DLL scan — Tier 2 settings auto-detection**: New `src/dllscan.rs` module. `read_mapped_paths(pid)` parses `/proc/<pid>/maps`, extracts file-backed paths (those starting with '/'), lowercases them for case-insensitive matching, and returns an empty Vec gracefully on any read error (cross-platform safe). Three detection functions (all `pub(crate)`, tested with mock path slices): `detect_graphics_api_from_paths` — priority chain VKD3D > DXVK D3D9 > DXVK D3D11 > Vulkan > OpenGL (all fragments lowercase to match lowercased paths); `detect_upscaler_from_paths` — DLSS (nvngx_dlss) > XeSS (xess) > FSR (ffx_fsr/libffx_fsr/amd_fidelityfx_vk/openfsr); `detect_frame_gen_from_paths` — DLSS3 (nvngx_dlssg/dlss_fg/dlssg.dll) > FSR3 (ffx_framegeneration/ffx_fsr3framegen) > AFMF. Two public functions: `graphics_api_from_maps(pid)` and `settings_overlay_from_maps(pid)` (builds `{ gamepulse.settings.* }` with `source="auto_detected"`, `confidence="medium"`, returns Null when nothing detected). Wired in `session.rs`: new `graphics_api_with_maps_fallback(env, pid)` helper calls `detect_graphics_api(env)` first; falls back to `graphics_api_from_maps(pid)` when env returns None. Replaces all 5 `detect_graphics_api` call sites (Lutris, Heroic, Bottles, Steam, UserSpecified). Wired in `main.rs` `GameStarted` arm: `settings_overlay_from_maps(target.pid)` merged after the D.7 profile block with existing overlay winning (maps is lowest precedence). 13 dllscan unit tests + bug fix (libGL.so/libGLX.so fragments lowercased). 26/26 tests green.
 
