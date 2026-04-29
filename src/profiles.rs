@@ -155,6 +155,18 @@ pub fn to_overlay(profile: &GameProfile) -> Value {
 // ── Directory discovery + loading ─────────────────────────────────────────────
 
 /// Return all profile directories to search, in priority order.
+///
+/// Search order (first found wins for any given game):
+///
+/// 1. `$GAMEPULSE_PROFILES_DIR` env var (any platform)
+/// 2. Per-user dir — Linux `~/.config/gamepulse/profiles/`,
+///    Windows `%APPDATA%\GamePulse\profiles\`
+/// 3. System-local — Linux `/etc/gamepulse/profiles/`,
+///    Windows `%PROGRAMDATA%\GamePulse\profiles\`
+/// 4. System-package — Linux `/usr/share/gamepulse/profiles/`;
+///    Windows uses the binary-relative fallback below instead
+/// 5. Binary-relative — `<exe>/../profiles/` (MSI/zip install layout) and
+///    `<exe>/../../profiles/` (dev: `target/release/...`)
 pub fn profile_dirs() -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = Vec::new();
 
@@ -164,22 +176,43 @@ pub fn profile_dirs() -> Vec<PathBuf> {
         }
     }
 
-    // ~/.config/gamepulse/profiles/
-    let home = std::env::var("SUDO_USER")
-        .ok()
-        .filter(|u| !u.is_empty())
-        .map(|u| PathBuf::from("/home").join(u))
-        .or_else(|| std::env::var("HOME").ok().map(PathBuf::from));
-    if let Some(h) = home {
-        dirs.push(h.join(".config/gamepulse/profiles"));
+    #[cfg(unix)]
+    {
+        let home = std::env::var("SUDO_USER")
+            .ok()
+            .filter(|u| !u.is_empty())
+            .map(|u| PathBuf::from("/home").join(u))
+            .or_else(|| std::env::var("HOME").ok().map(PathBuf::from));
+        if let Some(h) = home {
+            dirs.push(h.join(".config/gamepulse/profiles"));
+        }
+        dirs.push(PathBuf::from("/etc/gamepulse/profiles"));
+        dirs.push(PathBuf::from("/usr/share/gamepulse/profiles"));
     }
 
-    dirs.push(PathBuf::from("/etc/gamepulse/profiles"));
-    dirs.push(PathBuf::from("/usr/share/gamepulse/profiles"));
+    #[cfg(windows)]
+    {
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            dirs.push(PathBuf::from(appdata).join("GamePulse").join("profiles"));
+        }
+        if let Ok(programdata) = std::env::var("PROGRAMDATA") {
+            dirs.push(
+                PathBuf::from(programdata)
+                    .join("GamePulse")
+                    .join("profiles"),
+            );
+        }
+    }
 
-    // Dev fallback: target/release/../../profiles → repo-root/profiles/
+    // Binary-relative fallbacks (cross-platform). Try one-up
+    // (MSI/zip install: `bin/gamepulse-agent.exe` → `../profiles/`) and
+    // two-up (dev: `target/release/gamepulse-agent` → `../../profiles/`).
     if let Ok(exe) = std::env::current_exe() {
         if let Some(exe_dir) = exe.parent() {
+            let install = exe_dir.join("../profiles");
+            if install.exists() {
+                dirs.push(install);
+            }
             let dev = exe_dir.join("../../profiles");
             if dev.exists() {
                 dirs.push(dev);
@@ -282,6 +315,38 @@ mod tests {
         assert_eq!(settings["source"], "profile");
         assert_eq!(settings["confidence"], "medium");
         assert_eq!(settings["preset"], "ultra");
+    }
+
+    #[test]
+    fn test_profile_dirs_env_override_listed_first() {
+        // Use a deliberately unique sentinel so we don't disturb real env state.
+        let sentinel = std::env::temp_dir().join("gamepulse-profile-test-XYZ");
+        // SAFETY: tests run in the same process — set_var is safe in single-thread cargo
+        // test, and this test does not rely on concurrency.
+        unsafe {
+            std::env::set_var("GAMEPULSE_PROFILES_DIR", &sentinel);
+        }
+        let dirs = profile_dirs();
+        unsafe {
+            std::env::remove_var("GAMEPULSE_PROFILES_DIR");
+        }
+        assert_eq!(dirs.first(), Some(&sentinel));
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_profile_dirs_includes_windows_paths() {
+        // With APPDATA set (always set on Windows runners), profile_dirs should
+        // include a path under APPDATA\GamePulse\profiles.
+        let dirs = profile_dirs();
+        let appdata = std::env::var("APPDATA").expect("APPDATA must be set on Windows");
+        let expected = std::path::PathBuf::from(&appdata)
+            .join("GamePulse")
+            .join("profiles");
+        assert!(
+            dirs.iter().any(|d| d == &expected),
+            "expected {expected:?} in {dirs:?}"
+        );
     }
 
     #[test]
