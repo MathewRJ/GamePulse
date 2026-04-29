@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-29 by claude-code (release workflow: added workflow_dispatch trigger + Windows zip job; next = Milestone E Windows MSI on Windows machine)
+Last updated: 2026-04-29 by claude-code (Milestone E complete: Windows MSI via cargo-wix + WiX 3, install/uninstall round-trip verified locally; next = trigger CI workflow_dispatch to verify MSI builds on the runner, then Milestone F parity verification)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -24,7 +24,7 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 | B3 Automatic game detection (TBD) | ⚪ Not started | ░░░░░░░░░░ |
 | C  Windows collectors | 🟢 Done (C.0–C.8) | ▓▓▓▓▓▓▓▓▓▓ |
 | D  Linux portable packaging | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
-| E  Windows packaging | ⚪ Not started | ░░░░░░░░░░ |
+| E  Windows packaging | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
 | F  Cross-platform parity verification (M2) | 🔒 Blocked on B2+C+E | — |
 | G  elastic/integrations PR (M4) | 🔒 Blocked on F | — |
 
@@ -65,11 +65,13 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 ## Active work package
 
+**Milestone E complete 2026-04-29.** Windows MSI packaging via cargo-wix 0.3.9 + WiX Toolset 3.14. Hand-authored `main.wxs` mirrors Linux package layout: install root `C:\Program Files\GamePulse\` with `bin\`, `config\`, `profiles\` subfolders; system PATH gains `bin\`; stable upgrade GUID + MajorUpgrade for in-place upgrades; `perMachine` install scope. `release.yml` Windows job rewired from zip → MSI (cargo-binstall installs cargo-wix in CI). `Config::load()` now searches `%APPDATA%\GamePulse\gamepulse.toml` then `%PROGRAMDATA%\GamePulse\gamepulse.toml` on Windows, cfg-gated separately from the Linux chain. CLI help strings de-Linux-ified (about-string, `--config` description). Local install/uninstall round-trip on Windows 11 (UAC `/qb!`): exit 0, all 5 files present, PATH added on install + removed on uninstall, `gamepulse-agent --help` runs from PATH. CI workflow_dispatch trigger needs to be exercised once on a test version to verify the runner-side build.
+
 **v0.1.0 released 2026-04-29.** GitHub Release at https://github.com/MathewRJ/GamePulse/releases/tag/v0.1.0 — .deb (Debian/Ubuntu), .rpm (Fedora/RHEL), .pkg.tar.zst (Arch/CachyOS/Manjaro) all verified. Release notes + user guide (install, quick-start, config, profiles, troubleshooting, FAQ) at `.github/RELEASE_NOTES.md`.
 
-**Release workflow updated 2026-04-29.** Added `workflow_dispatch` with `version` input (no git tag needed — trigger from GitHub UI). Added Windows zip job (`windows-latest`, `gamepulse-agent-{v}-windows-x86_64.zip`). Arch PKGVER now reads `needs.setup.outputs.version` (works for both trigger modes). Windows job is a placeholder — upgrade to MSI (cargo-wix) in Milestone E.
+**Release workflow updated 2026-04-29.** Added `workflow_dispatch` with `version` input (no git tag needed — trigger from GitHub UI). Arch PKGVER now reads `needs.setup.outputs.version` (works for both trigger modes). Windows job upgraded from zip to MSI in Milestone E (above).
 
-**Milestone D fully complete (D.1/D.2 + Phase 7.2 + Phase 8).** All pre-Milestone-E gates passed on 2026-04-29. Next: Milestone E (Windows MSI packaging).
+**Milestone D fully complete (D.1/D.2 + Phase 7.2 + Phase 8).** All pre-Milestone-E gates passed on 2026-04-29.
 
 **Dashboard suite complete (Home → Games → Environment → Hardware → Compare → Engine).** All 6 primary dashboards deployed and verified.
 
@@ -91,6 +93,22 @@ Users who install PresentMon to a non-standard path should set `GAMEPULSE_PRESEN
 See `docs/ROADMAP.md` for milestone structure and work package definitions.
 
 ## Completed work
+
+### Milestone E — Windows packaging (complete, 2026-04-29)
+
+- **E.1 — WiX 3 installer source** (`.github/packaging/main.wxs`, hand-authored): single `Product` with `MajorUpgrade` (afterInstallInitialize, blocks downgrade), `perMachine` `InstallScope`, `ProgramFiles64Folder` rooted at `APPLICATIONFOLDER` named `GamePulse`. Three sibling subdirs — `bin\` (component `AgentBinary` with `gamepulse-agent.exe`), `config\` (`ConfigExample` with `gamepulse.toml.example`), `profiles\` (`Profiles` with three TOML files). System PATH `bin\` entry via separate `PathEntry` component (`Environment` element, `Part='last'`, `System='yes'`). Stable GUIDs: UpgradeCode `D09227C0-…`, AgentBinary `F1B34534-…`, PathEntry `EDE10EE8-…`, ConfigExample `EB29D189-…`, Profiles `B7785CFF-…` (changing any of these breaks upgrade detection or orphans uninstall). `ARPINSTALLLOCATION` + `ARPHELPLINK` + `ARPURLINFOABOUT` set so Add/Remove Programs shows the install path and links to the GitHub repo.
+
+- **E.2 — cargo-wix metadata in `src/Cargo.toml`**: `[package.metadata.wix]` block with `upgrade-guid` + `path-guid` matching the wxs source, `license = false`, `eula = false`. Build invocation in CI: `cargo wix --no-build --nocapture --include .github/packaging/main.wxs src/Cargo.toml` — `--no-build` because the Rust binary is built in a separate CI job and downloaded as an artifact, `--include` so cargo-wix uses our hand-authored wxs instead of generating one.
+
+- **E.3 — Release workflow Windows job rewired**: `package-windows` job in `.github/workflows/release.yml` switched from the zip placeholder to MSI: installs Rust toolchain (Swatinem rust-cache for incremental cargo-wix builds), `actions/download-artifact@v4` lands the agent binary at `target/release/`, `cargo-bins/cargo-binstall@main` provides the cargo-binstall extension, `cargo binstall cargo-wix --no-confirm --locked` installs the cargo-wix subcommand pre-built (no source compile), `cargo wix` builds the MSI, artifact is `target/wix/*.msi` named `windows-package`. Final release job picks up the artifact via the existing `softprops/action-gh-release` glob.
+
+- **E.4 — Windows config fallback chain**: `src/config.rs::Config::load()` now branches on `cfg(windows)`: Windows fallback chain is `%APPDATA%\GamePulse\gamepulse.toml` (per-user) then `%PROGRAMDATA%\GamePulse\gamepulse.toml` (system-wide); Linux unchanged (`~/.config/gamepulse/gamepulse.toml` then `/etc/gamepulse/gamepulse.toml`). CLI `--config` and `$GAMEPULSE_CONFIG` env var precedence unchanged across both platforms. Doc-comment on `Config::load` lists both chains.
+
+- **E.5 — `RELEASE_NOTES.md` Windows section**: Added install via `msiexec /i ... /qb!` and uninstall via `msiexec /x` or *Settings → Apps*. Documents: PATH integration (`gamepulse-agent` from any new shell), absent `gamepulse setup` launcher (Windows-side TODO), `notepad` walkthrough for hand-authoring `%APPDATA%\GamePulse\gamepulse.toml`, env-var alternative (`ES_URL` + `ES_API_KEY`), Windows-specific PowerShell start/stop snippets (no systemd analogue yet), and a "Windows caveats" block enumerating the four fields that don't populate on Windows in this release (`cpu.game_utilisation_pct`, `storage.game_io`, `audio.xruns`, `power.battery_rate_w`) plus the PresentMon optional-dep note.
+
+- **E.6 — CLI help strings de-Linux-ified**: `src/main.rs` clap `about` changed from "GamePulse Linux telemetry agent" to "GamePulse cross-platform gaming telemetry agent". `--config` doc-comment now enumerates Linux and Windows fallback chains (clap's default-value display string was the only place that lied about Windows behaviour after E.4).
+
+- **E.7 — Local install/uninstall round-trip on Windows 11**: `cargo wix` produced `target/wix/gamepulse-agent-0.1.0-x86_64.msi` (2.7 MB, contains 5 files at expected names + sizes). Elevated `msiexec /i` (UAC `/qb!`) exit 0, files at `C:\Program Files\GamePulse\{bin,config,profiles}\` with correct sizes (6.7 MB exe, 225 B config example, 3 profile TOMLs), system PATH gained `C:\Program Files\GamePulse\bin\`, `gamepulse-agent.exe --help` runs cleanly via PATH. Elevated `msiexec /x` exit 0, install dir removed cleanly, PATH entry removed cleanly. `cargo check` + `cargo clippy -- -D warnings` green; `cargo fmt --check` shows pre-existing drift in 5 files unrelated to this milestone (`config.rs` and `main.rs` changes within this milestone are correctly formatted). `cargo test` blocked by Windows Application Control policy (`os error 4551`) on this machine — not a code issue, tests gate on Linux.
 
 ### Milestone D — Linux portable packaging (complete, 2026-04-29 — D.1/D.2 smoke tests done)
 
