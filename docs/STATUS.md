@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-29 by claude-code (Phase 6 complete: .deb smoke test PASS on Ubuntu 24.04, .rpm smoke test PASS on Fedora 40)
+Last updated: 2026-04-29 by claude-code (Phase 7.2 complete: B2/B.7/B.8 all verified live in ES — Starfield session starfield-20260429-1)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -65,7 +65,7 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 ## Active work package
 
-**Milestone D complete (including D.1/D.2).** D.1 (.deb Ubuntu 24.04 smoke test) and D.2 (.rpm Fedora 40 smoke test) PASS — 2026-04-29. All packages install cleanly, binary runs, all assets land in correct paths. Next: Milestone E (Windows MSI packaging).
+**Milestone D complete (including D.1/D.2 + Phase 7.2).** D.1/D.2 smoke tests PASS (2026-04-29). B2/B.7/B.8 fields verified live in ES (2026-04-29, Starfield session `starfield-20260429-1`): game.source/launcher/steam_app_id, session.label N-format/label_source/sequence_number, settings.preset/upscaler.tech/features_active/source/confidence/notes all confirmed. Also installed profiles to `~/.config/gamepulse/profiles/` and updated `/usr/local/bin/gamepulse-agent` to April 29 build. Next: Phase 8 (dashboard dataset filters) then Milestone E (Windows MSI packaging).
 
 **Dashboard suite complete (Home → Games → Environment → Hardware → Compare → Engine).** All 6 primary dashboards deployed and verified.
 
