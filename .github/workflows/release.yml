@@ -109,13 +109,13 @@ jobs:
         run: cargo binstall cargo-generate-rpm --no-confirm
 
       - name: Build .rpm
-        run: cargo generate-rpm --manifest-path src/Cargo.toml
+        run: cd src && cargo generate-rpm
 
       - name: Upload .rpm artefact
         uses: actions/upload-artifact@v4
         with:
           name: rpm-package
-          path: target/generate-rpm/*.rpm
+          path: src/target/generate-rpm/*.rpm
 
   # ── 4. .pkg.tar.zst (Arch Linux) ───────────────────────────────────────────
   package-arch:
@@ -176,9 +176,12 @@ jobs:
       - name: List release assets
         run: ls -lh dist/
 
+      - uses: actions/checkout@v4
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
+          body_path: .github/RELEASE_NOTES.md
           generate_release_notes: true
           fail_on_unmatched_files: true
