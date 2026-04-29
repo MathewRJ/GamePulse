@@ -182,6 +182,41 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /home/cachyos/coding/GamePulse/.claude/hooks/fiscal-check.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /home/cachyos/coding/GamePulse/.claude/hooks/session-log.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /home/cachyos/coding/GamePulse/.claude/hooks/session-summary.py",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   },
   "permissionMode": "acceptEdits"
