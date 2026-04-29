@@ -95,11 +95,21 @@ makepkg -si
 
 ### Debian / Ubuntu (.deb)
 
-Coming in Milestone D. Until then, build from source (see below).
+Download the latest `.deb` from the [GitHub releases page](https://github.com/MathewRJ/GamePulse/releases):
+
+```bash
+sudo apt install ./gamepulse_*.deb
+```
+
+The package installs `gamepulse-agent` and `gamepulse` (launcher) to `/usr/bin/`, the systemd user unit, and an example config to `/etc/gamepulse/gamepulse.toml`.
 
 ### Fedora / RHEL (.rpm)
 
-Coming in Milestone D. Until then, build from source.
+Download the latest `.rpm` from the [GitHub releases page](https://github.com/MathewRJ/GamePulse/releases):
+
+```bash
+sudo dnf install ./gamepulse-*.rpm
+```
 
 ### Building from source
 
@@ -109,7 +119,9 @@ Requires Rust 1.77+ and the Aya eBPF toolchain:
 git clone https://github.com/MathewRJ/GamePulse.git
 cd GamePulse/src
 cargo build --release
-sudo cp target/release/gamepulse-agent /usr/local/bin/gamepulse
+sudo cp target/release/gamepulse-agent /usr/local/bin/gamepulse-agent
+# Install the launcher wrapper as 'gamepulse'
+sudo install -Dm755 ../packaging/gamepulse-launcher.sh /usr/local/bin/gamepulse
 ```
 
 For the eBPF daemon (requires kernel 5.8+ and `CAP_BPF`):
@@ -131,9 +143,13 @@ Coming in Milestone E. The plan: MSI installer via WiX, installs `gamepulse.exe`
 
 ---
 
-## MangoHud setup (required for frame timing)
+## MangoHud setup (optional — needed for frame timing data)
 
-GamePulse reads frame data from MangoHud's CSV log. Add to Steam launch options:
+The agent ships all 8 metric streams regardless. MangoHud is only needed to populate
+`gamepulse.frame` (FPS, frame time, 1%/0.1% lows, stutter). All other streams (CPU, GPU,
+memory, storage, network, audio, power) work without it.
+
+To enable frame data, add to Steam launch options:
 
 ```
 MANGOHUD=1 MANGOHUD_LOG=1 gamepulse run %command%
@@ -177,9 +193,26 @@ Config is read from (in priority order):
 
 ---
 
-## Beta install guide
+## Minimum API key permissions
 
-For colleagues onboarding as beta testers, see `docs/BETA-INSTALL.md`. That document will be merged here once .deb/.rpm packaging ships.
+The API key you provide needs:
+- `monitor` privilege on the cluster
+- `auto_configure`, `create_doc`, `create_index` on indices `metrics-gamepulse.*` and `logs-gamepulse.*`
+
+For a personal deployment, `all` cluster + index privileges is simpler and fine.
+
+---
+
+## Verifying your setup
+
+After configuring, run the diagnostics subcommand before starting a game:
+
+```bash
+gamepulse-agent diagnose
+```
+
+This outputs kernel version, GPU info, Elasticsearch reachability (with the API key redacted),
+and the resolved config path. Use `--output report.txt` to save it for bug reports.
 
 ---
 

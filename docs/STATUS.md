@@ -266,4 +266,4 @@ Commit: 561dc78
 - HOME env fallback via `getpwuid` in `game_name_from_appid()` (src/session.rs)
 - No-game system metrics dashboard panel (system health without game filter)
 - Startup ES credential validation (ping at startup)
-- `docs/BETA-INSTALL.md` to be merged into `docs/install.md` and deleted (pending D.1/D.2 smoke test results)
+- `docs/BETA-INSTALL.md` merged into `docs/install.md` and deleted (D.1/D.2 smoke tests still pending)
