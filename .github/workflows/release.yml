@@ -7,7 +7,7 @@ name: release
 #
 # Fan-out packaging jobs (Linux + Windows run in parallel):
 #   Linux:   .deb (Debian/Ubuntu) · .rpm (Fedora/RHEL/openSUSE) · .pkg.tar.zst (Arch)
-#   Windows: .zip (binary + example config) — upgrade to MSI in Milestone E
+#   Windows: .msi (cargo-wix → WiX Toolset 3, ships with windows-latest runners)
 #
 # eBPF probes are NOT included — they require nightly Rust + bpf-linker and are
 # shipped via AUR (gamepulse-git) which builds from source.
@@ -213,36 +213,50 @@ jobs:
           name: arch-package
           path: .github/packaging/*.pkg.tar.zst
 
-  # ── 6. Windows .zip (binary + example config) ───────────────────────────────
-  # Milestone E will replace this with a proper MSI (cargo-wix).
+  # ── 6. Windows .msi (cargo-wix + WiX Toolset 3) ─────────────────────────────
+  # WiX 3 is pre-installed on windows-latest runners; cargo-wix is a small
+  # cargo subcommand that drives candle.exe + light.exe with the wxs source
+  # at .github/packaging/main.wxs. The MSI installs to Program Files\GamePulse\
+  # and adds bin\ to the system PATH.
   package-windows:
-    name: package .zip (windows)
+    name: package .msi (windows)
     needs: [setup, build-windows]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Rust toolchain (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry + build artefacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src -> target
+
       - name: Download Windows binary
         uses: actions/download-artifact@v4
         with:
           name: agent-binary-windows-x86_64
-          path: dist-win/
+          path: target/release/
 
-      - name: Bundle release zip
+      - name: Install cargo-binstall
+        uses: cargo-bins/cargo-binstall@main
+
+      - name: Install cargo-wix
+        run: cargo binstall cargo-wix --no-confirm --locked
+
+      - name: Build .msi
         shell: pwsh
         run: |
-          $version = "${{ needs.setup.outputs.version }}"
-          $pkg = "gamepulse-agent-$version-windows-x86_64"
-          New-Item -ItemType Directory -Path $pkg | Out-Null
-          Copy-Item dist-win/gamepulse-agent.exe "$pkg/"
-          Copy-Item packaging/config/gamepulse.toml.example "$pkg/gamepulse.toml.example"
-          Compress-Archive -Path $pkg -DestinationPath "$pkg.zip"
+          cargo wix --no-build --nocapture `
+            --include .github/packaging/main.wxs `
+            src/Cargo.toml
 
-      - name: Upload Windows zip artefact
+      - name: Upload .msi artefact
         uses: actions/upload-artifact@v4
         with:
           name: windows-package
-          path: gamepulse-agent-*-windows-x86_64.zip
+          path: target/wix/*.msi
 
   # ── 7. Create GitHub Release ─────────────────────────────────────────────────
   release:

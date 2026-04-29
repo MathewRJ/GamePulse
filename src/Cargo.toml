@@ -83,6 +83,17 @@ assets = [
     ["../profiles/baldurs-gate-3.toml", "usr/share/gamepulse/profiles/baldurs-gate-3.toml", "644"],
 ]
 
+# ── WiX MSI metadata (cargo-wix) ─────────────────────────────────────────────
+# WiX source lives at .github/packaging/main.wxs (alongside PKGBUILD).
+# Run from repo root: cargo wix --no-build --include .github/packaging/main.wxs
+# upgrade-guid / path-guid are stable across releases — never change them or
+# upgrades stop being detected as upgrades.
+[package.metadata.wix]
+upgrade-guid = "D09227C0-8367-4FB7-BA3D-027E0D47F7A3"
+path-guid    = "EDE10EE8-4579-4E3D-AC7B-4C21446D6498"
+license      = false
+eula         = false
+
 # ── RPM package metadata (cargo-generate-rpm) ────────────────────────────────
 # Paths are relative to this file's directory (src/).
 # Run: cargo generate-rpm --manifest-path src/Cargo.toml

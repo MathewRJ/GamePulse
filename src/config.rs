@@ -155,8 +155,14 @@ impl Config {
     /// Search order:
     ///   1. `path` argument (from --config CLI flag)
     ///   2. $GAMEPULSE_CONFIG env var
+    ///
+    /// Linux fallback chain (when neither of the above is set):
     ///   3. ~/.config/gamepulse/gamepulse.toml
     ///   4. /etc/gamepulse/gamepulse.toml
+    ///
+    /// Windows fallback chain (when neither of the above is set):
+    ///   3. %APPDATA%\GamePulse\gamepulse.toml          (per-user)
+    ///   4. %PROGRAMDATA%\GamePulse\gamepulse.toml      (system-wide)
     pub fn load(path: Option<&PathBuf>) -> Result<Self> {
         let candidates: Vec<PathBuf> = if let Some(p) = path {
             vec![p.clone()]
@@ -164,10 +170,30 @@ impl Config {
             vec![PathBuf::from(env_path)]
         } else {
             let mut v = Vec::new();
-            if let Some(home) = home_dir() {
-                v.push(home.join(".config/gamepulse/gamepulse.toml"));
+            #[cfg(windows)]
+            {
+                if let Ok(appdata) = std::env::var("APPDATA") {
+                    v.push(
+                        PathBuf::from(appdata)
+                            .join("GamePulse")
+                            .join("gamepulse.toml"),
+                    );
+                }
+                if let Ok(programdata) = std::env::var("PROGRAMDATA") {
+                    v.push(
+                        PathBuf::from(programdata)
+                            .join("GamePulse")
+                            .join("gamepulse.toml"),
+                    );
+                }
             }
-            v.push(PathBuf::from("/etc/gamepulse/gamepulse.toml"));
+            #[cfg(not(windows))]
+            {
+                if let Some(home) = home_dir() {
+                    v.push(home.join(".config/gamepulse/gamepulse.toml"));
+                }
+                v.push(PathBuf::from("/etc/gamepulse/gamepulse.toml"));
+            }
             v
         };
 

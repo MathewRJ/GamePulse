@@ -45,10 +45,12 @@ enum Commands {
 #[command(
     name = "gamepulse-agent",
     version,
-    about = "GamePulse Linux telemetry agent"
+    about = "GamePulse cross-platform gaming telemetry agent"
 )]
 struct Cli {
-    /// Path to config file [default: ~/.config/gamepulse/gamepulse.toml]
+    /// Path to config file. If unset, searches platform defaults:
+    /// Linux: ~/.config/gamepulse/gamepulse.toml then /etc/gamepulse/gamepulse.toml.
+    /// Windows: %APPDATA%\GamePulse\gamepulse.toml then %PROGRAMDATA%\GamePulse\gamepulse.toml.
     #[arg(short, long, value_name = "PATH")]
     config: Option<PathBuf>,
 
