@@ -148,10 +148,11 @@ jobs:
 
       - name: Build Arch package
         run: |
+          WORKSPACE="$(pwd)"
           su builder -c "
-            cd .github/packaging
+            cd '$WORKSPACE/.github/packaging'
             sed -i 's/^pkgver=.*/pkgver=${{ env.PKGVER }}/' PKGBUILD
-            REPOROOT=$(realpath ../..) makepkg --nodeps --noextract --nosign
+            REPOROOT='$WORKSPACE' makepkg --nodeps --noextract --nosign
           "
 
       - name: Upload .pkg.tar.zst artefact
