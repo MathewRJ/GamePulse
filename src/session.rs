@@ -1,9 +1,9 @@
 /// Game session lifecycle and target detection (Steam + future launchers).
 ///
-/// Detection: scans /proc/*/environ every 5 s for processes with SteamAppId
-/// set. Groups all matching PIDs by app_id; picks a non-helper representative
-/// for metadata. Resolves the game name from Steam appmanifest ACF files.
-/// B2.3-B2.7 will add Lutris / Heroic / Bottles / user-specified detectors.
+/// On Linux: scans /proc/*/environ every 5 s for processes with SteamAppId
+/// set, plus Lutris / Heroic / Bottles launchers. On Windows: returns None
+/// until a Windows-native scanner is added (B3 follow-up).
+/// B2.7 user-specified targets bypass polling entirely (pinned at startup).
 ///
 /// Session.json: written to /tmp/gamepulse/session.json when a target is
 /// detected; removed on game exit or agent shutdown. Fields read by the
@@ -187,7 +187,7 @@ impl SessionManager {
                     Some(t) => now.duration_since(t) >= Duration::from_secs(30),
                 };
                 if log_now {
-                    tracing::info!("No game detected — scanning /proc every 5 s");
+                    tracing::info!("No game detected — idle polling");
                     self.last_no_game_log = Some(now);
                 }
                 SessionEvent::NoChange
@@ -681,8 +681,9 @@ mod tests {
     }
 }
 
-// ── Lutris detection ──────────────────────────────────────────────────────────
+// ── Lutris detection (Unix only) ──────────────────────────────────────────────
 
+#[cfg(unix)]
 #[derive(serde::Deserialize, Default)]
 struct LutrisGameConfig {
     #[serde(default)]
@@ -691,6 +692,7 @@ struct LutrisGameConfig {
     wine: serde_yaml::Value,
 }
 
+#[cfg(unix)]
 #[derive(serde::Deserialize, Default)]
 struct LutrisGameSection {
     exe: Option<String>,
@@ -699,6 +701,7 @@ struct LutrisGameSection {
 
 /// Strip trailing `-<timestamp>` suffix from a Lutris filename stem, then
 /// convert the remaining slug to Title Case.
+#[cfg(unix)]
 fn lutris_slug_to_title(stem: &str) -> String {
     let parts: Vec<&str> = stem.split('-').collect();
     let slug = if let Some(last) = parts.last() {
@@ -725,6 +728,7 @@ fn lutris_slug_to_title(stem: &str) -> String {
 
 /// Scan `~/.local/share/lutris/games/*.yml` and cross-reference running
 /// processes to detect a Lutris-managed game. Returns the first match.
+#[cfg(unix)]
 pub(crate) fn scan_for_lutris_game() -> Option<Target> {
     let home = std::env::var("HOME").ok()?;
     let games_dir = PathBuf::from(&home).join(".local/share/lutris/games");
@@ -839,9 +843,10 @@ pub(crate) fn scan_for_lutris_game() -> Option<Target> {
     None
 }
 
-// ── /proc/environ parsing ──────────────────────────────────────────────────────
+// ── /proc/environ parsing (Linux/Unix only) ────────────────────────────────────
 
 /// Read /proc/{pid}/environ as a null-separated key=value store.
+#[cfg(unix)]
 fn read_environ(pid: u32) -> Option<HashMap<String, String>> {
     let bytes = std::fs::read(format!("/proc/{}/environ", pid)).ok()?;
     if bytes.is_empty() {
@@ -866,6 +871,7 @@ fn read_environ(pid: u32) -> Option<HashMap<String, String>> {
 
 /// Search Steam library paths for appmanifest_{app_id}.acf and extract the
 /// "name" field. Matches Python _game_name_from_appid().
+#[cfg(unix)]
 fn game_name_from_appid(app_id: u32) -> Option<String> {
     let home = home_dir()?;
 
@@ -919,6 +925,7 @@ fn game_name_from_appid(app_id: u32) -> Option<String> {
 // ── Graphics API detection ─────────────────────────────────────────────────────
 
 /// Detect graphics API from process environment. Matches Python _detect_graphics_api().
+#[cfg(unix)]
 fn detect_graphics_api(env: &HashMap<String, String>) -> (Option<String>, bool) {
     let uses_proton =
         env.contains_key("PROTON_VERSION") || env.contains_key("STEAM_COMPAT_DATA_PATH");
@@ -944,6 +951,7 @@ fn detect_graphics_api(env: &HashMap<String, String>) -> (Option<String>, bool) 
 
 /// Detect graphics API from environment; fall back to `/proc/<pid>/maps` scanning
 /// when env-var detection returns `None` (e.g. native games that skip Wine env vars).
+#[cfg(unix)]
 fn graphics_api_with_maps_fallback(env: &HashMap<String, String>, pid: u32) -> (Option<String>, bool) {
     let (api, uses_proton) = detect_graphics_api(env);
     if api.is_some() {
@@ -952,6 +960,7 @@ fn graphics_api_with_maps_fallback(env: &HashMap<String, String>, pid: u32) -> (
     (crate::dllscan::graphics_api_from_maps(pid), false)
 }
 
+#[cfg(unix)]
 fn proton_version_from_env(env: &HashMap<String, String>) -> Option<String> {
     if let Some(v) = env.get("PROTON_VERSION") {
         return Some(v.clone());
@@ -969,6 +978,7 @@ fn proton_version_from_env(env: &HashMap<String, String>) -> Option<String> {
     None
 }
 
+#[cfg(unix)]
 fn dxvk_version_from_env(env: &HashMap<String, String>) -> Option<String> {
     let log_path = env.get("DXVK_LOG_PATH")?;
     let log_file = std::path::Path::new(log_path).join("dxvk.log");
@@ -997,8 +1007,9 @@ fn dxvk_version_from_env(env: &HashMap<String, String>) -> Option<String> {
     }
 }
 
-// ── Heroic detection ──────────────────────────────────────────────────────────
+// ── Heroic detection (Unix only) ──────────────────────────────────────────────
 
+#[cfg(unix)]
 #[derive(Clone, Copy)]
 enum HeroicStore {
     Epic,
@@ -1008,6 +1019,7 @@ enum HeroicStore {
 /// Probe all known Heroic installed.json paths (native + Flatpak, Epic + GOG).
 /// Returns (app_name, display_title, store) for every non-DLC installed game.
 /// Deduplicates by app_name across all four candidate paths.
+#[cfg(unix)]
 fn heroic_installed_games() -> Vec<(String, String, HeroicStore)> {
     let home = match std::env::var("HOME") {
         Ok(h) => h,
@@ -1106,6 +1118,7 @@ fn heroic_installed_games() -> Vec<(String, String, HeroicStore)> {
 /// `SteamGameId=heroic-<AppName>`. Heroic sets this env var on child processes
 /// for both Epic (via Legendary) and GOG (via gogdl) games. The app_name
 /// suffix is a UUID hash for Epic games (e.g. `a7594e61a4f24e6d9495ea959749598e`).
+#[cfg(unix)]
 pub(crate) fn scan_for_heroic_game() -> Option<Target> {
     let installed = heroic_installed_games();
     if installed.is_empty() {
@@ -1167,8 +1180,9 @@ pub(crate) fn scan_for_heroic_game() -> Option<Target> {
     None
 }
 
-// ── Bottles detection ─────────────────────────────────────────────────────────
+// ── Bottles detection (Unix only) ─────────────────────────────────────────────
 
+#[cfg(unix)]
 #[derive(serde::Deserialize, Default)]
 struct BottleConfig {
     #[serde(rename = "Name")]
@@ -1177,6 +1191,7 @@ struct BottleConfig {
     programs: std::collections::HashMap<String, BottleProgram>,
 }
 
+#[cfg(unix)]
 #[derive(serde::Deserialize, Default)]
 struct BottleProgram {
     name: Option<String>,
@@ -1185,6 +1200,7 @@ struct BottleProgram {
     removed: Option<serde_json::Value>,
 }
 
+#[cfg(unix)]
 impl BottleProgram {
     fn is_active(&self) -> bool {
         match &self.removed {
@@ -1201,6 +1217,7 @@ impl BottleProgram {
 /// WINEPREFIX that matches a known bottle directory. Each bottle directory IS
 /// the WINEPREFIX. Uses /proc/<pid>/exe basename to identify which program
 /// within the bottle is running; falls back to the bottle Name if no match.
+#[cfg(unix)]
 pub(crate) fn scan_for_bottles_game() -> Option<Target> {
     let home = std::env::var("HOME").ok()?;
 
@@ -1337,6 +1354,10 @@ pub(crate) fn scan_for_bottles_game() -> Option<Target> {
 /// Try every detection source in order; return the first match.
 /// B2.1 only knows Steam. Future WPs slot launcher-specific scanners into this
 /// chain without restructuring callers.
+/// Try every detection source in order; return the first match.
+/// On Windows this is a stub returning None until a Windows-native scanner
+/// is wired in (B3 follow-up: Steam registry + ETW game detection).
+#[cfg(unix)]
 pub fn scan_for_game() -> Option<Target> {
     scan_for_steam_game()
         .or_else(scan_for_lutris_game)
@@ -1346,8 +1367,14 @@ pub fn scan_for_game() -> Option<Target> {
     // not polled here — user targets are pinned, not re-scanned every 5 s.
 }
 
+#[cfg(not(unix))]
+pub fn scan_for_game() -> Option<Target> {
+    None
+}
+
 /// Scan /proc for a running Steam game. Returns the best candidate or None.
 /// Matches Python GameDetector._scan() exactly.
+#[cfg(unix)]
 pub(crate) fn scan_for_steam_game() -> Option<Target> {
     let pids: Vec<u32> = std::fs::read_dir("/proc")
         .ok()?

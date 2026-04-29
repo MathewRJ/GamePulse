@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-29 by claude-code (Milestone E + Windows post-E sweep complete: profile_dirs Windows paths, host.name/host.os.type fixed, EnumProcessModules dllscan + dllscan debug subcommand. Live ES shipping verified end-to-end from GAMINGPC2. Next = Linux-side B3 (automatic game detection design) or Milestone F (cross-platform parity verification))
+Last updated: 2026-04-29 by claude-code (B3.0 complete: cfg-gate all /proc/environ scanner functions #[cfg(unix)]; scan_for_game() returns None on Windows; log message de-Linux-ified. 29/29 tests green. Next = B3.1 design (heuristic auto-detection) or Milestone F)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -21,7 +21,7 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 | A  Docs reorganisation | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
 | B  Cross-platform refactor | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
 | B2 Launcher-agnostic game detection | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
-| B3 Automatic game detection (TBD) | ⚪ Not started | ░░░░░░░░░░ |
+| B3 Automatic game detection | 🟡 In progress (B3.0 ✅ cfg-gate; B3.1+ design TBD) | ▓░░░░░░░░░ |
 | C  Windows collectors | 🟢 Done (C.0–C.8) | ▓▓▓▓▓▓▓▓▓▓ |
 | D  Linux portable packaging | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
 | E  Windows packaging | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
