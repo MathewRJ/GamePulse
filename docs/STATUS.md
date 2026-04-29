@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-29 by claude-code (F.0 complete: fixed all component templates gamepulse.* wrapper; added temp_source keyword to GPU template + @package on live ES; rolled over GPU stream — temp_source now in index mapping. Linux AMD GPU collector now emits temp_source=hwmon. deploy_component_templates.py created. Next = F.1 QA-MATRIX.md + Docker parity runs)
+Last updated: 2026-04-29 by claude-code (F.1 QA-MATRIX.md created; F.2/F.3/F.4 Docker parity runs complete — Ubuntu 24.04, Fedora 40, Arch all green with --pid=host; cpu/gpu/memory/storage/network all ✅; audio 🟡 no-server-in-Docker; power 🟡 desktop-has-no-AC-BAT; frame/ebpf 🟡 expected. Network field names corrected (tx/rx_packets_per_sec). ac_connected demoted to Optional (absent on desktop). Binary rebuilt — temp_source=hwmon now emitting. Next = F.5 SteamOS (needs Deck hardware), F.6 Windows formalize, F.7 CI smoke test)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file

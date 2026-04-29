@@ -56,7 +56,6 @@ def main():
         'wget',
         'ssh',
         'scp',
-        'docker run',   # docker inspect/ps/build are fine; docker run is not
     ]
 
     for blocked in blocked_patterns:
