@@ -1,18 +1,26 @@
 name: release
 
-# Runs on every version tag push (e.g. v0.1.0).
-# Builds the Linux agent binary once, then fans out to three parallel packaging
-# jobs (.deb / .rpm / .pkg.tar.zst), and finally creates a GitHub Release with
-# all three attached.
+# Triggers:
+#   • git push of a v* tag (e.g. v0.2.0) — the traditional release flow
+#   • workflow_dispatch — click "Run workflow" in the GitHub UI and type the
+#     version number; the tag is created automatically by the release step
 #
-# Note: eBPF probes and the eBPF daemon are NOT included in these packages —
-# they require nightly Rust + bpf-linker and are shipped separately.
-# The packages contain: gamepulse-agent binary, gamepulse launcher script,
-# systemd user unit, and an example config file.
+# Fan-out packaging jobs (Linux + Windows run in parallel):
+#   Linux:   .deb (Debian/Ubuntu) · .rpm (Fedora/RHEL/openSUSE) · .pkg.tar.zst (Arch)
+#   Windows: .zip (binary + example config) — upgrade to MSI in Milestone E
+#
+# eBPF probes are NOT included — they require nightly Rust + bpf-linker and are
+# shipped via AUR (gamepulse-git) which builds from source.
 
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 0.2.0 — without leading v)'
+        required: true
+        type: string
 
 permissions:
   contents: write  # required by softprops/action-gh-release to create releases
@@ -23,9 +31,30 @@ env:
 
 jobs:
 
-  # ── 1. Build Linux x86_64 release binary ───────────────────────────────────
-  build:
+  # ── 0. Derive version from tag push or workflow_dispatch input ───────────────
+  setup:
+    name: compute version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      tag: ${{ steps.ver.outputs.tag }}
+    steps:
+      - name: Derive version and tag
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+            echo "tag=v${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            TAG="${GITHUB_REF_NAME}"
+            echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+            echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ── 1. Build Linux x86_64 release binary ────────────────────────────────────
+  build-linux:
     name: build (linux x86_64)
+    needs: setup
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -47,10 +76,35 @@ jobs:
           name: agent-binary-linux-x86_64
           path: target/release/gamepulse-agent
 
-  # ── 2. .deb (Debian / Ubuntu) ──────────────────────────────────────────────
+  # ── 2. Build Windows x86_64 release binary ──────────────────────────────────
+  build-windows:
+    name: build (windows x86_64)
+    needs: setup
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry + build artefacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src -> target
+
+      - name: cargo build --release
+        run: cargo build --release --manifest-path src/Cargo.toml --locked
+
+      - name: Upload binary artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-binary-windows-x86_64
+          path: target/release/gamepulse-agent.exe
+
+  # ── 3. .deb (Debian / Ubuntu) ───────────────────────────────────────────────
   package-deb:
     name: package .deb
-    needs: build
+    needs: [setup, build-linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -82,10 +136,10 @@ jobs:
           name: deb-package
           path: target/debian/*.deb
 
-  # ── 3. .rpm (Fedora / RHEL / openSUSE) ─────────────────────────────────────
+  # ── 4. .rpm (Fedora / RHEL / openSUSE) ──────────────────────────────────────
   package-rpm:
     name: package .rpm
-    needs: build
+    needs: [setup, build-linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -117,10 +171,10 @@ jobs:
           name: rpm-package
           path: src/target/generate-rpm/*.rpm
 
-  # ── 4. .pkg.tar.zst (Arch Linux) ───────────────────────────────────────────
+  # ── 5. .pkg.tar.zst (Arch Linux) ────────────────────────────────────────────
   package-arch:
     name: package .pkg.tar.zst
-    needs: build
+    needs: [setup, build-linux]
     runs-on: ubuntu-latest
     container: archlinux/archlinux:latest
     steps:
@@ -138,9 +192,6 @@ jobs:
       - name: Mark binary executable
         run: chmod +x target/release/gamepulse-agent
 
-      - name: Extract version from tag
-        run: echo "PKGVER=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
-
       - name: Create unprivileged build user (makepkg refuses to run as root)
         run: |
           useradd -m builder
@@ -149,9 +200,10 @@ jobs:
       - name: Build Arch package
         run: |
           WORKSPACE="$(pwd)"
+          PKGVER="${{ needs.setup.outputs.version }}"
           su builder -c "
             cd '$WORKSPACE/.github/packaging'
-            sed -i 's/^pkgver=.*/pkgver=${{ env.PKGVER }}/' PKGBUILD
+            sed -i 's/^pkgver=.*/pkgver=$PKGVER/' PKGBUILD
             REPOROOT='$WORKSPACE' makepkg --nodeps --noextract --nosign
           "
 
@@ -161,10 +213,41 @@ jobs:
           name: arch-package
           path: .github/packaging/*.pkg.tar.zst
 
-  # ── 5. Create GitHub Release ────────────────────────────────────────────────
+  # ── 6. Windows .zip (binary + example config) ───────────────────────────────
+  # Milestone E will replace this with a proper MSI (cargo-wix).
+  package-windows:
+    name: package .zip (windows)
+    needs: [setup, build-windows]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Windows binary
+        uses: actions/download-artifact@v4
+        with:
+          name: agent-binary-windows-x86_64
+          path: dist-win/
+
+      - name: Bundle release zip
+        shell: pwsh
+        run: |
+          $version = "${{ needs.setup.outputs.version }}"
+          $pkg = "gamepulse-agent-$version-windows-x86_64"
+          New-Item -ItemType Directory -Path $pkg | Out-Null
+          Copy-Item dist-win/gamepulse-agent.exe "$pkg/"
+          Copy-Item packaging/config/gamepulse.toml.example "$pkg/gamepulse.toml.example"
+          Compress-Archive -Path $pkg -DestinationPath "$pkg.zip"
+
+      - name: Upload Windows zip artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-package
+          path: gamepulse-agent-*-windows-x86_64.zip
+
+  # ── 7. Create GitHub Release ─────────────────────────────────────────────────
   release:
     name: create github release
-    needs: [package-deb, package-rpm, package-arch]
+    needs: [setup, package-deb, package-rpm, package-arch, package-windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -182,6 +265,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.setup.outputs.tag }}
           files: dist/*
           body_path: .github/RELEASE_NOTES.md
           generate_release_notes: true
