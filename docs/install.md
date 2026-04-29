@@ -180,6 +180,17 @@ sudo systemctl enable --now gamepulse-ebpf
 
 Service files are installed by the AUR package to the correct locations. For manual installs, copy from `packaging/systemd/`.
 
+> **Dev installs (build from source):** The unit's `ExecStart` defaults to `/usr/bin/gamepulse-agent`, but a source build installs to `/usr/local/bin/`. Create a drop-in to override:
+> ```bash
+> mkdir -p ~/.config/systemd/user/gamepulse-agent.service.d
+> cat > ~/.config/systemd/user/gamepulse-agent.service.d/override.conf <<'EOF'
+> [Service]
+> ExecStart=
+> ExecStart=/usr/local/bin/gamepulse-agent
+> EOF
+> systemctl --user daemon-reload
+> ```
+
 ---
 
 ## Configuration

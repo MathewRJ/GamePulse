@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-27 by claude-code (D.8 shipped: /proc/maps DLL scan for Tier 2 settings auto-detect; 26/26 tests green; Milestone D complete)
+Last updated: 2026-04-29 by claude-code (Linux cleanup complete: repo drift corrected, all sample_event.json files updated, docs rewritten, pre-command-check hook fixed)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -240,7 +240,7 @@ Commit: 561dc78
 
 - **Security hardening follow-up — MCP key exposure via `claude mcp list`**: During initial MCP setup attempt, the first `gamepulse-mcp` API key was printed verbatim in `claude mcp list` output and exposed to a conversation transcript. That key has been invalidated. A separate properly-scoped key now lives in env var only. `claude mcp list` displaying raw API key values in its output is a design-level issue — future setup flows should either redact or be executed in non-logged contexts. Worth surfacing to Anthropic as a product feedback item.
 
-- **Infrastructure follow-up — pre-command-check allowlist non-functional**: the `allowed_prefixes` list exists in both the bash and Python hooks but non-blocked commands fall through to `exit 0` regardless, so it has no blocking effect. Behaviour preserved verbatim during Linux→Python port. Pending decision: make allowlist enforce (breaking change, risks blocking valid workflows) or remove dead code (documents true behaviour). Review before Phase G.
+- **Infrastructure follow-up — pre-command-check allowlist non-functional** ✅ RESOLVED 2026-04-29: removed the dead `allowed_prefixes` list (it had no blocking effect) and added `_scan_target()` which strips `-m`/`--message` content before scanning, so commit messages mentioning blocked words no longer false-positive block. Also handles compound `&&` commands correctly.
 - **Infrastructure fix — pre-edit-check absolute-path bug (resolved in Python port)**: exact-match (manifest.yml) and prefix checks (_dev/, packaging/) never fired against absolute paths on either OS in the bash version. Fixed in Python port by stripping cwd prefix before applying checks. Bash scripts still carry the unfixed logic; when Linux migrates to Python hooks, the fix propagates automatically.
 - **Hook observability — PostToolUse stdout not surfaced to Claude Code**: post-edit-check cargo check output flows to the Claude Code terminal, not back into conversation context. Claude Code cannot directly observe the hook result; it must re-run cargo check manually to verify. Not blocking; worth revisiting if hook output becomes debugging-relevant.
 
@@ -261,7 +261,7 @@ Commit: 561dc78
 ## Follow-ups to investigate
 
 - **Dashboard integration-compliance gap (Milestone G blocker)**: All 6 new-suite dashboards (`home`, `games`, `environment`, `hardware`, `compare`, `engine`) have zero `data_stream.dataset` filters. Each panel needs a `data_stream.dataset` filter in its `embeddableConfig` for elastic/integrations submission. The old `gamepulse-dashboard.ndjson` that previously held this note has been archived to `dashboards/archive/`. Fix all 6 new-suite dashboards in Kibana UI, re-export as NDJSON, then run `scripts/verify-dashboard.sh --require-dataset-filter` before Milestone G.
-- **Dev install: systemd unit ExecStart path and `--config` path require drop-in override** when installing to `/usr/local/bin`. Unit ships with `ExecStart=/usr/bin/gamepulse-agent` and `--config /etc/gamepulse/gamepulse.toml`; user credentials land at `~/.config/gamepulse/gamepulse.toml`. Consider updating the unit to try `/usr/local/bin` first, or document the override in `docs/install.md`. PKGBUILD installs to `/usr/bin/` and is unaffected.
+- **Dev install: systemd unit ExecStart path drop-in override** ✅ DOCUMENTED 2026-04-29: `docs/install.md` now has a callout block showing the exact `~/.config/systemd/user/gamepulse-agent.service.d/override.conf` snippet for dev builds installed to `/usr/local/bin`. PKGBUILD installs to `/usr/bin/` and is unaffected.
 - `bottleneck_dominant` null in April-12 session summaries — historical: those sessions predate the accumulator code; new sessions populate it correctly when both GPU and CPU collectors are active
 - HOME env fallback fixed: `home_dir()` helper in session.rs now checks HOME → SUDO_USER → None instead of falling back to `/root`; `game_name_from_appid()` and `counter_file_path()` both updated
 - Startup ES credential validation: already implemented (`shipper::ping` called at startup in main.rs)
