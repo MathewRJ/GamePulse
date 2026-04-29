@@ -167,6 +167,8 @@ jobs:
     needs: [package-deb, package-rpm, package-arch]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download all package artefacts
         uses: actions/download-artifact@v4
         with:
@@ -176,8 +178,6 @@ jobs:
 
       - name: List release assets
         run: ls -lh dist/
-
-      - uses: actions/checkout@v4
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
