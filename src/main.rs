@@ -513,7 +513,7 @@ fn build_summary_doc(
 
 /// Build the platform-appropriate set of collectors. Types resolve via the
 /// cfg-gated `pub use` in collectors/mod.rs — Linux pulls from `linux::*`,
-/// Windows from `windows::*` (stubs that return None in B.3).
+/// Windows from `windows::*` (PDH/DXGI/WMI/PresentMon collectors).
 fn build_collectors(game_pid: Option<u32>) -> Vec<Box<dyn Collector>> {
     vec![
         Box::new(collectors::CpuCollector::new(game_pid)),
