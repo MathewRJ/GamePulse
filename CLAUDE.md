@@ -1,108 +1,36 @@
-# GamePulse — Claude Code Project Instructions
-
-## Project state
-
-`docs/STATUS.md` is the single source of truth. At session start: use `recall_memory("GamePulse project state")` or read the file directly. Update it after every completed work package. This file contains rules only — no state.
-
-Full reference (file locations, hardware, skills, dashboards, test suite): `docs/claude-reference.md` — load only when needed for the specific task, not by default.
-
----
+# GamePulse — Contributor Guide
 
 ## What this project is
 
-GamePulse is an open-source gaming performance telemetry platform collecting, shipping, and visualising real-world gaming metrics to Elasticsearch. Audience: game developers, journalists, Proton/Wine/Mesa maintainers, package maintainers.
+GamePulse is an open-source gaming performance telemetry platform. It collects, ships, and
+visualises real-world gaming metrics to Elasticsearch via an Elastic integration package.
 
-**Stack:** Rust agent (`src/`), Python prototype (`collector/`), eBPF daemon (`ebpf/`), Elasticsearch Serverless + Kibana. Hardware: AMD GPU (Linux primary), Steam Deck, NVIDIA (community). Packaging: AUR (done), Debian/RPM (Milestone D), Windows MSI (Milestone E).
-
-**Remote access:** Elasticsearch via `$ES_URL` / `$ES_API_KEY`. Gaming PC via `ssh gamingpc` (CachyOS, AMD GPU, MangoHud).
-
-## Session hygiene
-
-- Always run `git pull` before starting any work.
-- Always run `git push` immediately after every commit.
-- Never start implementation if `git status` shows unpushed commits or branch is behind `origin/main`.
-- If the branch has diverged, stop and flag it before doing anything else.
-
-## Workflow rules
-
-1. One task at a time. No opportunistic refactors.
-2. No dependency version changes unless the task explicitly requires it.
-3. No changes to protected files without a planner-assigned task targeting them.
-4. After any pipeline/manifest change: run `elastic-package check` before declaring done.
-5. After any Rust code change: run `cargo check` before declaring done.
-6. Reviewer must approve before tester runs.
-7. Progress auditor runs at every milestone boundary, not every task.
+**Stack:** Rust agent (`src/`), eBPF daemon (`ebpf/`), Elastic integration package
+(`data_stream/`, `elastic/`, `_dev/`). Platform support: Linux (primary), Windows, Steam Deck.
 
 ## Protected files — never edit without explicit task assignment
 
-Integration-critical — errors are silent until package validation:
+Errors in these files are silent until package validation fails:
 
-- `manifest.yml`, `tools/deploy_pipelines.py`, `tools/wire_pipelines.py`, `docs/SCOPE.md`
-- Any file under `_dev/` or `packaging/`
+- `manifest.yml`, any file under `_dev/` or `packaging/`
 - Ingest pipeline YAML/JSON files (any path matching `*pipeline*`)
 - Index template JSON files, ILM policy JSON files
 
-## Validation commands (only approved test commands)
+## Validation commands
 
-```
+```bash
 elastic-package check
 elastic-package test static
-elastic-package test system   # requires local ES or Docker
 cargo check
 cargo clippy -- -D warnings
 cargo test
 cargo build --release
 ```
 
-Do not run any other commands that modify the repo, network, or filesystem without explicit user approval.
+After any Rust change: run `cargo check`.
+After any pipeline/manifest change: run `elastic-package check`.
 
-For package builds use `bash scripts/build-package.sh` (not `elastic-package build` directly); for asset tests use `bash scripts/test-asset.sh`. See `docs/claude-reference.md` for details.
+## Development workflow
 
-## Agent routing
-
-Use the cheapest capable agent for each task type:
-
-| Task | Agent |
-|---|---|
-| Read file + extract value, summaries, boilerplate code | haiku-worker |
-| Large file reads (SCOPE.md, HANDOFF.md), web research, multi-file scans | gemini-researcher |
-| Open-ended codebase exploration spanning many files | Explore subagent |
-| Mechanical file edits matching a clear pattern (Codex pipeline) | Codex (worktree) |
-| Code changes, Rust edits, judgment calls requiring context | Sonnet (main) |
-| Architecture strategy, high-level planning | Opus (ultrathink only) |
-
-Before any large file read: call `recall_memory("topic")` first — if the answer is in ES memory, no file read needed.
-
-## Codex pipeline
-
-For mechanical implementation tasks: claude.ai plans → Codex implements in `worktrees/codex-<task-id>/` → Claude Code verifies → user merges.
-
-See `docs/AGENT-COLLABORATION.md` for the full pipeline, prompt templates, work-package format, and guardrails. Worktrees are gitignored; branch naming is `codex/<task-id>`.
-
-## Multi-agent pipeline (`gpx`)
-
-Beyond Codex handoff, the project has a full agent system mapped onto Claude / Codex / Gemini. Entry point is `bin/gpx`.
-
-- `gpx plan` → planner picks next task
-- `gpx architect <topic>` → data-model / package-structure design (read-only)
-- `gpx implement <task-id>` → Codex in worktree (loads `tasks/<task-id>.yaml`)
-- `gpx review` → reviewer on diff vs `origin/main`
-- `gpx test` → cargo + elastic-package validation
-- `gpx audit security|integration` → Opus auditor (local, no API key)
-- `gpx ci` → review → test → audit chain
-- `gpx doctor` → verify CLIs and login state
-
-Agents added under `.claude/agents/`: `architect`, `dashboard-designer`, `devops`, `security-auditor`, `integration-auditor`, `docs-writer`. Existing five agents (`planner`, `implementer`, `reviewer`, `tester`, `progress-auditor`) unchanged.
-
-CI is deterministic-only — no API keys. LLM gates run locally via `gpx` or the opt-in pre-push hook (`.githooks/pre-push`, enable with `git config core.hooksPath .githooks`). Full design: `docs/AGENT-SYSTEM.md`.
-
-## Grep-first rule
-
-For any file over 100 lines: Grep for the specific content first, then Read only the matching lines using offset/limit. Never read `docs/SCOPE.md` (~1700 lines) in full — delegate to gemini-researcher or use targeted Grep.
-
-## Cross-session continuity
-
-- `docs/STATUS.md` — single source of truth. Both claude.ai and Claude Code read at session start and write after each WP completion.
-- `docs/HANDOFF.md` — narrative history. Prefer `recall_memory("GamePulse [topic]")` over reading the full file.
-- Claude Code must never edit planning context docs that belong to claude.ai.
-- claude.ai must never directly edit `CLAUDE.md`.
+This integration is developed using an AI-assisted workflow documented in `docs/archive/AGENT-SYSTEM.md`.
+The workflow infrastructure lives in a separate private repository and is not a dependency of GamePulse.
