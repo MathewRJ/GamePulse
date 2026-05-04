@@ -9,7 +9,7 @@
         "Authorization:${AUTH_HEADER}"
       ],
       "env": {
-        "KIBANA_URL": "https://gamepulse-af41f9.kb.us-central1.gcp.elastic.cloud",
+        "KIBANA_URL": "https://your-deployment.kb.us-central1.gcp.elastic.cloud",
         "AUTH_HEADER": "ApiKey ${GAMEPULSE_MCP_API_KEY}"
       }
     }

@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-# Cross-platform launcher (Linux, macOS, Git Bash on Windows).
-# All logic lives in gpx.py — this file exists so `gpx <cmd>` works on PATH.
-set -e
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec python3 "${DIR}/gpx.py" "$@"

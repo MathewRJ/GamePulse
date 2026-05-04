@@ -256,7 +256,7 @@ Commit: 561dc78
 
 ### Infrastructure session — 2026-04-21 (Windows MCP wiring)
 
-- **Windows machine MCP wiring (2026-04-21)**: elastic-agent-builder registered and connected via npx mcp-remote against `https://gamepulse-af41f9.kb.us-central1.gcp.elastic.cloud/api/agent_builder/mcp`. `GAMEPULSE_MCP_API_KEY` set as persistent user env var; `.mcp.json` uses variable substitution (`${GAMEPULSE_MCP_API_KEY}`) rather than baked-in key — no API key material on disk. New MCP key was created with explicit `feature_agentBuilder.read` + `feature_actions.read` application privileges via Kibana Dev Console (superuser session). Previous attempt with derived inherits-parent key failed because parent `ES_API_KEY` lacks `feature_agentBuilder.read`; documented here to save future time. Tools (`recall_memory`, `recall_recent`) activate on next session restart per the MCP protocol.
+- **Windows machine MCP wiring (2026-04-21)**: elastic-agent-builder registered and connected via npx mcp-remote against the Kibana MCP endpoint. `GAMEPULSE_MCP_API_KEY` set as persistent user env var; `.mcp.json` uses variable substitution (`${GAMEPULSE_MCP_API_KEY}`) rather than baked-in key — no API key material on disk. New MCP key was created with explicit `feature_agentBuilder.read` + `feature_actions.read` application privileges via Kibana Dev Console (superuser session). Previous attempt with derived inherits-parent key failed because parent `ES_API_KEY` lacks `feature_agentBuilder.read`; documented here to save future time. Tools (`recall_memory`, `recall_recent`) activate on next session restart per the MCP protocol.
 
 ### Infrastructure session — 2026-04-21 (Python hooks — cross-platform guard)
 
@@ -291,8 +291,8 @@ Commit: 561dc78
 
 - Primary dev host: CachyOS Linux (AMD Ryzen 7 9800X3D / Radeon RX 9070 XT)
 - Secondary host: Windows 11 desktop (needs Steam + Rust + WiX setup before Phase C)
-- ES endpoint: Elastic Cloud Serverless — `https://gamepulse-af41f9.es.us-central1.gcp.elastic.cloud`
-- Repo: github.com/MathewRJ/GamePulse (private)
+- ES endpoint: Elastic Cloud Serverless (see your deployment)
+- Repo: github.com/MathewRJ/GamePulse
 
 ## Follow-ups and migration notes
 

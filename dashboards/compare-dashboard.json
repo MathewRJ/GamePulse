@@ -2,7 +2,7 @@
   "api_version": "Elastic-Api-Version: 2023-10-31",
   "created": "2026-04-27",
   "id": "828db140-b330-4d26-8045-40a7895bfc41",
-  "kibana_url": "https://gamepulse-af41f9.kb.us-central1.gcp.elastic.cloud",
+  "kibana_url": "https://your-deployment.kb.us-central1.gcp.elastic.cloud",
   "data": {
     "title": "GamePulse - Compare",
     "time_range": {

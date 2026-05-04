@@ -21,26 +21,11 @@ build/
 # Claude Code local settings (not for commit)
 .claude/settings.local.json
 
-# Claude Code skill symlinks — directory symlinks that break elastic-package build.
-# Claude Code agent skills — dev tooling, not part of the integration package.
-# Recreate with: npx skills add elastic/agent-skills -a claude-code
-.claude/skills/
-.agents/
-# Exception: GamePulse-specific skills ARE committed (regular dirs, no symlinks)
-!.agents/skills/elasticsearch-tsds/
-!.agents/skills/gamepulse-data-model/
-!.agents/skills/gamepulse-workflow/
-!.agents/skills/elastic-mcp-setup/
 
 # MCP server config — contains credentials; .example is committed, real file is not
 .mcp.json
 
-# Git worktrees for Codex implementation tasks — local only, never commit
-worktrees/
-.claude/worktrees/
 
-# gpx orchestrator local state — log of every agent invocation
-.gpx/
 
 # Browser-auth storage-state for the Kibana UI verifier — never commit
 *.storage-state.json
@@ -51,3 +36,6 @@ artifacts/dashboard-ui/
 
 # Playwright local install (we recommend npm install --no-save)
 node_modules/
+
+# docs/archive/ is intentionally tracked — sanitised history for contributors
+!docs/archive/

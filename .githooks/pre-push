@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# GamePulse opt-in pre-push hook.
+# Workflow opt-in pre-push hook — template for all managed projects.
 #
-# Enable with:
+# Install in any project with:
+#   cp ~/coding/Workflow/.githooks/pre-push .githooks/pre-push
 #   git config core.hooksPath .githooks
 #
 # Disable with:
@@ -17,9 +18,8 @@
 
 set -e
 
-# Find the gpx launcher (relative to repo root, since .githooks runs from there)
-REPO="$(git rev-parse --show-toplevel)"
-GPX="${REPO}/bin/gpx"
+# Always use the Workflow repo's gpx (not a project-local copy)
+GPX="${HOME}/coding/Workflow/bin/gpx"
 
 if [[ ! -x "${GPX}" ]]; then
   echo "[pre-push] gpx not found at ${GPX} — skipping audit" >&2

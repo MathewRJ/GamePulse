@@ -2,7 +2,7 @@
   "api_version": "Elastic-Api-Version: 2023-10-31",
   "created": "2026-04-27",
   "id": "ed9d9b94-2003-429c-b294-9d3f2ef737e7",
-  "kibana_url": "https://gamepulse-af41f9.kb.us-central1.gcp.elastic.cloud",
+  "kibana_url": "https://your-deployment.kb.us-central1.gcp.elastic.cloud",
   "data": {
     "title": "GamePulse - Hardware",
     "time_range": {

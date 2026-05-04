@@ -1,6 +1,6 @@
 {
   "id": "b68f1178-6923-4e92-819b-33eb595197a9",
-  "kibana_url": "https://gamepulse-af41f9.kb.us-central1.gcp.elastic.cloud/app/dashboards#/view/b68f1178-6923-4e92-819b-33eb595197a9",
+  "kibana_url": "https://your-deployment.kb.us-central1.gcp.elastic.cloud/app/dashboards#/view/b68f1178-6923-4e92-819b-33eb595197a9",
   "created": "2026-04-07",
   "api_version": "Elastic-Api-Version: 1",
   "notes": [

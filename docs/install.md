@@ -40,7 +40,7 @@ Sign up at [cloud.elastic.co](https://cloud.elastic.co/). The free tier (8 GB) i
 ### 2. Get an API key
 
 In Kibana → Stack Management → API Keys, create a key with cluster `monitor` and index `auto_configure` + `create_doc` privileges on `metrics-gamepulse.*`. Note:
-- Your **Elasticsearch endpoint** (e.g. `https://gamepulse-af41f9.es.us-central1.gcp.elastic.cloud`)
+- Your **Elasticsearch endpoint** (e.g. `https://your-deployment.es.us-central1.gcp.elastic.cloud`)
 - The **API key** (base64 encoded, shown once at creation)
 
 For a personal deployment, `all` cluster + index privileges is simpler and fine.
