@@ -1,6 +1,6 @@
 # GamePulse — Project Status
 
-Last updated: 2026-04-29 by claude-code (Milestone F complete: F.6 Windows known limitations finalized (hardware.* empty on Windows added); F.7 CI smoke test implemented — scripts/smoke-test.sh + smoke-test job in ci.yml; 14/14 required fields pass locally. All parity runs done: Ubuntu/Fedora/Arch/SteamOS/Windows. Next = Milestone G — elastic/integrations PR submission)
+Last updated: 2026-05-04 by claude-code (Workflow repo split complete; GamePulse cleaned for public contribution; private endpoints scrubbed; Milestone F table fixed; Milestone G started)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -25,8 +25,8 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 | C  Windows collectors | 🟢 Done (C.0–C.8) | ▓▓▓▓▓▓▓▓▓▓ |
 | D  Linux portable packaging | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
 | E  Windows packaging | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
-| F  Cross-platform parity verification (M2) | 🔒 Blocked on B2+C+E | — |
-| G  elastic/integrations PR (M4) | 🔒 Blocked on F | — |
+| F  Cross-platform parity verification (M2) | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
+| G  elastic/integrations PR (M4) | 🟡 In progress (repo cleanup done; audit next) | ▓░░░░░░░░░ |
 
 ## At a glance — offline branch (not yet forked)
 
