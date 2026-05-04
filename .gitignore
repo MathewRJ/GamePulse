@@ -1,14 +1,21 @@
-# Python
-collector/.venv/
-collector/__pycache__/
-collector/**/__pycache__/
-collector/**/*.pyc
-collector/.pytest_cache/
-collector/dist/
-collector/*.egg-info/
+# Python (archived collector)
+archive/collector/.venv/
+archive/collector/__pycache__/
+archive/collector/**/__pycache__/
+archive/collector/**/*.pyc
+archive/collector/.pytest_cache/
+archive/collector/dist/
+archive/collector/*.egg-info/
 
 # elastic-package build output
 build/
+
+# Build artifacts / OS noise
+a.out
+*.pkg.tar.zst
+
+# AI scaffolding (lives in ~/coding/Workflow, not here)
+.agents/
 
 # macOS
 .DS_Store

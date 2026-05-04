@@ -139,7 +139,13 @@ sudo install -m 644 target/bpfel-unknown-none/release/gamepulse-ebpf-probes \
 
 ## Windows installer
 
-Coming in Milestone E. The plan: MSI installer via WiX, installs `gamepulse.exe` and the Steam launch wrapper. For now, Windows users can build from source with `cargo build --release` (eBPF not available on Windows).
+The Windows MSI installer shipped in Milestone E and is available on the
+[GitHub Releases page](https://github.com/MathewRJ/GamePulse/releases).
+Download `gamepulse-<version>-x86_64-windows.msi` and run the installer — it installs
+`gamepulse.exe` to `Program Files\GamePulse\` and registers the Windows Service.
+A portable zip (`gamepulse-<version>-windows-x64.zip`) is also available for users
+who prefer not to use the installer. eBPF is not available on Windows; all other
+metric streams are supported.
 
 ---
 

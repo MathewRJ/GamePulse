@@ -1,3 +1,11 @@
+<!-- ARCHIVED 2026-05-04
+     This is the v3.2 scope document written in April 2026.
+     At the time of archiving: Milestones A–F are complete; Milestone G (elastic/integrations PR) is in progress.
+     Phases 5–7 described below as future work are now complete or in-progress under Milestones C–G.
+     The "next review: after Phase 0.5 completion" review never happened.
+     For current project state see docs/STATUS.md. For current phase structure see docs/ROADMAP.md.
+-->
+
 > **Note:** This document describes the original strategic scope. The tactical execution plan has evolved — see `docs/ROADMAP.md` for the current phase/work package structure and `docs/STATUS.md` for progress. Key updates since this document was written: (1) Windows collectors pulled forward ahead of the elastic/integrations PR given 92% of PC gamers are on Windows; (2) an `offline` git branch has been planned for air-gapped benchmarkers/reviewers; (3) per-session settings capture (FSR/DLSS/frame-gen/RT/etc.) added as a three-tier feature family; (4) game detection generalised from Steam-only to any PC launcher — Phase B2 adds first-class Lutris/Heroic/Bottles support plus a user-specified target mode for long-tail launchers (Battle.net, EA, Ubisoft, Rockstar, etc.). GamePulse targets PC games regardless of which launcher started them. Passages below that reference Steam-specific detection sources predate this shift and reflect Phase 1's initial implementation; the generalisation lands in B2.
 
 ---

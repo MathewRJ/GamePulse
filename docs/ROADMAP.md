@@ -72,7 +72,7 @@ Established `docs/STATUS.md` as single source of truth; stripped planning docs; 
 
 **Architectural note:** Inspired by behavioural-classification patterns from EDR systems (e.g. Elastic Defend) — specifically the insight that "is this process X-type" is better answered by observing kernel-level runtime behaviour than by matching allowlists. Implementation is a lightweight in-agent classifier reusing GamePulse's existing eBPF infrastructure (gpu_sched, gpu_submit, page fault probes). **No third-party EDR dependency, no Elastic Defend integration** — the pattern is borrowed, the product is not. Licensing, performance overhead, installation friction, and data-model pollution all rule out literal reuse of Defend.
 
-**B3.0 — small precursor (committed)**: cfg-gate the existing Linux `/proc/*/environ` Steam scanner in `src/session.rs` so it doesn't run on Windows. Currently the Windows agent logs `No game detected — scanning /proc every 5 s` indefinitely (harmless but noisy). This is a prerequisite to any Windows game-detection work and is small enough to ship independently of the larger B3 design effort.
+**B3.0 — small precursor (shipped in Phase C)**: cfg-gate the existing Linux `/proc/*/environ` Steam scanner in `src/session.rs` so it doesn't run on Windows. This was a prerequisite to Windows game-detection work and shipped alongside the Phase C Windows collectors.
 
 Sketch of likely work packages (not committed):
 - Per-PID signal aggregation on top of existing eBPF probes (rolling-window GPU submission rate)
@@ -129,7 +129,7 @@ All 8 work packages (C.1–C.8) shipped. Per-collector parity gaps and upgrade p
 
 ---
 
-## Phase E — Windows packaging
+## Phase E — Windows packaging 🟢 Complete
 
 | WP | Deliverable |
 |---|---|
