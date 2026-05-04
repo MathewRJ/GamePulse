@@ -1,8 +1,7 @@
 # ECS fields used in this data stream
 - name: host.name
-  type: keyword
+  external: ecs
   dimension: true
-  description: "Hostname of the gaming PC"
 
 # Session context (common across all metric data streams)
 - name: gamepulse

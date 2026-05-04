@@ -1,23 +1,17 @@
 # ECS fields used in this data stream
 - name: host.name
-  type: keyword
+  external: ecs
   dimension: true
-  description: "Hostname of the gaming PC"
 - name: host.os.name
-  type: keyword
-  description: "Operating system name (e.g. CachyOS, Windows 11)"
+  external: ecs
 - name: host.os.version
-  type: keyword
-  description: "OS version string"
+  external: ecs
 - name: host.os.kernel
-  type: keyword
-  description: "Kernel version string (e.g. 6.12.0-cachyos)"
+  external: ecs
 - name: host.os.type
-  type: keyword
-  description: "OS type (linux, windows)"
+  external: ecs
 - name: host.os.platform
-  type: keyword
-  description: "OS platform/distro identifier"
+  external: ecs
 
 # Session document — captured once per gaming session
 - name: gamepulse

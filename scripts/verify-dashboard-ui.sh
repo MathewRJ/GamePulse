@@ -13,7 +13,7 @@
 #   4. A full-page screenshot is saved as evidence.
 #
 # This is the gap that import-valid-but-UI-broken Lens datasource bugs slip
-# through. Adapted from the framework at /home/cachyos/coding/chatgpt-codex-test.
+# through. Uses a Playwright-based headless browser verification framework.
 #
 # Usage:
 #   scripts/verify-dashboard-ui.sh <dashboard-id> [--artifact-dir DIR]

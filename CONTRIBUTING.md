@@ -24,8 +24,8 @@ Thank you for your interest in contributing to GamePulse! This project aims to b
 ### Building
 
 ```bash
-git clone https://github.com/gamepulse/agent.git
-cd agent
+git clone https://github.com/MathewRJ/GamePulse.git
+cd GamePulse
 cargo build          # Debug build
 cargo build --release # Optimised build
 cargo test           # Run tests

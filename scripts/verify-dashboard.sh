@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # verify-dashboard.sh — verify a deployed Kibana dashboard is UI-renderable,
-# not just import-valid. Lifted from chatgpt-codex-test/scripts and adapted
-# for GamePulse env + integration-package rules.
+# not just import-valid. Uses a Playwright-based headless browser verification
+# framework adapted for GamePulse env + integration-package rules.
 #
 # Usage:
 #   scripts/verify-dashboard.sh <dashboard-id> [--expected-panel-types t1,t2,...]

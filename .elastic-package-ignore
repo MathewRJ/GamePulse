@@ -1,3 +1,9 @@
+# Exclude archive directories (legacy code and docs, not part of integration)
+archive
+archive/
+docs/archive
+docs/archive/
+
 # Exclude Python virtual environment from package build
 collector/.venv
 collector/.venv/

@@ -3,37 +3,6 @@
   "kibana_url": "https://your-deployment.kb.us-central1.gcp.elastic.cloud/app/dashboards#/view/5e898d7c-8de1-45b8-ae04-4cdc745f046d",
   "created": "2026-04-26",
   "api_version": "Elastic-Api-Version: 2023-10-31",
-  "notes": [
-    "Created via Kibana Dashboards API (kibana-dashboards skill) against Kibana 9.5.0 serverless.",
-    "All field paths validated via ES|QL before building (Step 0).",
-    "Data view: gp-dv-timeline (index: gamepulse-game-timeline, time field: session_start).",
-    "13 total sessions: 11 Starfield + 2 Thronebreaker The Witcher Tales.",
-    "peak_gpu_power_w populated in 13/13 docs \u2014 included in session table.",
-    "gpu_model populated in 1/13 docs \u2014 included in table + GPU filter control (sparse but valid).",
-    "bottleneck_dominant populated in 1/13 docs \u2014 included in session table (sparse).",
-    "driver_version populated in 1/13 docs \u2014 included in session table (sparse).",
-    "kernel_version populated in 1/13 docs \u2014 included in session table (sparse).",
-    "cumulative_playtime_hours populated in 1/13 docs (value=0) \u2014 omitted from KPI tiles (misleading).",
-    "proton_version absent from index \u2014 omitted per instructions.",
-    "9 panels: 2 filter controls, 4 KPI metric tiles, 1 FPS trend line chart, 1 session history table, 1 FPS-by-game bar chart.",
-    "KPI tiles: Total Sessions and Games Played use ES|QL COUNT; Total Hours uses ES|QL ROUND(SUM(duration_s)/3600.0, 1); Avg FPS uses dataView average.",
-    "FPS trend: two line layers (avg_fps and low_1pct_fps), each split by game_name.",
-    "Session table rows grouped by session_id (terms), sorted alphabetically; user can re-sort in UI.",
-    "FPS by game: horizontal bar chart with both avg_fps and low_1pct_fps on same layer."
-  ],
-  "schema_notes": [
-    "Kibana 9.5.0 renamed panel type 'lens' to 'vis' \u2014 all inline visualization panels use type='vis'.",
-    "API version header changed from integer '1' to date string '2023-10-31'; integer form rejected with HTTP 400.",
-    "Panel identifier changed from 'uid' to 'id'; 'uid' on options_list_control causes validation error.",
-    "data_source replaces dataset: use { type: 'data_view_reference', ref_id: '<id>' } for dataView panels.",
-    "data_source for ES|QL metrics: { type: 'esql', query: '...' } \u2014 accepted by metric panels.",
-    "ES|QL metric items: { type: 'primary', column: '<col>', label: '<lbl>' } \u2014 'operation' field not allowed.",
-    "dataView metric items: { type: 'primary', operation: '<op>', field: '<f>', label: '<lbl>' } unchanged.",
-    "last_value metrics: use time_field (not sort_by) and multi_value (not show_array_values).",
-    "data_table rows rank_by: valid types are 'alphabetical', 'rare', 'significant', 'metric', 'custom'; 'column' type no longer valid.",
-    "XY axis key changed from 'left' to 'y' for the left/primary y-axis.",
-    "data_source goes inside each XY layer (unchanged from SKILL.md) but uses data_view_reference format."
-  ],
   "data": {
     "description": "Per-session game performance: FPS, frame time, thermals, and stutter trend over time",
     "options": {
@@ -487,12 +456,12 @@
             {
               "operation": "max",
               "field": "peak_gpu_temp_c",
-              "label": "Peak GPU \u00b0C"
+              "label": "Peak GPU °C"
             },
             {
               "operation": "max",
               "field": "peak_cpu_temp_c",
-              "label": "Peak CPU \u00b0C"
+              "label": "Peak CPU °C"
             },
             {
               "operation": "max",

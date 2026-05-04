@@ -12,7 +12,6 @@
     "title": "GamePulse - Engine"
   },
   "coreMigrationVersion": "8.8.0",
-  "created_at": "2026-04-27T16:20:43.327Z",
   "id": "7ec220c4-0c7a-4538-9b86-9a664b4a7d2f",
   "managed": false,
   "references": [
@@ -93,7 +92,5 @@
     }
   ],
   "type": "dashboard",
-  "typeMigrationVersion": "10.3.0",
-  "updated_at": "2026-04-27T16:20:43.327Z",
-  "version": "WzE0MDEsMV0="
+  "typeMigrationVersion": "10.3.0"
 }

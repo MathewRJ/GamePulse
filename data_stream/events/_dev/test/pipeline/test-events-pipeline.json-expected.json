@@ -38,7 +38,7 @@
                 }
             },
             "host": {
-                "name": "cachyos-pc"
+                "name": "gaming-pc"
             },
             "message": "Shader compilation completed in 284ms (cache miss)"
         }

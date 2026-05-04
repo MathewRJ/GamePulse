@@ -73,9 +73,9 @@
                 }
             },
             "host": {
-                "name": "cachyos-pc",
+                "name": "gaming-pc",
                 "os": {
-                    "kernel": "6.19.11-1-cachyos-deckify"
+                    "kernel": "6.1.82-valve22-1-neptune"
                 }
             }
         }

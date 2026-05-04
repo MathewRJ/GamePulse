@@ -3,20 +3,6 @@
   "kibana_url": "https://your-deployment.kb.us-central1.gcp.elastic.cloud/app/dashboards#/view/e7d878d0-e2d6-454b-9a95-d93a4aeb70a8",
   "created": "2026-04-07",
   "api_version": "Elastic-Api-Version: 1",
-  "notes": [
-    "Created via Kibana Dashboards API (kibana-dashboards skill).",
-    "All field paths validated via ES|QL before building.",
-    "Panels use dataView ID 18dd83e8-6f88-474f-b434-a4b6c14a04a2 (metrics-gamepulse.* wildcard).",
-    "Frame fields confirmed: avg_1s, low_1pct, low_01pct, frametime_ms, stutter_count all live.",
-    "Session fields confirmed: gamepulse.game.name.keyword, gamepulse.game.steam_app_id, host.os.name.keyword.",
-    "GPU fields confirmed: utilisation_pct, power_w available in gpu stream.",
-    "8 panels: 2 filter controls, avg FPS bar, 1% low FPS bar, FPS timeline by game, GPU util by game, GPU power by game, performance summary table.",
-    "Default time range set to now-30d to capture multiple sessions.",
-    "stutter_count uses MAX (TSDS counter field — never avg/sum).",
-    "B2.8 (2026-04-25): added ctrl-source and ctrl-launcher filter controls; added launcher-breakdown bar panel.",
-    "gamepulse.game.source and gamepulse.game.launcher are native keyword fields (no .keyword sub-field needed).",
-    "launcher-breakdown panel pins data_stream.dataset=gamepulse.session — source/launcher only live in session stream."
-  ],
   "data": {
     "title": "GamePulse - Game Library",
     "description": "Per-game performance summary: FPS, frame time, stutter, session count, and GPU/CPU load broken out by game title",
@@ -416,8 +402,7 @@
             ]
           }
         }
-      }
-      ,
+      },
       {
         "type": "lens",
         "uid": "launcher-breakdown",

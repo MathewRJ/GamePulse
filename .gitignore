@@ -13,6 +13,9 @@ build/
 # Build artifacts / OS noise
 a.out
 *.pkg.tar.zst
+target/
+src/target/
+ebpf/target/
 
 # AI scaffolding (lives in ~/coding/Workflow, not here)
 .agents/
@@ -36,7 +39,7 @@ a.out
 
 # Browser-auth storage-state for the Kibana UI verifier — never commit
 *.storage-state.json
-.gpx/kibana-auth.storage-state.json
+.gpx/
 
 # UI verification artefacts — screenshots and failure dumps
 artifacts/dashboard-ui/

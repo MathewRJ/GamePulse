@@ -1,24 +1,18 @@
 # ECS fields used in this data stream
 - name: host.name
-  type: keyword
-  description: "Hostname of the gaming PC"
+  external: ecs
 
 # ECS event fields
 - name: event.kind
-  type: keyword
-  description: "ECS event kind (event, alert, signal, etc.)"
+  external: ecs
 - name: event.category
-  type: keyword
-  description: "ECS event category (e.g. process, session)"
+  external: ecs
 - name: event.type
-  type: keyword
-  description: "ECS event type (start, end, info, error)"
+  external: ecs
 - name: event.severity
-  type: long
-  description: "Event severity as a numeric value (ECS)"
+  external: ecs
 - name: message
-  type: text
-  description: "Human-readable event description"
+  external: ecs
 
 # Session context
 - name: gamepulse

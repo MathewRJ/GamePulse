@@ -54,8 +54,7 @@ or the panel migration version is stale.
    be visible, scans for failure strings (`Cannot read properties`,
    `No embeddable factory found`, `Field not found`, `Error loading
    dashboard`, etc.), and saves a full-page PNG to
-   `artifacts/dashboard-ui/<id>.png`. Adapted from
-   `chatgpt-codex-test/test/playwright/`.
+   `artifacts/dashboard-ui/<id>.png`.
 
    **One-time setup** (Playwright + a captured browser-auth session):
    ```sh

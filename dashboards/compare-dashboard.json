@@ -504,20 +504,5 @@
         }
       }
     ]
-  },
-  "notes": [
-    "Step 0 field validation results (last 30d, gp-dv-timeline, 14 sessions):",
-    "POPULATED EVERY ROW: avg_fps (avg 475 / max 1252), low_1pct_fps (avg 273), p99_frametime_ms (avg 9.4 / max 16.1), stutter_count (avg 2158 / max 12104), peak_gpu_temp_c (avg 40 / max 46), peak_cpu_temp_c (avg 60 / max 67), peak_gpu_power_w (avg 296 / max 516), total_frames (avg 48563 / max 342543), duration_s (avg 942), session_id, game_name (Starfield, Thronebreaker)",
-    "SPARSE (~20% in last 30d): gpu_model, bottleneck_dominant, driver_version, kernel_version — included in table only (bar charts would render confusing empty bars)",
-    "Compare dashboard concept: pick 2 sessions via ctrl-session multi-select; all panels filter to those sessions and present them side-by-side as bars on a categorical x-axis (terms over session_id).",
-    "9 panels: 2 filter controls (ctrl-session, ctrl-game) + 4 KPI bars (avg_fps, low_1pct_fps, p99_frametime, stutters) + chart-fps-compare (avg + low_1pct on shared y) + chart-thermals-power (GPU+CPU temp on y, GPU power on y2 dual-axis) + table-compare (16 metric columns, 1 row per session, alphabetical).",
-    "Counter rule: stutter_count and total_frames use MAX everywhere (transform pre-aggregated; re-MAX is harmless and consistent)."
-  ],
-  "schema_notes": [
-    "9.5.0 schema rules from docs/dashboards.md applied unchanged.",
-    "Field paths: BARE keyword on gp-dv-timeline (no .keyword) per dashboard-designer agent rule #6 — all timeline fields are native keyword/numeric.",
-    "Time field for last_value on gp-dv-timeline: session_start (NOT @timestamp — gp-dv-timeline indexes by session_start).",
-    "Filter control config simplified — title + data_view_id + field_name only, matches Environment/Hardware precedent.",
-    "First dashboard built end-to-end via the agent system: planner agent confirmed scope, dashboard-designer agent produced the work package, this session implemented and verified. No claude.ai courier round-trip."
-  ]
+  }
 }

@@ -175,7 +175,7 @@ Docker: eBPF probe loading typically fails without `--privileged` — acceptable
 
 ¹ QA matrix targeted SteamOS 3.6; actual device runs 3.9 (Valve rolling release). Results apply to both.
 
-*Table updated as parity runs complete. F.2/F.3/F.4 Docker runs 2026-04-29 with --pid=host. F.5 SteamOS run 2026-04-29 via SSH to Steam Deck (Jupiter, kernel 6.18.22-valve1). Windows column pre-filled from live ES verification (2026-04-29 GAMINGPC2 run).*
+*Table updated as parity runs complete. F.2/F.3/F.4 Docker runs 2026-04-29 with --pid=host. F.5 SteamOS run 2026-04-29 via SSH to Steam Deck (Jupiter, kernel 6.18.22-valve1). Windows column pre-filled from live ES verification (2026-04-29 Windows run).*
 
 ---
 

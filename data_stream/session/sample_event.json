@@ -6,13 +6,13 @@
     "namespace": "default"
   },
   "host": {
-    "name": "cachyos-pc",
+    "name": "gaming-pc",
     "os": {
-      "name": "CachyOS Linux",
+      "name": "Arch Linux",
       "version": "2024.12",
-      "kernel": "6.12.10-2-cachyos",
+      "kernel": "6.12.10-2-arch1-1",
       "type": "linux",
-      "platform": "cachyos"
+      "platform": "arch"
     }
   },
   "gamepulse": {

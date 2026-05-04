@@ -1,11 +1,10 @@
 # ECS fields
 - name: host.name
-  type: keyword
-  description: "Hostname of the gaming PC"
+  external: ecs
+  dimension: true
 
 - name: host.os.kernel
-  type: keyword
-  description: "Kernel version string"
+  external: ecs
 
 # Session and eBPF metrics
 - name: gamepulse
@@ -16,6 +15,7 @@
       fields:
         - name: id
           type: keyword
+          dimension: true
           description: "Unique session identifier (UUID)"
 
     - name: ebpf

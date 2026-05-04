@@ -13,8 +13,6 @@
  *
  * Hard requirement: storage-state file from a real browser-auth session.
  * No fallback to ApiKey headers for the browser routes.
- *
- * Adapted from the framework at /home/cachyos/coding/chatgpt-codex-test.
  */
 
 "use strict";

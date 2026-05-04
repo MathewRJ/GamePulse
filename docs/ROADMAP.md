@@ -107,7 +107,7 @@ All 8 work packages (C.1–C.8) shipped. Per-collector parity gaps and upgrade p
 | C.9 | Game detection | Steam registry `HKCU\Software\Valve\Steam\Apps\<appid>\Running` + process scan |
 | C.10 | Session lifecycle | Port `src/session.rs` paths — `%APPDATA%\GamePulse\session.json` |
 | C.11 | ETW image-load subscription for Tier 2 settings auto-detect |
-| C.12 | Port `src/host.rs` hardware enrichment to Windows — `cpu_info()`, `gpu_info()`, `ram_info()` currently read `/proc` and `/sys` and produce empty `gamepulse.hardware.*` blocks on Windows session docs. Re-use the data we already collect via PDH (cpu model/cores), DXGI (gpu vendor/model/VRAM), and `GlobalMemoryStatusEx` (ram). Surfaced 2026-04-29 by live ES smoke test from GAMINGPC2. |
+| C.12 | Port `src/host.rs` hardware enrichment to Windows — `cpu_info()`, `gpu_info()`, `ram_info()` currently read `/proc` and `/sys` and produce empty `gamepulse.hardware.*` blocks on Windows session docs. Re-use the data we already collect via PDH (cpu model/cores), DXGI (gpu vendor/model/VRAM), and `GlobalMemoryStatusEx` (ram). Surfaced 2026-04-29 by live ES smoke test. |
 
 ---
 

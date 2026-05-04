@@ -32,7 +32,7 @@
                 }
             },
             "host": {
-                "name": "cachyos-pc"
+                "name": "gaming-pc"
             }
         },
         {
@@ -63,7 +63,7 @@
                 }
             },
             "host": {
-                "name": "cachyos-pc"
+                "name": "gaming-pc"
             }
         }
     ]
