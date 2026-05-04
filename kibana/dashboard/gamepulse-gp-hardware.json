@@ -641,8 +641,7 @@
                       "columnOrder": [
                         "line_x",
                         "line_breakdown",
-                        "line_y_0",
-                        "line_y_1"
+                        "line_y_0"
                       ],
                       "columns": {
                         "line_breakdown": {
@@ -685,14 +684,6 @@
                           "label": "GPU Power (W)",
                           "operationType": "average",
                           "sourceField": "gamepulse.gpu.power_w"
-                        },
-                        "line_y_1": {
-                          "customLabel": true,
-                          "dataType": "number",
-                          "isBucketed": false,
-                          "label": "TDP %",
-                          "operationType": "average",
-                          "sourceField": "gamepulse.gpu.tdp_pct"
                         }
                       },
                       "ignoreGlobalFilters": false,
@@ -727,8 +718,7 @@
                 "layers": [
                   {
                     "accessors": [
-                      "line_y_0",
-                      "line_y_1"
+                      "line_y_0"
                     ],
                     "colorMapping": {
                       "assignments": [],
@@ -761,10 +751,6 @@
                       {
                         "axisMode": "left",
                         "forAccessor": "line_y_0"
-                      },
-                      {
-                        "axisMode": "left",
-                        "forAccessor": "line_y_1"
                       }
                     ]
                   }
@@ -791,13 +777,13 @@
                   "niceValues": true
                 },
                 "yLeftScale": "linear",
-                "yTitle": "Power (W) / TDP %"
+                "yTitle": "Power (W)"
               }
             },
             "title": "",
             "visualizationType": "lnsXY"
           },
-          "title": "GPU Power Draw Over Time \u2014 Compares actual draw against TDP; sustained 100% TDP = thermally or power-limited. Power spikes on Vulkan/DX12 async compute reflect burst workloads."
+          "title": "GPU Power Draw Over Time \u2014 Sustained high draw near card TDP = power-limited; watch for throttling. Power spikes on Vulkan/DX12 async compute reflect burst workloads."
         },
         "gridData": {
           "h": 12,
@@ -1001,8 +987,7 @@
                       "columnOrder": [
                         "line_x",
                         "line_breakdown",
-                        "line_y_0",
-                        "line_y_1"
+                        "line_y_0"
                       ],
                       "columns": {
                         "line_breakdown": {
@@ -1045,14 +1030,6 @@
                           "label": "Core Clock (MHz)",
                           "operationType": "average",
                           "sourceField": "gamepulse.gpu.clock_mhz"
-                        },
-                        "line_y_1": {
-                          "customLabel": true,
-                          "dataType": "number",
-                          "isBucketed": false,
-                          "label": "Mem Clock (MHz)",
-                          "operationType": "average",
-                          "sourceField": "gamepulse.gpu.memory_clock_mhz"
                         }
                       },
                       "ignoreGlobalFilters": false,
@@ -1087,8 +1064,7 @@
                 "layers": [
                   {
                     "accessors": [
-                      "line_y_0",
-                      "line_y_1"
+                      "line_y_0"
                     ],
                     "colorMapping": {
                       "assignments": [],
@@ -1121,10 +1097,6 @@
                       {
                         "axisMode": "left",
                         "forAccessor": "line_y_0"
-                      },
-                      {
-                        "axisMode": "left",
-                        "forAccessor": "line_y_1"
                       }
                     ]
                   }
@@ -1157,7 +1129,7 @@
             "title": "",
             "visualizationType": "lnsXY"
           },
-          "title": "GPU Core Clock Over Time \u2014 Clock below rated boost speed indicates thermal or power throttling. Memory clock drops can cause VRAM bandwidth starvation in texture-heavy scenes."
+          "title": "GPU Core Clock Over Time \u2014 Clock below rated boost speed indicates thermal or power throttling. Sustained clock reduction simultaneous with high temperature = thermal throttle."
         },
         "gridData": {
           "h": 10,

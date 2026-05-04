@@ -830,8 +830,7 @@
                         "line_x",
                         "line_breakdown",
                         "line_y_0",
-                        "line_y_1",
-                        "line_y_2"
+                        "line_y_1"
                       ],
                       "columns": {
                         "line_breakdown": {
@@ -879,17 +878,9 @@
                           "customLabel": true,
                           "dataType": "number",
                           "isBucketed": false,
-                          "label": "p99 Frametime (ms)",
+                          "label": "0.1% Low FPS",
                           "operationType": "average",
-                          "sourceField": "gamepulse.fps.p99_frametime_ms"
-                        },
-                        "line_y_2": {
-                          "customLabel": true,
-                          "dataType": "number",
-                          "isBucketed": false,
-                          "label": "p95 Frametime (ms)",
-                          "operationType": "average",
-                          "sourceField": "gamepulse.fps.p95_frametime_ms"
+                          "sourceField": "gamepulse.fps.low_01pct"
                         }
                       },
                       "ignoreGlobalFilters": false,
@@ -925,8 +916,7 @@
                   {
                     "accessors": [
                       "line_y_0",
-                      "line_y_1",
-                      "line_y_2"
+                      "line_y_1"
                     ],
                     "colorMapping": {
                       "assignments": [],
@@ -963,10 +953,6 @@
                       {
                         "axisMode": "left",
                         "forAccessor": "line_y_1"
-                      },
-                      {
-                        "axisMode": "left",
-                        "forAccessor": "line_y_2"
                       }
                     ]
                   }
@@ -993,13 +979,13 @@
                   "niceValues": true
                 },
                 "yLeftScale": "linear",
-                "yTitle": "Frame Time (ms)"
+                "yTitle": "Frame Time (ms) / 0.1% Low FPS"
               }
             },
             "title": "",
             "visualizationType": "lnsXY"
           },
-          "title": "Frame Time Over Time \u2014 p99 spikes reveal stutter events. Target: p99 \u2264 33 ms for 30 FPS lock, \u2264 16.7 ms for 60 FPS."
+          "title": "Frame Time Over Time \u2014 spikes reveal stutter events. Target: avg frametime \u2264 33 ms for 30 FPS cap, \u2264 16.7 ms for 60 FPS. 0.1% lows (worst frames) amplify hitches invisible in the average."
         },
         "gridData": {
           "h": 12,
@@ -1070,9 +1056,12 @@
                           "customLabel": true,
                           "dataType": "number",
                           "isBucketed": false,
-                          "label": "Stutter Score",
-                          "operationType": "average",
-                          "sourceField": "gamepulse.fps.stutter_score"
+                          "label": "Stutter Count",
+                          "operationType": "sum",
+                          "params": {
+                            "emptyAsNull": false
+                          },
+                          "sourceField": "gamepulse.fps.stutter_count"
                         }
                       },
                       "ignoreGlobalFilters": false,
@@ -1166,13 +1155,13 @@
                   "niceValues": true
                 },
                 "yLeftScale": "linear",
-                "yTitle": "Stutter Score"
+                "yTitle": "Stutter Events / interval"
               }
             },
             "title": "",
             "visualizationType": "lnsXY"
           },
-          "title": "Stutter Events Per Minute \u2014 sudden spikes indicate shader compilation, CPU-GPU sync issues, or memory pressure."
+          "title": "Stutter Events Per Interval \u2014 sudden spikes indicate shader compilation hitches, CPU-GPU sync issues, or memory pressure. stutter_detected fires when frametime exceeds 2\u00d7 the rolling average."
         },
         "gridData": {
           "h": 12,
@@ -1849,7 +1838,7 @@
                             "showArrayValues": false,
                             "sortField": "@timestamp"
                           },
-                          "sourceField": "gamepulse.session.graphics_api"
+                          "sourceField": "gamepulse.game.graphics_api"
                         },
                         "datatable_accessor_metric_13": {
                           "customLabel": true,
@@ -1861,7 +1850,7 @@
                             "showArrayValues": false,
                             "sortField": "@timestamp"
                           },
-                          "sourceField": "gamepulse.session.upscaler"
+                          "sourceField": "gamepulse.game.upscaler.type"
                         },
                         "datatable_accessor_metric_2": {
                           "customLabel": true,

@@ -31,6 +31,9 @@ const FAILURE_NEEDLES = [
   "Visualization could not be saved",
   "Unable to load",
   "An error occurred",
+  "Could not locate field",
+  "Unknown column",
+  "verification_exception",
 ];
 
 function parseArgs(argv) {

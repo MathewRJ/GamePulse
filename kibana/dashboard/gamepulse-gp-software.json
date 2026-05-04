@@ -2155,13 +2155,13 @@
                           "customLabel": true,
                           "dataType": "number",
                           "isBucketed": false,
-                          "label": "VKD3D",
+                          "label": "VKD3D-Proton",
                           "operationType": "last_value",
                           "params": {
                             "showArrayValues": false,
                             "sortField": "@timestamp"
                           },
-                          "sourceField": "gamepulse.compatibility.vkd3d_version"
+                          "sourceField": "gamepulse.compatibility.vkd3d_proton_version"
                         },
                         "datatable_accessor_metric_4": {
                           "customLabel": true,
@@ -2173,7 +2173,7 @@
                             "showArrayValues": false,
                             "sortField": "@timestamp"
                           },
-                          "sourceField": "gamepulse.compatibility.steam_app_id"
+                          "sourceField": "gamepulse.game.steam_app_id"
                         },
                         "datatable_accessor_metric_5": {
                           "customLabel": true,

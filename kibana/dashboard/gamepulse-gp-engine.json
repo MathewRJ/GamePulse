@@ -64,7 +64,7 @@
           "dataViewRefName": "optionsListDataView",
           "exclude": false,
           "exists_selected": false,
-          "field_name": "gamepulse.session.graphics_api",
+          "field_name": "gamepulse.game.graphics_api",
           "ignore_validations": false,
           "run_past_timeout": false,
           "search_technique": "wildcard",
@@ -92,7 +92,7 @@
           "dataViewRefName": "optionsListDataView",
           "exclude": false,
           "exists_selected": false,
-          "field_name": "gamepulse.session.upscaler",
+          "field_name": "gamepulse.game.upscaler.type",
           "ignore_validations": false,
           "run_past_timeout": false,
           "search_technique": "wildcard",
@@ -149,12 +149,12 @@
             "references": [],
             "state": {
               "adHocDataViews": {
-                "metrics-gamepulse.ebpf-default-9da65ee5b0ebc0f99854435d9e02f53597d4b497dcd8baa1a80949dd5ffefda1": {
+                "metrics-gamepulse.ebpf-default-fc796b398a559e1d0159005d59b56f8a6d0de87775429580e8a6b7c47782b96d": {
                   "allowHidden": false,
                   "allowNoIndex": false,
                   "fieldAttrs": {},
                   "fieldFormats": {},
-                  "id": "metrics-gamepulse.ebpf-default-9da65ee5b0ebc0f99854435d9e02f53597d4b497dcd8baa1a80949dd5ffefda1",
+                  "id": "metrics-gamepulse.ebpf-default-fc796b398a559e1d0159005d59b56f8a6d0de87775429580e8a6b7c47782b96d",
                   "name": "metrics-gamepulse.ebpf-default",
                   "runtimeFieldMap": {},
                   "sourceFilters": [],
@@ -170,16 +170,16 @@
                         {
                           "columnId": "metric_accessor_metric",
                           "customLabel": true,
-                          "fieldName": "GPU Submit \u00b5s",
-                          "label": "Avg GPU Submit Latency",
+                          "fieldName": "GPU Fence \u00b5s",
+                          "label": "Avg GPU Fence Latency",
                           "meta": {
                             "type": "number"
                           }
                         }
                       ],
-                      "index": "metrics-gamepulse.ebpf-default-9da65ee5b0ebc0f99854435d9e02f53597d4b497dcd8baa1a80949dd5ffefda1",
+                      "index": "metrics-gamepulse.ebpf-default-fc796b398a559e1d0159005d59b56f8a6d0de87775429580e8a6b7c47782b96d",
                       "query": {
-                        "esql": "FROM metrics-gamepulse.ebpf-default | WHERE gamepulse.ebpf.drm_gpu_submit_latency_us IS NOT NULL | STATS `GPU Submit \u00b5s` = ROUND(AVG(gamepulse.ebpf.drm_gpu_submit_latency_us), 1)"
+                        "esql": "FROM metrics-gamepulse.ebpf-default | WHERE `gamepulse.ebpf.gpu_fence.latency_avg_us` IS NOT NULL | STATS `GPU Fence \u00b5s` = ROUND(AVG(`gamepulse.ebpf.gpu_fence.latency_avg_us`), 1)"
                       }
                     }
                   }
@@ -188,13 +188,13 @@
               "filters": [],
               "internalReferences": [
                 {
-                  "id": "metrics-gamepulse.ebpf-default-9da65ee5b0ebc0f99854435d9e02f53597d4b497dcd8baa1a80949dd5ffefda1",
+                  "id": "metrics-gamepulse.ebpf-default-fc796b398a559e1d0159005d59b56f8a6d0de87775429580e8a6b7c47782b96d",
                   "name": "indexpattern-datasource-layer-layer_0",
                   "type": "index-pattern"
                 }
               ],
               "query": {
-                "esql": "FROM metrics-gamepulse.ebpf-default | WHERE gamepulse.ebpf.drm_gpu_submit_latency_us IS NOT NULL | STATS `GPU Submit \u00b5s` = ROUND(AVG(gamepulse.ebpf.drm_gpu_submit_latency_us), 1)"
+                "esql": "FROM metrics-gamepulse.ebpf-default | WHERE `gamepulse.ebpf.gpu_fence.latency_avg_us` IS NOT NULL | STATS `GPU Fence \u00b5s` = ROUND(AVG(`gamepulse.ebpf.gpu_fence.latency_avg_us`), 1)"
               },
               "visualization": {
                 "layerId": "layer_0",
@@ -211,16 +211,16 @@
             "title": "",
             "visualizationType": "lnsMetric"
           },
-          "title": "Avg GPU Submit Latency"
+          "title": "Avg GPU Fence Latency"
         },
         "gridData": {
           "h": 6,
-          "i": "kpi-gpu-submit",
+          "i": "kpi-gpu-fence",
           "w": 8,
           "x": 0,
           "y": 7
         },
-        "panelIndex": "kpi-gpu-submit",
+        "panelIndex": "kpi-gpu-fence",
         "type": "vis"
       },
       {
@@ -229,12 +229,12 @@
             "references": [],
             "state": {
               "adHocDataViews": {
-                "metrics-gamepulse.ebpf-default-4db0d9daf660e52099a201375fe5285febabe97c25b965a56c5c242b742ba431": {
+                "metrics-gamepulse.ebpf-default-bb37c2dab0c7a79322b0fa370af67c35fa7611327b07f3c996134a5ccbc14f8d": {
                   "allowHidden": false,
                   "allowNoIndex": false,
                   "fieldAttrs": {},
                   "fieldFormats": {},
-                  "id": "metrics-gamepulse.ebpf-default-4db0d9daf660e52099a201375fe5285febabe97c25b965a56c5c242b742ba431",
+                  "id": "metrics-gamepulse.ebpf-default-bb37c2dab0c7a79322b0fa370af67c35fa7611327b07f3c996134a5ccbc14f8d",
                   "name": "metrics-gamepulse.ebpf-default",
                   "runtimeFieldMap": {},
                   "sourceFilters": [],
@@ -257,9 +257,9 @@
                           }
                         }
                       ],
-                      "index": "metrics-gamepulse.ebpf-default-4db0d9daf660e52099a201375fe5285febabe97c25b965a56c5c242b742ba431",
+                      "index": "metrics-gamepulse.ebpf-default-bb37c2dab0c7a79322b0fa370af67c35fa7611327b07f3c996134a5ccbc14f8d",
                       "query": {
-                        "esql": "FROM metrics-gamepulse.ebpf-default | WHERE gamepulse.ebpf.gpu_sched_latency_avg_us IS NOT NULL | STATS `GPU Sched \u00b5s` = ROUND(AVG(gamepulse.ebpf.gpu_sched_latency_avg_us), 1)"
+                        "esql": "FROM metrics-gamepulse.ebpf-default | WHERE `gamepulse.ebpf.gpu_sched.latency_avg_us` IS NOT NULL | STATS `GPU Sched \u00b5s` = ROUND(AVG(`gamepulse.ebpf.gpu_sched.latency_avg_us`), 1)"
                       }
                     }
                   }
@@ -268,13 +268,13 @@
               "filters": [],
               "internalReferences": [
                 {
-                  "id": "metrics-gamepulse.ebpf-default-4db0d9daf660e52099a201375fe5285febabe97c25b965a56c5c242b742ba431",
+                  "id": "metrics-gamepulse.ebpf-default-bb37c2dab0c7a79322b0fa370af67c35fa7611327b07f3c996134a5ccbc14f8d",
                   "name": "indexpattern-datasource-layer-layer_0",
                   "type": "index-pattern"
                 }
               ],
               "query": {
-                "esql": "FROM metrics-gamepulse.ebpf-default | WHERE gamepulse.ebpf.gpu_sched_latency_avg_us IS NOT NULL | STATS `GPU Sched \u00b5s` = ROUND(AVG(gamepulse.ebpf.gpu_sched_latency_avg_us), 1)"
+                "esql": "FROM metrics-gamepulse.ebpf-default | WHERE `gamepulse.ebpf.gpu_sched.latency_avg_us` IS NOT NULL | STATS `GPU Sched \u00b5s` = ROUND(AVG(`gamepulse.ebpf.gpu_sched.latency_avg_us`), 1)"
               },
               "visualization": {
                 "layerId": "layer_0",
@@ -309,12 +309,12 @@
             "references": [],
             "state": {
               "adHocDataViews": {
-                "metrics-gamepulse.ebpf-default-305fed45cbc592e9f5c5d5bd15666c0b15877b85ebcaa70e94513aa2165037c2": {
+                "metrics-gamepulse.ebpf-default-97bda46bbcb9a5d7e85957db81a4a741356907e9a7d079d88b2d68da660474da": {
                   "allowHidden": false,
                   "allowNoIndex": false,
                   "fieldAttrs": {},
                   "fieldFormats": {},
-                  "id": "metrics-gamepulse.ebpf-default-305fed45cbc592e9f5c5d5bd15666c0b15877b85ebcaa70e94513aa2165037c2",
+                  "id": "metrics-gamepulse.ebpf-default-97bda46bbcb9a5d7e85957db81a4a741356907e9a7d079d88b2d68da660474da",
                   "name": "metrics-gamepulse.ebpf-default",
                   "runtimeFieldMap": {},
                   "sourceFilters": [],
@@ -337,9 +337,9 @@
                           }
                         }
                       ],
-                      "index": "metrics-gamepulse.ebpf-default-305fed45cbc592e9f5c5d5bd15666c0b15877b85ebcaa70e94513aa2165037c2",
+                      "index": "metrics-gamepulse.ebpf-default-97bda46bbcb9a5d7e85957db81a4a741356907e9a7d079d88b2d68da660474da",
                       "query": {
-                        "esql": "FROM metrics-gamepulse.ebpf-default | WHERE gamepulse.ebpf.runqueue_latency_avg_us IS NOT NULL | STATS `RQ \u00b5s` = ROUND(AVG(gamepulse.ebpf.runqueue_latency_avg_us), 1)"
+                        "esql": "FROM metrics-gamepulse.ebpf-default | WHERE `gamepulse.ebpf.runqueue.latency_avg_us` IS NOT NULL | STATS `RQ \u00b5s` = ROUND(AVG(`gamepulse.ebpf.runqueue.latency_avg_us`), 1)"
                       }
                     }
                   }
@@ -348,13 +348,13 @@
               "filters": [],
               "internalReferences": [
                 {
-                  "id": "metrics-gamepulse.ebpf-default-305fed45cbc592e9f5c5d5bd15666c0b15877b85ebcaa70e94513aa2165037c2",
+                  "id": "metrics-gamepulse.ebpf-default-97bda46bbcb9a5d7e85957db81a4a741356907e9a7d079d88b2d68da660474da",
                   "name": "indexpattern-datasource-layer-layer_0",
                   "type": "index-pattern"
                 }
               ],
               "query": {
-                "esql": "FROM metrics-gamepulse.ebpf-default | WHERE gamepulse.ebpf.runqueue_latency_avg_us IS NOT NULL | STATS `RQ \u00b5s` = ROUND(AVG(gamepulse.ebpf.runqueue_latency_avg_us), 1)"
+                "esql": "FROM metrics-gamepulse.ebpf-default | WHERE `gamepulse.ebpf.runqueue.latency_avg_us` IS NOT NULL | STATS `RQ \u00b5s` = ROUND(AVG(`gamepulse.ebpf.runqueue.latency_avg_us`), 1)"
               },
               "visualization": {
                 "layerId": "layer_0",
@@ -389,12 +389,12 @@
             "references": [],
             "state": {
               "adHocDataViews": {
-                "metrics-gamepulse.ebpf-default-7d77748551e01fb990a79fb23b82e0124c2d5bf8b67c2dcea81b6b4c2db4153c": {
+                "metrics-gamepulse.ebpf-default-86798affa35e98740bb3acf4e54dd9f9155ed3ae7c700f66548a344e9851758e": {
                   "allowHidden": false,
                   "allowNoIndex": false,
                   "fieldAttrs": {},
                   "fieldFormats": {},
-                  "id": "metrics-gamepulse.ebpf-default-7d77748551e01fb990a79fb23b82e0124c2d5bf8b67c2dcea81b6b4c2db4153c",
+                  "id": "metrics-gamepulse.ebpf-default-86798affa35e98740bb3acf4e54dd9f9155ed3ae7c700f66548a344e9851758e",
                   "name": "metrics-gamepulse.ebpf-default",
                   "runtimeFieldMap": {},
                   "sourceFilters": [],
@@ -417,9 +417,9 @@
                           }
                         }
                       ],
-                      "index": "metrics-gamepulse.ebpf-default-7d77748551e01fb990a79fb23b82e0124c2d5bf8b67c2dcea81b6b4c2db4153c",
+                      "index": "metrics-gamepulse.ebpf-default-86798affa35e98740bb3acf4e54dd9f9155ed3ae7c700f66548a344e9851758e",
                       "query": {
-                        "esql": "FROM metrics-gamepulse.ebpf-default | WHERE gamepulse.ebpf.bio_latency_avg_us IS NOT NULL | STATS `I/O \u00b5s` = ROUND(AVG(gamepulse.ebpf.bio_latency_avg_us), 1)"
+                        "esql": "FROM metrics-gamepulse.ebpf-default | WHERE `gamepulse.ebpf.bio.latency_avg_us` IS NOT NULL | STATS `I/O \u00b5s` = ROUND(AVG(`gamepulse.ebpf.bio.latency_avg_us`), 1)"
                       }
                     }
                   }
@@ -428,13 +428,13 @@
               "filters": [],
               "internalReferences": [
                 {
-                  "id": "metrics-gamepulse.ebpf-default-7d77748551e01fb990a79fb23b82e0124c2d5bf8b67c2dcea81b6b4c2db4153c",
+                  "id": "metrics-gamepulse.ebpf-default-86798affa35e98740bb3acf4e54dd9f9155ed3ae7c700f66548a344e9851758e",
                   "name": "indexpattern-datasource-layer-layer_0",
                   "type": "index-pattern"
                 }
               ],
               "query": {
-                "esql": "FROM metrics-gamepulse.ebpf-default | WHERE gamepulse.ebpf.bio_latency_avg_us IS NOT NULL | STATS `I/O \u00b5s` = ROUND(AVG(gamepulse.ebpf.bio_latency_avg_us), 1)"
+                "esql": "FROM metrics-gamepulse.ebpf-default | WHERE `gamepulse.ebpf.bio.latency_avg_us` IS NOT NULL | STATS `I/O \u00b5s` = ROUND(AVG(`gamepulse.ebpf.bio.latency_avg_us`), 1)"
               },
               "visualization": {
                 "layerId": "layer_0",
@@ -469,12 +469,12 @@
             "references": [],
             "state": {
               "adHocDataViews": {
-                "metrics-gamepulse.ebpf-default-f8e5a79c4df46fe77daf87430bd136f17202e8d5547e77c947d76550f753c145": {
+                "metrics-gamepulse.ebpf-default-4e42ae989310967cf4d92c52283a2ec4da67a346b0c5da8eeb46cabd7fe0f06e": {
                   "allowHidden": false,
                   "allowNoIndex": false,
                   "fieldAttrs": {},
                   "fieldFormats": {},
-                  "id": "metrics-gamepulse.ebpf-default-f8e5a79c4df46fe77daf87430bd136f17202e8d5547e77c947d76550f753c145",
+                  "id": "metrics-gamepulse.ebpf-default-4e42ae989310967cf4d92c52283a2ec4da67a346b0c5da8eeb46cabd7fe0f06e",
                   "name": "metrics-gamepulse.ebpf-default",
                   "runtimeFieldMap": {},
                   "sourceFilters": [],
@@ -490,16 +490,16 @@
                         {
                           "columnId": "metric_accessor_metric",
                           "customLabel": true,
-                          "fieldName": "Syscall \u00b5s",
-                          "label": "Avg Syscall Latency",
+                          "fieldName": "Futex \u00b5s",
+                          "label": "Avg Futex Latency",
                           "meta": {
                             "type": "number"
                           }
                         }
                       ],
-                      "index": "metrics-gamepulse.ebpf-default-f8e5a79c4df46fe77daf87430bd136f17202e8d5547e77c947d76550f753c145",
+                      "index": "metrics-gamepulse.ebpf-default-4e42ae989310967cf4d92c52283a2ec4da67a346b0c5da8eeb46cabd7fe0f06e",
                       "query": {
-                        "esql": "FROM metrics-gamepulse.ebpf-default | WHERE gamepulse.ebpf.syscall_latency_us IS NOT NULL | STATS `Syscall \u00b5s` = ROUND(AVG(gamepulse.ebpf.syscall_latency_us), 1)"
+                        "esql": "FROM metrics-gamepulse.ebpf-default | WHERE `gamepulse.ebpf.futex.latency_avg_us` IS NOT NULL | STATS `Futex \u00b5s` = ROUND(AVG(`gamepulse.ebpf.futex.latency_avg_us`), 1)"
                       }
                     }
                   }
@@ -508,13 +508,13 @@
               "filters": [],
               "internalReferences": [
                 {
-                  "id": "metrics-gamepulse.ebpf-default-f8e5a79c4df46fe77daf87430bd136f17202e8d5547e77c947d76550f753c145",
+                  "id": "metrics-gamepulse.ebpf-default-4e42ae989310967cf4d92c52283a2ec4da67a346b0c5da8eeb46cabd7fe0f06e",
                   "name": "indexpattern-datasource-layer-layer_0",
                   "type": "index-pattern"
                 }
               ],
               "query": {
-                "esql": "FROM metrics-gamepulse.ebpf-default | WHERE gamepulse.ebpf.syscall_latency_us IS NOT NULL | STATS `Syscall \u00b5s` = ROUND(AVG(gamepulse.ebpf.syscall_latency_us), 1)"
+                "esql": "FROM metrics-gamepulse.ebpf-default | WHERE `gamepulse.ebpf.futex.latency_avg_us` IS NOT NULL | STATS `Futex \u00b5s` = ROUND(AVG(`gamepulse.ebpf.futex.latency_avg_us`), 1)"
               },
               "visualization": {
                 "layerId": "layer_0",
@@ -531,16 +531,16 @@
             "title": "",
             "visualizationType": "lnsMetric"
           },
-          "title": "Avg Syscall Latency"
+          "title": "Avg Futex Latency"
         },
         "gridData": {
           "h": 6,
-          "i": "kpi-syscall",
+          "i": "kpi-futex-lat",
           "w": 8,
           "x": 32,
           "y": 7
         },
-        "panelIndex": "kpi-syscall",
+        "panelIndex": "kpi-futex-lat",
         "type": "vis"
       },
       {
@@ -549,12 +549,12 @@
             "references": [],
             "state": {
               "adHocDataViews": {
-                "metrics-gamepulse.ebpf-default-c312981bb8094a7fda3f39c76f04a3e417bd929873d5665eeb980e083a721d0d": {
+                "metrics-gamepulse.ebpf-default-21636e44dc40eeb17c571edc59a1687d8f25dac5c5ae2d767e1935b761a2bff2": {
                   "allowHidden": false,
                   "allowNoIndex": false,
                   "fieldAttrs": {},
                   "fieldFormats": {},
-                  "id": "metrics-gamepulse.ebpf-default-c312981bb8094a7fda3f39c76f04a3e417bd929873d5665eeb980e083a721d0d",
+                  "id": "metrics-gamepulse.ebpf-default-21636e44dc40eeb17c571edc59a1687d8f25dac5c5ae2d767e1935b761a2bff2",
                   "name": "metrics-gamepulse.ebpf-default",
                   "runtimeFieldMap": {},
                   "sourceFilters": [],
@@ -577,9 +577,9 @@
                           }
                         }
                       ],
-                      "index": "metrics-gamepulse.ebpf-default-c312981bb8094a7fda3f39c76f04a3e417bd929873d5665eeb980e083a721d0d",
+                      "index": "metrics-gamepulse.ebpf-default-21636e44dc40eeb17c571edc59a1687d8f25dac5c5ae2d767e1935b761a2bff2",
                       "query": {
-                        "esql": "FROM metrics-gamepulse.ebpf-default | WHERE gamepulse.ebpf.stutter_severity_score IS NOT NULL | STATS `Stutter Score` = ROUND(AVG(gamepulse.ebpf.stutter_severity_score), 2)"
+                        "esql": "FROM metrics-gamepulse.ebpf-default | WHERE `gamepulse.ebpf.stutter.severity_score` IS NOT NULL | STATS `Stutter Score` = ROUND(AVG(`gamepulse.ebpf.stutter.severity_score`), 2)"
                       }
                     }
                   }
@@ -588,13 +588,13 @@
               "filters": [],
               "internalReferences": [
                 {
-                  "id": "metrics-gamepulse.ebpf-default-c312981bb8094a7fda3f39c76f04a3e417bd929873d5665eeb980e083a721d0d",
+                  "id": "metrics-gamepulse.ebpf-default-21636e44dc40eeb17c571edc59a1687d8f25dac5c5ae2d767e1935b761a2bff2",
                   "name": "indexpattern-datasource-layer-layer_0",
                   "type": "index-pattern"
                 }
               ],
               "query": {
-                "esql": "FROM metrics-gamepulse.ebpf-default | WHERE gamepulse.ebpf.stutter_severity_score IS NOT NULL | STATS `Stutter Score` = ROUND(AVG(gamepulse.ebpf.stutter_severity_score), 2)"
+                "esql": "FROM metrics-gamepulse.ebpf-default | WHERE `gamepulse.ebpf.stutter.severity_score` IS NOT NULL | STATS `Stutter Score` = ROUND(AVG(`gamepulse.ebpf.stutter.severity_score`), 2)"
               },
               "visualization": {
                 "layerId": "layer_0",
@@ -683,9 +683,9 @@
                           "customLabel": true,
                           "dataType": "number",
                           "isBucketed": false,
-                          "label": "DRM Submit (\u00b5s)",
+                          "label": "GPU Fence (\u00b5s)",
                           "operationType": "average",
-                          "sourceField": "gamepulse.ebpf.drm_gpu_submit_latency_us"
+                          "sourceField": "gamepulse.ebpf.gpu_fence.latency_avg_us"
                         },
                         "line_y_1": {
                           "customLabel": true,
@@ -693,7 +693,7 @@
                           "isBucketed": false,
                           "label": "GPU Sched (\u00b5s)",
                           "operationType": "average",
-                          "sourceField": "gamepulse.ebpf.gpu_sched_latency_avg_us"
+                          "sourceField": "gamepulse.ebpf.gpu_sched.latency_avg_us"
                         }
                       },
                       "ignoreGlobalFilters": false,
@@ -798,7 +798,7 @@
             "title": "",
             "visualizationType": "lnsXY"
           },
-          "title": "GPU Pipeline Latency Over Time \u2014 DRM submit latency = time from CPU draw call to GPU execution start. GPU scheduler latency = time GPU work spends queued waiting for execution. Spikes indicate GPU ring buffer saturation or driver overhead."
+          "title": "GPU Pipeline Latency Over Time \u2014 GPU fence latency = time from command submission to GPU completion (measured by DRM fence callbacks). GPU scheduler latency = time GPU work spends queued waiting for execution. Spikes indicate GPU ring buffer saturation or driver overhead."
         },
         "gridData": {
           "h": 14,
@@ -871,7 +871,7 @@
                           "isBucketed": false,
                           "label": "Runqueue Latency (\u00b5s)",
                           "operationType": "average",
-                          "sourceField": "gamepulse.ebpf.runqueue_latency_avg_us"
+                          "sourceField": "gamepulse.ebpf.runqueue.latency_avg_us"
                         }
                       },
                       "ignoreGlobalFilters": false,
@@ -1044,7 +1044,7 @@
                           "isBucketed": false,
                           "label": "CCX Migrations/s",
                           "operationType": "average",
-                          "sourceField": "gamepulse.ebpf.migration_ccx_cross_count"
+                          "sourceField": "gamepulse.ebpf.migration.ccx_cross_count"
                         }
                       },
                       "ignoreGlobalFilters": false,
@@ -1217,7 +1217,7 @@
                           "isBucketed": false,
                           "label": "BIO Latency (\u00b5s)",
                           "operationType": "average",
-                          "sourceField": "gamepulse.ebpf.bio_latency_avg_us"
+                          "sourceField": "gamepulse.ebpf.bio.latency_avg_us"
                         }
                       },
                       "ignoreGlobalFilters": false,
@@ -1390,7 +1390,7 @@
                           "isBucketed": false,
                           "label": "Futex Contention/s",
                           "operationType": "average",
-                          "sourceField": "gamepulse.ebpf.futex_contended_count"
+                          "sourceField": "gamepulse.ebpf.futex.contended_count"
                         }
                       },
                       "ignoreGlobalFilters": false,
@@ -1563,7 +1563,7 @@
                           "isBucketed": false,
                           "label": "Stutter Severity",
                           "operationType": "average",
-                          "sourceField": "gamepulse.ebpf.stutter_severity_score"
+                          "sourceField": "gamepulse.ebpf.stutter.severity_score"
                         }
                       },
                       "ignoreGlobalFilters": false,
@@ -1701,8 +1701,7 @@
                         "datatable_accessor_metric_5",
                         "datatable_accessor_metric_6",
                         "datatable_accessor_metric_7",
-                        "datatable_accessor_metric_8",
-                        "datatable_accessor_metric_9"
+                        "datatable_accessor_metric_8"
                       ],
                       "columns": {
                         "datatable_accessor_metric_0": {
@@ -1727,7 +1726,7 @@
                             "showArrayValues": false,
                             "sortField": "@timestamp"
                           },
-                          "sourceField": "gamepulse.session.graphics_api"
+                          "sourceField": "gamepulse.game.graphics_api"
                         },
                         "datatable_accessor_metric_2": {
                           "customLabel": true,
@@ -1739,7 +1738,7 @@
                             "showArrayValues": false,
                             "sortField": "@timestamp"
                           },
-                          "sourceField": "gamepulse.session.upscaler"
+                          "sourceField": "gamepulse.game.upscaler.type"
                         },
                         "datatable_accessor_metric_3": {
                           "customLabel": true,
@@ -1751,33 +1750,21 @@
                             "showArrayValues": false,
                             "sortField": "@timestamp"
                           },
-                          "sourceField": "gamepulse.session.upscaler_quality"
+                          "sourceField": "gamepulse.game.upscaler.quality"
                         },
                         "datatable_accessor_metric_4": {
                           "customLabel": true,
                           "dataType": "number",
                           "isBucketed": false,
-                          "label": "Ray Tracing",
+                          "label": "Features",
                           "operationType": "last_value",
                           "params": {
                             "showArrayValues": false,
                             "sortField": "@timestamp"
                           },
-                          "sourceField": "gamepulse.session.ray_tracing"
+                          "sourceField": "gamepulse.settings.features_active"
                         },
                         "datatable_accessor_metric_5": {
-                          "customLabel": true,
-                          "dataType": "number",
-                          "isBucketed": false,
-                          "label": "Async Compute",
-                          "operationType": "last_value",
-                          "params": {
-                            "showArrayValues": false,
-                            "sortField": "@timestamp"
-                          },
-                          "sourceField": "gamepulse.session.async_compute"
-                        },
-                        "datatable_accessor_metric_6": {
                           "customLabel": true,
                           "dataType": "number",
                           "isBucketed": false,
@@ -1789,7 +1776,7 @@
                           },
                           "sourceField": "gamepulse.summary.avg_fps"
                         },
-                        "datatable_accessor_metric_7": {
+                        "datatable_accessor_metric_6": {
                           "customLabel": true,
                           "dataType": "number",
                           "isBucketed": false,
@@ -1801,7 +1788,7 @@
                           },
                           "sourceField": "gamepulse.summary.stutter_count"
                         },
-                        "datatable_accessor_metric_8": {
+                        "datatable_accessor_metric_7": {
                           "customLabel": true,
                           "dataType": "number",
                           "isBucketed": false,
@@ -1813,7 +1800,7 @@
                           },
                           "sourceField": "gamepulse.hardware.gpu.driver_version"
                         },
-                        "datatable_accessor_metric_9": {
+                        "datatable_accessor_metric_8": {
                           "customLabel": true,
                           "dataType": "number",
                           "isBucketed": false,
@@ -1905,11 +1892,6 @@
                   },
                   {
                     "columnId": "datatable_accessor_metric_8",
-                    "isMetric": true,
-                    "isTransposed": false
-                  },
-                  {
-                    "columnId": "datatable_accessor_metric_9",
                     "isMetric": true,
                     "isTransposed": false
                   }
