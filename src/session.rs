@@ -1007,6 +1007,30 @@ fn dxvk_version_from_env(env: &HashMap<String, String>) -> Option<String> {
     }
 }
 
+// Windows stubs — Proton/DXVK/proc-environ concepts don't exist on Windows.
+#[cfg(not(unix))]
+fn read_environ(_pid: u32) -> Option<HashMap<String, String>> {
+    None
+}
+
+#[cfg(not(unix))]
+fn graphics_api_with_maps_fallback(
+    _env: &HashMap<String, String>,
+    _pid: u32,
+) -> (Option<String>, bool) {
+    (None, false)
+}
+
+#[cfg(not(unix))]
+fn proton_version_from_env(_env: &HashMap<String, String>) -> Option<String> {
+    None
+}
+
+#[cfg(not(unix))]
+fn dxvk_version_from_env(_env: &HashMap<String, String>) -> Option<String> {
+    None
+}
+
 // ── Heroic detection (Unix only) ──────────────────────────────────────────────
 
 #[cfg(unix)]
