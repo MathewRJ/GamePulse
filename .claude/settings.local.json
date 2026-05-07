@@ -1,7 +1,0 @@
-{
-  "permissionMode": "acceptEdits",
-  "enableAllProjectMcpServers": true,
-  "enabledMcpjsonServers": [
-    "elastic-agent-builder"
-  ]
-}
