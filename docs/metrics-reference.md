@@ -204,6 +204,24 @@ See `data_stream/ebpf/fields/fields.yml` for the full field list.
 
 ---
 
+## `metrics-gamepulse.ebpf_thread-default`
+
+Per-thread scheduler metrics from the companion `gamepulse-ebpf` daemon.
+Each document represents one top-ranked game thread in a 1-second scheduler window.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `gamepulse.ebpf_thread.comm` | keyword | Thread name (`comm`) |
+| `gamepulse.ebpf_thread.tid` | long | Thread ID |
+| `gamepulse.ebpf_thread.rank` | integer | Rank by switch count within the window |
+| `gamepulse.ebpf_thread.runqueue_min_us` | double | Minimum runqueue latency for the thread |
+| `gamepulse.ebpf_thread.runqueue_max_us` | double | Maximum runqueue latency for the thread |
+| `gamepulse.ebpf_thread.runqueue_avg_us` | double | Mean runqueue latency for the thread |
+| `gamepulse.ebpf_thread.switch_count` | long | Context switches for the thread |
+| `gamepulse.ebpf_thread.migration_count` | long | CPU migrations for the thread |
+
+---
+
 ## `logs-gamepulse.events-default`
 
 Discrete events during a game session (shader compilation, save operations, etc.).

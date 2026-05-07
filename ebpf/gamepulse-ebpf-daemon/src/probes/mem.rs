@@ -15,7 +15,7 @@ use tracing::{debug, warn};
 
 use super::{Probe, ProbeRequirements};
 use crate::aggregator::{MemAggregator, RawMemEvent};
-use crate::es_model::EbpfMetricDoc;
+use crate::es_model::EbpfDocument;
 
 pub struct MemProbe {
     aggregator: MemAggregator,
@@ -49,20 +49,28 @@ impl Probe for MemProbe {
     }
 
     fn attach(&mut self, ebpf: &mut Ebpf) -> Result<()> {
-        let attach = |ebpf: &mut Ebpf, prog_name: &str, category: &str, tp_name: &str| -> Result<()> {
-            let prog: &mut TracePoint = ebpf
-                .program_mut(prog_name)
-                .with_context(|| format!("program '{}' not found in BPF object", prog_name))?
-                .try_into()
-                .context("expected TracePoint program type")?;
-            prog.load().with_context(|| format!("loading {}", prog_name))?;
-            prog.attach(category, tp_name)
-                .with_context(|| format!("attaching {} to {}/{}", prog_name, category, tp_name))?;
-            Ok(())
-        };
+        let attach =
+            |ebpf: &mut Ebpf, prog_name: &str, category: &str, tp_name: &str| -> Result<()> {
+                let prog: &mut TracePoint = ebpf
+                    .program_mut(prog_name)
+                    .with_context(|| format!("program '{}' not found in BPF object", prog_name))?
+                    .try_into()
+                    .context("expected TracePoint program type")?;
+                prog.load()
+                    .with_context(|| format!("loading {}", prog_name))?;
+                prog.attach(category, tp_name).with_context(|| {
+                    format!("attaching {} to {}/{}", prog_name, category, tp_name)
+                })?;
+                Ok(())
+            };
 
-        attach(ebpf, "page_fault_user",                  "exceptions", "page_fault_user")?;
-        attach(ebpf, "mm_vmscan_direct_reclaim_begin",   "vmscan",     "mm_vmscan_direct_reclaim_begin")?;
+        attach(ebpf, "page_fault_user", "exceptions", "page_fault_user")?;
+        attach(
+            ebpf,
+            "mm_vmscan_direct_reclaim_begin",
+            "vmscan",
+            "mm_vmscan_direct_reclaim_begin",
+        )?;
 
         let ring_buf = RingBuf::try_from(
             ebpf.take_map("MEM_EVENTS")
@@ -74,7 +82,7 @@ impl Probe for MemProbe {
         Ok(())
     }
 
-    fn collect(&mut self, session_id: &str) -> Result<Vec<EbpfMetricDoc>> {
+    fn collect(&mut self, session_id: &str) -> Result<Vec<EbpfDocument>> {
         use std::mem::size_of;
         let event_size = size_of::<RawMemEvent>();
         let mut event_count = 0usize;
@@ -83,12 +91,15 @@ impl Probe for MemProbe {
             while let Some(item) = rb.next() {
                 let bytes: &[u8] = &*item;
                 if bytes.len() < event_size {
-                    warn!("mem ring buf item too small: {} < {}", bytes.len(), event_size);
+                    warn!(
+                        "mem ring buf item too small: {} < {}",
+                        bytes.len(),
+                        event_size
+                    );
                     continue;
                 }
-                let event = unsafe {
-                    std::ptr::read_unaligned(bytes.as_ptr() as *const RawMemEvent)
-                };
+                let event =
+                    unsafe { std::ptr::read_unaligned(bytes.as_ptr() as *const RawMemEvent) };
                 self.aggregator.push(event);
                 event_count += 1;
             }
@@ -99,7 +110,7 @@ impl Probe for MemProbe {
         }
 
         let doc = self.aggregator.flush(session_id);
-        Ok(doc.into_iter().collect())
+        Ok(doc.into_iter().map(Into::into).collect())
     }
 
     fn detach(&mut self) -> Result<()> {

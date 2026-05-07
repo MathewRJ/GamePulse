@@ -6,7 +6,7 @@
 use anyhow::Result;
 use aya::Ebpf;
 
-use crate::es_model::EbpfMetricDoc;
+use crate::es_model::EbpfDocument;
 
 pub mod bio;
 pub mod futex;
@@ -42,7 +42,7 @@ pub trait Probe: Send + 'static {
 
     /// Drain the ring buffer / perf buffer, aggregate into a 1-second snapshot.
     /// Returns 0..N documents ready for shipping.
-    fn collect(&mut self, session_id: &str) -> Result<Vec<EbpfMetricDoc>>;
+    fn collect(&mut self, session_id: &str) -> Result<Vec<EbpfDocument>>;
 
     /// Detach and release kernel resources.
     fn detach(&mut self) -> Result<()>;
@@ -60,7 +60,10 @@ pub fn check_requirements(req: &ProbeRequirements) -> Result<()> {
         if version < (major, minor) {
             bail!(
                 "kernel {}.{} required, running {}.{}",
-                major, minor, version.0, version.1
+                major,
+                minor,
+                version.0,
+                version.1
             );
         }
     }
@@ -90,8 +93,7 @@ pub fn check_requirements(req: &ProbeRequirements) -> Result<()> {
 }
 
 fn read_kernel_version() -> Result<(u32, u32)> {
-    let release = std::fs::read_to_string("/proc/sys/kernel/osrelease")
-        .unwrap_or_default();
+    let release = std::fs::read_to_string("/proc/sys/kernel/osrelease").unwrap_or_default();
     let mut parts = release.trim().split('.');
     let major: u32 = parts.next().unwrap_or("0").parse().unwrap_or(0);
     let minor: u32 = parts.next().unwrap_or("0").parse().unwrap_or(0);
@@ -107,9 +109,9 @@ fn tracepoint_exists(tp: &str) -> bool {
 fn kallsyms_contains(sym: &str) -> bool {
     if let Ok(content) = std::fs::read_to_string("/proc/kallsyms") {
         // kallsyms lines: "address type name [module]"
-        content.lines().any(|line| {
-            line.split_whitespace().nth(2).map_or(false, |s| s == sym)
-        })
+        content
+            .lines()
+            .any(|line| line.split_whitespace().nth(2).map_or(false, |s| s == sym))
     } else {
         false
     }
@@ -118,7 +120,9 @@ fn kallsyms_contains(sym: &str) -> bool {
 fn module_loaded(module: &str) -> bool {
     if let Ok(content) = std::fs::read_to_string("/proc/modules") {
         content.lines().any(|line| {
-            line.split_whitespace().next().map_or(false, |s| s == module)
+            line.split_whitespace()
+                .next()
+                .map_or(false, |s| s == module)
         })
     } else {
         false

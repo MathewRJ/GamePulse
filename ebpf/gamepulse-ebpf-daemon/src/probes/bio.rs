@@ -16,7 +16,7 @@ use tracing::{debug, warn};
 
 use super::{Probe, ProbeRequirements};
 use crate::aggregator::{BioAggregator, RawBioEvent};
-use crate::es_model::EbpfMetricDoc;
+use crate::es_model::EbpfDocument;
 
 pub struct BioProbe {
     aggregator: BioAggregator,
@@ -39,10 +39,7 @@ impl Probe for BioProbe {
 
     fn requirements(&self) -> ProbeRequirements {
         ProbeRequirements {
-            tracepoints: vec![
-                "block/block_rq_issue",
-                "block/block_rq_complete",
-            ],
+            tracepoints: vec!["block/block_rq_issue", "block/block_rq_complete"],
             kprobe_symbols: vec![],
             kernel_modules: vec![],
             min_kernel: (5, 8),
@@ -50,19 +47,22 @@ impl Probe for BioProbe {
     }
 
     fn attach(&mut self, ebpf: &mut Ebpf) -> Result<()> {
-        let attach = |ebpf: &mut Ebpf, prog_name: &str, category: &str, tp_name: &str| -> Result<()> {
-            let prog: &mut TracePoint = ebpf
-                .program_mut(prog_name)
-                .with_context(|| format!("program '{}' not found in BPF object", prog_name))?
-                .try_into()
-                .context("expected TracePoint program type")?;
-            prog.load().with_context(|| format!("loading {}", prog_name))?;
-            prog.attach(category, tp_name)
-                .with_context(|| format!("attaching {} to {}/{}", prog_name, category, tp_name))?;
-            Ok(())
-        };
+        let attach =
+            |ebpf: &mut Ebpf, prog_name: &str, category: &str, tp_name: &str| -> Result<()> {
+                let prog: &mut TracePoint = ebpf
+                    .program_mut(prog_name)
+                    .with_context(|| format!("program '{}' not found in BPF object", prog_name))?
+                    .try_into()
+                    .context("expected TracePoint program type")?;
+                prog.load()
+                    .with_context(|| format!("loading {}", prog_name))?;
+                prog.attach(category, tp_name).with_context(|| {
+                    format!("attaching {} to {}/{}", prog_name, category, tp_name)
+                })?;
+                Ok(())
+            };
 
-        attach(ebpf, "block_rq_issue",    "block", "block_rq_issue")?;
+        attach(ebpf, "block_rq_issue", "block", "block_rq_issue")?;
         attach(ebpf, "block_rq_complete", "block", "block_rq_complete")?;
 
         let ring_buf = RingBuf::try_from(
@@ -75,7 +75,7 @@ impl Probe for BioProbe {
         Ok(())
     }
 
-    fn collect(&mut self, session_id: &str) -> Result<Vec<EbpfMetricDoc>> {
+    fn collect(&mut self, session_id: &str) -> Result<Vec<EbpfDocument>> {
         use std::mem::size_of;
         let event_size = size_of::<RawBioEvent>();
         let mut event_count = 0usize;
@@ -84,13 +84,16 @@ impl Probe for BioProbe {
             while let Some(item) = rb.next() {
                 let bytes: &[u8] = &*item;
                 if bytes.len() < event_size {
-                    warn!("bio ring buf item too small: {} < {}", bytes.len(), event_size);
+                    warn!(
+                        "bio ring buf item too small: {} < {}",
+                        bytes.len(),
+                        event_size
+                    );
                     continue;
                 }
                 // SAFETY: RawBioEvent is repr(C), size verified above.
-                let event = unsafe {
-                    std::ptr::read_unaligned(bytes.as_ptr() as *const RawBioEvent)
-                };
+                let event =
+                    unsafe { std::ptr::read_unaligned(bytes.as_ptr() as *const RawBioEvent) };
                 self.aggregator.push(event);
                 event_count += 1;
             }
@@ -101,7 +104,7 @@ impl Probe for BioProbe {
         }
 
         let doc = self.aggregator.flush(session_id);
-        Ok(doc.into_iter().collect())
+        Ok(doc.into_iter().map(Into::into).collect())
     }
 
     fn detach(&mut self) -> Result<()> {

@@ -1,12 +1,11 @@
-/// Elasticsearch document structs for the gamepulse.ebpf data stream.
+/// Elasticsearch document structs for the GamePulse eBPF data streams.
 ///
-/// All probes ship to `metrics-gamepulse.ebpf-default`.
-/// Documents are polymorphic: common fields always present, probe-specific fields
-/// populated according to `probe` discriminant.
+/// Aggregate probe snapshots ship to `metrics-gamepulse.ebpf-default`.
+/// Per-thread scheduler rows ship to `metrics-gamepulse.ebpf_thread-default`.
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
-/// Top-level document sent to ES bulk API.
+/// Top-level aggregate document sent to metrics-gamepulse.ebpf-default.
 #[derive(Debug, Serialize)]
 pub struct EbpfMetricDoc {
     #[serde(rename = "@timestamp")]
@@ -18,6 +17,53 @@ pub struct EbpfMetricDoc {
 
     /// Host info — populated once at startup from /etc/hostname and uname.
     pub host: HostFields,
+}
+
+/// Top-level per-thread scheduler document sent to metrics-gamepulse.ebpf_thread-default.
+#[derive(Debug, Serialize)]
+pub struct EbpfThreadDoc {
+    #[serde(rename = "@timestamp")]
+    pub timestamp: DateTime<Utc>,
+
+    pub data_stream: DataStream,
+
+    pub gamepulse: GamePulseThreadFields,
+
+    pub host: HostFields,
+}
+
+#[derive(Debug)]
+pub enum EbpfDocument {
+    Metric(EbpfMetricDoc),
+    Thread(EbpfThreadDoc),
+}
+
+impl EbpfDocument {
+    pub fn index(&self) -> &'static str {
+        match self {
+            EbpfDocument::Metric(_) => "metrics-gamepulse.ebpf-default",
+            EbpfDocument::Thread(_) => "metrics-gamepulse.ebpf_thread-default",
+        }
+    }
+
+    pub fn as_metric(&self) -> Option<&EbpfMetricDoc> {
+        match self {
+            EbpfDocument::Metric(doc) => Some(doc),
+            EbpfDocument::Thread(_) => None,
+        }
+    }
+}
+
+impl From<EbpfMetricDoc> for EbpfDocument {
+    fn from(doc: EbpfMetricDoc) -> Self {
+        EbpfDocument::Metric(doc)
+    }
+}
+
+impl From<EbpfThreadDoc> for EbpfDocument {
+    fn from(doc: EbpfThreadDoc) -> Self {
+        EbpfDocument::Thread(doc)
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -33,6 +79,16 @@ impl Default for DataStream {
         DataStream {
             ds_type: "metrics",
             dataset: "gamepulse.ebpf",
+            namespace: "default",
+        }
+    }
+}
+
+impl DataStream {
+    pub fn ebpf_thread() -> Self {
+        DataStream {
+            ds_type: "metrics",
+            dataset: "gamepulse.ebpf_thread",
             namespace: "default",
         }
     }
@@ -56,6 +112,12 @@ pub struct GamePulseFields {
 }
 
 #[derive(Debug, Serialize)]
+pub struct GamePulseThreadFields {
+    pub session: SessionRef,
+    pub ebpf_thread: ThreadMetric,
+}
+
+#[derive(Debug, Serialize)]
 pub struct SessionRef {
     pub id: String,
 }
@@ -71,9 +133,6 @@ pub struct EbpfPayload {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub migration: Option<MigrationSnapshot>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub thread_breakdown: Option<Vec<ThreadStat>>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bio: Option<BlockIoSnapshot>,
@@ -150,11 +209,15 @@ pub struct MigrationSnapshot {
     pub ccx_cross_count: u32,
 }
 
-/// Per-thread breakdown for significant threads (render, audio, etc.)
+/// First-class per-thread scheduler metric document payload.
 #[derive(Debug, Serialize)]
-pub struct ThreadStat {
+pub struct ThreadMetric {
+    pub probe: &'static str,
+    pub rank: u8,
     pub comm: String,
     pub tid: u32,
+    pub runqueue_min_us: f64,
+    pub runqueue_max_us: f64,
     pub runqueue_avg_us: f64,
     pub switch_count: u32,
     pub migration_count: u32,

@@ -1,10 +1,11 @@
 /// In-memory aggregator — accumulates raw SchedEvents from the ring buffer
 /// and computes 1-second snapshots ready for Elasticsearch.
 use crate::es_model::{
-    BlockIoSnapshot, DataStream, EbpfMetricDoc, EbpfPayload, FutexSnapshot, GamePulseFields,
-    GpuFenceSnapshot, GpuSchedSnapshot, GpuSubmitSnapshot, HostFields, IrqKindSnapshot,
-    IrqSnapshot, LatencyHistogram, MemSnapshot, MigrationSnapshot, OsFields, RunqueueSnapshot,
-    SessionRef, StutterCorrelation, ThreadStat, VfsOpSnapshot, VfsSnapshot,
+    BlockIoSnapshot, DataStream, EbpfDocument, EbpfMetricDoc, EbpfPayload, EbpfThreadDoc,
+    FutexSnapshot, GamePulseFields, GamePulseThreadFields, GpuFenceSnapshot, GpuSchedSnapshot,
+    GpuSubmitSnapshot, HostFields, IrqKindSnapshot, IrqSnapshot, LatencyHistogram, MemSnapshot,
+    MigrationSnapshot, OsFields, RunqueueSnapshot, SessionRef, StutterCorrelation, ThreadMetric,
+    VfsOpSnapshot, VfsSnapshot,
 };
 use chrono::Utc;
 use std::collections::HashMap;
@@ -36,7 +37,17 @@ struct ThreadAccum {
     max_wait_ns: u64,
 }
 
-/// Aggregates SchedEvents over a 1-second window, then produces an EbpfMetricDoc.
+struct ThreadStat {
+    comm: String,
+    tid: u32,
+    runqueue_min_us: f64,
+    runqueue_max_us: f64,
+    runqueue_avg_us: f64,
+    switch_count: u32,
+    migration_count: u32,
+}
+
+/// Aggregates SchedEvents over a 1-second window, then produces aggregate and per-thread docs.
 pub struct SchedAggregator {
     events: Vec<RawSchedEvent>,
     host_name: String,
@@ -60,12 +71,12 @@ impl SchedAggregator {
         self.events.push(event);
     }
 
-    /// Consume all buffered events and produce a document for the current second.
-    /// Returns None if no events were observed (no game activity this second).
-    pub fn flush(&mut self, session_id: &str) -> Option<EbpfMetricDoc> {
+    /// Consume all buffered events and produce documents for the current second.
+    /// Returns an empty vec if no events were observed (no game activity this second).
+    pub fn flush(&mut self, session_id: &str) -> Vec<EbpfDocument> {
         let events = std::mem::take(&mut self.events);
         if events.is_empty() {
-            return None;
+            return Vec::new();
         }
 
         let mut histogram = LatencyHistogram::new();
@@ -131,6 +142,12 @@ impl SchedAggregator {
             .map(|(tid, t)| ThreadStat {
                 comm: t.comm,
                 tid,
+                runqueue_min_us: if t.min_wait_ns == u64::MAX {
+                    0.0
+                } else {
+                    t.min_wait_ns as f64 / 1000.0
+                },
+                runqueue_max_us: t.max_wait_ns as f64 / 1000.0,
                 runqueue_avg_us: if t.switch_count > 0 {
                     (t.total_wait_ns as f64 / 1000.0) / t.switch_count as f64
                 } else {
@@ -143,53 +160,91 @@ impl SchedAggregator {
         thread_breakdown.sort_by(|a, b| b.switch_count.cmp(&a.switch_count));
         thread_breakdown.truncate(8);
 
-        Some(EbpfMetricDoc {
-            timestamp: Utc::now(),
-            data_stream: DataStream::default(),
-            host: HostFields {
-                name: self.host_name.clone(),
-                os: OsFields {
-                    kernel: self.kernel_version.clone(),
-                },
-            },
-            gamepulse: GamePulseFields {
-                session: SessionRef {
-                    id: session_id.to_string(),
-                },
-                ebpf: EbpfPayload {
-                    probe: "schedlatency",
-                    bio: None,
-                    gpu_sched: None,
-                    mem: None,
-                    runqueue: Some(RunqueueSnapshot {
-                        latency_histogram: histogram,
-                        latency_min_us: if min_wait_ns == u64::MAX {
-                            0.0
-                        } else {
-                            min_wait_ns as f64 / 1000.0
-                        },
-                        latency_max_us: max_wait_ns as f64 / 1000.0,
-                        latency_avg_us: avg_wait_us,
-                        event_count: switch_count,
-                    }),
-                    migration: Some(MigrationSnapshot {
-                        total_count: total_migrations,
-                        ccx_cross_count,
-                    }),
-                    thread_breakdown: if thread_breakdown.is_empty() {
-                        None
-                    } else {
-                        Some(thread_breakdown)
+        let timestamp = Utc::now();
+        let mut docs = Vec::with_capacity(1 + thread_breakdown.len());
+
+        docs.push(
+            EbpfMetricDoc {
+                timestamp,
+                data_stream: DataStream::default(),
+                host: HostFields {
+                    name: self.host_name.clone(),
+                    os: OsFields {
+                        kernel: self.kernel_version.clone(),
                     },
-                    stutter: None,
-                    futex: None,
-                    irq: None,
-                    vfs: None,
-                    gpu_fence: None,
-                    gpu_submit: None,
                 },
-            },
-        })
+                gamepulse: GamePulseFields {
+                    session: SessionRef {
+                        id: session_id.to_string(),
+                    },
+                    ebpf: EbpfPayload {
+                        probe: "schedlatency",
+                        bio: None,
+                        gpu_sched: None,
+                        mem: None,
+                        runqueue: Some(RunqueueSnapshot {
+                            latency_histogram: histogram,
+                            latency_min_us: if min_wait_ns == u64::MAX {
+                                0.0
+                            } else {
+                                min_wait_ns as f64 / 1000.0
+                            },
+                            latency_max_us: max_wait_ns as f64 / 1000.0,
+                            latency_avg_us: avg_wait_us,
+                            event_count: switch_count,
+                        }),
+                        migration: Some(MigrationSnapshot {
+                            total_count: total_migrations,
+                            ccx_cross_count,
+                        }),
+                        stutter: None,
+                        futex: None,
+                        irq: None,
+                        vfs: None,
+                        gpu_fence: None,
+                        gpu_submit: None,
+                    },
+                },
+            }
+            .into(),
+        );
+
+        docs.extend(
+            thread_breakdown
+                .into_iter()
+                .enumerate()
+                .map(|(idx, thread)| {
+                    EbpfThreadDoc {
+                        timestamp,
+                        data_stream: DataStream::ebpf_thread(),
+                        host: HostFields {
+                            name: self.host_name.clone(),
+                            os: OsFields {
+                                kernel: self.kernel_version.clone(),
+                            },
+                        },
+                        gamepulse: GamePulseThreadFields {
+                            session: SessionRef {
+                                id: session_id.to_string(),
+                            },
+                            ebpf_thread: ThreadMetric {
+                                probe: "schedlatency",
+                                rank: (idx + 1) as u8,
+                                comm: thread.comm,
+                                tid: thread.tid,
+                                runqueue_min_us: thread.runqueue_min_us,
+                                runqueue_max_us: thread.runqueue_max_us,
+                                runqueue_avg_us: thread.runqueue_avg_us,
+                                switch_count: thread.switch_count,
+                                migration_count: thread.migration_count,
+                            },
+                        },
+                    }
+                    .into()
+                }),
+        );
+
+        docs
     }
 }
 
@@ -237,9 +292,7 @@ fn build_ccx_map() -> HashMap<u32, u32> {
         };
 
         // Try both possible paths for L3 shared CPUs
-        let l3_path = entry
-            .path()
-            .join("cache/index3/shared_cpu_list");
+        let l3_path = entry.path().join("cache/index3/shared_cpu_list");
         let shared_list = match std::fs::read_to_string(&l3_path) {
             Ok(s) => s.trim().to_string(),
             Err(_) => continue,
@@ -333,7 +386,6 @@ impl BioAggregator {
                     probe: "bio",
                     runqueue: None,
                     migration: None,
-                    thread_breakdown: None,
                     gpu_sched: None,
                     mem: None,
                     bio: Some(BlockIoSnapshot {
@@ -431,11 +483,14 @@ impl GpuAggregator {
                     probe: "gpu_sched",
                     runqueue: None,
                     migration: None,
-                    thread_breakdown: None,
                     bio: None,
                     gpu_sched: Some(GpuSchedSnapshot {
                         latency_histogram: histogram,
-                        latency_min_us: if min_ns == u64::MAX { 0.0 } else { min_ns as f64 / 1000.0 },
+                        latency_min_us: if min_ns == u64::MAX {
+                            0.0
+                        } else {
+                            min_ns as f64 / 1000.0
+                        },
                         latency_max_us: max_ns as f64 / 1000.0,
                         latency_avg_us: avg_us,
                         event_count,
@@ -532,7 +587,6 @@ impl MemAggregator {
                     probe: "mem",
                     runqueue: None,
                     migration: None,
-                    thread_breakdown: None,
                     bio: None,
                     gpu_sched: None,
                     mem: Some(MemSnapshot {
@@ -565,7 +619,7 @@ const SPIKE_THRESHOLD_US: f64 = 16_000.0;
 ///
 /// `docs` should be the full slice returned by all probes in one tick.
 pub fn correlate(
-    docs: &[EbpfMetricDoc],
+    docs: &[&EbpfMetricDoc],
     host_name: &str,
     kernel_version: &str,
     session_id: &str,
@@ -627,7 +681,6 @@ pub fn correlate(
                 probe: "stutter_correlation",
                 runqueue: None,
                 migration: None,
-                thread_breakdown: None,
                 bio: None,
                 gpu_sched: None,
                 mem: None,
@@ -670,7 +723,11 @@ pub struct FutexAggregator {
 
 impl FutexAggregator {
     pub fn new(host_name: String, kernel_version: String) -> Self {
-        FutexAggregator { events: Vec::new(), host_name, kernel_version }
+        FutexAggregator {
+            events: Vec::new(),
+            host_name,
+            kernel_version,
+        }
     }
 
     pub fn push(&mut self, event: RawFutexEvent) {
@@ -706,17 +763,35 @@ impl FutexAggregator {
         Some(EbpfMetricDoc {
             timestamp: chrono::Utc::now(),
             data_stream: DataStream::default(),
-            host: HostFields { name: self.host_name.clone(), os: OsFields { kernel: self.kernel_version.clone() } },
+            host: HostFields {
+                name: self.host_name.clone(),
+                os: OsFields {
+                    kernel: self.kernel_version.clone(),
+                },
+            },
             gamepulse: GamePulseFields {
-                session: SessionRef { id: session_id.to_string() },
+                session: SessionRef {
+                    id: session_id.to_string(),
+                },
                 ebpf: EbpfPayload {
                     probe: "futex",
-                    runqueue: None, migration: None, thread_breakdown: None,
-                    bio: None, gpu_sched: None, mem: None, stutter: None,
-                    irq: None, vfs: None, gpu_fence: None, gpu_submit: None,
+                    runqueue: None,
+                    migration: None,
+                    bio: None,
+                    gpu_sched: None,
+                    mem: None,
+                    stutter: None,
+                    irq: None,
+                    vfs: None,
+                    gpu_fence: None,
+                    gpu_submit: None,
                     futex: Some(FutexSnapshot {
                         latency_histogram: histogram,
-                        latency_min_us: if min_ns == u64::MAX { 0.0 } else { min_ns as f64 / 1000.0 },
+                        latency_min_us: if min_ns == u64::MAX {
+                            0.0
+                        } else {
+                            min_ns as f64 / 1000.0
+                        },
                         latency_max_us: max_ns as f64 / 1000.0,
                         latency_avg_us: avg_us,
                         event_count,
@@ -753,7 +828,11 @@ pub struct IrqAggregator {
 
 impl IrqAggregator {
     pub fn new(host_name: String, kernel_version: String) -> Self {
-        IrqAggregator { events: Vec::new(), host_name, kernel_version }
+        IrqAggregator {
+            events: Vec::new(),
+            host_name,
+            kernel_version,
+        }
     }
 
     pub fn push(&mut self, event: RawIrqEvent) {
@@ -790,20 +869,42 @@ impl IrqAggregator {
             }
         }
 
-        let hard_avg_us = if hard_count > 0 { (hard_total_ns as f64 / 1000.0) / hard_count as f64 } else { 0.0 };
-        let soft_avg_us = if soft_count > 0 { (soft_total_ns as f64 / 1000.0) / soft_count as f64 } else { 0.0 };
+        let hard_avg_us = if hard_count > 0 {
+            (hard_total_ns as f64 / 1000.0) / hard_count as f64
+        } else {
+            0.0
+        };
+        let soft_avg_us = if soft_count > 0 {
+            (soft_total_ns as f64 / 1000.0) / soft_count as f64
+        } else {
+            0.0
+        };
 
         Some(EbpfMetricDoc {
             timestamp: chrono::Utc::now(),
             data_stream: DataStream::default(),
-            host: HostFields { name: self.host_name.clone(), os: OsFields { kernel: self.kernel_version.clone() } },
+            host: HostFields {
+                name: self.host_name.clone(),
+                os: OsFields {
+                    kernel: self.kernel_version.clone(),
+                },
+            },
             gamepulse: GamePulseFields {
-                session: SessionRef { id: session_id.to_string() },
+                session: SessionRef {
+                    id: session_id.to_string(),
+                },
                 ebpf: EbpfPayload {
                     probe: "irq",
-                    runqueue: None, migration: None, thread_breakdown: None,
-                    bio: None, gpu_sched: None, mem: None, stutter: None,
-                    futex: None, vfs: None, gpu_fence: None, gpu_submit: None,
+                    runqueue: None,
+                    migration: None,
+                    bio: None,
+                    gpu_sched: None,
+                    mem: None,
+                    stutter: None,
+                    futex: None,
+                    vfs: None,
+                    gpu_fence: None,
+                    gpu_submit: None,
                     irq: Some(IrqSnapshot {
                         hard_irq: IrqKindSnapshot {
                             latency_histogram: hard_hist,
@@ -847,7 +948,11 @@ pub struct VfsAggregator {
 
 impl VfsAggregator {
     pub fn new(host_name: String, kernel_version: String) -> Self {
-        VfsAggregator { events: Vec::new(), host_name, kernel_version }
+        VfsAggregator {
+            events: Vec::new(),
+            host_name,
+            kernel_version,
+        }
     }
 
     pub fn push(&mut self, event: RawVfsEvent) {
@@ -884,20 +989,42 @@ impl VfsAggregator {
             }
         }
 
-        let read_avg_us = if read_count > 0 { (read_total_ns as f64 / 1000.0) / read_count as f64 } else { 0.0 };
-        let write_avg_us = if write_count > 0 { (write_total_ns as f64 / 1000.0) / write_count as f64 } else { 0.0 };
+        let read_avg_us = if read_count > 0 {
+            (read_total_ns as f64 / 1000.0) / read_count as f64
+        } else {
+            0.0
+        };
+        let write_avg_us = if write_count > 0 {
+            (write_total_ns as f64 / 1000.0) / write_count as f64
+        } else {
+            0.0
+        };
 
         Some(EbpfMetricDoc {
             timestamp: chrono::Utc::now(),
             data_stream: DataStream::default(),
-            host: HostFields { name: self.host_name.clone(), os: OsFields { kernel: self.kernel_version.clone() } },
+            host: HostFields {
+                name: self.host_name.clone(),
+                os: OsFields {
+                    kernel: self.kernel_version.clone(),
+                },
+            },
             gamepulse: GamePulseFields {
-                session: SessionRef { id: session_id.to_string() },
+                session: SessionRef {
+                    id: session_id.to_string(),
+                },
                 ebpf: EbpfPayload {
                     probe: "vfs",
-                    runqueue: None, migration: None, thread_breakdown: None,
-                    bio: None, gpu_sched: None, mem: None, stutter: None,
-                    futex: None, irq: None, gpu_fence: None, gpu_submit: None,
+                    runqueue: None,
+                    migration: None,
+                    bio: None,
+                    gpu_sched: None,
+                    mem: None,
+                    stutter: None,
+                    futex: None,
+                    irq: None,
+                    gpu_fence: None,
+                    gpu_submit: None,
                     vfs: Some(VfsSnapshot {
                         read: VfsOpSnapshot {
                             latency_histogram: read_hist,
@@ -939,7 +1066,11 @@ pub struct GpuFenceAggregator {
 
 impl GpuFenceAggregator {
     pub fn new(host_name: String, kernel_version: String) -> Self {
-        GpuFenceAggregator { events: Vec::new(), host_name, kernel_version }
+        GpuFenceAggregator {
+            events: Vec::new(),
+            host_name,
+            kernel_version,
+        }
     }
 
     pub fn push(&mut self, event: RawGpuFenceEvent) {
@@ -975,17 +1106,35 @@ impl GpuFenceAggregator {
         Some(EbpfMetricDoc {
             timestamp: chrono::Utc::now(),
             data_stream: DataStream::default(),
-            host: HostFields { name: self.host_name.clone(), os: OsFields { kernel: self.kernel_version.clone() } },
+            host: HostFields {
+                name: self.host_name.clone(),
+                os: OsFields {
+                    kernel: self.kernel_version.clone(),
+                },
+            },
             gamepulse: GamePulseFields {
-                session: SessionRef { id: session_id.to_string() },
+                session: SessionRef {
+                    id: session_id.to_string(),
+                },
                 ebpf: EbpfPayload {
                     probe: "gpu_fence",
-                    runqueue: None, migration: None, thread_breakdown: None,
-                    bio: None, gpu_sched: None, mem: None, stutter: None,
-                    futex: None, irq: None, vfs: None, gpu_submit: None,
+                    runqueue: None,
+                    migration: None,
+                    bio: None,
+                    gpu_sched: None,
+                    mem: None,
+                    stutter: None,
+                    futex: None,
+                    irq: None,
+                    vfs: None,
+                    gpu_submit: None,
                     gpu_fence: Some(GpuFenceSnapshot {
                         latency_histogram: histogram,
-                        latency_min_us: if min_ns == u64::MAX { 0.0 } else { min_ns as f64 / 1000.0 },
+                        latency_min_us: if min_ns == u64::MAX {
+                            0.0
+                        } else {
+                            min_ns as f64 / 1000.0
+                        },
                         latency_max_us: max_ns as f64 / 1000.0,
                         latency_avg_us: avg_us,
                         event_count,
@@ -1018,7 +1167,11 @@ pub struct GpuSubmitAggregator {
 
 impl GpuSubmitAggregator {
     pub fn new(host_name: String, kernel_version: String) -> Self {
-        GpuSubmitAggregator { count: 0, host_name, kernel_version }
+        GpuSubmitAggregator {
+            count: 0,
+            host_name,
+            kernel_version,
+        }
     }
 
     pub fn push(&mut self, _event: RawGpuSubmitEvent) {
@@ -1035,17 +1188,29 @@ impl GpuSubmitAggregator {
         Some(EbpfMetricDoc {
             timestamp: chrono::Utc::now(),
             data_stream: DataStream::default(),
-            host: HostFields { name: self.host_name.clone(), os: OsFields { kernel: self.kernel_version.clone() } },
+            host: HostFields {
+                name: self.host_name.clone(),
+                os: OsFields {
+                    kernel: self.kernel_version.clone(),
+                },
+            },
             gamepulse: GamePulseFields {
-                session: SessionRef { id: session_id.to_string() },
+                session: SessionRef {
+                    id: session_id.to_string(),
+                },
                 ebpf: EbpfPayload {
                     probe: "gpu_submit",
-                    runqueue: None, migration: None, thread_breakdown: None,
-                    bio: None, gpu_sched: None, mem: None, stutter: None,
-                    futex: None, irq: None, vfs: None, gpu_fence: None,
-                    gpu_submit: Some(GpuSubmitSnapshot {
-                        event_count: count,
-                    }),
+                    runqueue: None,
+                    migration: None,
+                    bio: None,
+                    gpu_sched: None,
+                    mem: None,
+                    stutter: None,
+                    futex: None,
+                    irq: None,
+                    vfs: None,
+                    gpu_fence: None,
+                    gpu_submit: Some(GpuSubmitSnapshot { event_count: count }),
                 },
             },
         })

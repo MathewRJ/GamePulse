@@ -1,8 +1,8 @@
 /// Elasticsearch bulk API shipper.
 ///
-/// Batches EbpfMetricDoc documents and POSTs them to the ES bulk endpoint.
+/// Batches eBPF documents and POSTs them to the ES bulk endpoint.
 /// Uses the same API key and endpoint as the Python collector.
-use crate::es_model::EbpfMetricDoc;
+use crate::es_model::EbpfDocument;
 use anyhow::{Context, Result};
 use reqwest::Client;
 use tracing::{debug, error, warn};
@@ -12,7 +12,7 @@ pub struct EsShipper {
     endpoint: String,
     api_key: String,
     /// Pending documents awaiting the next flush.
-    pending: Vec<EbpfMetricDoc>,
+    pending: Vec<EbpfDocument>,
     /// How many docs to accumulate before forcing a flush.
     batch_size: usize,
 }
@@ -24,8 +24,7 @@ impl EsShipper {
             .build()
             .context("building HTTP client")?;
 
-        // The ES bulk endpoint for the eBPF data stream.
-        let endpoint = format!("{}/metrics-gamepulse.ebpf-default/_bulk", endpoint.trim_end_matches('/'));
+        let endpoint = format!("{}/_bulk", endpoint.trim_end_matches('/'));
 
         Ok(EsShipper {
             client,
@@ -37,12 +36,12 @@ impl EsShipper {
     }
 
     /// Queue a document for the next flush.
-    pub fn queue(&mut self, doc: EbpfMetricDoc) {
+    pub fn queue(&mut self, doc: EbpfDocument) {
         self.pending.push(doc);
     }
 
     /// Queue multiple documents.
-    pub fn queue_all(&mut self, docs: Vec<EbpfMetricDoc>) {
+    pub fn queue_all(&mut self, docs: Vec<EbpfDocument>) {
         self.pending.extend(docs);
     }
 
@@ -72,22 +71,26 @@ impl EsShipper {
         let status = resp.status();
         if !status.is_success() {
             let text = resp.text().await.unwrap_or_default();
-            error!("ES bulk API returned {}: {}", status, &text[..text.len().min(500)]);
+            error!(
+                "ES bulk API returned {}: {}",
+                status,
+                &text[..text.len().min(500)]
+            );
             // Docs are dropped on error — eBPF telemetry is best-effort.
             return Ok(());
         }
 
         // Check for per-item errors in the bulk response.
         let resp_body: serde_json::Value = resp.json().await.context("parsing bulk response")?;
-        if resp_body.get("errors").and_then(|e| e.as_bool()).unwrap_or(false) {
+        if resp_body
+            .get("errors")
+            .and_then(|e| e.as_bool())
+            .unwrap_or(false)
+        {
             if let Some(items) = resp_body.get("items").and_then(|i| i.as_array()) {
                 let error_count = items
                     .iter()
-                    .filter(|item| {
-                        item.get("index")
-                            .and_then(|idx| idx.get("error"))
-                            .is_some()
-                    })
+                    .filter(|item| item.get("index").and_then(|idx| idx.get("error")).is_some())
                     .count();
                 warn!("{}/{} docs had bulk errors", error_count, count);
             }
@@ -97,14 +100,17 @@ impl EsShipper {
     }
 }
 
-fn build_bulk_body(docs: &[EbpfMetricDoc]) -> Result<String> {
+fn build_bulk_body(docs: &[EbpfDocument]) -> Result<String> {
     let mut body = String::with_capacity(docs.len() * 256);
-    // Action line — create in the data stream (no explicit _id, ES generates one)
-    let action = r#"{"create":{}}"#;
     for doc in docs {
-        body.push_str(action);
+        let action = format!(r#"{{"create":{{"_index":"{}"}}}}"#, doc.index());
+        body.push_str(&action);
         body.push('\n');
-        let doc_json = serde_json::to_string(doc).context("serialising doc")?;
+        let doc_json = match doc {
+            EbpfDocument::Metric(metric) => serde_json::to_string(metric),
+            EbpfDocument::Thread(thread) => serde_json::to_string(thread),
+        }
+        .context("serialising doc")?;
         body.push_str(&doc_json);
         body.push('\n');
     }

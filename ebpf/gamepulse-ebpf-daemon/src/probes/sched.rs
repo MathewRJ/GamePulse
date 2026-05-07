@@ -19,7 +19,7 @@ use tracing::{debug, warn};
 
 use super::{Probe, ProbeRequirements};
 use crate::aggregator::{RawSchedEvent, SchedAggregator};
-use crate::es_model::EbpfMetricDoc;
+use crate::es_model::EbpfDocument;
 
 pub struct SchedProbe {
     aggregator: SchedAggregator,
@@ -38,9 +38,11 @@ impl SchedProbe {
     /// Update the BPF game_pids_map with a new set of TIDs.
     /// Called by the loader when the session state changes.
     pub fn update_pids(ebpf: &mut Ebpf, tids: &[u32]) -> Result<()> {
-        let mut map: AyaHashMap<&mut MapData, u32, u8> =
-            AyaHashMap::try_from(ebpf.map_mut("GAME_PIDS").context("GAME_PIDS map not found")?)
-                .context("GAME_PIDS map type mismatch")?;
+        let mut map: AyaHashMap<&mut MapData, u32, u8> = AyaHashMap::try_from(
+            ebpf.map_mut("GAME_PIDS")
+                .context("GAME_PIDS map not found")?,
+        )
+        .context("GAME_PIDS map type mismatch")?;
 
         // Clear existing entries (aya HashMap doesn't have a clear() — iterate and remove)
         // Collect keys first to avoid borrow issues
@@ -51,7 +53,8 @@ impl SchedProbe {
 
         // Insert new TIDs (value is unused — map acts as a set)
         for &tid in tids {
-            map.insert(tid, 1u8, 0).context("inserting TID into GAME_PIDS")?;
+            map.insert(tid, 1u8, 0)
+                .context("inserting TID into GAME_PIDS")?;
         }
 
         debug!("updated GAME_PIDS with {} TIDs", tids.len());
@@ -79,20 +82,23 @@ impl Probe for SchedProbe {
 
     fn attach(&mut self, ebpf: &mut Ebpf) -> Result<()> {
         // Attach the three tracepoints from the BPF object.
-        let attach = |ebpf: &mut Ebpf, prog_name: &str, category: &str, tp_name: &str| -> Result<()> {
-            let prog: &mut TracePoint = ebpf
-                .program_mut(prog_name)
-                .with_context(|| format!("program '{}' not found in BPF object", prog_name))?
-                .try_into()
-                .context("expected TracePoint program type")?;
-            prog.load().with_context(|| format!("loading {}", prog_name))?;
-            prog.attach(category, tp_name)
-                .with_context(|| format!("attaching {} to {}/{}", prog_name, category, tp_name))?;
-            Ok(())
-        };
+        let attach =
+            |ebpf: &mut Ebpf, prog_name: &str, category: &str, tp_name: &str| -> Result<()> {
+                let prog: &mut TracePoint = ebpf
+                    .program_mut(prog_name)
+                    .with_context(|| format!("program '{}' not found in BPF object", prog_name))?
+                    .try_into()
+                    .context("expected TracePoint program type")?;
+                prog.load()
+                    .with_context(|| format!("loading {}", prog_name))?;
+                prog.attach(category, tp_name).with_context(|| {
+                    format!("attaching {} to {}/{}", prog_name, category, tp_name)
+                })?;
+                Ok(())
+            };
 
-        attach(ebpf, "sched_wakeup",       "sched", "sched_wakeup")?;
-        attach(ebpf, "sched_switch",       "sched", "sched_switch")?;
+        attach(ebpf, "sched_wakeup", "sched", "sched_wakeup")?;
+        attach(ebpf, "sched_switch", "sched", "sched_switch")?;
         attach(ebpf, "sched_migrate_task", "sched", "sched_migrate_task")?;
 
         // Take the ring buffer map and hold it here for synchronous draining in collect().
@@ -106,7 +112,7 @@ impl Probe for SchedProbe {
         Ok(())
     }
 
-    fn collect(&mut self, session_id: &str) -> Result<Vec<EbpfMetricDoc>> {
+    fn collect(&mut self, session_id: &str) -> Result<Vec<EbpfDocument>> {
         use std::mem::size_of;
         let event_size = size_of::<RawSchedEvent>();
         let mut event_count = 0usize;
@@ -122,9 +128,8 @@ impl Probe for SchedProbe {
                     continue;
                 }
                 // SAFETY: RawSchedEvent is repr(C), size verified above.
-                let event = unsafe {
-                    std::ptr::read_unaligned(bytes.as_ptr() as *const RawSchedEvent)
-                };
+                let event =
+                    unsafe { std::ptr::read_unaligned(bytes.as_ptr() as *const RawSchedEvent) };
                 self.aggregator.push(event);
                 event_count += 1;
             }
@@ -135,7 +140,7 @@ impl Probe for SchedProbe {
         }
 
         let doc = self.aggregator.flush(session_id);
-        Ok(doc.into_iter().collect())
+        Ok(doc.into_iter().map(Into::into).collect())
     }
 
     fn detach(&mut self) -> Result<()> {

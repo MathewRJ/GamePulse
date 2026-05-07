@@ -15,7 +15,7 @@ use tracing::{debug, warn};
 
 use super::{Probe, ProbeRequirements};
 use crate::aggregator::{RawVfsEvent, VfsAggregator};
-use crate::es_model::EbpfMetricDoc;
+use crate::es_model::EbpfDocument;
 
 pub struct VfsProbe {
     aggregator: VfsAggregator,
@@ -52,15 +52,16 @@ impl Probe for VfsProbe {
                 .with_context(|| format!("program '{}' not found in BPF object", prog_name))?
                 .try_into()
                 .context("expected KProbe program type")?;
-            prog.load().with_context(|| format!("loading {}", prog_name))?;
+            prog.load()
+                .with_context(|| format!("loading {}", prog_name))?;
             prog.attach(symbol, 0)
                 .with_context(|| format!("attaching {} kprobe on {}", prog_name, symbol))?;
             Ok(())
         };
 
-        attach_kprobe(ebpf, "vfs_read_entry",   "vfs_read")?;
-        attach_kprobe(ebpf, "vfs_read_return",  "vfs_read")?;
-        attach_kprobe(ebpf, "vfs_write_entry",  "vfs_write")?;
+        attach_kprobe(ebpf, "vfs_read_entry", "vfs_read")?;
+        attach_kprobe(ebpf, "vfs_read_return", "vfs_read")?;
+        attach_kprobe(ebpf, "vfs_write_entry", "vfs_write")?;
         attach_kprobe(ebpf, "vfs_write_return", "vfs_write")?;
 
         let ring_buf = RingBuf::try_from(
@@ -73,7 +74,7 @@ impl Probe for VfsProbe {
         Ok(())
     }
 
-    fn collect(&mut self, session_id: &str) -> Result<Vec<EbpfMetricDoc>> {
+    fn collect(&mut self, session_id: &str) -> Result<Vec<EbpfDocument>> {
         use std::mem::size_of;
         let event_size = size_of::<RawVfsEvent>();
         let mut event_count = 0usize;
@@ -82,12 +83,15 @@ impl Probe for VfsProbe {
             while let Some(item) = rb.next() {
                 let bytes: &[u8] = &item;
                 if bytes.len() < event_size {
-                    warn!("vfs ring buf item too small: {} < {}", bytes.len(), event_size);
+                    warn!(
+                        "vfs ring buf item too small: {} < {}",
+                        bytes.len(),
+                        event_size
+                    );
                     continue;
                 }
-                let event = unsafe {
-                    std::ptr::read_unaligned(bytes.as_ptr() as *const RawVfsEvent)
-                };
+                let event =
+                    unsafe { std::ptr::read_unaligned(bytes.as_ptr() as *const RawVfsEvent) };
                 self.aggregator.push(event);
                 event_count += 1;
             }
@@ -98,7 +102,7 @@ impl Probe for VfsProbe {
         }
 
         let doc = self.aggregator.flush(session_id);
-        Ok(doc.into_iter().collect())
+        Ok(doc.into_iter().map(Into::into).collect())
     }
 
     fn detach(&mut self) -> Result<()> {

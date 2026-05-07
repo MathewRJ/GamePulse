@@ -17,7 +17,7 @@ use tracing::{debug, warn};
 
 use super::{Probe, ProbeRequirements};
 use crate::aggregator::{IrqAggregator, RawIrqEvent};
-use crate::es_model::EbpfMetricDoc;
+use crate::es_model::EbpfDocument;
 
 pub struct IrqProbe {
     aggregator: IrqAggregator,
@@ -53,22 +53,25 @@ impl Probe for IrqProbe {
     }
 
     fn attach(&mut self, ebpf: &mut Ebpf) -> Result<()> {
-        let attach = |ebpf: &mut Ebpf, prog_name: &str, category: &str, tp_name: &str| -> Result<()> {
-            let prog: &mut TracePoint = ebpf
-                .program_mut(prog_name)
-                .with_context(|| format!("program '{}' not found in BPF object", prog_name))?
-                .try_into()
-                .context("expected TracePoint program type")?;
-            prog.load().with_context(|| format!("loading {}", prog_name))?;
-            prog.attach(category, tp_name)
-                .with_context(|| format!("attaching {} to {}/{}", prog_name, category, tp_name))?;
-            Ok(())
-        };
+        let attach =
+            |ebpf: &mut Ebpf, prog_name: &str, category: &str, tp_name: &str| -> Result<()> {
+                let prog: &mut TracePoint = ebpf
+                    .program_mut(prog_name)
+                    .with_context(|| format!("program '{}' not found in BPF object", prog_name))?
+                    .try_into()
+                    .context("expected TracePoint program type")?;
+                prog.load()
+                    .with_context(|| format!("loading {}", prog_name))?;
+                prog.attach(category, tp_name).with_context(|| {
+                    format!("attaching {} to {}/{}", prog_name, category, tp_name)
+                })?;
+                Ok(())
+            };
 
         attach(ebpf, "irq_handler_entry", "irq", "irq_handler_entry")?;
-        attach(ebpf, "irq_handler_exit",  "irq", "irq_handler_exit")?;
-        attach(ebpf, "softirq_entry",     "irq", "softirq_entry")?;
-        attach(ebpf, "softirq_exit",      "irq", "softirq_exit")?;
+        attach(ebpf, "irq_handler_exit", "irq", "irq_handler_exit")?;
+        attach(ebpf, "softirq_entry", "irq", "softirq_entry")?;
+        attach(ebpf, "softirq_exit", "irq", "softirq_exit")?;
 
         let ring_buf = RingBuf::try_from(
             ebpf.take_map("IRQ_EVENTS")
@@ -80,7 +83,7 @@ impl Probe for IrqProbe {
         Ok(())
     }
 
-    fn collect(&mut self, session_id: &str) -> Result<Vec<EbpfMetricDoc>> {
+    fn collect(&mut self, session_id: &str) -> Result<Vec<EbpfDocument>> {
         use std::mem::size_of;
         let event_size = size_of::<RawIrqEvent>();
         let mut event_count = 0usize;
@@ -89,12 +92,15 @@ impl Probe for IrqProbe {
             while let Some(item) = rb.next() {
                 let bytes: &[u8] = &item;
                 if bytes.len() < event_size {
-                    warn!("irq ring buf item too small: {} < {}", bytes.len(), event_size);
+                    warn!(
+                        "irq ring buf item too small: {} < {}",
+                        bytes.len(),
+                        event_size
+                    );
                     continue;
                 }
-                let event = unsafe {
-                    std::ptr::read_unaligned(bytes.as_ptr() as *const RawIrqEvent)
-                };
+                let event =
+                    unsafe { std::ptr::read_unaligned(bytes.as_ptr() as *const RawIrqEvent) };
                 self.aggregator.push(event);
                 event_count += 1;
             }
@@ -105,7 +111,7 @@ impl Probe for IrqProbe {
         }
 
         let doc = self.aggregator.flush(session_id);
-        Ok(doc.into_iter().collect())
+        Ok(doc.into_iter().map(Into::into).collect())
     }
 
     fn detach(&mut self) -> Result<()> {

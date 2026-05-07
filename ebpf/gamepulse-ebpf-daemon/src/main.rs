@@ -38,7 +38,10 @@ use session::{session_file_path, spawn_watcher};
 use shipper::EsShipper;
 
 #[derive(Parser, Debug)]
-#[command(name = "gamepulse-ebpf", about = "GamePulse eBPF kernel telemetry daemon")]
+#[command(
+    name = "gamepulse-ebpf",
+    about = "GamePulse eBPF kernel telemetry daemon"
+)]
 struct Cli {
     /// Path to gamepulse.toml (defaults to ~/.config/gamepulse/gamepulse.toml)
     #[arg(long)]
@@ -60,8 +63,7 @@ async fn main() -> Result<()> {
     // Logging
     tracing_subscriber::fmt()
         .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new(&cli.log)),
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&cli.log)),
         )
         .init();
 
@@ -78,10 +80,7 @@ async fn main() -> Result<()> {
 
     info!("GamePulse eBPF daemon starting");
     info!("BPF probe path: {}", probe_path.display());
-    info!(
-        "ES endpoint: {}",
-        config.elasticsearch.endpoint
-    );
+    info!("ES endpoint: {}", config.elasticsearch.endpoint);
 
     // Host metadata (filled once at startup)
     let host_name = std::fs::read_to_string("/etc/hostname")
@@ -97,18 +96,26 @@ async fn main() -> Result<()> {
     let candidates: Vec<Box<dyn probes::Probe>> = vec![
         Box::new(SchedProbe::new(host_name.clone(), kernel_version.clone())),
         Box::new(BioProbe::new(host_name.clone(), kernel_version.clone())),
-        Box::new(GpuSchedProbe::new(host_name.clone(), kernel_version.clone())),
+        Box::new(GpuSchedProbe::new(
+            host_name.clone(),
+            kernel_version.clone(),
+        )),
         Box::new(MemProbe::new(host_name.clone(), kernel_version.clone())),
         Box::new(FutexProbe::new(host_name.clone(), kernel_version.clone())),
         Box::new(IrqProbe::new(host_name.clone(), kernel_version.clone())),
         Box::new(VfsProbe::new(host_name.clone(), kernel_version.clone())),
-        Box::new(GpuFenceProbe::new(host_name.clone(), kernel_version.clone())),
-        Box::new(GpuSubmitProbe::new(host_name.clone(), kernel_version.clone())),
+        Box::new(GpuFenceProbe::new(
+            host_name.clone(),
+            kernel_version.clone(),
+        )),
+        Box::new(GpuSubmitProbe::new(
+            host_name.clone(),
+            kernel_version.clone(),
+        )),
     ];
 
     // Load probes (does capability + BTF checks, attaches tracepoints)
-    let mut loaded = load_probes(&probe_path, candidates)
-        .context("failed to load BPF probes")?;
+    let mut loaded = load_probes(&probe_path, candidates).context("failed to load BPF probes")?;
 
     if loaded.loaded_count == 0 {
         error!("no probes loaded — nothing to do, exiting");
@@ -131,14 +138,11 @@ async fn main() -> Result<()> {
     }
 
     // ES shipper
-    let api_key = config.elasticsearch.api_key
-        .as_deref()
-        .ok_or_else(|| anyhow::anyhow!("No API key: set ES_API_KEY env var or api_key in gamepulse.toml"))?;
-    let mut shipper = EsShipper::new(
-        &config.elasticsearch.endpoint,
-        api_key,
-    )
-    .context("creating ES shipper")?;
+    let api_key = config.elasticsearch.api_key.as_deref().ok_or_else(|| {
+        anyhow::anyhow!("No API key: set ES_API_KEY env var or api_key in gamepulse.toml")
+    })?;
+    let mut shipper =
+        EsShipper::new(&config.elasticsearch.endpoint, api_key).context("creating ES shipper")?;
 
     // Aggregation interval
     let interval_duration = Duration::from_secs(config.ebpf.interval_s);
@@ -187,8 +191,9 @@ async fn main() -> Result<()> {
                 }
 
                 // Stutter correlation: emit a cross-probe doc if ≥2 probes spiked.
-                if let Some(corr_doc) = correlate(&tick_docs, &host_name, &kernel_version, &sid) {
-                    tick_docs.push(corr_doc);
+                let metric_docs: Vec<_> = tick_docs.iter().filter_map(|doc| doc.as_metric()).collect();
+                if let Some(corr_doc) = correlate(&metric_docs, &host_name, &kernel_version, &sid) {
+                    tick_docs.push(corr_doc.into());
                 }
 
                 shipper.queue_all(tick_docs);

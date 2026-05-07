@@ -16,7 +16,7 @@ use tracing::{debug, warn};
 
 use super::{Probe, ProbeRequirements};
 use crate::aggregator::{GpuFenceAggregator, RawGpuFenceEvent};
-use crate::es_model::EbpfMetricDoc;
+use crate::es_model::EbpfDocument;
 
 pub struct GpuFenceProbe {
     aggregator: GpuFenceAggregator,
@@ -53,14 +53,23 @@ impl Probe for GpuFenceProbe {
                 .with_context(|| format!("program '{}' not found in BPF object", prog_name))?
                 .try_into()
                 .context("expected KProbe program type")?;
-            prog.load().with_context(|| format!("loading {}", prog_name))?;
+            prog.load()
+                .with_context(|| format!("loading {}", prog_name))?;
             prog.attach(symbol, 0)
                 .with_context(|| format!("attaching {} kprobe on {}", prog_name, symbol))?;
             Ok(())
         };
 
-        attach_kprobe(ebpf, "dma_fence_default_wait_entry",  "dma_fence_default_wait")?;
-        attach_kprobe(ebpf, "dma_fence_default_wait_return", "dma_fence_default_wait")?;
+        attach_kprobe(
+            ebpf,
+            "dma_fence_default_wait_entry",
+            "dma_fence_default_wait",
+        )?;
+        attach_kprobe(
+            ebpf,
+            "dma_fence_default_wait_return",
+            "dma_fence_default_wait",
+        )?;
 
         let ring_buf = RingBuf::try_from(
             ebpf.take_map("GPU_FENCE_EVENTS")
@@ -72,7 +81,7 @@ impl Probe for GpuFenceProbe {
         Ok(())
     }
 
-    fn collect(&mut self, session_id: &str) -> Result<Vec<EbpfMetricDoc>> {
+    fn collect(&mut self, session_id: &str) -> Result<Vec<EbpfDocument>> {
         use std::mem::size_of;
         let event_size = size_of::<RawGpuFenceEvent>();
         let mut event_count = 0usize;
@@ -81,12 +90,15 @@ impl Probe for GpuFenceProbe {
             while let Some(item) = rb.next() {
                 let bytes: &[u8] = &item;
                 if bytes.len() < event_size {
-                    warn!("gpu_fence ring buf item too small: {} < {}", bytes.len(), event_size);
+                    warn!(
+                        "gpu_fence ring buf item too small: {} < {}",
+                        bytes.len(),
+                        event_size
+                    );
                     continue;
                 }
-                let event = unsafe {
-                    std::ptr::read_unaligned(bytes.as_ptr() as *const RawGpuFenceEvent)
-                };
+                let event =
+                    unsafe { std::ptr::read_unaligned(bytes.as_ptr() as *const RawGpuFenceEvent) };
                 self.aggregator.push(event);
                 event_count += 1;
             }
@@ -97,7 +109,7 @@ impl Probe for GpuFenceProbe {
         }
 
         let doc = self.aggregator.flush(session_id);
-        Ok(doc.into_iter().collect())
+        Ok(doc.into_iter().map(Into::into).collect())
     }
 
     fn detach(&mut self) -> Result<()> {

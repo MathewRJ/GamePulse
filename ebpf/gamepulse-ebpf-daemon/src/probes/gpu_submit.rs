@@ -17,7 +17,7 @@ use tracing::{debug, warn};
 
 use super::{Probe, ProbeRequirements};
 use crate::aggregator::{GpuSubmitAggregator, RawGpuSubmitEvent};
-use crate::es_model::EbpfMetricDoc;
+use crate::es_model::EbpfDocument;
 
 pub struct GpuSubmitProbe {
     aggregator: GpuSubmitAggregator,
@@ -67,7 +67,7 @@ impl Probe for GpuSubmitProbe {
         Ok(())
     }
 
-    fn collect(&mut self, session_id: &str) -> Result<Vec<EbpfMetricDoc>> {
+    fn collect(&mut self, session_id: &str) -> Result<Vec<EbpfDocument>> {
         use std::mem::size_of;
         let event_size = size_of::<RawGpuSubmitEvent>();
         let mut event_count = 0usize;
@@ -76,12 +76,15 @@ impl Probe for GpuSubmitProbe {
             while let Some(item) = rb.next() {
                 let bytes: &[u8] = &item;
                 if bytes.len() < event_size {
-                    warn!("gpu_submit ring buf item too small: {} < {}", bytes.len(), event_size);
+                    warn!(
+                        "gpu_submit ring buf item too small: {} < {}",
+                        bytes.len(),
+                        event_size
+                    );
                     continue;
                 }
-                let event = unsafe {
-                    std::ptr::read_unaligned(bytes.as_ptr() as *const RawGpuSubmitEvent)
-                };
+                let event =
+                    unsafe { std::ptr::read_unaligned(bytes.as_ptr() as *const RawGpuSubmitEvent) };
                 self.aggregator.push(event);
                 event_count += 1;
             }
@@ -92,7 +95,7 @@ impl Probe for GpuSubmitProbe {
         }
 
         let doc = self.aggregator.flush(session_id);
-        Ok(doc.into_iter().collect())
+        Ok(doc.into_iter().map(Into::into).collect())
     }
 
     fn detach(&mut self) -> Result<()> {
