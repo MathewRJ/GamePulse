@@ -3,15 +3,16 @@
 #
 # Usage:
 #   ES_URL=https://... ES_API_KEY=... bash scripts/run-gaming-test.sh
+#   GAMEPULSE_TEST_HOST=mygamingpc ES_URL=https://... ES_API_KEY=... bash scripts/run-gaming-test.sh
 #
 # Flow:
 #   1. Check credentials
-#   2. Deploy collector to gamingpc
+#   2. Deploy collector to the target host (GAMEPULSE_TEST_HOST, default: localhost)
 #   3. Prompt: launch a game, then press Enter
 #   4. Run collector interactively over SSH (live output, Ctrl+C to stop)
 #   5. Query ES for doc counts per stream
 
-REMOTE=gamingpc
+REMOTE="${GAMEPULSE_TEST_HOST:-localhost}"
 REMOTE_VENV=/tmp/gp-venv
 REMOTE_COLLECTOR=/tmp/gp-collector
 
@@ -46,7 +47,7 @@ echo "    Done."
 echo ""
 
 # ── 3. Prompt to launch game ──────────────────────────────────────────────────
-echo "[2/3] Launch a game on the gaming PC, then press Enter to start collecting."
+echo "[2/3] Launch a game on ${REMOTE}, then press Enter to start collecting."
 echo "      (Press Ctrl+C when you're done playing to stop and see the summary.)"
 echo ""
 read -r
