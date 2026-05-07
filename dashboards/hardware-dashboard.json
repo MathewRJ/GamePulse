@@ -1,0 +1,455 @@
+{
+  "api_version": "Elastic-Api-Version: 2023-10-31",
+  "created": "2026-04-27",
+  "id": "ed9d9b94-2003-429c-b294-9d3f2ef737e7",
+  "kibana_url": "https://your-deployment.kb.us-central1.gcp.elastic.cloud",
+  "data": {
+    "title": "GamePulse - Hardware",
+    "time_range": {
+      "from": "now-7d",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "type": "options_list_control",
+        "id": "ctrl-game",
+        "grid": {
+          "x": 0,
+          "y": 0,
+          "w": 16,
+          "h": 4
+        },
+        "config": {
+          "title": "Game",
+          "data_view_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2",
+          "field_name": "gamepulse.game.name"
+        }
+      },
+      {
+        "type": "options_list_control",
+        "id": "ctrl-session",
+        "grid": {
+          "x": 16,
+          "y": 0,
+          "w": 16,
+          "h": 4
+        },
+        "config": {
+          "title": "Session",
+          "data_view_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2",
+          "field_name": "gamepulse.session.id"
+        }
+      },
+      {
+        "type": "options_list_control",
+        "id": "ctrl-os",
+        "grid": {
+          "x": 32,
+          "y": 0,
+          "w": 16,
+          "h": 4
+        },
+        "config": {
+          "title": "OS Kernel",
+          "data_view_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2",
+          "field_name": "host.os.kernel"
+        }
+      },
+      {
+        "type": "vis",
+        "id": "tile-gpu-model",
+        "grid": {
+          "x": 0,
+          "y": 4,
+          "w": 16,
+          "h": 6
+        },
+        "config": {
+          "title": "GPU",
+          "type": "metric",
+          "data_source": {
+            "type": "data_view_reference",
+            "ref_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2"
+          },
+          "metrics": [
+            {
+              "type": "primary",
+              "operation": "last_value",
+              "field": "gamepulse.hardware.gpu.model",
+              "time_field": "@timestamp",
+              "multi_value": false,
+              "label": "GPU"
+            }
+          ]
+        }
+      },
+      {
+        "type": "vis",
+        "id": "tile-gpu-vram",
+        "grid": {
+          "x": 16,
+          "y": 4,
+          "w": 8,
+          "h": 6
+        },
+        "config": {
+          "title": "VRAM MB",
+          "type": "metric",
+          "data_source": {
+            "type": "data_view_reference",
+            "ref_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2"
+          },
+          "metrics": [
+            {
+              "type": "primary",
+              "operation": "last_value",
+              "field": "gamepulse.hardware.gpu.vram_mb",
+              "time_field": "@timestamp",
+              "multi_value": false,
+              "label": "VRAM MB"
+            }
+          ]
+        }
+      },
+      {
+        "type": "vis",
+        "id": "tile-gpu-driver",
+        "grid": {
+          "x": 24,
+          "y": 4,
+          "w": 8,
+          "h": 6
+        },
+        "config": {
+          "title": "Driver",
+          "type": "metric",
+          "data_source": {
+            "type": "data_view_reference",
+            "ref_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2"
+          },
+          "metrics": [
+            {
+              "type": "primary",
+              "operation": "last_value",
+              "field": "gamepulse.hardware.gpu.driver_version",
+              "time_field": "@timestamp",
+              "multi_value": false,
+              "label": "Driver"
+            }
+          ]
+        }
+      },
+      {
+        "type": "vis",
+        "id": "tile-ram-total",
+        "grid": {
+          "x": 32,
+          "y": 4,
+          "w": 16,
+          "h": 6
+        },
+        "config": {
+          "title": "RAM MB",
+          "type": "metric",
+          "data_source": {
+            "type": "data_view_reference",
+            "ref_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2"
+          },
+          "metrics": [
+            {
+              "type": "primary",
+              "operation": "last_value",
+              "field": "gamepulse.hardware.ram.total_mb",
+              "time_field": "@timestamp",
+              "multi_value": false,
+              "label": "RAM MB"
+            }
+          ]
+        }
+      },
+      {
+        "type": "vis",
+        "id": "chart-gpu-perf",
+        "grid": {
+          "x": 0,
+          "y": 10,
+          "w": 48,
+          "h": 12
+        },
+        "config": {
+          "title": "GPU utilisation and VRAM usage",
+          "type": "xy",
+          "axis": {
+            "x": {
+              "title": {
+                "visible": false
+              }
+            },
+            "y": {
+              "title": {
+                "visible": false
+              }
+            }
+          },
+          "layers": [
+            {
+              "type": "line",
+              "data_source": {
+                "type": "data_view_reference",
+                "ref_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2"
+              },
+              "x": {
+                "operation": "date_histogram",
+                "field": "@timestamp"
+              },
+              "y": [
+                {
+                  "operation": "average",
+                  "field": "gamepulse.gpu.utilisation_pct",
+                  "label": "GPU Util %"
+                },
+                {
+                  "operation": "average",
+                  "field": "gamepulse.gpu.memory_used_mb",
+                  "label": "VRAM Used MB",
+                  "axis": "y2"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "vis",
+        "id": "chart-gpu-thermal",
+        "grid": {
+          "x": 0,
+          "y": 22,
+          "w": 48,
+          "h": 12
+        },
+        "config": {
+          "title": "GPU power and temperature",
+          "type": "xy",
+          "axis": {
+            "x": {
+              "title": {
+                "visible": false
+              }
+            },
+            "y": {
+              "title": {
+                "visible": false
+              }
+            }
+          },
+          "layers": [
+            {
+              "type": "line",
+              "data_source": {
+                "type": "data_view_reference",
+                "ref_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2"
+              },
+              "x": {
+                "operation": "date_histogram",
+                "field": "@timestamp"
+              },
+              "y": [
+                {
+                  "operation": "average",
+                  "field": "gamepulse.gpu.power_w",
+                  "label": "GPU Power W"
+                },
+                {
+                  "operation": "max",
+                  "field": "gamepulse.gpu.temperature_c",
+                  "label": "GPU Temp °C",
+                  "axis": "y2"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "vis",
+        "id": "chart-cpu-perf",
+        "grid": {
+          "x": 0,
+          "y": 34,
+          "w": 48,
+          "h": 12
+        },
+        "config": {
+          "title": "CPU utilisation and clock speed",
+          "type": "xy",
+          "axis": {
+            "x": {
+              "title": {
+                "visible": false
+              }
+            },
+            "y": {
+              "title": {
+                "visible": false
+              }
+            }
+          },
+          "layers": [
+            {
+              "type": "line",
+              "data_source": {
+                "type": "data_view_reference",
+                "ref_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2"
+              },
+              "x": {
+                "operation": "date_histogram",
+                "field": "@timestamp"
+              },
+              "y": [
+                {
+                  "operation": "average",
+                  "field": "gamepulse.cpu.total_utilisation_pct",
+                  "label": "CPU Util %"
+                },
+                {
+                  "operation": "average",
+                  "field": "gamepulse.cpu.clock_mhz_avg",
+                  "label": "CPU Clock MHz",
+                  "axis": "y2"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "vis",
+        "id": "chart-vram",
+        "grid": {
+          "x": 0,
+          "y": 46,
+          "w": 48,
+          "h": 10
+        },
+        "config": {
+          "title": "VRAM usage vs budget",
+          "type": "xy",
+          "axis": {
+            "x": {
+              "title": {
+                "visible": false
+              }
+            },
+            "y": {
+              "title": {
+                "visible": false
+              }
+            }
+          },
+          "layers": [
+            {
+              "type": "area",
+              "data_source": {
+                "type": "data_view_reference",
+                "ref_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2"
+              },
+              "x": {
+                "operation": "date_histogram",
+                "field": "@timestamp"
+              },
+              "y": [
+                {
+                  "operation": "average",
+                  "field": "gamepulse.gpu.memory_used_mb",
+                  "label": "VRAM Used MB"
+                },
+                {
+                  "operation": "max",
+                  "field": "gamepulse.gpu.memory_total_mb",
+                  "label": "VRAM Total MB",
+                  "axis": "y2"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "vis",
+        "id": "table-hw",
+        "grid": {
+          "x": 0,
+          "y": 56,
+          "w": 48,
+          "h": 14
+        },
+        "config": {
+          "title": "Hardware configuration per session",
+          "type": "data_table",
+          "data_source": {
+            "type": "data_view_reference",
+            "ref_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2"
+          },
+          "metrics": [
+            {
+              "operation": "last_value",
+              "field": "gamepulse.game.name",
+              "time_field": "@timestamp",
+              "multi_value": false,
+              "label": "Game"
+            },
+            {
+              "operation": "last_value",
+              "field": "gamepulse.hardware.gpu.model",
+              "time_field": "@timestamp",
+              "multi_value": false,
+              "label": "GPU"
+            },
+            {
+              "operation": "last_value",
+              "field": "gamepulse.hardware.gpu.driver_version",
+              "time_field": "@timestamp",
+              "multi_value": false,
+              "label": "Driver"
+            },
+            {
+              "operation": "last_value",
+              "field": "gamepulse.hardware.gpu.vram_mb",
+              "time_field": "@timestamp",
+              "multi_value": false,
+              "label": "VRAM MB"
+            },
+            {
+              "operation": "last_value",
+              "field": "gamepulse.hardware.ram.total_mb",
+              "time_field": "@timestamp",
+              "multi_value": false,
+              "label": "RAM MB"
+            },
+            {
+              "operation": "last_value",
+              "field": "host.os.kernel",
+              "time_field": "@timestamp",
+              "multi_value": false,
+              "label": "Kernel"
+            }
+          ],
+          "rows": [
+            {
+              "operation": "terms",
+              "fields": [
+                "gamepulse.session.id"
+              ],
+              "limit": 20,
+              "rank_by": {
+                "type": "alphabetical",
+                "direction": "desc"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

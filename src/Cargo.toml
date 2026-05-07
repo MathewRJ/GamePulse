@@ -1,0 +1,111 @@
+[package]
+name = "gamepulse-agent"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "gamepulse-agent"
+path = "main.rs"
+
+[features]
+# Default build ships without eBPF — the agent emits session.json and
+# relies on the separate `ebpf/` workspace daemon for kernel-level
+# probes. Enable `ebpf` when/if in-agent eBPF integration lands; until
+# then this feature is a scaffold that reserves the flag name, gates
+# any future aya/ebpf dependencies, and enforces the Linux-only
+# constraint at compile time.
+default = []
+ebpf = []
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+toml = "0.8"
+reqwest = { version = "0.12", features = ["rustls-tls", "json"], default-features = false }
+tokio = { version = "1", features = ["full"] }
+anyhow = "1"
+chrono = "0.4"
+uuid = { version = "1", features = ["v4"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+fs2 = "0.4"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_System_Performance",
+    "Win32_System_SystemInformation",
+    "Win32_System_ProcessStatus",
+    "Win32_System_Threading",
+    "Win32_Foundation",
+    "Win32_System_Power",
+    "Win32_System_Com",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+] }
+
+[lints.rust]
+# Public API fields deserialized from TOML/config and collectors trait methods are
+# intentionally unused in the current codebase — suppress dead_code globally.
+dead_code = "allow"
+
+[lints.clippy]
+# Pre-existing issues in src/collectors/ (not touched by B.7/B.8 work):
+seek_from_current = "allow"
+needless_lifetimes = "allow"
+manual_div_ceil = "allow"
+bind_instead_of_map = "allow"
+
+# ── Debian package metadata (cargo-deb) ─────────────────────────────────────
+# Paths are relative to this file's directory (src/).
+# Run: cargo deb --manifest-path src/Cargo.toml --no-build --no-strip
+[package.metadata.deb]
+maintainer = "MathewRJ <https://github.com/MathewRJ>"
+copyright = "2026, MathewRJ"
+license-file = ["../LICENSE", "0"]
+extended-description = """\
+GamePulse gaming performance telemetry agent.
+Ships CPU, GPU, memory, storage, network, audio, power, and frame metrics
+to Elasticsearch for live analysis and historical comparison."""
+section = "utils"
+priority = "optional"
+# Binary auto-inclusion is disabled when assets is set; list it explicitly.
+# $auto resolves shared-library dependencies (glibc, etc.) from the binary.
+depends = "$auto"
+assets = [
+    ["../target/release/gamepulse-agent", "usr/bin/gamepulse-agent", "755"],
+    ["../packaging/gamepulse-launcher.sh", "usr/bin/gamepulse", "755"],
+    ["../packaging/systemd/gamepulse-agent.service", "usr/lib/systemd/user/gamepulse-agent.service", "644"],
+    ["../packaging/config/gamepulse.toml.example", "etc/gamepulse/gamepulse.toml", "644"],
+    ["../profiles/starfield.toml", "usr/share/gamepulse/profiles/starfield.toml", "644"],
+    ["../profiles/cyberpunk-2077.toml", "usr/share/gamepulse/profiles/cyberpunk-2077.toml", "644"],
+    ["../profiles/baldurs-gate-3.toml", "usr/share/gamepulse/profiles/baldurs-gate-3.toml", "644"],
+]
+
+# ── WiX MSI metadata (cargo-wix) ─────────────────────────────────────────────
+# WiX source lives at .github/packaging/main.wxs (alongside PKGBUILD).
+# Run from repo root: cargo wix --no-build --include .github/packaging/main.wxs
+# upgrade-guid / path-guid are stable across releases — never change them or
+# upgrades stop being detected as upgrades.
+[package.metadata.wix]
+upgrade-guid = "D09227C0-8367-4FB7-BA3D-027E0D47F7A3"
+path-guid    = "EDE10EE8-4579-4E3D-AC7B-4C21446D6498"
+license      = false
+eula         = false
+
+# ── RPM package metadata (cargo-generate-rpm) ────────────────────────────────
+# Paths are relative to this file's directory (src/).
+# Run: cargo generate-rpm --manifest-path src/Cargo.toml
+[package.metadata.generate-rpm]
+license = "MIT"
+summary = "GamePulse gaming performance telemetry agent"
+assets = [
+    { source = "../target/release/gamepulse-agent", dest = "/usr/bin/gamepulse-agent", mode = "755" },
+    { source = "../packaging/gamepulse-launcher.sh", dest = "/usr/bin/gamepulse", mode = "755" },
+    { source = "../packaging/systemd/gamepulse-agent.service", dest = "/usr/lib/systemd/user/gamepulse-agent.service", mode = "644" },
+    { source = "../packaging/config/gamepulse.toml.example", dest = "/etc/gamepulse/gamepulse.toml", mode = "644", config = true },
+    { source = "../profiles/starfield.toml", dest = "/usr/share/gamepulse/profiles/starfield.toml", mode = "644" },
+    { source = "../profiles/cyberpunk-2077.toml", dest = "/usr/share/gamepulse/profiles/cyberpunk-2077.toml", mode = "644" },
+    { source = "../profiles/baldurs-gate-3.toml", dest = "/usr/share/gamepulse/profiles/baldurs-gate-3.toml", mode = "644" },
+]

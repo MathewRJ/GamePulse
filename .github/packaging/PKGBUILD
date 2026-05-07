@@ -1,0 +1,55 @@
+# CI-only PKGBUILD — agent-only (no eBPF), pre-built binary.
+#
+# This file is used by .github/workflows/release.yml and is NOT the AUR
+# PKGBUILD (which lives at packaging/PKGBUILD and builds from source including
+# the eBPF daemon). Kept separate so CI can package a pre-built binary without
+# the nightly Rust + bpf-linker toolchain the eBPF build requires.
+#
+# Environment variables expected at makepkg invocation time:
+#   PKGVER   — release version string without leading 'v' (e.g. 0.1.0)
+#   REPOROOT — absolute path to the GamePulse repo root
+#
+# Invocation (from .github/packaging/):
+#   PKGVER=0.1.0 REPOROOT=/path/to/repo makepkg --nodeps --noextract --nosign
+
+pkgname=gamepulse
+pkgver="${PKGVER:-0.1.0}"
+pkgrel=1
+pkgdesc="GamePulse gaming performance telemetry agent — ships CPU/GPU/memory/frame metrics to Elasticsearch"
+arch=('x86_64')
+url="https://github.com/MathewRJ/GamePulse"
+license=('MIT')
+depends=()
+optdepends=('mangohud: frame timing data collection')
+backup=('etc/gamepulse/gamepulse.toml')
+source=()
+sha256sums=()
+
+# Resolve absolute path at parse time so the fakeroot package() call can find files.
+_reporoot="$(realpath "${REPOROOT:-../..}")"
+
+package() {
+    install -Dm755 "${_reporoot}/target/release/gamepulse-agent" \
+        "${pkgdir}/usr/bin/gamepulse-agent"
+
+    install -Dm755 "${_reporoot}/packaging/gamepulse-launcher.sh" \
+        "${pkgdir}/usr/bin/gamepulse"
+
+    install -Dm644 "${_reporoot}/packaging/systemd/gamepulse-agent.service" \
+        "${pkgdir}/usr/lib/systemd/user/gamepulse-agent.service"
+
+    install -Dm644 "${_reporoot}/packaging/systemd/gamepulse-ebpf.service" \
+        "${pkgdir}/usr/lib/systemd/system/gamepulse-ebpf.service"
+
+    install -Dm644 "${_reporoot}/packaging/config/gamepulse.toml.example" \
+        "${pkgdir}/etc/gamepulse/gamepulse.toml"
+
+    # ---- Starter game profiles ----
+    for _profile in "${_reporoot}"/profiles/*.toml; do
+        install -Dm644 "${_profile}" \
+            "${pkgdir}/usr/share/gamepulse/profiles/$(basename "${_profile}")"
+    done
+
+    install -Dm644 "${_reporoot}/LICENSE" \
+        "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}

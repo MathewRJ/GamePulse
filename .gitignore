@@ -1,0 +1,51 @@
+# Python (archived collector)
+archive/collector/.venv/
+archive/collector/__pycache__/
+archive/collector/**/__pycache__/
+archive/collector/**/*.pyc
+archive/collector/.pytest_cache/
+archive/collector/dist/
+archive/collector/*.egg-info/
+
+# elastic-package build output
+build/
+
+# Build artifacts / OS noise
+a.out
+*.pkg.tar.zst
+target/
+src/target/
+ebpf/target/
+
+# AI scaffolding (lives in ~/coding/Workflow, not here)
+.agents/
+
+# macOS
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+*.swp
+
+# Claude Code local settings (not for commit)
+.claude/settings.local.json
+
+
+# MCP server config — contains credentials; .example is committed, real file is not
+.mcp.json
+
+
+
+# Browser-auth storage-state for the Kibana UI verifier — never commit
+*.storage-state.json
+.gpx/
+
+# UI verification artefacts — screenshots and failure dumps
+artifacts/dashboard-ui/
+
+# Playwright local install (we recommend npm install --no-save)
+node_modules/
+
+# docs/archive/ is intentionally tracked — sanitised history for contributors
+!docs/archive/

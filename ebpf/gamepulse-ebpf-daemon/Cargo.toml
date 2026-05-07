@@ -1,0 +1,46 @@
+[package]
+name = "gamepulse-ebpf-daemon"
+version = "0.1.0"
+edition = "2021"
+description = "GamePulse eBPF daemon — kernel telemetry for gaming performance"
+
+[[bin]]
+name = "gamepulse-ebpf"
+path = "src/main.rs"
+
+[dependencies]
+# eBPF loader — async tokio integration
+aya = { version = "0.13", features = ["async_tokio"] }
+aya-log = "0.2"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# HTTP client for Elasticsearch bulk API
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+
+# Serialisation
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# TOML config parsing
+toml = "0.8"
+
+# Structured logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# File watching (inotify-based) for session.json
+notify = "6"
+
+# POSIX helpers — signal handling, capabilities
+nix = { version = "0.29", features = ["process", "signal", "user"] }
+
+# Error handling
+anyhow = "1"
+
+# CLI argument parsing
+clap = { version = "4", features = ["derive"] }
+
+# Timestamps
+chrono = { version = "0.4", features = ["serde"] }

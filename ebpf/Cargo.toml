@@ -1,0 +1,19 @@
+[workspace]
+members = [
+    "gamepulse-ebpf-probes",
+    "gamepulse-ebpf-daemon",
+    "xtask",
+]
+# default-members excludes the BPF probes crate from host-target builds.
+# Use `cargo xtask build-ebpf` to compile probes for bpfel-unknown-none.
+default-members = ["gamepulse-ebpf-daemon"]
+resolver = "2"
+
+# BPF programs need panic=abort and higher optimisation.
+# These profiles apply to the whole workspace (including the probes crate when
+# built via `cargo xtask build-ebpf`).
+[profile.release]
+opt-level = 3
+lto = "thin"
+
+# BPF-specific flags (panic=abort, lto) are set via RUSTFLAGS in cargo xtask build-ebpf.

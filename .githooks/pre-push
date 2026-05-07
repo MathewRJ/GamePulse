@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Workflow opt-in pre-push hook — template for all managed projects.
+#
+# Install in any project with:
+#   cp ~/coding/Workflow/.githooks/pre-push .githooks/pre-push
+#   git config core.hooksPath .githooks
+#
+# Disable with:
+#   git config --unset core.hooksPath
+#
+# Behaviour:
+#   - On push to main:               run `gpx audit security` (block on REJECT)
+#   - On push to any other branch:   no-op (return 0)
+#   - Bypass with:                   git push --no-verify
+#
+# Auth: uses the local `claude` CLI authenticated via your Pro subscription.
+# No API key required. No network call to Anthropic API.
+
+set -e
+
+# Always use the Workflow repo's gpx (not a project-local copy)
+GPX="${HOME}/coding/Workflow/bin/gpx"
+
+if [[ ! -x "${GPX}" ]]; then
+  echo "[pre-push] gpx not found at ${GPX} — skipping audit" >&2
+  exit 0
+fi
+
+# Read each ref being pushed; only audit when 'main' is among them.
+audit_main=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "${remote_ref}" in
+    refs/heads/main)
+      audit_main=1
+      ;;
+  esac
+done
+
+if [[ "${audit_main}" -eq 0 ]]; then
+  exit 0
+fi
+
+echo "[pre-push] push to main detected — running gpx audit security"
+echo "[pre-push] (bypass with: git push --no-verify)"
+"${GPX}" audit security

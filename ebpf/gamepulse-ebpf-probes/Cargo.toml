@@ -1,0 +1,19 @@
+[package]
+name = "gamepulse-ebpf-probes"
+version = "0.1.0"
+edition = "2021"
+
+# This crate compiles to bpfel-unknown-none (BPF bytecode).
+# Build via: cargo xtask build-ebpf
+# Do NOT add to the host-target workspace default-members.
+
+[[bin]]
+name = "gamepulse-ebpf-probes"
+path = "src/main.rs"
+
+[dependencies]
+aya-ebpf = "0.1"
+aya-log-ebpf = "0.1"
+
+# BPF-specific build profiles are defined in the workspace root Cargo.toml
+# (cargo ignores profiles in non-root packages).

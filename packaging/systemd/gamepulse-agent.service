@@ -1,0 +1,17 @@
+[Unit]
+Description=GamePulse metrics agent
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/gamepulse-agent --config /etc/gamepulse/gamepulse.toml
+Restart=on-failure
+RestartSec=5
+# Ensure HOME resolves to the real user home even if PAM session env is absent.
+Environment=HOME=/home/%u
+# Set default log level. Override with: systemctl --user edit gamepulse-agent
+# and add [Service] / Environment=GAMEPULSE_LOG=debug
+Environment=GAMEPULSE_LOG=info
+
+[Install]
+WantedBy=default.target

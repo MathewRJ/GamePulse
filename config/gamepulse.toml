@@ -1,0 +1,43 @@
+# GamePulse Agent Configuration
+# Copy to ~/.config/gamepulse/gamepulse.toml or alongside the binary
+
+[elasticsearch]
+# Elastic Cloud or self-hosted endpoint
+endpoint = "https://your-deployment.es.region.cloud.es.io:443"
+# API key for authentication (recommended for Elastic Cloud)
+# Generate at: Kibana > Stack Management > API Keys
+# api_key = "your-base64-api-key-here"
+# Alternative: basic auth
+# username = "elastic"
+# password = "changeme"
+
+# Index name prefix
+index_prefix = "gamepulse"
+
+# How often to flush buffered metrics to ES (seconds)
+flush_interval_secs = 5
+
+# Max documents per bulk request
+batch_size = 100
+
+[collection]
+# Collection interval in milliseconds (1000 = 1 sample/second)
+interval_ms = 1000
+
+# Enable/disable individual collectors
+cpu = true
+memory = true
+gpu = true
+storage = true
+network = false       # Enable for multiplayer latency tracking
+ebpf = false          # Enable for deep kernel telemetry (Linux, needs privileges)
+frame_timing = true   # Enable for FPS/frame time collection
+game_detection = true # Auto-detect running games
+
+[privacy]
+# Share anonymous metrics with the community
+opt_in_public = false
+# Include eBPF data in public sharing
+share_ebpf = false
+# Include network metrics in public sharing
+share_network = false

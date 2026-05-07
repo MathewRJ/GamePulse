@@ -1,0 +1,375 @@
+{
+  "id": "3a55c257-0537-42a8-94a7-24dc773a703b",
+  "kibana_url": "https://your-deployment.kb.us-central1.gcp.elastic.cloud",
+  "created": "2026-04-26",
+  "api_version": "Elastic-Api-Version: 2023-10-31",
+  "data": {
+    "title": "GamePulse - Environment",
+    "time_range": {
+      "from": "now-24h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "type": "options_list_control",
+        "id": "ctrl-game",
+        "grid": {
+          "x": 0,
+          "y": 0,
+          "w": 16,
+          "h": 4
+        },
+        "config": {
+          "title": "Game",
+          "data_view_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2",
+          "field_name": "gamepulse.game.name"
+        }
+      },
+      {
+        "type": "options_list_control",
+        "id": "ctrl-session",
+        "grid": {
+          "x": 16,
+          "y": 0,
+          "w": 16,
+          "h": 4
+        },
+        "config": {
+          "title": "Session",
+          "data_view_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2",
+          "field_name": "gamepulse.session.id"
+        }
+      },
+      {
+        "type": "options_list_control",
+        "id": "ctrl-os",
+        "grid": {
+          "x": 32,
+          "y": 0,
+          "w": 16,
+          "h": 4
+        },
+        "config": {
+          "title": "OS",
+          "data_view_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2",
+          "field_name": "host.os.name"
+        }
+      },
+      {
+        "type": "vis",
+        "id": "tile-cpu-temp",
+        "grid": {
+          "x": 0,
+          "y": 4,
+          "w": 12,
+          "h": 6
+        },
+        "config": {
+          "title": "Peak CPU Temp °C",
+          "type": "metric",
+          "data_source": {
+            "type": "data_view_reference",
+            "ref_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2"
+          },
+          "metrics": [
+            {
+              "type": "primary",
+              "operation": "max",
+              "field": "gamepulse.cpu.temperature_c",
+              "label": "Peak CPU Temp °C"
+            }
+          ]
+        }
+      },
+      {
+        "type": "vis",
+        "id": "tile-gpu-temp",
+        "grid": {
+          "x": 12,
+          "y": 4,
+          "w": 12,
+          "h": 6
+        },
+        "config": {
+          "title": "Peak GPU Temp °C",
+          "type": "metric",
+          "data_source": {
+            "type": "data_view_reference",
+            "ref_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2"
+          },
+          "metrics": [
+            {
+              "type": "primary",
+              "operation": "max",
+              "field": "gamepulse.gpu.temperature_c",
+              "label": "Peak GPU Temp °C"
+            }
+          ]
+        }
+      },
+      {
+        "type": "vis",
+        "id": "tile-gpu-util",
+        "grid": {
+          "x": 24,
+          "y": 4,
+          "w": 12,
+          "h": 6
+        },
+        "config": {
+          "title": "Avg GPU Util %",
+          "type": "metric",
+          "data_source": {
+            "type": "data_view_reference",
+            "ref_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2"
+          },
+          "metrics": [
+            {
+              "type": "primary",
+              "operation": "average",
+              "field": "gamepulse.gpu.utilisation_pct",
+              "label": "Avg GPU Util %"
+            }
+          ]
+        }
+      },
+      {
+        "type": "vis",
+        "id": "tile-ram-used",
+        "grid": {
+          "x": 36,
+          "y": 4,
+          "w": 12,
+          "h": 6
+        },
+        "config": {
+          "title": "Peak RAM Used MB",
+          "type": "metric",
+          "data_source": {
+            "type": "data_view_reference",
+            "ref_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2"
+          },
+          "metrics": [
+            {
+              "type": "primary",
+              "operation": "max",
+              "field": "gamepulse.memory.system_used_mb",
+              "label": "Peak RAM Used MB"
+            }
+          ]
+        }
+      },
+      {
+        "type": "vis",
+        "id": "chart-gpu",
+        "grid": {
+          "x": 0,
+          "y": 10,
+          "w": 48,
+          "h": 12
+        },
+        "config": {
+          "title": "GPU utilisation and temperature",
+          "type": "xy",
+          "axis": {
+            "x": {
+              "title": {
+                "visible": false
+              }
+            },
+            "y": {
+              "title": {
+                "visible": false
+              }
+            }
+          },
+          "layers": [
+            {
+              "type": "line",
+              "data_source": {
+                "type": "data_view_reference",
+                "ref_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2"
+              },
+              "x": {
+                "operation": "date_histogram",
+                "field": "@timestamp"
+              },
+              "y": [
+                {
+                  "operation": "average",
+                  "field": "gamepulse.gpu.utilisation_pct",
+                  "label": "GPU Util %"
+                },
+                {
+                  "operation": "max",
+                  "field": "gamepulse.gpu.temperature_c",
+                  "label": "GPU Temp °C",
+                  "axis": "y2"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "vis",
+        "id": "chart-cpu",
+        "grid": {
+          "x": 0,
+          "y": 22,
+          "w": 48,
+          "h": 12
+        },
+        "config": {
+          "title": "CPU utilisation and temperature",
+          "type": "xy",
+          "axis": {
+            "x": {
+              "title": {
+                "visible": false
+              }
+            },
+            "y": {
+              "title": {
+                "visible": false
+              }
+            }
+          },
+          "layers": [
+            {
+              "type": "line",
+              "data_source": {
+                "type": "data_view_reference",
+                "ref_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2"
+              },
+              "x": {
+                "operation": "date_histogram",
+                "field": "@timestamp"
+              },
+              "y": [
+                {
+                  "operation": "average",
+                  "field": "gamepulse.cpu.total_utilisation_pct",
+                  "label": "CPU Util %"
+                },
+                {
+                  "operation": "max",
+                  "field": "gamepulse.cpu.temperature_c",
+                  "label": "CPU Temp °C",
+                  "axis": "y2"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "vis",
+        "id": "chart-memory",
+        "grid": {
+          "x": 0,
+          "y": 34,
+          "w": 48,
+          "h": 10
+        },
+        "config": {
+          "title": "Memory pressure",
+          "type": "xy",
+          "axis": {
+            "x": {
+              "title": {
+                "visible": false
+              }
+            },
+            "y": {
+              "title": {
+                "visible": false
+              }
+            }
+          },
+          "layers": [
+            {
+              "type": "area",
+              "data_source": {
+                "type": "data_view_reference",
+                "ref_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2"
+              },
+              "x": {
+                "operation": "date_histogram",
+                "field": "@timestamp"
+              },
+              "y": [
+                {
+                  "operation": "average",
+                  "field": "gamepulse.memory.system_used_mb",
+                  "label": "System RAM Used MB"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "vis",
+        "id": "table-env",
+        "grid": {
+          "x": 0,
+          "y": 44,
+          "w": 48,
+          "h": 12
+        },
+        "config": {
+          "title": "Session environment",
+          "type": "data_table",
+          "data_source": {
+            "type": "data_view_reference",
+            "ref_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2"
+          },
+          "metrics": [
+            {
+              "operation": "last_value",
+              "field": "gamepulse.game.name",
+              "time_field": "@timestamp",
+              "multi_value": false,
+              "label": "Game"
+            },
+            {
+              "operation": "last_value",
+              "field": "gamepulse.hardware.gpu.model",
+              "time_field": "@timestamp",
+              "multi_value": false,
+              "label": "GPU"
+            },
+            {
+              "operation": "last_value",
+              "field": "gamepulse.hardware.gpu.driver_version",
+              "time_field": "@timestamp",
+              "multi_value": false,
+              "label": "Driver"
+            },
+            {
+              "operation": "last_value",
+              "field": "host.os.kernel",
+              "time_field": "@timestamp",
+              "multi_value": false,
+              "label": "Kernel"
+            }
+          ],
+          "rows": [
+            {
+              "operation": "terms",
+              "fields": [
+                "gamepulse.session.id"
+              ],
+              "limit": 20,
+              "rank_by": {
+                "type": "alphabetical",
+                "direction": "asc"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

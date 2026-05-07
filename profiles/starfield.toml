@@ -1,0 +1,13 @@
+[game]
+name = "Starfield"
+steam_app_id = 1716740
+aliases = ["starfield"]
+
+[settings]
+# Bethesda RPG (2023) — DirectX 12. Native AMD FSR 2 upscaler.
+# FSR 3 (frame gen) and DLSS available via community mods.
+# Ships with "Ultra" as the recommended preset on modern hardware.
+preset = "ultra"
+upscaler_tech = "fsr"
+features_active = ["ray_tracing"]
+notes = "Native FSR 2; FSR 3 / DLSS via mod"

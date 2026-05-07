@@ -1,0 +1,59 @@
+{
+  "description": "GamePulse metrics ingest pipeline — normalizes fields, classifies hardware tiers, and tags anomalies",
+  "processors": [
+    {
+      "set": {
+        "field": "ingest_timestamp",
+        "value": "{{_ingest.timestamp}}"
+      }
+    },
+    {
+      "script": {
+        "description": "Classify hardware tier based on GPU model and VRAM",
+        "lang": "painless",
+        "source": "if (ctx.gpu == null) return; def vram = ctx.gpu.memory_total_mb; if (vram == null) return; if (vram >= 16384) { ctx.hardware_tier = 'enthusiast'; } else if (vram >= 8192) { ctx.hardware_tier = 'high'; } else if (vram >= 4096) { ctx.hardware_tier = 'mid'; } else if (vram >= 2048) { ctx.hardware_tier = 'low'; } else { ctx.hardware_tier = 'integrated'; }",
+        "ignore_failure": true
+      }
+    },
+    {
+      "script": {
+        "description": "Classify FPS bracket for easy filtering",
+        "lang": "painless",
+        "source": "if (ctx.fps == null || ctx.fps.fps_avg == null) return; def avg = ctx.fps.fps_avg; if (avg >= 120) { ctx.fps_bracket = '120+'; } else if (avg >= 90) { ctx.fps_bracket = '90-120'; } else if (avg >= 60) { ctx.fps_bracket = '60-90'; } else if (avg >= 30) { ctx.fps_bracket = '30-60'; } else { ctx.fps_bracket = 'below_30'; }",
+        "ignore_failure": true
+      }
+    },
+    {
+      "script": {
+        "description": "Tag thermal throttling if GPU temp > 90 or CPU temp > 95",
+        "lang": "painless",
+        "source": "ctx.throttle_detected = false; if (ctx.gpu != null && ctx.gpu.temperature_c != null && ctx.gpu.temperature_c > 90) { ctx.throttle_detected = true; ctx.throttle_source = 'gpu_thermal'; } if (ctx.cpu != null && ctx.cpu.temperature_c != null && ctx.cpu.temperature_c > 95) { ctx.throttle_detected = true; ctx.throttle_source = 'cpu_thermal'; }",
+        "ignore_failure": true
+      }
+    },
+    {
+      "script": {
+        "description": "Tag stutter frames (frametime > 33ms = below 30fps)",
+        "lang": "painless",
+        "source": "if (ctx.fps == null) return; ctx.has_stutter = (ctx.fps.stutter_count != null && ctx.fps.stutter_count > 0); if (ctx.fps.frametime_max_ms != null && ctx.fps.frametime_max_ms > 100) { ctx.severe_stutter = true; }",
+        "ignore_failure": true
+      }
+    },
+    {
+      "script": {
+        "description": "Calculate GPU memory pressure percentage",
+        "lang": "painless",
+        "source": "if (ctx.gpu == null || ctx.gpu.memory_used_mb == null || ctx.gpu.memory_total_mb == null) return; if (ctx.gpu.memory_total_mb > 0) { ctx.gpu.memory_pressure_pct = (ctx.gpu.memory_used_mb * 100.0) / ctx.gpu.memory_total_mb; }",
+        "ignore_failure": true
+      }
+    },
+    {
+      "script": {
+        "description": "Tag storage bottleneck if I/O wait > 5% or queue depth > 32",
+        "lang": "painless",
+        "source": "if (ctx.storage == null) return; ctx.storage_bottleneck = false; if (ctx.storage.io_wait_pct != null && ctx.storage.io_wait_pct > 5.0) { ctx.storage_bottleneck = true; } if (ctx.storage.queue_depth != null && ctx.storage.queue_depth > 32) { ctx.storage_bottleneck = true; }",
+        "ignore_failure": true
+      }
+    }
+  ]
+}

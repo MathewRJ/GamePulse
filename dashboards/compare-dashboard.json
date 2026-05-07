@@ -1,0 +1,508 @@
+{
+  "api_version": "Elastic-Api-Version: 2023-10-31",
+  "created": "2026-04-27",
+  "id": "828db140-b330-4d26-8045-40a7895bfc41",
+  "kibana_url": "https://your-deployment.kb.us-central1.gcp.elastic.cloud",
+  "data": {
+    "title": "GamePulse - Compare",
+    "time_range": {
+      "from": "now-30d",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "type": "options_list_control",
+        "id": "ctrl-session",
+        "grid": {
+          "x": 0,
+          "y": 0,
+          "w": 24,
+          "h": 4
+        },
+        "config": {
+          "title": "Session",
+          "data_view_id": "gp-dv-timeline",
+          "field_name": "session_id"
+        }
+      },
+      {
+        "type": "options_list_control",
+        "id": "ctrl-game",
+        "grid": {
+          "x": 24,
+          "y": 0,
+          "w": 24,
+          "h": 4
+        },
+        "config": {
+          "title": "Game",
+          "data_view_id": "gp-dv-timeline",
+          "field_name": "game_name"
+        }
+      },
+      {
+        "type": "vis",
+        "id": "kpi-avg-fps",
+        "grid": {
+          "x": 0,
+          "y": 4,
+          "w": 12,
+          "h": 8
+        },
+        "config": {
+          "title": "Avg FPS by Session",
+          "type": "xy",
+          "axis": {
+            "x": {
+              "title": {
+                "visible": false
+              }
+            },
+            "y": {
+              "title": {
+                "visible": false
+              }
+            }
+          },
+          "layers": [
+            {
+              "type": "bar",
+              "data_source": {
+                "type": "data_view_reference",
+                "ref_id": "gp-dv-timeline"
+              },
+              "x": {
+                "operation": "terms",
+                "fields": [
+                  "session_id"
+                ],
+                "limit": 10,
+                "rank_by": {
+                  "type": "metric",
+                  "metric_index": 0,
+                  "direction": "desc"
+                }
+              },
+              "y": [
+                {
+                  "operation": "max",
+                  "field": "avg_fps",
+                  "label": "Avg FPS"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "vis",
+        "id": "kpi-1pct-low",
+        "grid": {
+          "x": 12,
+          "y": 4,
+          "w": 12,
+          "h": 8
+        },
+        "config": {
+          "title": "1% Low FPS by Session",
+          "type": "xy",
+          "axis": {
+            "x": {
+              "title": {
+                "visible": false
+              }
+            },
+            "y": {
+              "title": {
+                "visible": false
+              }
+            }
+          },
+          "layers": [
+            {
+              "type": "bar",
+              "data_source": {
+                "type": "data_view_reference",
+                "ref_id": "gp-dv-timeline"
+              },
+              "x": {
+                "operation": "terms",
+                "fields": [
+                  "session_id"
+                ],
+                "limit": 10,
+                "rank_by": {
+                  "type": "metric",
+                  "metric_index": 0,
+                  "direction": "desc"
+                }
+              },
+              "y": [
+                {
+                  "operation": "max",
+                  "field": "low_1pct_fps",
+                  "label": "1% Low FPS"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "vis",
+        "id": "kpi-p99-frametime",
+        "grid": {
+          "x": 24,
+          "y": 4,
+          "w": 12,
+          "h": 8
+        },
+        "config": {
+          "title": "p99 Frametime by Session",
+          "type": "xy",
+          "axis": {
+            "x": {
+              "title": {
+                "visible": false
+              }
+            },
+            "y": {
+              "title": {
+                "visible": false
+              }
+            }
+          },
+          "layers": [
+            {
+              "type": "bar",
+              "data_source": {
+                "type": "data_view_reference",
+                "ref_id": "gp-dv-timeline"
+              },
+              "x": {
+                "operation": "terms",
+                "fields": [
+                  "session_id"
+                ],
+                "limit": 10,
+                "rank_by": {
+                  "type": "metric",
+                  "metric_index": 0,
+                  "direction": "desc"
+                }
+              },
+              "y": [
+                {
+                  "operation": "max",
+                  "field": "p99_frametime_ms",
+                  "label": "p99 Frametime (ms)"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "vis",
+        "id": "kpi-stutters",
+        "grid": {
+          "x": 36,
+          "y": 4,
+          "w": 12,
+          "h": 8
+        },
+        "config": {
+          "title": "Stutter Count by Session",
+          "type": "xy",
+          "axis": {
+            "x": {
+              "title": {
+                "visible": false
+              }
+            },
+            "y": {
+              "title": {
+                "visible": false
+              }
+            }
+          },
+          "layers": [
+            {
+              "type": "bar",
+              "data_source": {
+                "type": "data_view_reference",
+                "ref_id": "gp-dv-timeline"
+              },
+              "x": {
+                "operation": "terms",
+                "fields": [
+                  "session_id"
+                ],
+                "limit": 10,
+                "rank_by": {
+                  "type": "metric",
+                  "metric_index": 0,
+                  "direction": "desc"
+                }
+              },
+              "y": [
+                {
+                  "operation": "max",
+                  "field": "stutter_count",
+                  "label": "Stutter Count"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "vis",
+        "id": "chart-fps-compare",
+        "grid": {
+          "x": 0,
+          "y": 12,
+          "w": 24,
+          "h": 12
+        },
+        "config": {
+          "title": "FPS Comparison",
+          "type": "xy",
+          "axis": {
+            "x": {
+              "title": {
+                "visible": false
+              }
+            },
+            "y": {
+              "title": {
+                "visible": false
+              }
+            }
+          },
+          "layers": [
+            {
+              "type": "bar",
+              "data_source": {
+                "type": "data_view_reference",
+                "ref_id": "gp-dv-timeline"
+              },
+              "x": {
+                "operation": "terms",
+                "fields": [
+                  "session_id"
+                ],
+                "limit": 10,
+                "rank_by": {
+                  "type": "metric",
+                  "metric_index": 0,
+                  "direction": "desc"
+                }
+              },
+              "y": [
+                {
+                  "operation": "max",
+                  "field": "avg_fps",
+                  "label": "Avg FPS"
+                },
+                {
+                  "operation": "max",
+                  "field": "low_1pct_fps",
+                  "label": "1% Low FPS"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "vis",
+        "id": "chart-thermals-power",
+        "grid": {
+          "x": 24,
+          "y": 12,
+          "w": 24,
+          "h": 12
+        },
+        "config": {
+          "title": "Thermals & Power",
+          "type": "xy",
+          "axis": {
+            "x": {
+              "title": {
+                "visible": false
+              }
+            },
+            "y": {
+              "title": {
+                "visible": false
+              }
+            }
+          },
+          "layers": [
+            {
+              "type": "bar",
+              "data_source": {
+                "type": "data_view_reference",
+                "ref_id": "gp-dv-timeline"
+              },
+              "x": {
+                "operation": "terms",
+                "fields": [
+                  "session_id"
+                ],
+                "limit": 10,
+                "rank_by": {
+                  "type": "metric",
+                  "metric_index": 0,
+                  "direction": "desc"
+                }
+              },
+              "y": [
+                {
+                  "operation": "max",
+                  "field": "peak_gpu_temp_c",
+                  "label": "Peak GPU Temp °C"
+                },
+                {
+                  "operation": "max",
+                  "field": "peak_cpu_temp_c",
+                  "label": "Peak CPU Temp °C"
+                },
+                {
+                  "operation": "max",
+                  "field": "peak_gpu_power_w",
+                  "label": "Peak GPU Power (W)",
+                  "axis": "y2"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "vis",
+        "id": "table-compare",
+        "grid": {
+          "x": 0,
+          "y": 24,
+          "w": 48,
+          "h": 22
+        },
+        "config": {
+          "title": "Session Comparison Table",
+          "type": "data_table",
+          "data_source": {
+            "type": "data_view_reference",
+            "ref_id": "gp-dv-timeline"
+          },
+          "metrics": [
+            {
+              "operation": "last_value",
+              "field": "game_name",
+              "time_field": "session_start",
+              "multi_value": false,
+              "label": "Game"
+            },
+            {
+              "operation": "min",
+              "field": "session_start",
+              "label": "Session Start"
+            },
+            {
+              "operation": "max",
+              "field": "duration_s",
+              "label": "Duration (s)"
+            },
+            {
+              "operation": "max",
+              "field": "avg_fps",
+              "label": "Avg FPS"
+            },
+            {
+              "operation": "max",
+              "field": "low_1pct_fps",
+              "label": "1% Low FPS"
+            },
+            {
+              "operation": "max",
+              "field": "p99_frametime_ms",
+              "label": "p99 Frametime (ms)"
+            },
+            {
+              "operation": "max",
+              "field": "peak_gpu_temp_c",
+              "label": "Peak GPU Temp °C"
+            },
+            {
+              "operation": "max",
+              "field": "peak_cpu_temp_c",
+              "label": "Peak CPU Temp °C"
+            },
+            {
+              "operation": "max",
+              "field": "peak_gpu_power_w",
+              "label": "Peak GPU Power (W)"
+            },
+            {
+              "operation": "max",
+              "field": "stutter_count",
+              "label": "Stutter Count"
+            },
+            {
+              "operation": "max",
+              "field": "total_frames",
+              "label": "Total Frames"
+            },
+            {
+              "operation": "max",
+              "field": "cumulative_playtime_hours",
+              "label": "Cumulative Play (h)"
+            },
+            {
+              "operation": "last_value",
+              "field": "gpu_model",
+              "time_field": "session_start",
+              "multi_value": false,
+              "label": "GPU"
+            },
+            {
+              "operation": "last_value",
+              "field": "bottleneck_dominant",
+              "time_field": "session_start",
+              "multi_value": false,
+              "label": "Bottleneck"
+            },
+            {
+              "operation": "last_value",
+              "field": "driver_version",
+              "time_field": "session_start",
+              "multi_value": false,
+              "label": "Driver"
+            },
+            {
+              "operation": "last_value",
+              "field": "kernel_version",
+              "time_field": "session_start",
+              "multi_value": false,
+              "label": "Kernel"
+            }
+          ],
+          "rows": [
+            {
+              "operation": "terms",
+              "fields": [
+                "session_id"
+              ],
+              "limit": 50,
+              "rank_by": {
+                "type": "alphabetical",
+                "direction": "asc"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

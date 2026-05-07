@@ -1,0 +1,115 @@
+# Maintainer: MathewRJ <https://github.com/MathewRJ>
+# AUR: https://aur.archlinux.org/packages/gamepulse
+#
+# For AUR submission, replace the local source= line below with:
+#   source=("${pkgname}-${pkgver}::git+https://github.com/MathewRJ/GamePulse.git#tag=v${pkgver}")
+#   sha256sums=('SKIP')
+#
+# Prerequisites (not in official repos — install once before makepkg):
+#   rustup install nightly
+#   rustup component add rust-src --toolchain nightly
+#   cargo install bpf-linker
+#
+pkgname=gamepulse
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Gaming performance telemetry agent — ships CPU/GPU/memory/frame metrics to Elasticsearch"
+arch=('x86_64')
+url="https://github.com/MathewRJ/GamePulse"
+license=('MIT')
+depends=()
+makedepends=('rust')
+optdepends=('mangohud: frame timing data collection')
+backup=('etc/gamepulse/gamepulse.toml')
+install=
+# Disable LTO: ring's build script compiles C/ASM via cc and produces GCC LTO
+# bitcode objects when CFLAGS contains -flto. Rust's LLD linker cannot resolve
+# symbols from GCC LTO objects, causing undefined symbol errors at link time.
+options=(!lto)
+
+# Local source: the packaging/ dir lives inside the repo, so $startdir/.. is the repo root.
+# makepkg copies nothing for an empty source array — we reference files directly via $startdir.
+source=()
+sha256sums=()
+
+_repodir="$(realpath "$startdir/..")"
+
+prepare() {
+    # Verify the eBPF toolchain prerequisites are present. makepkg runs as a
+    # regular user; these tools must already be installed.
+    if ! command -v bpf-linker &>/dev/null; then
+        echo "ERROR: bpf-linker not found. Install with: cargo install bpf-linker"
+        return 1
+    fi
+    if ! cargo +nightly --version &>/dev/null; then
+        echo "ERROR: nightly Rust toolchain not found. Install with: rustup install nightly"
+        return 1
+    fi
+    if ! rustup component list --toolchain nightly 2>/dev/null | grep -q "^rust-src (installed)"; then
+        echo "ERROR: rust-src not found for nightly. Install with: rustup component add rust-src --toolchain nightly"
+        return 1
+    fi
+}
+
+build() {
+    # Change to repo root so that cargo finds .cargo/config.toml
+    # (which sets linker=cc for the ring crate) from the correct path hierarchy.
+    # makepkg's $srcdir is an unrelated directory; running from there prevents
+    # cargo from discovering the linker config.
+    cd "${_repodir}"
+
+    # --- Build the Rust agent ---
+    echo "==> Building gamepulse-agent (release)..."
+    cargo build --release --manifest-path src/Cargo.toml
+
+    # --- Build eBPF probes (requires nightly + bpf-linker + rust-src) ---
+    # eBPF target (bpfel-unknown-none) is cross-compiled; bpf-linker does not
+    # support -C target-cpu=native (host CPU flags make no sense for BPF bytecode).
+    # Clear RUSTFLAGS so only eBPF-appropriate flags apply.
+    echo "==> Building eBPF probes (bpfel-unknown-none, release)..."
+    (cd ebpf && RUSTFLAGS="" cargo xtask build-ebpf --release 2>/dev/null) || \
+    RUSTFLAGS="" cargo +nightly build \
+        -p gamepulse-ebpf-probes \
+        --target bpfel-unknown-none \
+        -Z build-std=core \
+        --release \
+        --manifest-path ebpf/Cargo.toml
+
+    # --- Build eBPF daemon (embeds probes at compile time) ---
+    echo "==> Building gamepulse-ebpf daemon (release)..."
+    cargo build --release \
+        -p gamepulse-ebpf-daemon \
+        --manifest-path ebpf/Cargo.toml
+}
+
+package() {
+    # ---- Binaries ----
+    install -Dm755 "${_repodir}/target/release/gamepulse-agent" \
+        "${pkgdir}/usr/bin/gamepulse-agent"
+    install -Dm755 "${_repodir}/ebpf/target/release/gamepulse-ebpf" \
+        "${pkgdir}/usr/bin/gamepulse-ebpf"
+
+    # ---- eBPF probe ELF (kernel bytecode loaded by gamepulse-ebpf at runtime) ----
+    install -Dm755 "${_repodir}/ebpf/target/bpfel-unknown-none/release/gamepulse-ebpf-probes" \
+        "${pkgdir}/usr/lib/gamepulse/gamepulse-ebpf-probes"
+
+    # ---- systemd user unit (gamepulse-agent runs as the gaming user) ----
+    install -Dm644 "${startdir}/systemd/gamepulse-agent.service" \
+        "${pkgdir}/usr/lib/systemd/user/gamepulse-agent.service"
+
+    # ---- systemd system unit (gamepulse-ebpf needs CAP_BPF/PERFMON) ----
+    install -Dm644 "${startdir}/systemd/gamepulse-ebpf.service" \
+        "${pkgdir}/usr/lib/systemd/system/gamepulse-ebpf.service"
+
+    # ---- Launcher CLI ----
+    # Single entry-point for start/stop/run/setup subcommands.
+    # 'gamepulse run %command%' is the Steam launch option form.
+    install -Dm755 "${startdir}/gamepulse-launcher.sh" \
+        "${pkgdir}/usr/bin/gamepulse"
+
+    # ---- Config ----
+    # Install example as the default config (backup= in PKGBUILD protects user edits
+    # from being overwritten on upgrade). User should edit this with their ES credentials.
+    install -Dm644 "${startdir}/config/gamepulse.toml.example" \
+        "${pkgdir}/etc/gamepulse/gamepulse.toml"
+}

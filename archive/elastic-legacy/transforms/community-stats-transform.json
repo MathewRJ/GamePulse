@@ -1,0 +1,51 @@
+{
+  "description": "Aggregate per-game performance by hardware config for community comparison",
+  "_meta": {
+    "purpose": "Powers the community dashboard — shows avg FPS per game per hardware tier",
+    "schedule": "Runs every 5 minutes, aggregates last 24 hours"
+  },
+  "source": {
+    "index": ["gamepulse-metrics-*"],
+    "query": {
+      "bool": {
+        "must": [
+          { "exists": { "field": "fps.fps_avg" } },
+          { "exists": { "field": "session_id" } }
+        ]
+      }
+    }
+  },
+  "dest": {
+    "index": "gamepulse-community-stats"
+  },
+  "pivot": {
+    "group_by": {
+      "session_id": { "terms": { "field": "session_id" } }
+    },
+    "aggregations": {
+      "fps_avg": { "avg": { "field": "fps.fps_avg" } },
+      "fps_1pct_low": { "avg": { "field": "fps.fps_1pct_low" } },
+      "fps_01pct_low": { "avg": { "field": "fps.fps_01pct_low" } },
+      "frametime_avg_ms": { "avg": { "field": "fps.frametime_avg_ms" } },
+      "frametime_p99_ms": { "max": { "field": "fps.frametime_max_ms" } },
+      "stutter_total": { "sum": { "field": "fps.stutter_count" } },
+      "gpu_temp_avg": { "avg": { "field": "gpu.temperature_c" } },
+      "gpu_util_avg": { "avg": { "field": "gpu.utilisation_pct" } },
+      "gpu_power_avg": { "avg": { "field": "gpu.power_w" } },
+      "cpu_util_avg": { "avg": { "field": "cpu.total_utilisation_pct" } },
+      "cpu_temp_avg": { "avg": { "field": "cpu.temperature_c" } },
+      "ram_used_avg_mb": { "avg": { "field": "memory.system_used_mb" } },
+      "sample_count": { "value_count": { "field": "@timestamp" } },
+      "throttle_samples": {
+        "filter": { "term": { "throttle_detected": true } }
+      }
+    }
+  },
+  "frequency": "5m",
+  "sync": {
+    "time": {
+      "field": "@timestamp",
+      "delay": "60s"
+    }
+  }
+}

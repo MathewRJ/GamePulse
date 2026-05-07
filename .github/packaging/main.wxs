@@ -1,0 +1,131 @@
+<?xml version='1.0' encoding='windows-1252'?>
+<!--
+    GamePulse Windows installer (WiX 3.x source)
+
+    Authored by hand rather than via `cargo wix init` so the layout matches
+    the Linux .deb / .rpm / Arch packages: a single Program Files\GamePulse\
+    install root with bin\ + config\ + profiles\ subfolders, plus a PATH
+    entry so `gamepulse-agent` works from any shell.
+
+    Built variables:
+        $(var.Version)            - from src/Cargo.toml [package].version (cargo-wix)
+        $(var.CargoTargetBinDir)  - target/release (cargo-wix, via cargo metadata)
+        $(sys.SOURCEFILEDIR)      - dir of this wxs file (WiX preprocessor)
+
+    GUIDs:
+        UpgradeCode and the per-component GUIDs are stable across releases.
+        Changing UpgradeCode would prevent MSI from detecting an upgrade and
+        would leave the previous version installed alongside the new one.
+        Changing path-component GUID would orphan the PATH entry on uninstall.
+-->
+<Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
+
+    <Product
+        Id='*'
+        Name='GamePulse'
+        UpgradeCode='D09227C0-8367-4FB7-BA3D-027E0D47F7A3'
+        Manufacturer='MathewRJ'
+        Language='1033'
+        Codepage='1252'
+        Version='$(var.Version)'>
+
+        <Package Id='*'
+            Keywords='Installer'
+            Description='GamePulse gaming performance telemetry agent'
+            Manufacturer='MathewRJ'
+            InstallerVersion='450'
+            Languages='1033'
+            Compressed='yes'
+            InstallScope='perMachine'
+            SummaryCodepage='1252'/>
+
+        <MajorUpgrade
+            Schedule='afterInstallInitialize'
+            DowngradeErrorMessage='A newer version of GamePulse is already installed. Setup will now exit.'/>
+
+        <Media Id='1' Cabinet='media1.cab' EmbedCab='yes' DiskPrompt='CD-ROM #1'/>
+        <Property Id='DiskPrompt' Value='GamePulse Installation'/>
+
+        <!-- Install layout -->
+        <Directory Id='TARGETDIR' Name='SourceDir'>
+            <Directory Id='ProgramFiles64Folder' Name='PFiles'>
+                <Directory Id='APPLICATIONFOLDER' Name='GamePulse'>
+
+                    <Directory Id='Bin' Name='bin'>
+                        <Component Id='AgentBinary' Guid='F1B34534-06A8-45F6-B14D-AAF6DEDF06E1' Win64='yes'>
+                            <File
+                                Id='GamepulseAgentExe'
+                                Name='gamepulse-agent.exe'
+                                Source='$(var.CargoTargetBinDir)\gamepulse-agent.exe'
+                                KeyPath='yes'
+                                DiskId='1'/>
+                        </Component>
+                        <Component Id='PathEntry' Guid='EDE10EE8-4579-4E3D-AC7B-4C21446D6498' Win64='yes' KeyPath='yes'>
+                            <Environment
+                                Id='UpdatePath'
+                                Name='PATH'
+                                Value='[Bin]'
+                                Permanent='no'
+                                Part='last'
+                                Action='set'
+                                System='yes'/>
+                        </Component>
+                    </Directory>
+
+                    <Directory Id='ConfigDir' Name='config'>
+                        <Component Id='ConfigExample' Guid='EB29D189-3EC2-4494-BA97-38F8E5ED1448' Win64='yes'>
+                            <File
+                                Id='GamepulseTomlExample'
+                                Name='gamepulse.toml.example'
+                                Source='$(sys.SOURCEFILEDIR)..\..\packaging\config\gamepulse.toml.example'
+                                KeyPath='yes'
+                                DiskId='1'/>
+                        </Component>
+                    </Directory>
+
+                    <Directory Id='ProfilesDir' Name='profiles'>
+                        <Component Id='Profiles' Guid='B7785CFF-A5BC-4735-B348-663E91762685' Win64='yes'>
+                            <File
+                                Id='ProfileStarfield'
+                                Name='starfield.toml'
+                                Source='$(sys.SOURCEFILEDIR)..\..\profiles\starfield.toml'
+                                KeyPath='yes'
+                                DiskId='1'/>
+                            <File
+                                Id='ProfileCyberpunk'
+                                Name='cyberpunk-2077.toml'
+                                Source='$(sys.SOURCEFILEDIR)..\..\profiles\cyberpunk-2077.toml'
+                                DiskId='1'/>
+                            <File
+                                Id='ProfileBaldursGate3'
+                                Name='baldurs-gate-3.toml'
+                                Source='$(sys.SOURCEFILEDIR)..\..\profiles\baldurs-gate-3.toml'
+                                DiskId='1'/>
+                        </Component>
+                    </Directory>
+
+                </Directory>
+            </Directory>
+        </Directory>
+
+        <Feature Id='Main'
+                 Title='GamePulse'
+                 Description='GamePulse agent + bundled profiles'
+                 Level='1'
+                 ConfigurableDirectory='APPLICATIONFOLDER'
+                 AllowAdvertise='no'
+                 Display='expand'
+                 Absent='disallow'>
+            <ComponentRef Id='AgentBinary'/>
+            <ComponentRef Id='PathEntry'/>
+            <ComponentRef Id='ConfigExample'/>
+            <ComponentRef Id='Profiles'/>
+        </Feature>
+
+        <SetProperty Id='ARPINSTALLLOCATION' Value='[APPLICATIONFOLDER]' After='CostFinalize'/>
+        <Property Id='ARPHELPLINK' Value='https://github.com/MathewRJ/GamePulse'/>
+        <Property Id='ARPURLINFOABOUT' Value='https://github.com/MathewRJ/GamePulse'/>
+
+    </Product>
+
+</Wix>

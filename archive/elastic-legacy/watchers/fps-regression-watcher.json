@@ -1,0 +1,75 @@
+{
+  "_meta": {
+    "description": "Detects FPS regression: compares avg FPS for each game between this week and last week, grouped by driver/Proton version changes. Fires when a game's avg FPS drops >10% after an update."
+  },
+  "trigger": {
+    "schedule": { "interval": "6h" }
+  },
+  "input": {
+    "search": {
+      "request": {
+        "indices": ["gamepulse-sessions-*"],
+        "body": {
+          "size": 0,
+          "query": {
+            "range": {
+              "@timestamp": { "gte": "now-14d" }
+            }
+          },
+          "aggs": {
+            "by_game": {
+              "terms": { "field": "game.name", "size": 50 },
+              "aggs": {
+                "by_period": {
+                  "date_range": {
+                    "field": "@timestamp",
+                    "ranges": [
+                      { "key": "previous", "from": "now-14d", "to": "now-7d" },
+                      { "key": "current", "from": "now-7d", "to": "now" }
+                    ]
+                  },
+                  "aggs": {
+                    "by_driver": {
+                      "terms": { "field": "hardware.gpu.driver_version", "size": 10 },
+                      "aggs": {
+                        "avg_fps": {
+                          "avg": { "field": "fps_avg" }
+                        }
+                      }
+                    },
+                    "by_proton": {
+                      "terms": { "field": "compatibility.proton_version", "size": 10 },
+                      "aggs": {
+                        "avg_fps": {
+                          "avg": { "field": "fps_avg" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "condition": {
+    "script": {
+      "source": "return ctx.payload.aggregations.by_game.buckets.size() > 0;"
+    }
+  },
+  "actions": {
+    "log_regression": {
+      "logging": {
+        "text": "GamePulse regression check completed. Review community dashboard for per-game/driver FPS trends."
+      }
+    },
+    "index_regression_report": {
+      "index": {
+        "index": "gamepulse-events-regression",
+        "doc_id": "regression-report-{{ctx.execution_time}}"
+      }
+    }
+  }
+}

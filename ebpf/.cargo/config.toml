@@ -1,0 +1,12 @@
+[alias]
+xtask = "run --package xtask --"
+
+# bpf-linker must be installed: cargo install bpf-linker
+[target.bpfel-unknown-none]
+linker = "bpf-linker"
+rustflags = [
+    "-C", "opt-level=2",
+    "-C", "link-arg=--target=bpf",
+    "-C", "link-arg=-O2",
+    "-C", "link-arg=--btf",
+]

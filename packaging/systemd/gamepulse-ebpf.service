@@ -1,0 +1,16 @@
+[Unit]
+Description=GamePulse eBPF kernel daemon
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/gamepulse-ebpf --config /etc/gamepulse/gamepulse.toml --probe-path /usr/lib/gamepulse/gamepulse-ebpf-probes
+Restart=on-failure
+RestartSec=5
+# eBPF requires elevated capabilities
+AmbientCapabilities=CAP_BPF CAP_PERFMON CAP_SYS_ADMIN CAP_DAC_READ_SEARCH
+CapabilityBoundingSet=CAP_BPF CAP_PERFMON CAP_SYS_ADMIN CAP_DAC_READ_SEARCH
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
