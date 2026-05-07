@@ -187,6 +187,51 @@ Forks from `main` after Phase B lands. Targets air-gapped benchmarkers, reviewer
 
 ---
 
+## Phase G-ext — ebpf_thread Dashboard Panels
+
+Depends on Phase G. The `metrics-gamepulse.ebpf_thread-default` TSDB stream is live but unvisualized. These panels add per-thread scheduler drill-down — the "which thread caused this stutter?" answer that aggregate eBPF metrics cannot provide.
+
+| WP | Deliverable |
+|---|---|
+| G-ext.1 | Top threads by worst-case runqueue latency (bar chart, `MAX(runqueue_max_us) BY comm`) |
+| G-ext.2 | Thread runqueue latency heatmap (X=time, Y=comm, color=runqueue_avg_us) |
+| G-ext.3 | Top threads by migration count (per-thread time-series overlay) |
+| G-ext.4 | Thread rank distribution over time (stacked area, rank ≤ 5) |
+| G-ext.5 | Per-thread latency data table (min/avg/max/switch_count/migration_count, sortable) |
+| G-ext.6 | Migration vs latency scatter (X=migration_count, Y=runqueue_avg_us, grouped by comm) |
+
+Cross-stream correlation: join `ebpf` (aggregate) + `ebpf_thread` on `session.id` + time bucket to answer "when stutter_severity spikes, which thread drove it?" — add to Regression Lab dashboard. Author in Kibana UI, export NDJSON, mirror to both package repos (two-repo sync pattern).
+
+---
+
+## Phase I — Android Port
+
+Forks from `main` after Phase G closes. Android is the largest gaming platform by install base; this port covers mobile session telemetry (frame latency, thermal, battery drain).
+
+**Architecture notes:**
+- Rust `#[cfg(target_os)]` guards are already in place — adding an `android` module tree is scaffolding-only.
+- GamePulse sends directly to the ES bulk API (no Elastic Agent in the chain). Elastic Fleet is irrelevant on Android — there is no Elastic Agent for Android, and that is fine. The existing `elastic/integrations` package assets (data streams, ingest pipelines, dashboards) are fully compatible with Android-sourced data.
+- eBPF is **permanently out of scope** on Android: `BPF_PROG_LOAD` + `CAP_BPF` are restricted to system services under SELinux policy; `gpu_scheduler` tracepoints not exposed in AOSP.
+
+| WP | Deliverable | Complexity |
+|---|---|---|
+| I.1 | `android` module tree scaffolding, NDK cross-compile CI, `aarch64-linux-android` target | Trivial |
+| I.2 | CPU (`/proc/stat`), memory (`/proc/meminfo`), network (`/proc/net/dev`) collectors | Trivial |
+| I.3 | Power collector: battery/AC via Android `BatteryManager` Intent API (JNI) | Moderate |
+| I.4 | Thermal: Android Thermal HAL via JNI (replaces `/sys/class/hwmon`) | Moderate |
+| I.5 | Storage: `/proc/diskstats` fallback + file-descriptor monitoring | Moderate |
+| I.6 | Game detection: `ActivityManager.getRunningAppProcesses()` + `PackageManager` via JNI + package→game-name lookup table | Significant |
+| I.7 | Frame timing: Android `FrameTimingsListener` (JetPack) as eBPF replacement for frame latency | Significant |
+| I.8 | GPU metrics: vendor HAL integration (Qualcomm Adreno first); stub returning empty on unsupported devices | Significant |
+| I.9 | Audio xruns: rewrite using AAudio/OpenSL ES (no PipeWire/PulseAudio on Android) | Significant |
+| I.10 | Testing + validation on Android 12+ devices against top-10 game titles | — |
+
+**MVP scope for v1:** I.1–I.6 + I.7. Ship I.8 and I.9 as v2 with "known gap" documentation.
+
+**Estimated effort:** 6–12 weeks for functional-but-degraded port (no eBPF, GPU/audio limited).
+
+---
+
 ## Deferred
 
 - Windows eBPF equivalents (ETW deep telemetry)
