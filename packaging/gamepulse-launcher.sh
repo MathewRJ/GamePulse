@@ -134,6 +134,22 @@ ebpf_stop() {
         || true   # not fatal — may already be stopped or no sudo
 }
 
+# ── Agent binary resolution ────────────────────────────────────────────────────
+
+# Look next to this script first — the user-mode installer puts gamepulse and
+# gamepulse-agent in the same directory (~/.local/bin/). Gamescope / Gaming Mode
+# may not have ~/.local/bin on PATH, so we can't rely on PATH alone.
+resolve_agent_bin() {
+    _script_dir="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
+    if [ -x "$_script_dir/gamepulse-agent" ]; then
+        echo "$_script_dir/gamepulse-agent"
+    elif command -v gamepulse-agent >/dev/null 2>&1; then
+        command -v gamepulse-agent
+    else
+        echo ""
+    fi
+}
+
 # ── Subcommand: setup ──────────────────────────────────────────────────────────
 
 cmd_setup() {
@@ -306,18 +322,32 @@ cmd_run() {
         _die "Usage: gamepulse run <command> [args...]"
     fi
 
-    # Start services — die on agent failure, warn on eBPF failure.
-    cmd_start || exit 1
+    # Resolve the agent binary before starting anything.
+    AGENT_BIN="$(resolve_agent_bin)"
+    if [ -z "$AGENT_BIN" ]; then
+        _warn "gamepulse-agent not found — launching game without telemetry."
+        _info "Re-run the installer or add ~/.local/bin to PATH."
+        exec "$@"
+    fi
 
-    # Ensure services stop when the game exits (normal exit, crash, or signal).
-    # Redirect stop output to stderr so it doesn't interfere with game stdout.
-    trap 'cmd_stop >&2 2>/dev/null; trap - EXIT INT TERM' EXIT INT TERM
+    # Try systemd user service first (Desktop Mode / standard systemd sessions).
+    # Fall back to running the agent directly in the background — this is the
+    # path for Gamescope / Gaming Mode where DBUS_SESSION_BUS_ADDRESS is absent
+    # and systemctl --user fails. The game must not be blocked by agent startup.
+    if systemctl --user start "$AGENT_UNIT" >/dev/null 2>&1; then
+        wait_agent_active || true
+        trap 'systemctl --user stop "$AGENT_UNIT" >/dev/null 2>&1
+              trap - EXIT INT TERM' EXIT INT TERM
+    else
+        "$AGENT_BIN" &
+        _AGENT_PID=$!
+        trap 'kill "$_AGENT_PID" 2>/dev/null
+              trap - EXIT INT TERM' EXIT INT TERM
+    fi
 
     # Execute the game and capture its exit code.
     "$@"
     game_exit=$?
-
-    # Trap fires on EXIT to call cmd_stop.
     exit $game_exit
 }
 
