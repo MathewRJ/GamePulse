@@ -1,5 +1,9 @@
 #![no_std]
 #![no_main]
+// aya-ebpf helper safety varies across nightly versions — some treat
+// bpf_ktime_get_ns / bpf_get_current_pid_tgid as safe, others as unsafe.
+// Keep the unsafe{} wrappers and suppress the lint either way.
+#![allow(unused_unsafe)]
 
 // Silence the unused-import warning from aya-log-ebpf when no logging is active.
 #[allow(unused_imports)]

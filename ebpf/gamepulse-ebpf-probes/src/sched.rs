@@ -85,7 +85,7 @@ pub fn sched_wakeup(ctx: TracePointContext) -> u32 {
     if !is_game_tid(tid) {
         return 0;
     }
-    let ts = bpf_ktime_get_ns();
+    let ts = unsafe { bpf_ktime_get_ns() };
     let _ = WAKEUP_TS.insert(&tid, &ts, 0);
     0
 }
@@ -113,7 +113,7 @@ pub fn sched_switch(ctx: TracePointContext) -> u32 {
         return 0;
     }
 
-    let now = bpf_ktime_get_ns();
+    let now = unsafe { bpf_ktime_get_ns() };
 
     // Compute runqueue latency: time from wakeup to this schedule-in.
     let wait_ns = match unsafe { WAKEUP_TS.get(&next_tid) } {

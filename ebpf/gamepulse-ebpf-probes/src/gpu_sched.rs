@@ -69,7 +69,7 @@ pub fn drm_sched_job_queue(ctx: TracePointContext) -> u32 {
         Err(_) => return 1,
     };
 
-    let ts = bpf_ktime_get_ns();
+    let ts = unsafe { bpf_ktime_get_ns() };
     let _ = GPU_SCHED_TS.insert(&seqno, &ts, 0);
     0
 }
@@ -90,7 +90,7 @@ pub fn drm_sched_job_run(ctx: TracePointContext) -> u32 {
     };
     let _ = GPU_SCHED_TS.remove(&seqno);
 
-    let now = bpf_ktime_get_ns();
+    let now = unsafe { bpf_ktime_get_ns() };
     let latency_ns = now.saturating_sub(queue_ts);
 
     if let Some(mut entry) = GPU_SCHED_EVENTS.reserve::<GpuSchedEvent>(0) {

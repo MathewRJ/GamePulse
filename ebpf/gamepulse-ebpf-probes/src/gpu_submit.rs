@@ -52,7 +52,7 @@ pub struct GpuSubmitEvent {
 
 #[kprobe(function = "amdgpu_cs_ioctl")]
 pub fn amdgpu_cs_ioctl_entry(_ctx: ProbeContext) -> u32 {
-    let ts = bpf_ktime_get_ns();
+    let ts = unsafe { bpf_ktime_get_ns() };
 
     if let Some(mut entry) = GPU_SUBMIT_EVENTS.reserve::<GpuSubmitEvent>(0) {
         entry.write(GpuSubmitEvent {
