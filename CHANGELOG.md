@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+---
+
+## [0.1.7] — 2026-05-08
+
+### Added
+
+- **Launcher debug log** (`~/.local/share/gamepulse/launcher.log`): the launcher now writes timestamped entries for every key decision in `cmd_run` (agent binary resolved, systemctl outcome, PID captured, exec path taken). The log file persists across sessions and is readable in Desktop Mode after a Gaming Mode run — eliminating the "invisible crash" debugging problem. Set `GAMEPULSE_DEBUG=1` in Steam launch options (`GAMEPULSE_DEBUG=1 gamepulse run %command%`) to additionally capture a full shell trace (`set -x`) in the same file. Log rotates at 1 MB to `.old`.
+
+- **Unified installer with eBPF** (`install.sh`): the Linux release tarball now includes the `gamepulse-ebpf` daemon and `gamepulse-ebpf-probes` BPF blob built in CI (nightly Rust + `bpf-linker`). `install.sh` automatically installs the eBPF daemon to `/usr/local/bin/` and its system service when `sudo` is available — no separate AUR/yay step required. On SteamOS, the installer temporarily disables the read-only filesystem (`steamos-readonly disable`) and re-enables it after. If `sudo` is unavailable or the install fails, the script degrades gracefully and reports agent-only mode.
+
+- **eBPF build in CI** (`release.yml`): new `build-ebpf` job builds `gamepulse-ebpf-probes` (BPF target) and `gamepulse-ebpf` daemon using nightly Rust from the workspace `rust-toolchain.toml`. The eBPF binaries and a `/usr/local/`-based service file are bundled into the Linux tarball alongside the agent.
+
 ### Milestone D — Linux portable packaging (2026-04-27)
 
 - `/proc/<pid>/maps` DLL scan for Tier 2 settings auto-detection: detects graphics API

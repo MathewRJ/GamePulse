@@ -11,8 +11,8 @@ name: release
 #   Linux:   .deb (Debian/Ubuntu) · .rpm (Fedora/RHEL/openSUSE) · .pkg.tar.zst (Arch)
 #   Windows: .msi (cargo-wix → WiX Toolset 3, ships with windows-latest runners)
 #
-# eBPF probes are NOT included — they require nightly Rust + bpf-linker and are
-# shipped via AUR (gamepulse-git) which builds from source.
+# eBPF daemon + probes ARE included in the Linux tarball (build-ebpf job uses
+# nightly Rust + bpf-linker). install.sh installs them system-wide via sudo.
 
 on:
   push:
@@ -78,32 +78,96 @@ jobs:
           name: agent-binary-linux-x86_64
           path: target/release/gamepulse-agent
 
-  # ── 2a. Package Linux binary tarball (for install.sh / SteamOS) ─────────────
-  package-tarball:
-    name: package linux tarball
-    needs: [setup, build-linux]
+  # ── 1b. Build eBPF daemon + probes (Linux x86_64, nightly Rust) ─────────────
+  build-ebpf:
+    name: build ebpf daemon + probes
+    needs: setup
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download release binary
+      # rust-toolchain.toml in ebpf/ pins nightly + rust-src automatically.
+      # dtolnay/rust-toolchain reads rust-toolchain.toml when no toolchain is
+      # specified and the checkout contains one.
+      - name: Install nightly Rust (from ebpf/rust-toolchain.toml)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+          components: rust-src
+
+      - name: Add bpfel-unknown-none target
+        run: rustup target add bpfel-unknown-none --toolchain nightly
+
+      - name: Cache cargo registry + build artefacts (eBPF workspace)
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ebpf -> ebpf/target
+          key: ebpf-nightly
+
+      - name: Install bpf-linker
+        run: cargo install bpf-linker
+
+      - name: Build BPF probes + daemon
+        run: |
+          cd ebpf
+          cargo xtask build-all --release
+
+      - name: Stage eBPF binaries (flat, no nested paths in artifact)
+        run: |
+          mkdir -p ebpf-artifacts
+          cp ebpf/target/release/gamepulse-ebpf                             ebpf-artifacts/
+          cp ebpf/target/bpfel-unknown-none/release/gamepulse-ebpf-probes   ebpf-artifacts/
+
+      - name: Upload eBPF artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ebpf-binaries-linux-x86_64
+          path: ebpf-artifacts/
+
+  # ── 2a. Package Linux binary tarball (for install.sh / SteamOS) ─────────────
+  package-tarball:
+    name: package linux tarball
+    needs: [setup, build-linux, build-ebpf]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download agent binary
         uses: actions/download-artifact@v4
         with:
           name: agent-binary-linux-x86_64
           path: target/release/
 
-      - name: Mark binary executable
-        run: chmod +x target/release/gamepulse-agent
+      - name: Download eBPF binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: ebpf-binaries-linux-x86_64
+          path: target/ebpf/
+
+      - name: Mark binaries executable
+        run: |
+          chmod +x target/release/gamepulse-agent
+          chmod +x target/ebpf/gamepulse-ebpf
 
       - name: Build tarball
         run: |
           VERSION="${{ needs.setup.outputs.version }}"
           DIR="gamepulse-${VERSION}-linux-x86_64"
           mkdir -p "dist-tar/${DIR}"
+
+          # Agent + launcher + user service
           cp target/release/gamepulse-agent                            "dist-tar/${DIR}/gamepulse-agent"
           cp packaging/gamepulse-launcher.sh                           "dist-tar/${DIR}/gamepulse"
           cp packaging/systemd/gamepulse-agent.user-install.service    "dist-tar/${DIR}/gamepulse-agent.service"
-          chmod +x "dist-tar/${DIR}/gamepulse-agent" "dist-tar/${DIR}/gamepulse"
+
+          # eBPF daemon + probes + system service (installed by install.sh with sudo)
+          cp target/ebpf/gamepulse-ebpf                                "dist-tar/${DIR}/gamepulse-ebpf"
+          cp target/ebpf/gamepulse-ebpf-probes                         "dist-tar/${DIR}/gamepulse-ebpf-probes"
+          cp packaging/systemd/gamepulse-ebpf.user-install.service     "dist-tar/${DIR}/gamepulse-ebpf.service"
+
+          chmod +x "dist-tar/${DIR}/gamepulse-agent" \
+                   "dist-tar/${DIR}/gamepulse" \
+                   "dist-tar/${DIR}/gamepulse-ebpf"
           cd dist-tar
           tar -czf "${DIR}.tar.gz" "${DIR}/"
 
@@ -315,7 +379,7 @@ jobs:
   # build + package jobs run, but no release is published.
   release:
     name: create github release
-    needs: [setup, package-tarball, package-deb, package-rpm, package-arch, package-windows]
+    needs: [setup, build-ebpf, package-tarball, package-deb, package-rpm, package-arch, package-windows]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:

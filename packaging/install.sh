@@ -119,6 +119,56 @@ else
     info "systemctl not found — skipping service install (non-systemd system)"
 fi
 
+# ── Install eBPF daemon (optional, requires sudo) ─────────────────────────────
+# The eBPF daemon captures kernel-level scheduler, I/O, and GPU fence events.
+# It is only present in the tarball when built with nightly Rust + bpf-linker.
+# If absent, the agent runs without kernel-level telemetry — all other streams
+# (CPU, GPU, memory, frame timing, etc.) are unaffected.
+
+EBPF_BIN="$TMP/gamepulse-ebpf"
+EBPF_PROBES="$TMP/gamepulse-ebpf-probes"
+
+if [ -f "$EBPF_BIN" ]; then
+    if ! command -v sudo >/dev/null 2>&1; then
+        info "eBPF daemon found but sudo not available — skipping system install."
+        info "To install manually: sudo cp $EBPF_BIN /usr/local/bin/gamepulse-ebpf"
+    else
+        info "Installing eBPF daemon (kernel tracing — requires sudo)..."
+
+        # On SteamOS the root filesystem is read-only; disable it briefly.
+        _steamos_ro=0
+        if [ "$IS_STEAMOS" = "1" ] && command -v steamos-readonly >/dev/null 2>&1; then
+            sudo steamos-readonly disable 2>/dev/null && _steamos_ro=1
+        fi
+
+        if sudo install -m 755 "$EBPF_BIN" /usr/local/bin/gamepulse-ebpf 2>/dev/null; then
+            ok "eBPF daemon installed to /usr/local/bin/gamepulse-ebpf"
+
+            # Install BPF probes blob alongside the daemon.
+            if [ -f "$EBPF_PROBES" ]; then
+                sudo mkdir -p /usr/local/lib/gamepulse
+                sudo install -m 644 "$EBPF_PROBES" /usr/local/lib/gamepulse/gamepulse-ebpf-probes
+            fi
+
+            # Install system service (paths match /usr/local/ install above).
+            if [ -f "$TMP/gamepulse-ebpf.service" ] && command -v systemctl >/dev/null 2>&1; then
+                sudo install -m 644 "$TMP/gamepulse-ebpf.service" /etc/systemd/system/gamepulse-ebpf.service
+                sudo systemctl daemon-reload 2>/dev/null || true
+                ok "eBPF system service installed (/etc/systemd/system/gamepulse-ebpf.service)"
+                info "Enable at boot with: sudo systemctl enable --now gamepulse-ebpf"
+            fi
+        else
+            info "sudo install failed — eBPF skipped. Re-run with sudo access to enable kernel tracing."
+        fi
+
+        # Re-enable SteamOS read-only if we disabled it.
+        [ "$_steamos_ro" = "1" ] && sudo steamos-readonly enable 2>/dev/null || true
+    fi
+else
+    info "eBPF daemon not included in this release — kernel tracing unavailable."
+    info "Agent-only mode: FPS, CPU, GPU, memory, frame timing streams are unaffected."
+fi
+
 # ── PATH setup ────────────────────────────────────────────────────────────────
 
 # Check if ~/.local/bin is already in PATH

@@ -20,6 +20,33 @@ EBPF_UNIT="gamepulse-ebpf"
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/gamepulse"
 CONFIG_FILE="$CONFIG_DIR/gamepulse.toml"
 
+# ── Launcher debug log ─────────────────────────────────────────────────────────
+# _llog always writes timestamped entries to a persistent file so Gaming Mode
+# decisions (invisible at launch time) are readable afterwards in Desktop Mode:
+#   cat ~/.local/share/gamepulse/launcher.log
+#
+# Set GAMEPULSE_DEBUG=1 in Steam launch options to also capture the full shell
+# trace (set -x) in the same file — every branch, every command:
+#   GAMEPULSE_DEBUG=1 gamepulse run %command%
+
+_LOG_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/gamepulse"
+_LOG_FILE="$_LOG_DIR/launcher.log"
+_llog() { printf '%s %s\n' "$(date '+%Y-%m-%dT%H:%M:%S')" "$*" >> "$_LOG_FILE" 2>/dev/null || true; }
+
+mkdir -p "$_LOG_DIR" 2>/dev/null || true
+# Rotate log at 1 MB so it doesn't grow unbounded.
+if [ -f "$_LOG_FILE" ]; then
+    _lsz=$(wc -c < "$_LOG_FILE" 2>/dev/null || echo 0)
+    [ "${_lsz:-0}" -gt 1048576 ] && mv "$_LOG_FILE" "${_LOG_FILE}.old" 2>/dev/null || true
+fi
+
+if [ "${GAMEPULSE_DEBUG:-0}" = "1" ]; then
+    # Redirect stderr to the log file before set -x so the shell trace lands there.
+    # The game process will inherit fd 2 → its stderr also goes to the log in this mode.
+    exec 2>>"$_LOG_FILE"
+    set -x
+fi
+
 # ── Output helpers ─────────────────────────────────────────────────────────────
 # Use colors only when stdout is a terminal and not running under systemd.
 
@@ -322,33 +349,44 @@ cmd_run() {
         _die "Usage: gamepulse run <command> [args...]"
     fi
 
+    _llog "cmd_run: command=$*"
+
     # Resolve the agent binary before starting anything.
     AGENT_BIN="$(resolve_agent_bin)"
+    _llog "cmd_run: AGENT_BIN='$AGENT_BIN'"
     if [ -z "$AGENT_BIN" ]; then
         _warn "gamepulse-agent not found — launching game without telemetry."
         _info "Re-run the installer or add ~/.local/bin to PATH."
+        _llog "cmd_run: agent not found — exec-ing game directly without telemetry"
         exec "$@"
     fi
 
     # Start the agent — systemd if reachable, direct binary otherwise.
     # Reset any prior FAILED state so the unit can always be started fresh.
     systemctl --user reset-failed "$AGENT_UNIT" 2>/dev/null || true
+    _llog "cmd_run: reset-failed $AGENT_UNIT"
 
     # Capture the launcher PID before exec replaces this shell with the game.
     # In POSIX sh, $$ in a subshell still refers to the parent shell's PID,
     # so the watcher correctly monitors the game process after exec.
     _gp_pid=$$
+    _llog "cmd_run: launcher PID=$_gp_pid (becomes game PID after exec)"
 
     if systemctl --user start "$AGENT_UNIT" >/dev/null 2>&1; then
+        _llog "cmd_run: systemctl --user start $AGENT_UNIT succeeded (service mode)"
         # Background watcher: stop the service when the game exits.
         # /proc/<pid> vanishes atomically on process exit — no PID-reuse race.
         ( while [ -d "/proc/$_gp_pid" ]; do sleep 1; done
+          _llog "cmd_run: game PID $_gp_pid exited — stopping $AGENT_UNIT"
           systemctl --user stop "$AGENT_UNIT" 2>/dev/null || true
         ) &
     else
+        _llog "cmd_run: systemctl start failed (DBUS absent? unit missing?) — running agent directly"
         "$AGENT_BIN" &
         _agent_pid=$!
+        _llog "cmd_run: direct agent started PID=$_agent_pid"
         ( while [ -d "/proc/$_gp_pid" ]; do sleep 1; done
+          _llog "cmd_run: game PID $_gp_pid exited — kill -TERM agent $_agent_pid"
           kill -TERM "$_agent_pid" 2>/dev/null || true
         ) &
     fi
@@ -357,6 +395,7 @@ cmd_run() {
     # tracks the correct PID for cgroup assignment, GPU priority, and display
     # management. Running the game as a subprocess (not exec) puts it in the
     # wrong place in the process tree and breaks Gaming Mode (Gamescope).
+    _llog "cmd_run: exec-ing game (this shell becomes the game process): $*"
     exec "$@"
 }
 
@@ -387,6 +426,7 @@ EOF
 # ── Dispatch ───────────────────────────────────────────────────────────────────
 
 subcmd="${1:-}"
+_llog "launch: $0 $*"
 shift 2>/dev/null || true
 
 case "$subcmd" in
