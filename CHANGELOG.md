@@ -55,6 +55,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ---
 
+## [0.1.6] — 2026-05-08
+
+### Fixed
+
+- **Gamescope / Gaming Mode — wrong process tree (launcher)**: `cmd_run` was running the game as a *subprocess* of the launcher shell (`"$@"`), making it a grandchild of Steam. Gamescope requires the game to be the *direct* child of Steam to assign the correct cgroup and display priority; running it one level deeper caused the session to crash or be killed. Fixed by replacing the trap + subprocess + exit pattern with a background PID watcher + `exec "$@"` so the launcher shell is replaced by the game process in-place. The watcher monitors `/proc/<launcher_pid>` (which after exec is the game pid) and stops the agent service when the game exits.
+
+---
+
 ## [0.1.5] — 2026-05-08
 
 ### Fixed

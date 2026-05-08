@@ -330,29 +330,34 @@ cmd_run() {
         exec "$@"
     fi
 
-    # Try systemd user service first (Desktop Mode / standard systemd sessions).
-    # Reset any FAILED state first — the agent may have hit the restart rate limit.
-    # Fall back to running the agent directly in the background — this is the
-    # path for Gamescope / Gaming Mode where DBUS_SESSION_BUS_ADDRESS is absent
-    # and systemctl --user fails. The game must not be blocked by agent startup.
+    # Start the agent — systemd if reachable, direct binary otherwise.
+    # Reset any prior FAILED state so the unit can always be started fresh.
     systemctl --user reset-failed "$AGENT_UNIT" 2>/dev/null || true
+
+    # Capture the launcher PID before exec replaces this shell with the game.
+    # In POSIX sh, $$ in a subshell still refers to the parent shell's PID,
+    # so the watcher correctly monitors the game process after exec.
+    _gp_pid=$$
+
     if systemctl --user start "$AGENT_UNIT" >/dev/null 2>&1; then
-        # Do not wait for the agent to become active — the game must launch
-        # immediately. In Gamescope, a delay here can trigger the session timeout.
-        # The agent detects running games by scanning /proc; it will catch up.
-        trap 'systemctl --user stop "$AGENT_UNIT" >/dev/null 2>&1
-              trap - EXIT INT TERM' EXIT INT TERM
+        # Background watcher: stop the service when the game exits.
+        # /proc/<pid> vanishes atomically on process exit — no PID-reuse race.
+        ( while [ -d "/proc/$_gp_pid" ]; do sleep 1; done
+          systemctl --user stop "$AGENT_UNIT" 2>/dev/null || true
+        ) &
     else
         "$AGENT_BIN" &
-        _AGENT_PID=$!
-        trap 'kill "$_AGENT_PID" 2>/dev/null
-              trap - EXIT INT TERM' EXIT INT TERM
+        _agent_pid=$!
+        ( while [ -d "/proc/$_gp_pid" ]; do sleep 1; done
+          kill -TERM "$_agent_pid" 2>/dev/null || true
+        ) &
     fi
 
-    # Execute the game and capture its exit code.
-    "$@"
-    game_exit=$?
-    exit $game_exit
+    # exec replaces the launcher shell with the game process so Steam/Gamescope
+    # tracks the correct PID for cgroup assignment, GPU priority, and display
+    # management. Running the game as a subprocess (not exec) puts it in the
+    # wrong place in the process tree and breaks Gaming Mode (Gamescope).
+    exec "$@"
 }
 
 # ── Usage ──────────────────────────────────────────────────────────────────────
