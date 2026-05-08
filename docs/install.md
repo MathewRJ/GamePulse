@@ -3,31 +3,41 @@
 ## Quick start
 
 ```bash
-# 1. Install the agent (AUR)
-yay -S gamepulse
+# Arch Linux / CachyOS / Manjaro
+yay -S gamepulse-git
 
-# 2. First-run setup — prompts for ES endpoint + API key
+# Other Linux (one-liner)
+curl -sSfL https://mathewrj.github.io/GamePulse-Integration/install.sh | sh
+
+# Windows
+winget install MathewRJ.GamePulse
+```
+
+Then:
+
+```bash
+# Prompts for your Elasticsearch endpoint + API key
 gamepulse setup
 
-# 3. Add to Steam launch options for any game:
+# Add to Steam launch options for any game:
 gamepulse run %command%
 ```
 
-That's it. Data starts flowing to Elasticsearch the next time you launch a game.
+Data starts flowing to Elasticsearch the next time you launch a game.
 
 ---
 
-## Choosing a backend: Elastic Cloud vs offline stack
+## Choosing a backend
 
-| | Elastic Cloud Serverless | Self-hosted / offline |
+| | Elastic Cloud | Self-hosted (local) |
 |---|---|---|
-| Setup effort | Minutes | Hours |
-| Cost | Free tier (8 GB) for personal use | Hardware + time |
-| Kibana | Included | Install separately |
-| Offline gaming PC | Requires internet | Works fully offline |
-| Recommended for | Getting started, sharing data | Air-gapped setups |
+| Setup effort | Minutes | 15–30 min |
+| Cost | Free trial / free tier | Free (open source) |
+| Kibana | Included | Install separately (same version) |
+| Works offline | No (requires internet) | Yes |
+| Recommended for | Getting started fast | Privacy, air-gapped, no cloud |
 
-For the offline stack, the offline branch (not yet forked from main) will bundle Elasticsearch + Kibana natively. Until that branch ships, use Elastic Cloud.
+Both options are free. Elastic Cloud is the quickest path. Self-hosted gives you full control and works with no internet connection after setup.
 
 ---
 
@@ -57,23 +67,101 @@ This prompts for your ES endpoint and API key, verifies connectivity, and writes
 
 ## Self-hosted Elasticsearch
 
-Any Elasticsearch 8.13+ instance works. Ensure:
-- At least 2 GB RAM for ES
-- TLS configured (or `tls_skip_verify = true` in `gamepulse.toml` for local dev)
-- Kibana accessible for dashboards
+Download and install guide: [elastic.co/downloads/elasticsearch](https://www.elastic.co/downloads/elasticsearch) / [Installing Elasticsearch](https://www.elastic.co/docs/deploy-manage/deploy/self-managed/installing-elasticsearch)
 
-Deploy the integration package:
+Requirements: Elasticsearch 8.13+, at least 2 GB RAM, Kibana (same version) for dashboards.
+
+### 1. Start Elasticsearch
+
+**tar.gz (Linux):**
 
 ```bash
-# Via the Fleet API (Kibana 8.7+)
-curl -X POST "https://your-kibana:5601/api/fleet/epm/packages" \
+tar -xzf elasticsearch-*.tar.gz
+cd elasticsearch-*/
+./bin/elasticsearch
+```
+
+**Docker:**
+
+```bash
+docker run -d --name elasticsearch \
+  -p 9200:9200 -p 9300:9300 \
+  -e "discovery.type=single-node" \
+  -e "xpack.security.enabled=true" \
+  -e "ELASTIC_PASSWORD=changeme" \
+  docker.elastic.co/elasticsearch/elasticsearch:8.18.0
+```
+
+On first start, Elasticsearch generates a `elastic` superuser password and a Kibana enrollment token — save both. It listens on `https://localhost:9200` (TLS is enabled by default since ES 8.0).
+
+### 2. Create a GamePulse API key
+
+```bash
+curl -u elastic:<your-password> \
+  -X POST "https://localhost:9200/_security/api_key" \
+  -H "Content-Type: application/json" \
+  --cacert elasticsearch-*/config/certs/http_ca.crt \
+  -d '{
+    "name": "gamepulse",
+    "role_descriptors": {
+      "gamepulse_writer": {
+        "cluster": ["monitor"],
+        "indices": [{
+          "names": ["metrics-gamepulse.*", "logs-gamepulse.*"],
+          "privileges": ["auto_configure", "create_doc", "create_index"]
+        }]
+      }
+    }
+  }'
+```
+
+The response includes an `encoded` field — that base64 string is your API key.
+
+### 3. Run `gamepulse setup`
+
+```bash
+gamepulse setup
+# Elasticsearch endpoint: https://localhost:9200
+# API key: <the encoded value from above>
+```
+
+If you see a TLS certificate error with a locally-issued cert, add this to `~/.config/gamepulse/gamepulse.toml`:
+
+```toml
+[elasticsearch]
+tls_skip_verify = true
+```
+
+This is fine for a local dev machine. Do not use it for shared or remote instances.
+
+### 4. Install Kibana (for dashboards)
+
+Download Kibana from [elastic.co/downloads/kibana](https://www.elastic.co/downloads/kibana) — must be the same version as Elasticsearch.
+
+```bash
+tar -xzf kibana-*.tar.gz
+cd kibana-*/
+./bin/kibana
+# When prompted, paste the enrollment token printed by Elasticsearch on first start
+```
+
+Kibana listens on `http://localhost:5601` by default. Log in as `elastic` with the password from step 1.
+
+### 5. Install the GamePulse integration package
+
+Once Kibana is running, install the integration package via the Fleet API:
+
+```bash
+curl -X POST "https://localhost:5601/api/fleet/epm/packages" \
+  -u elastic:<your-password> \
   -H "kbn-xsrf: true" \
-  -H "Authorization: ApiKey YOUR_API_KEY" \
   -H "Content-Type: application/zip" \
   --data-binary @gamepulse-0.1.0.zip
 ```
 
-Or use `elastic-package stack up` from the repo root to start a local 8.13 stack with the package pre-loaded.
+Or navigate to Kibana → Fleet → Integrations → search "GamePulse" if the package is available in the registry.
+
+> For contributors: `elastic-package stack up` from the repo root starts a local stack with the package pre-loaded automatically.
 
 ---
 
@@ -82,14 +170,14 @@ Or use `elastic-package stack up` from the repo root to start a local 8.13 stack
 ### Arch Linux / CachyOS / Manjaro (AUR)
 
 ```bash
-yay -S gamepulse
+yay -S gamepulse-git
 ```
 
 Or manually:
 
 ```bash
-git clone https://aur.archlinux.org/gamepulse.git
-cd gamepulse
+git clone https://aur.archlinux.org/gamepulse-git.git
+cd gamepulse-git
 makepkg -si
 ```
 

@@ -1,6 +1,6 @@
 # GamePulse
 
-GamePulse is a gaming performance telemetry platform. A lightweight Rust agent collects FPS, frame times, GPU/CPU temperatures, storage I/O, memory pressure, and more from Linux gaming PCs and ships them to Elasticsearch for analysis in Kibana. Windows support is in active development (Phases B–C). The legacy Python reference implementation (`collector/`) remains for debugging and field validation.
+GamePulse is a gaming performance telemetry platform. A lightweight Rust agent collects FPS, frame times, GPU/CPU temperatures, storage I/O, memory pressure, and more from Linux gaming PCs and ships them to Elasticsearch for analysis in Kibana. Windows support is available (Phases B–C complete). The legacy Python reference implementation (`collector/`) remains for debugging and field validation.
 
 ---
 
@@ -19,11 +19,30 @@ GamePulse ships structured telemetry to Elasticsearch, enabling cross-session, c
 
 ## Quick start
 
-```bash
-# Arch Linux / CachyOS / Manjaro
-yay -S gamepulse
+### Arch Linux / CachyOS / Manjaro
 
-# First-run setup (prompts for Elasticsearch endpoint + API key)
+```bash
+yay -S gamepulse-git
+```
+
+### Other Linux (one-liner)
+
+```bash
+curl -sSfL https://mathewrj.github.io/GamePulse-Integration/install.sh | sh
+```
+
+### Windows
+
+```powershell
+winget install MathewRJ.GamePulse
+```
+
+Or download the MSI from the [Releases page](https://github.com/MathewRJ/GamePulse/releases).
+
+### First run
+
+```bash
+# Prompts for your Elasticsearch endpoint + API key
 gamepulse setup
 
 # Add to Steam launch options for any game:
@@ -34,9 +53,76 @@ Data starts flowing to Elasticsearch the next time you launch a game through Ste
 
 ---
 
+## Connecting to Elasticsearch
+
+GamePulse requires an Elasticsearch endpoint. You have two options:
+
+### Option A — Elastic Cloud (easiest, free tier available)
+
+Sign up at [cloud.elastic.co](https://cloud.elastic.co/). The free trial gives you a fully managed deployment with Kibana included. After creating a deployment:
+
+1. Note your **Elasticsearch endpoint** (shown on the deployment overview page)
+2. In Kibana → Stack Management → API Keys, create a key with `auto_configure` + `create_doc` + `create_index` on `metrics-gamepulse.*` and `logs-gamepulse.*`
+3. Run `gamepulse setup` and enter the endpoint and API key when prompted
+
+### Option B — Local Elasticsearch (free, runs on your own machine)
+
+Elasticsearch is free to self-host. Download the latest release from:
+
+- **Download:** [elastic.co/downloads/elasticsearch](https://www.elastic.co/downloads/elasticsearch)
+- **Install guide:** [Installing Elasticsearch](https://www.elastic.co/docs/deploy-manage/deploy/self-managed/installing-elasticsearch)
+
+Quick setup on Linux (tar.gz):
+
+```bash
+# Extract and start
+tar -xzf elasticsearch-*.tar.gz
+cd elasticsearch-*/
+./bin/elasticsearch
+```
+
+On first start, Elasticsearch prints a generated `elastic` superuser password and an enrollment token — save both. It listens on `https://localhost:9200` by default (TLS enabled since ES 8.0).
+
+Create an API key for GamePulse (run this in a new terminal):
+
+```bash
+curl -u elastic:<your-generated-password> \
+  -X POST "https://localhost:9200/_security/api_key" \
+  -H "Content-Type: application/json" \
+  --cacert elasticsearch-*/config/certs/http_ca.crt \
+  -d '{
+    "name": "gamepulse",
+    "role_descriptors": {
+      "gamepulse_writer": {
+        "cluster": ["monitor"],
+        "indices": [{
+          "names": ["metrics-gamepulse.*", "logs-gamepulse.*"],
+          "privileges": ["auto_configure", "create_doc", "create_index"]
+        }]
+      }
+    }
+  }'
+```
+
+Then run setup:
+
+```bash
+gamepulse setup
+# Endpoint: https://localhost:9200
+# API key: <the encoded value from the curl output above>
+```
+
+If you get a TLS error with a self-signed cert, add `tls_skip_verify = true` to `~/.config/gamepulse/gamepulse.toml` (fine for local dev, not for shared instances).
+
+For Kibana, download it separately from [elastic.co/downloads/kibana](https://www.elastic.co/downloads/kibana) and enroll it using the enrollment token printed at Elasticsearch startup. Both need to be the same version.
+
+See [`docs/install.md`](docs/install.md) for the full installation guide including package managers (.deb/.rpm), systemd setup, and the Fleet API integration package install.
+
+---
+
 ## What's working today
 
-The Rust production agent (`gamepulse-agent`) is Linux-complete and Elasticsearch-verified — a live 40-minute Starfield session confirmed all 8 metric streams (CPU, GPU, memory, storage, network, audio, power, frame) shipping correctly. The eBPF daemon (`gamepulse-ebpf`, Sprints 1–3) is ES-confirmed for kernel-level scheduler, I/O, GPU fence, futex, IRQ, and VFS probes. Seven Kibana dashboards are built and tested against Elastic Cloud Serverless. Windows collectors are in progress (Phase C); the AUR package is available now.
+The Rust production agent (`gamepulse-agent`) is Linux-complete and Elasticsearch-verified — a live 40-minute Starfield session confirmed all 8 metric streams (CPU, GPU, memory, storage, network, audio, power, frame) shipping correctly. The eBPF daemon (`gamepulse-ebpf`, Sprints 1–3) is ES-confirmed for kernel-level scheduler, I/O, GPU fence, futex, IRQ, and VFS probes. Windows collectors are implemented for all 8 streams (Phases B–C complete, some platform gaps documented in `docs/STATUS.md`). Seven Kibana dashboards are built and tested against Elastic Cloud Serverless. An integration package submission is in progress at [elastic/integrations#18878](https://github.com/elastic/integrations/pull/18878).
 
 ---
 
@@ -48,7 +134,7 @@ See [`docs/STATUS.md`](docs/STATUS.md) for current state and [`docs/ROADMAP.md`]
 
 ## Documentation
 
-- [`docs/install.md`](docs/install.md) — installation guide (Elastic Cloud setup, AUR, .deb/.rpm, building from source)
+- [`docs/install.md`](docs/install.md) — full installation guide (Elastic Cloud, local self-hosted, AUR, .deb/.rpm, building from source)
 - [`docs/configuration.md`](docs/configuration.md) — full configuration reference
 - [`docs/dashboards.md`](docs/dashboards.md) — dashboard build guide and NDJSON reference
 - [`docs/steam-setup.md`](docs/steam-setup.md) — Steam launch options setup
