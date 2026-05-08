@@ -9,21 +9,12 @@ GamePulse is optimised for the Steam Deck. It automatically detects the device m
 Switch to Desktop Mode, open Konsole, and run:
 
 ```bash
-curl -sSL https://install.gamepulse.dev | bash
+curl -sSfL https://mathewrj.github.io/GamePulse-Integration/install.sh | sh
 ```
 
-Or build from source:
-
-```bash
-# Install Rust (persists across updates if installed to ~/.cargo)
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source ~/.cargo/env
-
-git clone https://github.com/gamepulse/agent.git
-cd agent
-make release
-make install-user
-```
+This installs `gamepulse-agent` and the `gamepulse` launcher to `~/.local/bin/` — no root
+required. Because `~/.local/` lives on the persistent home partition, **the install survives
+SteamOS updates** without any action on your part.
 
 ### Configuration
 

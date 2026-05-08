@@ -1,0 +1,15 @@
+[Unit]
+Description=GamePulse metrics agent (user install)
+After=network.target
+
+[Service]
+Type=simple
+# %h expands to the user's home directory at activation time — safe across all users.
+# Config search order: ~/.config/gamepulse/gamepulse.toml then /etc/gamepulse/gamepulse.toml
+ExecStart=%h/.local/bin/gamepulse-agent
+Restart=on-failure
+RestartSec=5
+Environment=GAMEPULSE_LOG=info
+
+[Install]
+WantedBy=default.target
