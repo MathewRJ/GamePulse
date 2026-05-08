@@ -88,10 +88,10 @@ jobs:
 
       # rust-toolchain.toml in ebpf/ pins nightly to a specific date — let it
       # control the toolchain so CI always uses the same version as local builds.
-      - name: Install Rust (pinned nightly from ebpf/rust-toolchain.toml)
+      - name: Install Rust nightly + rust-src (for build-std)
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: nightly-2025-04-01
+          toolchain: nightly
           components: rust-src
 
       - name: Cache cargo registry + build artefacts (eBPF workspace)
