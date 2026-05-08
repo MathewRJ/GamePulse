@@ -95,9 +95,6 @@ jobs:
           toolchain: nightly
           components: rust-src
 
-      - name: Add bpfel-unknown-none target
-        run: rustup target add bpfel-unknown-none --toolchain nightly
-
       - name: Cache cargo registry + build artefacts (eBPF workspace)
         uses: Swatinem/rust-cache@v2
         with:
