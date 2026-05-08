@@ -101,7 +101,7 @@ jobs:
           key: ebpf-nightly
 
       - name: Install bpf-linker
-        run: cargo install bpf-linker
+        run: cargo install bpf-linker --locked
 
       - name: Build BPF probes + daemon
         run: |
