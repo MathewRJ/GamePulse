@@ -63,12 +63,14 @@ fn encode_base64(input: &[u8]) -> String {
     out
 }
 
-/// GET the ES endpoint root. Returns Ok(()) on HTTP 200, Err otherwise.
-/// Logs the cluster version string if present.
+/// GET /_cluster/health to verify connectivity. Returns Ok(()) on HTTP 2xx/4xx, Err on
+/// network failure. Uses the same endpoint as `gamepulse setup` so the API key
+/// privileges required are identical (cluster:monitor/health, not cluster:monitor/main).
 pub async fn ping(config: &Config) -> Result<()> {
     let client = build_client()?;
     let endpoint = config.elasticsearch.endpoint.trim_end_matches('/');
-    let mut req = client.get(endpoint);
+    let url = format!("{}/_cluster/health", endpoint);
+    let mut req = client.get(&url);
     if let Some(auth) = auth_header(config) {
         req = req.header("Authorization", auth);
     }
@@ -78,7 +80,9 @@ pub async fn ping(config: &Config) -> Result<()> {
         .with_context(|| format!("connecting to Elasticsearch at {}", endpoint))?;
 
     let status = resp.status();
-    if !status.is_success() {
+    // 401 = wrong key (endpoint alive). 403 = key exists but missing privilege.
+    // Only treat network-level failures as fatal; auth issues surface at bulk time.
+    if status.is_server_error() {
         let body = resp.text().await.unwrap_or_default();
         anyhow::bail!(
             "ES ping returned {}: {}",
@@ -87,15 +91,12 @@ pub async fn ping(config: &Config) -> Result<()> {
         );
     }
 
-    let body: Value = resp.json().await.context("parsing ES ping response")?;
-    if let Some(version) = body
-        .get("version")
-        .and_then(|v| v.get("number"))
-        .and_then(|n| n.as_str())
-    {
-        info!("Elasticsearch reachable — version {}", version);
+    if status.is_success() {
+        let body: Value = resp.json().await.unwrap_or_default();
+        let cluster_status = body.get("status").and_then(|s| s.as_str()).unwrap_or("unknown");
+        info!("Elasticsearch reachable — cluster status: {}", cluster_status);
     } else {
-        info!("Elasticsearch reachable");
+        info!("Elasticsearch reachable (HTTP {})", status);
     }
     Ok(())
 }
