@@ -331,11 +331,15 @@ cmd_run() {
     fi
 
     # Try systemd user service first (Desktop Mode / standard systemd sessions).
+    # Reset any FAILED state first — the agent may have hit the restart rate limit.
     # Fall back to running the agent directly in the background — this is the
     # path for Gamescope / Gaming Mode where DBUS_SESSION_BUS_ADDRESS is absent
     # and systemctl --user fails. The game must not be blocked by agent startup.
+    systemctl --user reset-failed "$AGENT_UNIT" 2>/dev/null || true
     if systemctl --user start "$AGENT_UNIT" >/dev/null 2>&1; then
-        wait_agent_active || true
+        # Do not wait for the agent to become active — the game must launch
+        # immediately. In Gamescope, a delay here can trigger the session timeout.
+        # The agent detects running games by scanning /proc; it will catch up.
         trap 'systemctl --user stop "$AGENT_UNIT" >/dev/null 2>&1
               trap - EXIT INT TERM' EXIT INT TERM
     else

@@ -55,6 +55,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ---
 
+## [0.1.5] — 2026-05-08
+
+### Fixed
+
+- **Gamescope / Gaming Mode crash (launcher)**: `systemctl --user reset-failed` is now called before `start` in `cmd_run` so a FAILED unit (from a prior crash loop hitting the restart rate limit) is properly reset instead of silently failing to start. The `wait_agent_active` poll that previously blocked game launch for up to 10 seconds is removed — the agent detects already-running games by scanning `/proc`, so the game launches immediately regardless of agent initialisation state. This prevents Gamescope session-launch timeouts from killing the game before it renders.
+
+---
+
+## [0.1.4] — 2026-05-08
+
+### Fixed
+
+- **Gamescope / Gaming Mode (launcher)**: `cmd_run` now falls back to running `gamepulse-agent` directly in the background when `systemctl --user` fails (DBUS absent in Gamescope). Previously the launcher exited, preventing the game from launching. The agent binary is resolved relative to the launcher's own directory so `~/.local/bin` does not need to be on PATH in the gamescope session.
+
+---
+
+## [0.1.3] — 2026-05-08
+
+### Fixed
+
+- **Elasticsearch 403 on startup**: Ping endpoint changed from `GET /` (requires `cluster:monitor/main`) to `GET /_cluster/health` (requires `cluster:monitor/health`). HTTP 4xx responses from the ping are now non-fatal — the agent continues and ships data even if the health check returns 401/403/410.
+
+---
+
 ## [0.1.0] — 2026-03-30
 
 ### Added
