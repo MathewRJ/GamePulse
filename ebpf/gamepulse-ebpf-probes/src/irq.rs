@@ -87,10 +87,10 @@ pub fn irq_handler_entry(ctx: TracePointContext) -> u32 {
         Err(_) => return 1,
     };
 
-    let cpu = unsafe { bpf_get_smp_processor_id() };
+    let cpu = bpf_get_smp_processor_id();
     let key: u64 = ((cpu as u64) << 32) | (irq_nr as u32 as u64);
 
-    let ts = unsafe { bpf_ktime_get_ns() };
+    let ts = bpf_ktime_get_ns();
     let _ = IRQ_START_TS.insert(&key, &ts, 0);
     0
 }
@@ -107,7 +107,7 @@ pub fn irq_handler_exit(ctx: TracePointContext) -> u32 {
         Err(_) => return 1,
     };
 
-    let cpu = unsafe { bpf_get_smp_processor_id() };
+    let cpu = bpf_get_smp_processor_id();
     let key: u64 = ((cpu as u64) << 32) | (irq_nr as u32 as u64);
 
     let entry_ts = match unsafe { IRQ_START_TS.get(&key) } {
@@ -116,7 +116,7 @@ pub fn irq_handler_exit(ctx: TracePointContext) -> u32 {
     };
     let _ = IRQ_START_TS.remove(&key);
 
-    let now = unsafe { bpf_ktime_get_ns() };
+    let now = bpf_ktime_get_ns();
     let latency_ns = now.saturating_sub(entry_ts);
 
     if let Some(mut entry) = IRQ_EVENTS.reserve::<IrqEvent>(0) {
@@ -138,8 +138,8 @@ pub fn irq_handler_exit(ctx: TracePointContext) -> u32 {
 // ---------------------------------------------------------------------------
 #[tracepoint(name = "softirq_entry", category = "irq")]
 pub fn softirq_entry(_ctx: TracePointContext) -> u32 {
-    let cpu = unsafe { bpf_get_smp_processor_id() };
-    let ts = unsafe { bpf_ktime_get_ns() };
+    let cpu = bpf_get_smp_processor_id();
+    let ts = bpf_ktime_get_ns();
     let _ = SOFTIRQ_START_TS.insert(&cpu, &ts, 0);
     0
 }
@@ -149,7 +149,7 @@ pub fn softirq_entry(_ctx: TracePointContext) -> u32 {
 // ---------------------------------------------------------------------------
 #[tracepoint(name = "softirq_exit", category = "irq")]
 pub fn softirq_exit(_ctx: TracePointContext) -> u32 {
-    let cpu = unsafe { bpf_get_smp_processor_id() };
+    let cpu = bpf_get_smp_processor_id();
 
     let entry_ts = match unsafe { SOFTIRQ_START_TS.get(&cpu) } {
         Some(ts) => *ts,
@@ -157,7 +157,7 @@ pub fn softirq_exit(_ctx: TracePointContext) -> u32 {
     };
     let _ = SOFTIRQ_START_TS.remove(&cpu);
 
-    let now = unsafe { bpf_ktime_get_ns() };
+    let now = bpf_ktime_get_ns();
     let latency_ns = now.saturating_sub(entry_ts);
 
     if let Some(mut entry) = IRQ_EVENTS.reserve::<IrqEvent>(0) {

@@ -53,8 +53,8 @@ pub struct GpuFenceEvent {
 
 #[kprobe(function = "dma_fence_default_wait")]
 pub fn dma_fence_default_wait_entry(_ctx: ProbeContext) -> u32 {
-    let pid_tgid = unsafe { bpf_get_current_pid_tgid() };
-    let ts = unsafe { bpf_ktime_get_ns() };
+    let pid_tgid = bpf_get_current_pid_tgid();
+    let ts = bpf_ktime_get_ns();
     let _ = GPU_FENCE_START_TS.insert(&pid_tgid, &ts, 0);
     0
 }
@@ -65,7 +65,7 @@ pub fn dma_fence_default_wait_entry(_ctx: ProbeContext) -> u32 {
 
 #[kretprobe(function = "dma_fence_default_wait")]
 pub fn dma_fence_default_wait_return(_ctx: RetProbeContext) -> u32 {
-    let pid_tgid = unsafe { bpf_get_current_pid_tgid() };
+    let pid_tgid = bpf_get_current_pid_tgid();
 
     let entry_ts = match unsafe { GPU_FENCE_START_TS.get(&pid_tgid) } {
         Some(ts) => *ts,
@@ -73,7 +73,7 @@ pub fn dma_fence_default_wait_return(_ctx: RetProbeContext) -> u32 {
     };
     let _ = GPU_FENCE_START_TS.remove(&pid_tgid);
 
-    let now = unsafe { bpf_ktime_get_ns() };
+    let now = bpf_ktime_get_ns();
     let latency_ns = now.saturating_sub(entry_ts);
 
     if let Some(mut entry) = GPU_FENCE_EVENTS.reserve::<GpuFenceEvent>(0) {

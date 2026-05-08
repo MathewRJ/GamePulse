@@ -78,7 +78,7 @@ pub fn block_rq_issue(ctx: TracePointContext) -> u32 {
         Err(_) => return 1,
     };
 
-    let ts = unsafe { bpf_ktime_get_ns() };
+    let ts = bpf_ktime_get_ns();
     let _ = BIO_START_TS.insert(&sector, &ts, 0);
     0
 }
@@ -106,7 +106,7 @@ pub fn block_rq_complete(ctx: TracePointContext) -> u32 {
     };
     let _ = BIO_START_TS.remove(&sector);
 
-    let now = unsafe { bpf_ktime_get_ns() };
+    let now = bpf_ktime_get_ns();
     let latency_ns = now.saturating_sub(issue_ts);
 
     let nr_sector: u32 = unsafe { ctx.read_at(24) }.unwrap_or(0);

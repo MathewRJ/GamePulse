@@ -76,14 +76,14 @@ fn is_game_tid(tid: u32) -> bool {
 
 #[kprobe(function = "vfs_read")]
 pub fn vfs_read_entry(_ctx: ProbeContext) -> u32 {
-    let pid_tgid = unsafe { bpf_get_current_pid_tgid() };
+    let pid_tgid = bpf_get_current_pid_tgid();
     let tid = (pid_tgid & 0xffff_ffff) as u32;
 
     if !is_game_tid(tid) {
         return 0;
     }
 
-    let ts = unsafe { bpf_ktime_get_ns() };
+    let ts = bpf_ktime_get_ns();
     let _ = VFS_READ_START_TS.insert(&pid_tgid, &ts, 0);
     0
 }
@@ -94,7 +94,7 @@ pub fn vfs_read_entry(_ctx: ProbeContext) -> u32 {
 
 #[kretprobe(function = "vfs_read")]
 pub fn vfs_read_return(_ctx: RetProbeContext) -> u32 {
-    let pid_tgid = unsafe { bpf_get_current_pid_tgid() };
+    let pid_tgid = bpf_get_current_pid_tgid();
 
     let entry_ts = match unsafe { VFS_READ_START_TS.get(&pid_tgid) } {
         Some(ts) => *ts,
@@ -102,7 +102,7 @@ pub fn vfs_read_return(_ctx: RetProbeContext) -> u32 {
     };
     let _ = VFS_READ_START_TS.remove(&pid_tgid);
 
-    let now = unsafe { bpf_ktime_get_ns() };
+    let now = bpf_ktime_get_ns();
     let latency_ns = now.saturating_sub(entry_ts);
 
     if let Some(mut entry) = VFS_EVENTS.reserve::<VfsEvent>(0) {
@@ -122,14 +122,14 @@ pub fn vfs_read_return(_ctx: RetProbeContext) -> u32 {
 
 #[kprobe(function = "vfs_write")]
 pub fn vfs_write_entry(_ctx: ProbeContext) -> u32 {
-    let pid_tgid = unsafe { bpf_get_current_pid_tgid() };
+    let pid_tgid = bpf_get_current_pid_tgid();
     let tid = (pid_tgid & 0xffff_ffff) as u32;
 
     if !is_game_tid(tid) {
         return 0;
     }
 
-    let ts = unsafe { bpf_ktime_get_ns() };
+    let ts = bpf_ktime_get_ns();
     let _ = VFS_WRITE_START_TS.insert(&pid_tgid, &ts, 0);
     0
 }
@@ -140,7 +140,7 @@ pub fn vfs_write_entry(_ctx: ProbeContext) -> u32 {
 
 #[kretprobe(function = "vfs_write")]
 pub fn vfs_write_return(_ctx: RetProbeContext) -> u32 {
-    let pid_tgid = unsafe { bpf_get_current_pid_tgid() };
+    let pid_tgid = bpf_get_current_pid_tgid();
 
     let entry_ts = match unsafe { VFS_WRITE_START_TS.get(&pid_tgid) } {
         Some(ts) => *ts,
@@ -148,7 +148,7 @@ pub fn vfs_write_return(_ctx: RetProbeContext) -> u32 {
     };
     let _ = VFS_WRITE_START_TS.remove(&pid_tgid);
 
-    let now = unsafe { bpf_ktime_get_ns() };
+    let now = bpf_ktime_get_ns();
     let latency_ns = now.saturating_sub(entry_ts);
 
     if let Some(mut entry) = VFS_EVENTS.reserve::<VfsEvent>(0) {
