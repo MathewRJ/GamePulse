@@ -131,6 +131,40 @@ or execution as root via `sudo systemctl enable --now gamepulse-ebpf`.
 This is expected. eBPF kernel probes are not available on Windows. All other data streams
 function normally.
 
+## Steam Deck
+
+GamePulse runs on the Steam Deck and is designed to survive SteamOS updates.
+
+**Installation (Desktop Mode):**
+
+```bash
+curl -sSfL https://mathewrj.github.io/GamePulse-Integration/install.sh | sh
+gamepulse setup
+```
+
+This installs the agent and launcher to `~/.local/bin/` and the systemd user service to
+`~/.config/systemd/user/` — both on the persistent home partition. SteamOS resets `/usr`
+on every OS update, but `~/.local/` survives, so **no reinstall is needed after a SteamOS
+update** for the agent itself.
+
+**eBPF on SteamOS:**
+
+eBPF probes are a special case. The eBPF daemon (`gamepulse-ebpf`) must run as a system
+service with root/`CAP_BPF`, which means it lives in `/usr/` and **gets wiped on every
+SteamOS update**. To restore eBPF after an update:
+
+```bash
+yay -S gamepulse-git          # rebuilds and reinstalls from AUR
+sudo systemctl enable --now gamepulse-ebpf
+```
+
+Without eBPF, all 11 other data streams (CPU, GPU, memory, frame timing, storage, network,
+audio, power, session, hardware, and more) continue to work normally. eBPF adds per-thread
+scheduler latency and kernel-level stutter attribution — useful for deep analysis but not
+required for day-to-day gaming telemetry.
+
+See [docs/steam-deck.md](steam-deck.md) for the full Steam Deck guide.
+
 ## Known limitations
 
 - eBPF probes require Linux kernel 5.8 or later with BTF enabled, and elevated process
