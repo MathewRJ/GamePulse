@@ -8,9 +8,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ---
 
-## [0.1.7] — 2026-05-08
+## [0.1.7] — 2026-05-09
+
+### Fixed
+
+- **eBPF nightly CI** (`ebpf/gamepulse-ebpf-daemon/src/`): five dead-code stubs (`LatencyHistogram::is_empty`, `SessionInfo::steam_app_id`, `EsShipper::batch_size`, `EsShipper::queue`, `EbpfConfig::enabled_probes`) now suppressed with per-item `#[allow(dead_code)]` — nightly's `-D warnings` was treating them as errors.
+- **Smoke test**: `cpu.clock_mhz_avg` demoted to optional check — the field is absent on GitHub-hosted runners where cpufreq is not exposed.
+- **Formatting**: `cargo fmt` pass on `src/diagnose.rs`, `src/profiles.rs`, `src/session.rs`, `src/shipper.rs`, `src/main.rs`.
 
 ### Added
+
+- **Uninstaller** (`packaging/uninstall.sh`): mirrors `install.sh` in reverse — stops and disables both systemd services, removes user-space binaries, then removes system eBPF files with privilege escalation. `--user-only` skips the privileged step.
+- **`--no-ebpf` flag** (`packaging/install.sh`): skip eBPF daemon install explicitly (useful on VMs or older kernels without BTF).
+- **Install inventory**: `install.sh` now prints a full `Installed:` / `Not installed:` summary after completion so it's always clear what was placed on the system.
+
+### Documentation
+
+- `docs/README.md` retitled `# GamePulse — Elastic Integration` with a callout pointing to the project README — clarifies that this file is the Fleet integration guide bundled into the Elastic Package Registry.
+- Root `README.md` documentation section rewritten as a labelled table with one row per guide and an audience column.
+
+---
+
+### Added (2026-05-08)
 
 - **Launcher debug log** (`~/.local/share/gamepulse/launcher.log`): the launcher now writes timestamped entries for every key decision in `cmd_run` (agent binary resolved, systemctl outcome, PID captured, exec path taken). The log file persists across sessions and is readable in Desktop Mode after a Gaming Mode run — eliminating the "invisible crash" debugging problem. Set `GAMEPULSE_DEBUG=1` in Steam launch options (`GAMEPULSE_DEBUG=1 gamepulse run %command%`) to additionally capture a full shell trace (`set -x`) in the same file. Log rotates at 1 MB to `.old`.
 
