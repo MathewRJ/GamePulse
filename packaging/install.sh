@@ -168,6 +168,26 @@ elif [ -f "$EBPF_BIN" ]; then
                 sudo systemctl daemon-reload 2>/dev/null || true
                 add_installed "/etc/systemd/system/gamepulse-ebpf.service  (system service)"
             fi
+
+            # Write system config so the eBPF daemon can connect to ES immediately.
+            # If the user already ran 'gamepulse setup', copy their credentials.
+            # Otherwise write a placeholder; 'gamepulse setup' will update it.
+            sudo mkdir -p /etc/gamepulse
+            _user_cfg="${XDG_CONFIG_HOME:-$HOME/.config}/gamepulse/gamepulse.toml"
+            if [ -f "$_user_cfg" ]; then
+                sudo install -m 600 "$_user_cfg" /etc/gamepulse/gamepulse.toml
+                add_installed "/etc/gamepulse/gamepulse.toml  (eBPF daemon config — copied from user config)"
+            else
+                sudo install -m 600 "$TMP/gamepulse.toml" /etc/gamepulse/gamepulse.toml 2>/dev/null || \
+                    printf '[elasticsearch]\nendpoint = ""\n' | sudo tee /etc/gamepulse/gamepulse.toml >/dev/null
+                add_installed "/etc/gamepulse/gamepulse.toml  (eBPF daemon config — run 'gamepulse setup' to fill in credentials)"
+            fi
+
+            # Enable and start the eBPF service so kernel tracing is active immediately.
+            if command -v systemctl >/dev/null 2>&1; then
+                sudo systemctl enable --now gamepulse-ebpf 2>/dev/null || true
+                add_installed "gamepulse-ebpf.service  (enabled + started)"
+            fi
         else
             info "sudo install failed — eBPF skipped. Re-run with sudo access to enable kernel tracing."
             add_skipped "gamepulse-ebpf (sudo install failed)"
@@ -249,7 +269,10 @@ fi
 printf '         gamepulse setup\n'
 printf '    2. Add to Steam launch options:\n'
 printf '         gamepulse run %%command%%\n'
-if printf '%b' "$INSTALLED" | grep -q "gamepulse-ebpf"; then
+if printf '%b' "$INSTALLED" | grep -q "gamepulse-ebpf.service  (enabled"; then
+    printf '    3. eBPF kernel telemetry is active. To check status:\n'
+    printf '         sudo systemctl status gamepulse-ebpf\n'
+elif printf '%b' "$INSTALLED" | grep -q "gamepulse-ebpf"; then
     printf '    3. Enable eBPF kernel telemetry at boot:\n'
     printf '         sudo systemctl enable --now gamepulse-ebpf\n'
 fi

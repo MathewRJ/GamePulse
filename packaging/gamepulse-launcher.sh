@@ -282,6 +282,25 @@ TOML
     mv "$tmp_cfg" "$CONFIG_FILE"
 
     _ok "Config written to $CONFIG_FILE"
+
+    # If the eBPF daemon is installed, sync credentials to the system config so it
+    # can reach Elasticsearch without a separate manual step.
+    if [ -f /usr/local/bin/gamepulse-ebpf ] && command -v sudo >/dev/null 2>&1; then
+        _steamos_ro_setup=0
+        if command -v steamos-readonly >/dev/null 2>&1; then
+            sudo steamos-readonly disable 2>/dev/null && _steamos_ro_setup=1
+        fi
+        sudo mkdir -p /etc/gamepulse
+        sudo install -m 600 "$CONFIG_FILE" /etc/gamepulse/gamepulse.toml
+        [ "$_steamos_ro_setup" = "1" ] && sudo steamos-readonly enable 2>/dev/null || true
+        _ok "eBPF daemon config updated (/etc/gamepulse/gamepulse.toml)"
+        # Restart the daemon so it picks up the new credentials immediately.
+        if systemctl is-active --quiet gamepulse-ebpf 2>/dev/null; then
+            sudo systemctl restart gamepulse-ebpf 2>/dev/null || true
+            _ok "eBPF daemon restarted with new credentials"
+        fi
+    fi
+
     _info "Run 'gamepulse start' to begin collecting, or add 'gamepulse run %command%' as a Steam launch option."
 }
 
