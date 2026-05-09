@@ -382,6 +382,7 @@ impl LatencyHistogram {
         self.counts[bucket] += 1;
     }
 
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.counts.iter().all(|&c| c == 0)
     }

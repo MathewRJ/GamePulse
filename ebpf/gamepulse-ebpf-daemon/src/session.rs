@@ -20,6 +20,7 @@ pub struct SessionInfo {
     pub game_pid: u32,
     pub game_name: String,
     #[serde(default)]
+    #[allow(dead_code)]
     pub steam_app_id: Option<u32>,
     /// All PIDs associated with the game (includes wine/Proton subprocesses).
     /// Falls back to [game_pid] if absent (older collector versions).

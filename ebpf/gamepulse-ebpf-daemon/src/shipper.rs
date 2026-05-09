@@ -14,6 +14,7 @@ pub struct EsShipper {
     /// Pending documents awaiting the next flush.
     pending: Vec<EbpfDocument>,
     /// How many docs to accumulate before forcing a flush.
+    #[allow(dead_code)]
     batch_size: usize,
 }
 
@@ -36,6 +37,7 @@ impl EsShipper {
     }
 
     /// Queue a document for the next flush.
+    #[allow(dead_code)]
     pub fn queue(&mut self, doc: EbpfDocument) {
         self.pending.push(doc);
     }

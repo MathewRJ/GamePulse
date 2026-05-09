@@ -29,6 +29,7 @@ pub struct EbpfConfig {
 
     /// Which probes to enable. Defaults to all Sprint-1 probes.
     #[serde(default = "default_enabled_probes")]
+    #[allow(dead_code)]
     pub enabled_probes: Vec<String>,
 
     /// Aggregate and ship once per this many seconds.
