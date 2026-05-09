@@ -263,7 +263,9 @@ mod tests {
         let name_lower = target.display_name.to_lowercase();
 
         // AppID match wins over name/alias mismatch
-        let found = profiles.iter().find(|p| p.game.steam_app_id == target.steam_app_id);
+        let found = profiles
+            .iter()
+            .find(|p| p.game.steam_app_id == target.steam_app_id);
         assert_eq!(found.unwrap().game.name, "Cyberpunk 2077");
 
         // No AppID match falls through to name
@@ -271,7 +273,10 @@ mod tests {
         let name2 = target2.display_name.to_lowercase();
         let found2 = profiles.iter().find(|p| {
             name2.contains(&p.game.name.to_lowercase())
-                || p.game.aliases.iter().any(|a| name2.contains(&a.to_lowercase()))
+                || p.game
+                    .aliases
+                    .iter()
+                    .any(|a| name2.contains(&a.to_lowercase()))
         });
         assert_eq!(found2.unwrap().game.name, "Starfield");
 
@@ -280,7 +285,10 @@ mod tests {
         let name3 = target3.display_name.to_lowercase();
         let found3 = profiles.iter().find(|p| {
             name3.contains(&p.game.name.to_lowercase())
-                || p.game.aliases.iter().any(|a| name3.contains(&a.to_lowercase()))
+                || p.game
+                    .aliases
+                    .iter()
+                    .any(|a| name3.contains(&a.to_lowercase()))
         });
         assert_eq!(found3.unwrap().game.name, "Cyberpunk 2077");
 
@@ -289,7 +297,10 @@ mod tests {
         let name4 = target4.display_name.to_lowercase();
         let found4 = profiles.iter().find(|p| {
             name4.contains(&p.game.name.to_lowercase())
-                || p.game.aliases.iter().any(|a| name4.contains(&a.to_lowercase()))
+                || p.game
+                    .aliases
+                    .iter()
+                    .any(|a| name4.contains(&a.to_lowercase()))
         });
         assert!(found4.is_none());
 

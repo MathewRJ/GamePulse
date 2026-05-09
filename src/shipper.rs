@@ -93,8 +93,14 @@ pub async fn ping(config: &Config) -> Result<()> {
 
     if status.is_success() {
         let body: Value = resp.json().await.unwrap_or_default();
-        let cluster_status = body.get("status").and_then(|s| s.as_str()).unwrap_or("unknown");
-        info!("Elasticsearch reachable — cluster status: {}", cluster_status);
+        let cluster_status = body
+            .get("status")
+            .and_then(|s| s.as_str())
+            .unwrap_or("unknown");
+        info!(
+            "Elasticsearch reachable — cluster status: {}",
+            cluster_status
+        );
     } else {
         info!("Elasticsearch reachable (HTTP {})", status);
     }

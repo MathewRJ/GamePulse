@@ -952,7 +952,10 @@ fn detect_graphics_api(env: &HashMap<String, String>) -> (Option<String>, bool) 
 /// Detect graphics API from environment; fall back to `/proc/<pid>/maps` scanning
 /// when env-var detection returns `None` (e.g. native games that skip Wine env vars).
 #[cfg(unix)]
-fn graphics_api_with_maps_fallback(env: &HashMap<String, String>, pid: u32) -> (Option<String>, bool) {
+fn graphics_api_with_maps_fallback(
+    env: &HashMap<String, String>,
+    pid: u32,
+) -> (Option<String>, bool) {
     let (api, uses_proton) = detect_graphics_api(env);
     if api.is_some() {
         return (api, uses_proton);

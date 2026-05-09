@@ -14,8 +14,8 @@ compile_error!(
 mod collectors;
 mod config;
 mod diagnose;
-mod host;
 mod dllscan;
+mod host;
 mod profiles;
 mod session;
 mod shipper;

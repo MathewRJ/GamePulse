@@ -131,10 +131,7 @@ pub async fn run(cfg: &Config, config_path: Option<&Path>, output: Option<&Path>
 
     // ── Elasticsearch ─────────────────────────────────────────────────────────
 
-    note!(
-        "pinging Elasticsearch at {}",
-        cfg.elasticsearch.endpoint
-    );
+    note!("pinging Elasticsearch at {}", cfg.elasticsearch.endpoint);
     let es_status = match shipper::ping(cfg).await {
         Ok(()) => {
             note!("ES ping OK");
@@ -190,7 +187,14 @@ pub async fn run(cfg: &Config, config_path: Option<&Path>, output: Option<&Path>
     // ── Diagnostic log ───────────────────────────────────────────────────────
 
     writeln!(report, "Diagnostic Log")?;
-    let tail: Vec<&String> = log.iter().rev().take(20).collect::<Vec<_>>().into_iter().rev().collect();
+    let tail: Vec<&String> = log
+        .iter()
+        .rev()
+        .take(20)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
     for line in tail {
         writeln!(report, "  {line}")?;
     }
