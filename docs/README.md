@@ -1,4 +1,7 @@
-# GamePulse
+# GamePulse — Elastic Integration
+
+> **This document is the Elastic Fleet integration guide** — it covers adding GamePulse to Kibana Fleet and is bundled into the Elastic Package Registry.
+> For installation, quick start, and project overview, see the [project README](https://github.com/MathewRJ/GamePulse#readme).
 
 GamePulse collects gaming performance telemetry — FPS, GPU/CPU metrics, frame timing
 percentiles, audio, storage, network, power, and kernel-level scheduler and I/O data via

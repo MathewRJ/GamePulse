@@ -22,15 +22,16 @@ GITHUB_RELEASES="https://github.com/${REPO}/releases/download"
 # ── Argument parsing ─────────────────────────────────────────────────────────
 
 VERSION=""
+NO_EBPF=0
 i=0
 for arg in "$@"; do
     i=$((i + 1))
     case "$arg" in
         --version=*) VERSION="${arg#--version=}" ;;
         --version)
-            # next arg is the value — handled by eval trick below
             eval "VERSION=\${$(( i + 1 ))}" 2>/dev/null || true
             ;;
+        --no-ebpf) NO_EBPF=1 ;;
     esac
 done
 
@@ -103,10 +104,17 @@ tar -xzf "$TMP/$TARBALL" -C "$TMP" --strip-components=1
 
 # ── Install binaries ──────────────────────────────────────────────────────────
 
+INSTALLED=""
+SKIPPED=""
+
+add_installed() { INSTALLED="${INSTALLED}  + $1\n"; }
+add_skipped()   { SKIPPED="${SKIPPED}  - $1\n"; }
+
 mkdir -p "$INSTALL_BIN"
 install -m 755 "$TMP/gamepulse-agent"  "$INSTALL_BIN/gamepulse-agent"
 install -m 755 "$TMP/gamepulse"        "$INSTALL_BIN/gamepulse"
-ok "Binaries installed to $INSTALL_BIN"
+add_installed "$INSTALL_BIN/gamepulse-agent  (collector)"
+add_installed "$INSTALL_BIN/gamepulse  (launcher CLI)"
 
 # ── Install user systemd service ──────────────────────────────────────────────
 
@@ -114,9 +122,10 @@ if command -v systemctl >/dev/null 2>&1; then
     mkdir -p "$INSTALL_SERVICE"
     install -m 644 "$TMP/gamepulse-agent.service" "$INSTALL_SERVICE/gamepulse-agent.service"
     systemctl --user daemon-reload 2>/dev/null || true
-    ok "Systemd user service installed ($INSTALL_SERVICE/gamepulse-agent.service)"
+    add_installed "$INSTALL_SERVICE/gamepulse-agent.service  (user systemd service)"
 else
     info "systemctl not found — skipping service install (non-systemd system)"
+    add_skipped "systemd user service (systemctl not found)"
 fi
 
 # ── Install eBPF daemon (optional, requires sudo) ─────────────────────────────
@@ -128,10 +137,14 @@ fi
 EBPF_BIN="$TMP/gamepulse-ebpf"
 EBPF_PROBES="$TMP/gamepulse-ebpf-probes"
 
-if [ -f "$EBPF_BIN" ]; then
+if [ "$NO_EBPF" = "1" ]; then
+    info "Skipping eBPF daemon (--no-ebpf)"
+    add_skipped "gamepulse-ebpf (--no-ebpf flag)"
+elif [ -f "$EBPF_BIN" ]; then
     if ! command -v sudo >/dev/null 2>&1; then
         info "eBPF daemon found but sudo not available — skipping system install."
         info "To install manually: sudo cp $EBPF_BIN /usr/local/bin/gamepulse-ebpf"
+        add_skipped "gamepulse-ebpf (sudo not available)"
     else
         info "Installing eBPF daemon (kernel tracing — requires sudo)..."
 
@@ -142,31 +155,30 @@ if [ -f "$EBPF_BIN" ]; then
         fi
 
         if sudo install -m 755 "$EBPF_BIN" /usr/local/bin/gamepulse-ebpf 2>/dev/null; then
-            ok "eBPF daemon installed to /usr/local/bin/gamepulse-ebpf"
+            add_installed "/usr/local/bin/gamepulse-ebpf  (eBPF kernel daemon)"
 
-            # Install BPF probes blob alongside the daemon.
             if [ -f "$EBPF_PROBES" ]; then
                 sudo mkdir -p /usr/local/lib/gamepulse
                 sudo install -m 644 "$EBPF_PROBES" /usr/local/lib/gamepulse/gamepulse-ebpf-probes
+                add_installed "/usr/local/lib/gamepulse/gamepulse-ebpf-probes  (eBPF probe bytecode)"
             fi
 
-            # Install system service (paths match /usr/local/ install above).
             if [ -f "$TMP/gamepulse-ebpf.service" ] && command -v systemctl >/dev/null 2>&1; then
                 sudo install -m 644 "$TMP/gamepulse-ebpf.service" /etc/systemd/system/gamepulse-ebpf.service
                 sudo systemctl daemon-reload 2>/dev/null || true
-                ok "eBPF system service installed (/etc/systemd/system/gamepulse-ebpf.service)"
-                info "Enable at boot with: sudo systemctl enable --now gamepulse-ebpf"
+                add_installed "/etc/systemd/system/gamepulse-ebpf.service  (system service)"
             fi
         else
             info "sudo install failed — eBPF skipped. Re-run with sudo access to enable kernel tracing."
+            add_skipped "gamepulse-ebpf (sudo install failed)"
         fi
 
-        # Re-enable SteamOS read-only if we disabled it.
         [ "$_steamos_ro" = "1" ] && sudo steamos-readonly enable 2>/dev/null || true
     fi
 else
     info "eBPF daemon not included in this release — kernel tracing unavailable."
     info "Agent-only mode: FPS, CPU, GPU, memory, frame timing streams are unaffected."
+    add_skipped "gamepulse-ebpf (not included in this release)"
 fi
 
 # ── PATH setup ────────────────────────────────────────────────────────────────
@@ -203,6 +215,14 @@ esac
 printf '\n'
 printf '  GamePulse v%s installed.\n' "$VERSION"
 printf '\n'
+printf '  Installed:\n'
+printf '%b' "$INSTALLED"
+if [ -n "$SKIPPED" ]; then
+    printf '\n'
+    printf '  Not installed:\n'
+    printf '%b' "$SKIPPED"
+fi
+printf '\n'
 printf '  Next steps:\n'
 if [ "$IS_STEAMOS" = "1" ]; then
     printf '    1. If gamepulse is not found, open a new terminal or run:\n'
@@ -214,4 +234,8 @@ fi
 printf '         gamepulse setup\n'
 printf '    2. Add to Steam launch options:\n'
 printf '         gamepulse run %%command%%\n'
+if printf '%b' "$INSTALLED" | grep -q "gamepulse-ebpf"; then
+    printf '    3. Enable eBPF kernel telemetry at boot:\n'
+    printf '         sudo systemctl enable --now gamepulse-ebpf\n'
+fi
 printf '\n'

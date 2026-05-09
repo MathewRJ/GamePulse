@@ -134,12 +134,16 @@ See [`docs/STATUS.md`](docs/STATUS.md) for current state and [`docs/ROADMAP.md`]
 
 ## Documentation
 
-- [`docs/install.md`](docs/install.md) — full installation guide (Elastic Cloud, local self-hosted, AUR, .deb/.rpm, building from source)
-- [`docs/configuration.md`](docs/configuration.md) — full configuration reference
-- [`docs/dashboards.md`](docs/dashboards.md) — dashboard build guide and NDJSON reference
-- [`docs/steam-setup.md`](docs/steam-setup.md) — Steam launch options setup
-- [`architecture/`](architecture/) — agent, eBPF, and data model architecture docs
-- [`docs/SCOPE.md`](docs/SCOPE.md) — strategic project scope
+| Guide | Link | Audience |
+|---|---|---|
+| **Elastic Fleet integration** | [`docs/README.md`](docs/README.md) | Adding GamePulse to Kibana Fleet |
+| Installation | [`docs/install.md`](docs/install.md) | Installing the agent (Elastic Cloud, self-hosted, AUR, .deb/.rpm) |
+| Configuration reference | [`docs/configuration.md`](docs/configuration.md) | All config options |
+| eBPF kernel telemetry | [`docs/ebpf.md`](docs/ebpf.md) | eBPF daemon setup and probe reference |
+| Steam Deck | [`docs/steam-deck.md`](docs/steam-deck.md) | SteamOS-specific install and eBPF persistence |
+| Dashboard guide | [`docs/dashboards.md`](docs/dashboards.md) | Dashboard build and NDJSON reference |
+| Steam launch options | [`docs/steam-setup.md`](docs/steam-setup.md) | Per-game Steam integration |
+| Architecture | [`architecture/`](architecture/) | Agent, eBPF, and data model internals |
 
 ---
 
