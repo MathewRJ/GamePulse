@@ -60,11 +60,23 @@ check() {
     fi
 }
 
+# Like check() but only warns — for optional fields that depend on hardware
+# availability (e.g. cpufreq not exposed in VMs).
+check_optional() {
+    local label="$1"
+    local pattern="$2"
+    if echo "$OUTPUT" | grep -qF "$pattern"; then
+        printf "  PASS  %s\n" "$label"
+    else
+        printf "  WARN  %s  (optional — not present on this runner)\n" "$label"
+    fi
+}
+
 echo "=== Field checks ==="
 
 check "cpu.total_utilisation_pct"           '"total_utilisation_pct"'
 check "cpu.per_core"                        '"per_core"'
-check "cpu.clock_mhz_avg"                  '"clock_mhz_avg"'
+check_optional "cpu.clock_mhz_avg"          '"clock_mhz_avg"'
 
 check "memory.system_used_mb"              '"system_used_mb"'
 check "memory.page_cache_mb"               '"page_cache_mb"'
