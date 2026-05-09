@@ -12,22 +12,30 @@ Switch to Desktop Mode, open Konsole, and run:
 curl -sSfL https://mathewrj.github.io/GamePulse-Integration/install.sh | sh
 ```
 
-This installs `gamepulse-agent` and the `gamepulse` launcher to `~/.local/bin/` — no root
-required. Because `~/.local/` lives on the persistent home partition, **the install survives
-SteamOS updates** without any action on your part.
+This installs `gamepulse-agent` and the `gamepulse` launcher to `~/.local/bin/`. If the release
+includes the eBPF daemon, the installer will prompt for `sudo` to place it in `/usr/local/bin/`
+and enable `gamepulse-ebpf.service` immediately — kernel tracing is active without any follow-up
+step. MangoHud is also configured to write frame-timing CSVs automatically.
+
+Because `~/.local/` lives on the persistent home partition, **the agent survives SteamOS updates**.
+The eBPF daemon lives on the read-only root filesystem and will need reinstalling after a SteamOS
+major update — re-run the installer after each OS update to restore kernel tracing.
 
 ### Configuration
 
 ```bash
-vim ~/.config/gamepulse/gamepulse.toml
+gamepulse setup
 ```
 
-Set your Elasticsearch endpoint and API key. Recommended Steam Deck settings:
+This prompts for your Elasticsearch endpoint and API key, writes `~/.config/gamepulse/gamepulse.toml`,
+and syncs credentials to `/etc/gamepulse/gamepulse.toml` for the eBPF daemon (restarting it if
+running). Re-run `gamepulse setup` any time you rotate your API key.
+
+Optional settings you can add manually to `~/.config/gamepulse/gamepulse.toml`:
 
 ```toml
 [collection]
 interval_ms = 1000
-ebpf = false        # User-mode can't use eBPF — use system service for this
 network = false      # Enable if playing multiplayer
 ```
 
@@ -37,7 +45,8 @@ network = false      # Enable if playing multiplayer
 systemctl --user enable --now gamepulse-agent
 ```
 
-The agent will now start automatically when you log in, persist across Gaming Mode and Desktop Mode, and survive SteamOS updates (when installed to `~/.local/bin`).
+The agent starts automatically on login and persists across Gaming Mode and Desktop Mode. The eBPF
+daemon (`gamepulse-ebpf.service`) is enabled and started by the installer — no separate step needed.
 
 ## Storage metrics on Steam Deck
 
@@ -61,8 +70,13 @@ On Steam Deck, frame timing works automatically through two sources:
 For the most detailed frame timing data, add to your per-game launch options in Steam:
 
 ```
-MANGOHUD_LOG=1 %command%
+MANGOHUD=1 %command%
 ```
+
+`MANGOHUD=1` is required on Steam Deck — the host `mangohud` binary is ignored by the Steam Linux
+Runtime container. `MANGOHUD=1` lets pressure-vessel inject its own MangoHud layer, which writes
+CSVs correctly. The installer sets `autostart_log=1` in `~/.config/MangoHud/MangoHud.conf` so
+logging starts automatically without pressing F2.
 
 ## TDP and power
 
@@ -84,6 +98,6 @@ When you launch a game on Steam Deck, GamePulse automatically captures:
 
 ## Known limitations on Steam Deck
 
-- **eBPF requires root**: the user-mode service can't use eBPF probes. If you want deep telemetry, install the system service instead (`make install` in Desktop Mode, then `sudo systemctl enable gamepulse-agent`).
+- **eBPF requires root**: the installer handles this automatically (prompts for `sudo` and enables `gamepulse-ebpf.service`). If eBPF was skipped during install, re-run the installer with `sudo` access to enable kernel tracing.
 - **SteamOS updates**: the read-only rootfs means system-level installs (`/usr/bin`) are wiped on updates. User-level installs (`~/.local/bin`) persist.
 - **Gaming Mode limitations**: the agent runs fine in Gaming Mode, but you can't see debug output. Check logs with `journalctl --user -u gamepulse-agent` in Desktop Mode.

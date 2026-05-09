@@ -42,14 +42,14 @@ Or download the MSI from the [Releases page](https://github.com/MathewRJ/GamePul
 ### First run
 
 ```bash
-# Prompts for your Elasticsearch endpoint + API key
+# Prompts for your Elasticsearch endpoint + API key, then activates the eBPF daemon if installed
 gamepulse setup
 
 # Add to Steam launch options for any game:
 gamepulse run %command%
 ```
 
-Data starts flowing to Elasticsearch the next time you launch a game through Steam.
+The installer also configures MangoHud to write frame-timing CSVs automatically — no extra setup needed. Data starts flowing to Elasticsearch the next time you launch a game through Steam.
 
 ---
 
