@@ -527,6 +527,19 @@ fn build_summary_doc(
 /// cfg-gated `pub use` in collectors/mod.rs — Linux pulls from `linux::*`,
 /// Windows from `windows::*` (PDH/DXGI/WMI/PresentMon collectors).
 fn build_collectors(game_pid: Option<u32>) -> Vec<Box<dyn Collector>> {
+    // On SteamOS, Gamescope always overrides MANGOHUD_CONFIGFILE with its own
+    // shim — MangoHud CSV logging is unavailable. Prefer the Gamescope stats
+    // pipe when present; fall back to MangoHud CSV on non-SteamOS Linux.
+    #[cfg(target_os = "linux")]
+    let frame_collector: Box<dyn Collector> =
+        if collectors::linux::gamescope::find_stats_pipe().is_some() {
+            Box::new(collectors::GamescopeFrameCollector::new(game_pid))
+        } else {
+            Box::new(collectors::MangoHudCollector::new(game_pid))
+        };
+    #[cfg(not(target_os = "linux"))]
+    let frame_collector: Box<dyn Collector> = Box::new(collectors::MangoHudCollector::new(game_pid));
+
     vec![
         Box::new(collectors::CpuCollector::new(game_pid)),
         Box::new(collectors::MemoryCollector::new(game_pid)),
@@ -534,7 +547,7 @@ fn build_collectors(game_pid: Option<u32>) -> Vec<Box<dyn Collector>> {
         Box::new(collectors::NetworkCollector::new(game_pid)),
         Box::new(collectors::PowerCollector::new(game_pid)),
         Box::new(collectors::AudioCollector::new(game_pid)),
-        Box::new(collectors::MangoHudCollector::new(game_pid)),
+        frame_collector,
         Box::new(collectors::GpuCollector::new(game_pid)),
     ]
 }
