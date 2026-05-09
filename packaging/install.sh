@@ -181,6 +181,21 @@ else
     add_skipped "gamepulse-ebpf (not included in this release)"
 fi
 
+# ── MangoHud config (frame timing CSV) ───────────────────────────────────────
+# Ensure MangoHud writes frame timing CSVs so the agent can read them.
+# We write only the two keys we need; if the file already exists we append
+# missing keys rather than overwriting user customisations.
+_mh_conf_dir="${XDG_CONFIG_HOME:-$HOME/.config}/MangoHud"
+_mh_conf="$_mh_conf_dir/MangoHud.conf"
+mkdir -p "$_mh_conf_dir"
+if ! grep -q "output_folder" "$_mh_conf" 2>/dev/null; then
+    printf 'output_folder=%s\n' "$HOME/.local/share/MangoHud" >> "$_mh_conf"
+fi
+if ! grep -q "autostart_log" "$_mh_conf" 2>/dev/null; then
+    printf 'autostart_log=1\n' >> "$_mh_conf"
+fi
+add_installed "$_mh_conf  (MangoHud frame logging)"
+
 # ── PATH setup ────────────────────────────────────────────────────────────────
 
 # Check if ~/.local/bin is already in PATH

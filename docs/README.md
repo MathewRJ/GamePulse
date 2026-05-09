@@ -34,9 +34,10 @@ Follow the platform instructions in the [installation guide](install.md).
 
 **2. Configure Elasticsearch credentials**
 
-Run the interactive setup to provide the agent-side Elasticsearch endpoint and API key.
-These credentials are used by the GamePulse agent to write log files locally. The Elastic
-integration reads those log files — it does not connect to Elasticsearch directly.
+Run the interactive setup to provide the Elasticsearch endpoint and API key.
+The GamePulse agent ships telemetry directly to Elasticsearch via the Bulk API —
+no Elastic Agent involvement is required for data ingestion. This integration
+provides the index templates, ingest pipelines, and dashboards.
 
 ```bash
 gamepulse setup
@@ -60,28 +61,34 @@ gamepulse run %command%
 
 In Kibana, go to **Fleet > Integrations**, search for **GamePulse**, and click **Add GamePulse**.
 
-**5. Configure the log path**
+Choose the policy template that matches your platform:
 
-Set the **Paths** variable to match the location where the GamePulse agent writes its log
-files. The default is `/var/log/gamepulse/*.log`. On Windows, use
-`C:\ProgramData\GamePulse\logs\*.log`.
+| Template | Use when |
+|---|---|
+| **GamePulse — Linux** | Linux gaming machine (all streams except eBPF) |
+| **GamePulse — Windows** | Windows gaming machine |
+| **GamePulse — eBPF Kernel Telemetry** | Linux, kernel 5.8+, eBPF daemon running |
 
-**6. Apply the policy**
+You can add multiple templates to the same Elastic Agent policy (e.g. Linux + eBPF).
 
-Assign the policy to the Elastic Agent running on your gaming machine and save.
+**5. Apply the policy**
+
+Assign the policy to the Elastic Agent on your gaming machine and save. The dashboards
+will populate as soon as the GamePulse agent starts shipping data.
 
 ## Configuration
 
-The Elastic integration has one configurable input variable.
+The integration itself requires no configuration for normal use — the GamePulse agent
+ships data directly to Elasticsearch using the credentials from `gamepulse setup`.
 
-**paths** (text, multi-value)
+Each policy template exposes a **paths** variable (hidden by default) for advanced
+setups where agent output is redirected to a file and read by Elastic Agent.
 
-Glob paths to the GamePulse log files produced by the agent.
-
-- Default (Linux): `/var/log/gamepulse/*.log`
-- Default (Windows): `C:\ProgramData\GamePulse\logs\*.log`
-
-Separate multiple paths with a newline in the Fleet UI.
+| Template | Default path |
+|---|---|
+| GamePulse — Linux | `/var/log/gamepulse/*.log` |
+| GamePulse — Windows | `C:\ProgramData\GamePulse\logs\*.log` |
+| GamePulse — eBPF | `/var/log/gamepulse/ebpf*.log` |
 
 ## Data streams
 

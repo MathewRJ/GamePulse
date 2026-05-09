@@ -1428,13 +1428,23 @@ pub(crate) fn scan_for_steam_game() -> Option<Target> {
 
         // Pick first non-helper process as the representative for metadata.
         // Wine/Proton subprocesses are in all_pids for eBPF but bad sources of metadata.
+        // Shell interpreters are also excluded: the gamepulse launcher's watcher
+        // subshell inherits Steam env vars and would otherwise be misidentified
+        // as the game, preventing correct game-exit detection.
         if representative.is_none() {
             let exe_path = std::fs::read_link(format!("/proc/{}/exe", pid))
                 .ok()
                 .and_then(|p| Some(p.to_string_lossy().to_lowercase()))
                 .unwrap_or_default();
-            let skip = ["proton", "wine", "steam", "reaper"];
-            if !skip.iter().any(|w| exe_path.contains(w)) {
+            let skip_contains = ["proton", "wine", "steam", "reaper"];
+            let skip_basename = ["sh", "bash", "dash", "zsh", "fish", "ksh", "python", "python3", "perl", "ruby", "node"];
+            let exe_basename = std::path::Path::new(&exe_path)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("");
+            if !skip_contains.iter().any(|w| exe_path.contains(w))
+                && !skip_basename.contains(&exe_basename)
+            {
                 representative = Some((pid, env));
             }
         }

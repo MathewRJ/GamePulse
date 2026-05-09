@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Fixed
+
+- **Performance / collection rate** (`src/main.rs`): per-tick Elasticsearch bulk shipping was `await`-ed synchronously inside the 1-second collection loop. Network latency or intermittent bulk errors caused each tick to take 5–7 seconds, producing choppy frame data and noticeable game performance degradation on the Steam Deck. Shipping is now spawned as a `tokio::spawn` fire-and-forget task — the collection timer runs independently of ES response times.
+
+- **Audio collector blocking tick loop** (`src/collectors/linux/audio.rs`): `pw-top -b` (PipeWire stats) was spawned every tick and blocked ~2 seconds waiting for a PipeWire refresh cycle, reducing the collection rate from 1/sec to ~0.33/sec. PipeWire stats are now cached for 5 seconds so `pw-top` runs at most once every 5 ticks; all other ticks return the cached value instantly.
+
+- **Launcher: env vars in wrong position crash** (`packaging/gamepulse-launcher.sh`): placing an env var after `run` (e.g. `gamepulse run GAMEPULSE_LOG=debug %command%`) was treated as the first positional arg of the exec command and caused an immediate crash. The launcher now strips and exports leading `KEY=VALUE` args before exec, making both forms equivalent.
+
+- **Launcher: agent stop blocked exit** (`packaging/gamepulse-launcher.sh`): the background watcher called `systemctl stop` synchronously, holding the watcher process open until the agent fully flushed and shut down. Changed to `--no-block` so the stop signal is sent and the watcher exits immediately.
+
+- **MangoHud CSV not written with Steam Linux Runtime games** (`packaging/gamepulse-launcher.sh`): wrapping the game command with the host `mangohud` binary prevented frame timing CSV output because pressure-vessel (Steam Linux Runtime) uses its own bundled MangoHud layer which ignored the host binary's configuration. The launcher now exports `MANGOHUD=1` instead, which pressure-vessel intercepts to inject its own MangoHud — then honours `~/.config/MangoHud/MangoHud.conf` and `MANGOHUD_CONFIG` normally.
+
+### Added
+
+- **MangoHud `autostart_log`** (`packaging/install.sh`, `packaging/gamepulse-launcher.sh`): installer now writes `autostart_log=1` to `~/.config/MangoHud/MangoHud.conf` so MangoHud writes frame timing CSVs immediately on game start without requiring an F2 keypress. Previously `output_folder` alone was insufficient — MangoHud required explicit log-start to write data. Set `GAMEPULSE_MANGOHUD=0` to disable MangoHud integration entirely.
+
+- **MangoHud `output_folder`**: installer now ensures `~/.config/MangoHud/MangoHud.conf` contains `output_folder=$HOME/.local/share/MangoHud` so the agent can read frame timing CSV data.
+
 ---
 
 ## [0.1.7] — 2026-05-09

@@ -17,6 +17,10 @@ use serde_json::Value;
 use std::io::Read;
 use std::time::{Duration, Instant};
 
+// pw-top -b waits for a PipeWire refresh cycle (~1-2 s) before exiting.
+// Calling it every tick blocks the entire collection loop. Cache for 5 s.
+const PIPEWIRE_CACHE_TTL: Duration = Duration::from_secs(5);
+
 // ── Subprocess helper ─────────────────────────────────────────────────────────
 
 /// Run a command, wait up to `timeout_ms` milliseconds, return stdout as String.
@@ -200,6 +204,8 @@ fn pulseaudio_stats() -> Option<PulseaudioStats> {
 pub struct AudioCollector {
     backend: Option<String>,
     prev_xruns: Option<i64>,
+    pw_cache: Option<PipewireStats>,
+    pw_cache_at: Option<Instant>,
 }
 
 impl AudioCollector {
@@ -207,7 +213,21 @@ impl AudioCollector {
         AudioCollector {
             backend: None,
             prev_xruns: None,
+            pw_cache: None,
+            pw_cache_at: None,
         }
+    }
+
+    fn pipewire_stats_cached(&mut self) -> Option<&PipewireStats> {
+        let stale = self
+            .pw_cache_at
+            .map(|t| t.elapsed() >= PIPEWIRE_CACHE_TTL)
+            .unwrap_or(true);
+        if stale {
+            self.pw_cache = pipewire_stats();
+            self.pw_cache_at = Some(Instant::now());
+        }
+        self.pw_cache.as_ref()
     }
 }
 
@@ -226,8 +246,10 @@ impl Collector for AudioCollector {
         audio.insert("backend".to_string(), Value::from(backend.to_string()));
 
         if backend == "pipewire" {
-            if let Some(stats) = pipewire_stats() {
-                let xruns_total = stats.xruns;
+            // Copy primitive values out immediately so the borrow on self ends
+            // before we mutate self.prev_xruns.
+            let pw = self.pipewire_stats_cached().map(|s| (s.xruns, s.latency_ms));
+            if let Some((xruns_total, lat)) = pw {
                 if let Some(prev) = self.prev_xruns {
                     audio.insert(
                         "xruns".to_string(),
@@ -235,8 +257,8 @@ impl Collector for AudioCollector {
                     );
                 }
                 self.prev_xruns = Some(xruns_total);
-                if let Some(lat) = stats.latency_ms {
-                    audio.insert("latency_ms".to_string(), Value::from(lat));
+                if let Some(ms) = lat {
+                    audio.insert("latency_ms".to_string(), Value::from(ms));
                 }
             }
         } else if backend == "pulseaudio" {

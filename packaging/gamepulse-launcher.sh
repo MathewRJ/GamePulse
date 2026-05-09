@@ -349,6 +349,31 @@ cmd_run() {
         _die "Usage: gamepulse run <command> [args...]"
     fi
 
+    # Strip leading KEY=VALUE args and export them so users can write:
+    #   gamepulse run GAMEPULSE_LOG=debug %command%
+    # rather than needing to place env vars before 'gamepulse' in the launch option.
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            [A-Za-z_]*=*)
+                _varname="${1%%=*}"
+                case "$_varname" in
+                    *[!A-Za-z0-9_]*) break ;;
+                    *)
+                        _llog "cmd_run: exporting env: $_varname"
+                        export "$1"
+                        shift
+                        continue
+                        ;;
+                esac
+                ;;
+        esac
+        break
+    done
+
+    if [ $# -eq 0 ]; then
+        _die "No command remaining after env var extraction."
+    fi
+
     _llog "cmd_run: command=$*"
 
     # Resolve the agent binary before starting anything.
@@ -359,6 +384,27 @@ cmd_run() {
         _info "Re-run the installer or add ~/.local/bin to PATH."
         _llog "cmd_run: agent not found — exec-ing game directly without telemetry"
         exec "$@"
+    fi
+
+    # Enable MangoHud frame timing collection via MANGOHUD=1.
+    # We export MANGOHUD=1 rather than wrapping with the `mangohud` binary so
+    # that the Steam Linux Runtime (pressure-vessel) uses its own bundled MangoHud
+    # layer — the host binary cannot inject across the container boundary.
+    # autostart_log=1 is written to ~/.config/MangoHud/MangoHud.conf by the
+    # installer so it applies unconditionally; no_display=1 hides the overlay.
+    # Set GAMEPULSE_MANGOHUD=0 to opt out entirely.
+    # Set GAMEPULSE_MANGOHUD=display to show the overlay.
+    if [ "${GAMEPULSE_MANGOHUD:-auto}" != "0" ] && [ -z "${MANGOHUD:-}" ]; then
+        MANGOHUD=1
+        export MANGOHUD
+        _llog "cmd_run: MANGOHUD=1 set (SLR bundled MangoHud, autostart_log via conf)"
+        if [ "${GAMEPULSE_MANGOHUD:-auto}" != "display" ]; then
+            MANGOHUD_CONFIG="no_display=1"
+            export MANGOHUD_CONFIG
+            _llog "cmd_run: MANGOHUD_CONFIG=no_display=1 (overlay hidden)"
+        else
+            _llog "cmd_run: GAMEPULSE_MANGOHUD=display — overlay visible"
+        fi
     fi
 
     # Start the agent — systemd if reachable, direct binary otherwise.
@@ -374,20 +420,30 @@ cmd_run() {
 
     if systemctl --user start "$AGENT_UNIT" >/dev/null 2>&1; then
         _llog "cmd_run: systemctl --user start $AGENT_UNIT succeeded (service mode)"
-        # Background watcher: stop the service when the game exits.
+        # Double-fork the watcher: the outer subshell exits immediately, making
+        # the inner watcher a child of init (PID 1) rather than of the exec'd
+        # process. Without this, exec replaces this shell with steam-launch-wrapper
+        # which becomes reaper — reaper then waits for the watcher (its child) and
+        # the watcher waits for reaper to exit: deadlock, permanent black screen.
         # /proc/<pid> vanishes atomically on process exit — no PID-reuse race.
-        ( while [ -d "/proc/$_gp_pid" ]; do sleep 1; done
-          _llog "cmd_run: game PID $_gp_pid exited — stopping $AGENT_UNIT"
-          systemctl --user stop "$AGENT_UNIT" 2>/dev/null || true
+        (
+          (
+            while [ -d "/proc/$_gp_pid" ]; do sleep 1; done
+            _llog "cmd_run: game PID $_gp_pid exited — stopping $AGENT_UNIT"
+            systemctl --user stop "$AGENT_UNIT" --no-block 2>/dev/null || true
+          ) &
         ) &
     else
         _llog "cmd_run: systemctl start failed (DBUS absent? unit missing?) — running agent directly"
         "$AGENT_BIN" &
         _agent_pid=$!
         _llog "cmd_run: direct agent started PID=$_agent_pid"
-        ( while [ -d "/proc/$_gp_pid" ]; do sleep 1; done
-          _llog "cmd_run: game PID $_gp_pid exited — kill -TERM agent $_agent_pid"
-          kill -TERM "$_agent_pid" 2>/dev/null || true
+        (
+          (
+            while [ -d "/proc/$_gp_pid" ]; do sleep 1; done
+            _llog "cmd_run: game PID $_gp_pid exited — kill -TERM agent $_agent_pid"
+            kill -TERM "$_agent_pid" 2>/dev/null || true
+          ) &
         ) &
     fi
 

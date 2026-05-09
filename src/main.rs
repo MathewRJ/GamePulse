@@ -915,19 +915,30 @@ async fn main() -> Result<()> {
                 // ── Update session accumulators ───────────────────────────────
                 acc.update(&tick_docs);
 
-                // ── Ship ──────────────────────────────────────────────────────
+                // ── Ship (non-blocking) ───────────────────────────────────────
+                // Spawn shipping as a separate task so network latency or ES
+                // timeouts do not stall the 1-second collection timer.
                 if !tick_docs.is_empty() {
                     let n = tick_docs.len();
-                    match shipper::ship(&cfg, tick_docs).await {
-                        Ok(r) => {
-                            if r.failed > 0 {
-                                tracing::warn!("Tick {}: {}/{} docs failed", tick, r.failed, n);
-                            } else {
-                                tracing::debug!("Tick {}: shipped {} docs", tick, n);
+                    let cfg_ship = cfg.clone();
+                    let tick_num = tick;
+                    tokio::spawn(async move {
+                        match shipper::ship(&cfg_ship, tick_docs).await {
+                            Ok(r) => {
+                                if r.failed > 0 {
+                                    tracing::warn!(
+                                        "Tick {}: {}/{} docs failed",
+                                        tick_num,
+                                        r.failed,
+                                        n
+                                    );
+                                } else {
+                                    tracing::debug!("Tick {}: shipped {} docs", tick_num, n);
+                                }
                             }
+                            Err(e) => tracing::warn!("Tick {} bulk error: {}", tick_num, e),
                         }
-                        Err(e) => tracing::warn!("Tick {} bulk error: {}", tick, e),
-                    }
+                    });
                 }
             }
 
