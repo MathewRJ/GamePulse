@@ -5,8 +5,10 @@
 /// until a Windows-native scanner is added (B3 follow-up).
 /// B2.7 user-specified targets bypass polling entirely (pinned at startup).
 ///
-/// Session.json: written to /tmp/rigsignal/session.json when a target is
-/// detected; removed on game exit or agent shutdown. Fields read by the
+/// Session.json: written to the platform session directory when a target is
+/// detected; removed on game exit or agent shutdown. On Unix this remains
+/// /tmp/rigsignal/session.json because the eBPF daemon reads the same path.
+/// Fields read by the
 /// eBPF daemon's SessionInfo struct:
 ///   {"session_id":"…","game_pid":N,"game_name":"…","game_pids":[…],
 ///    "target_source":"steam","steam_app_id":N}
@@ -162,7 +164,7 @@ impl SessionManager {
             label_source,
             sequence_number: None,
             settings_overlay,
-            session_json_path: PathBuf::from("/tmp/rigsignal/session.json"),
+            session_json_path: session_json_file_path(),
             last_scan: None,
             last_no_game_log: None,
         }
@@ -328,7 +330,7 @@ impl SessionManager {
         Ok(())
     }
 
-    /// Remove /tmp/rigsignal/session.json on game exit or agent shutdown.
+    /// Remove session.json on game exit or agent shutdown.
     pub fn remove_session_json(&self) {
         match std::fs::remove_file(&self.session_json_path) {
             Ok(_) => tracing::debug!("removed session.json"),
@@ -339,6 +341,28 @@ impl SessionManager {
 }
 
 // ── Target helpers ────────────────────────────────────────────────────────────
+
+fn session_json_file_path() -> PathBuf {
+    session_json_dir().join("session.json")
+}
+
+fn session_json_dir() -> PathBuf {
+    #[cfg(unix)]
+    {
+        // Contract with ebpf/rigsignal-ebpf/src/session.rs; do not change.
+        PathBuf::from("/tmp/rigsignal")
+    }
+
+    #[cfg(windows)]
+    {
+        std::env::temp_dir().join("rigsignal")
+    }
+
+    #[cfg(not(any(unix, windows)))]
+    {
+        std::env::temp_dir().join("rigsignal")
+    }
+}
 
 /// Canonical wire-format string for a `TargetSource`.
 /// Must stay in sync with the `rigsignal.game.source` enum in fields.yml.

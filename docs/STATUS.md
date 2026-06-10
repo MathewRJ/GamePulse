@@ -1,6 +1,6 @@
 # RigSignal — Project Status
 
-Last updated: 2026-05-04 by claude-code (Workflow repo split complete; RigSignal cleaned for public contribution; private endpoints scrubbed; Milestone F table fixed; Milestone G started)
+Last updated: 2026-06-10 by codex (Windows session parity row updated after launcher detection, manual attach, and PresentMon bundling)
 Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -61,7 +61,9 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 | power | ✅ | 🔲 | ✅ | 🔲 | 🟡 (AC + battery%; no rate_w) |
 | frame | ✅ (MangoHud) | 🔲 | ✅ (MangoHud) | 🔲 | 🟡 (PresentMon subprocess; external binary required) |
 | ebpf | ✅ | 🔲 | ✅ | 🔲 | n/a |
-| session | ✅ | 🔲 | ✅ | 🔲 | 🔲 |
+| session | ✅ | 🔲 | ✅ | 🔲 | 🟡 Partial[^windows-session-parity] |
+
+[^windows-session-parity]: Expected absent on Windows: `rigsignal.compatibility.proton_version` and `rigsignal.compatibility.dxvk_version` are Wine concepts; `rigsignal.hardware.*` remains pending Windows support in `host.rs`. Launcher detection (Steam/Epic/GOG), manual attach, and PresentMon bundling landed 2026-06-10.
 
 ## Active work package
 
