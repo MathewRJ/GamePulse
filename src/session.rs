@@ -32,6 +32,8 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TargetSource {
     Steam,
+    EpicGames,
+    GogGalaxy,
     Lutris,
     Heroic,
     Bottles,
@@ -344,6 +346,8 @@ impl SessionManager {
 fn target_source_str(source: TargetSource) -> &'static str {
     match source {
         TargetSource::Steam => "steam",
+        TargetSource::EpicGames => "epic_games",
+        TargetSource::GogGalaxy => "gog_galaxy",
         TargetSource::Lutris => "lutris",
         TargetSource::Heroic => "heroic",
         TargetSource::Bottles => "bottles",
@@ -565,6 +569,47 @@ fn increment_counter_at(slug: &str, path: &std::path::Path) -> u32 {
     n as u32
 }
 
+pub(crate) fn parse_vdf_paths(content: &str) -> Vec<PathBuf> {
+    content
+        .lines()
+        .filter_map(|line| {
+            let trimmed = line.trim();
+            if trimmed.starts_with("\"path\"") {
+                trimmed.split('"').nth(3).map(PathBuf::from)
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+pub(crate) fn parse_acf_field<'a>(content: &'a str, key: &str) -> Option<&'a str> {
+    let key_prefix = format!("\"{}\"", key);
+    content.lines().find_map(|line| {
+        let trimmed = line.trim();
+        if trimmed.starts_with(&key_prefix) {
+            let parts: Vec<&str> = trimmed.split('"').collect();
+            if parts.len() >= 4 {
+                let value = parts[3].trim();
+                if !value.is_empty() {
+                    return Some(value);
+                }
+            }
+        }
+        None
+    })
+}
+
+#[derive(serde::Deserialize)]
+pub(crate) struct EpicManifest {
+    #[serde(rename = "DisplayName")]
+    pub(crate) display_name: String,
+    #[serde(rename = "InstallLocation")]
+    pub(crate) install_location: String,
+    #[serde(rename = "LaunchExecutable")]
+    pub(crate) launch_executable: Option<String>,
+}
+
 // ── Unit tests ─────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -687,6 +732,98 @@ mod tests {
             "the-elder-scrolls-v-skyrim"
         );
     }
+
+    #[test]
+    fn test_parse_vdf_paths_basic() {
+        const VDF: &str = r#"
+"libraryfolders"
+{
+    "0"
+    {
+        "path"  "/mnt/fast/SteamLibrary"
+    }
+    "1"
+    {
+        "path"  "D:\\Games\\SteamLibrary"
+    }
+}
+"#;
+
+        assert_eq!(
+            parse_vdf_paths(VDF),
+            vec![
+                PathBuf::from("/mnt/fast/SteamLibrary"),
+                PathBuf::from(r"D:\\Games\\SteamLibrary")
+            ]
+        );
+    }
+
+    #[test]
+    fn test_parse_vdf_paths_empty() {
+        const VDF: &str = r#"
+"libraryfolders"
+{
+    "0"
+    {
+        "label"  "No path here"
+    }
+}
+"#;
+
+        assert!(parse_vdf_paths(VDF).is_empty());
+    }
+
+    #[test]
+    fn test_parse_acf_field_name() {
+        assert_eq!(parse_acf_field(ACF_FIXTURE, "name"), Some("Cyberpunk 2077"));
+    }
+
+    #[test]
+    fn test_parse_acf_field_installdir() {
+        assert_eq!(
+            parse_acf_field(ACF_FIXTURE, "installdir"),
+            Some("Cyberpunk 2077")
+        );
+    }
+
+    #[test]
+    fn test_parse_acf_field_missing_key() {
+        assert_eq!(parse_acf_field(ACF_FIXTURE, "StateFlags"), None);
+    }
+
+    #[test]
+    fn test_epic_manifest_parse() {
+        const MANIFEST: &str = r#"{
+  "DisplayName": "Alan Wake 2",
+  "InstallLocation": "C:\\Games\\AlanWake2",
+  "LaunchExecutable": "AlanWake2.exe"
+}"#;
+
+        let parsed: EpicManifest = serde_json::from_str(MANIFEST).unwrap();
+        assert_eq!(parsed.display_name, "Alan Wake 2");
+        assert_eq!(parsed.install_location, r"C:\Games\AlanWake2");
+        assert_eq!(parsed.launch_executable.as_deref(), Some("AlanWake2.exe"));
+    }
+
+    #[test]
+    fn test_epic_manifest_missing_field() {
+        const MANIFEST: &str = r#"{
+  "DisplayName": "DLC Entry",
+  "InstallLocation": "C:\\Games\\BaseGame"
+}"#;
+
+        let parsed: EpicManifest = serde_json::from_str(MANIFEST).unwrap();
+        assert_eq!(parsed.display_name, "DLC Entry");
+        assert_eq!(parsed.install_location, r"C:\Games\BaseGame");
+        assert_eq!(parsed.launch_executable, None);
+    }
+
+    const ACF_FIXTURE: &str = r#""AppState"
+{
+    "appid"  "1091500"
+    "name"  "Cyberpunk 2077"
+    "installdir"  "Cyberpunk 2077"
+}"#;
 }
 
 // ── Lutris detection (Unix only) ──────────────────────────────────────────────
@@ -894,15 +1031,11 @@ fn game_name_from_appid(app_id: u32) -> Option<String> {
     for root in &roots {
         let vdf = root.join("libraryfolders.vdf");
         if let Ok(content) = std::fs::read_to_string(&vdf) {
-            for line in content.lines() {
-                let trimmed = line.trim();
-                if trimmed.starts_with("\"path\"") {
-                    // Format: "path"  "/some/path" — value is in the 4th quote segment
-                    if let Some(val) = trimmed.split('"').nth(3) {
-                        extra.push(PathBuf::from(val).join("steamapps"));
-                    }
-                }
-            }
+            extra.extend(
+                parse_vdf_paths(&content)
+                    .into_iter()
+                    .map(|p| p.join("steamapps")),
+            );
         }
     }
     roots.extend(extra);
@@ -910,20 +1043,8 @@ fn game_name_from_appid(app_id: u32) -> Option<String> {
     for root in &roots {
         let acf = root.join(format!("appmanifest_{}.acf", app_id));
         if let Ok(content) = std::fs::read_to_string(&acf) {
-            // Find: "name"  "Game Title Here"
-            for line in content.lines() {
-                let trimmed = line.trim();
-                if trimmed.starts_with("\"name\"") {
-                    // Split on quote pairs: key quote, key, close, whitespace, value quote, value, close
-                    let parts: Vec<&str> = trimmed.split('"').collect();
-                    // parts: ["", "name", "   ", "Game Title", ""]
-                    if parts.len() >= 4 {
-                        let name = parts[3].trim().to_string();
-                        if !name.is_empty() {
-                            return Some(name);
-                        }
-                    }
-                }
+            if let Some(name) = parse_acf_field(&content, "name") {
+                return Some(name.to_string());
             }
         }
     }
@@ -1402,7 +1523,14 @@ pub fn scan_for_game() -> Option<Target> {
     // not polled here — user targets are pinned, not re-scanned every 5 s.
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+pub fn scan_for_game() -> Option<Target> {
+    crate::launchers_windows::scan_for_steam_game_windows()
+        .or_else(crate::launchers_windows::scan_for_epic_game_windows)
+        .or_else(crate::launchers_windows::scan_for_gog_game_windows)
+}
+
+#[cfg(not(any(unix, windows)))]
 pub fn scan_for_game() -> Option<Target> {
     None
 }
