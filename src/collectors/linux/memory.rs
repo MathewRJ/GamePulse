@@ -1,9 +1,9 @@
-/// Memory collector — mirrors collector/gamepulse/collectors/memory.py exactly.
+/// Memory collector — mirrors collector/rigsignal/collectors/memory.py exactly.
 ///
 /// Reads /proc/meminfo (system memory) and optionally /proc/<pid>/status and
 /// /proc/<pid>/stat for game-process memory and page fault metrics.
 ///
-/// Output fields (gamepulse.memory.*):
+/// Output fields (rigsignal.memory.*):
 ///   system_used_mb    u64  — MemTotal - MemAvailable in MB
 ///   page_cache_mb     u64  — Cached in MB
 ///   shared_mb         u64  — Shmem in MB
@@ -96,7 +96,7 @@ impl MemoryCollector {
 
 impl Collector for MemoryCollector {
     fn dataset(&self) -> &'static str {
-        "gamepulse.memory"
+        "rigsignal.memory"
     }
 
     fn set_game_pid(&mut self, pid: Option<u32>) {
@@ -140,6 +140,6 @@ impl Collector for MemoryCollector {
             }
         }
 
-        Ok(Some(json!({ "gamepulse": { "memory": mem } })))
+        Ok(Some(json!({ "rigsignal": { "memory": mem } })))
     }
 }

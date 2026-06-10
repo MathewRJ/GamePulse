@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Deploy the gamepulse-game-timeline Elasticsearch transform.
+Deploy the rigsignal-game-timeline Elasticsearch transform.
 
-This transform reads session summary documents from metrics-gamepulse.session-default
-and writes one pre-aggregated document per game/session into gamepulse-game-timeline.
+This transform reads session summary documents from metrics-rigsignal.session-default
+and writes one pre-aggregated document per game/session into rigsignal-game-timeline.
 
 After the transform runs, a post-enrichment step computes cumulative_playtime_hours
 (a running total of playtime per game, sorted by session_start) and patches each
@@ -33,17 +33,17 @@ from pathlib import Path
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-TRANSFORM_ID = "gamepulse-game-timeline"
-DEST_INDEX = "gamepulse-game-timeline"
+TRANSFORM_ID = "rigsignal-game-timeline"
+DEST_INDEX = "rigsignal-game-timeline"
 
 # Correct source index (session summaries ship to metrics, not logs).
-SOURCE_INDEX = "metrics-gamepulse.session-default"
+SOURCE_INDEX = "metrics-rigsignal.session-default"
 
 TRANSFORM_DEF = {
     "id": TRANSFORM_ID,
     "description": (
         "Pre-computes per-session metrics per game for the Games continuous "
-        "line dashboard. Source: metrics-gamepulse.session-default. "
+        "line dashboard. Source: metrics-rigsignal.session-default. "
         "One output doc per (game_name, session_id)."
     ),
     "source": {
@@ -52,11 +52,11 @@ TRANSFORM_DEF = {
             "bool": {
                 "filter": [
                     # Only completed sessions with a known game name.
-                    {"range": {"gamepulse.summary.duration_s": {"gt": 0}}},
-                    {"term": {"gamepulse.summary.ended": True}},
-                    {"exists": {"field": "gamepulse.game.name"}},
+                    {"range": {"rigsignal.summary.duration_s": {"gt": 0}}},
+                    {"term": {"rigsignal.summary.ended": True}},
+                    {"exists": {"field": "rigsignal.game.name"}},
                     # Restrict to sessions on/after 2026-04-12.
-                    # The backing index created on 2026-03-30 has gamepulse.game.name
+                    # The backing index created on 2026-03-30 has rigsignal.game.name
                     # mapped as text (no keyword), which causes top_metrics and terms
                     # aggregations to fail with "Fielddata is disabled". The 2026-04-12
                     # backing index has the correct keyword mappings from the fixed
@@ -82,13 +82,13 @@ TRANSFORM_DEF = {
             # One output document per unique (game, session) pair.
             # Use base field paths (no .keyword suffix). The source date range
             # (gte: 2026-04-12) limits the query to the 2026-04-12 backing index
-            # where gamepulse.game.name and gamepulse.session.id are mapped as
+            # where rigsignal.game.name and rigsignal.session.id are mapped as
             # native keyword. The .keyword multi-field only exists in the older
             # 2026.03.30 backing index and does NOT exist in the 2026.04.12 index,
             # so using .keyword paths causes the composite aggregation to return
             # empty results on the new index.
-            "game_name": {"terms": {"field": "gamepulse.game.name"}},
-            "session_id": {"terms": {"field": "gamepulse.session.id"}},
+            "game_name": {"terms": {"field": "rigsignal.game.name"}},
+            "session_id": {"terms": {"field": "rigsignal.session.id"}},
         },
         "aggregations": {
             # Use min(@timestamp) as session_start — the earliest doc timestamp
@@ -96,22 +96,22 @@ TRANSFORM_DEF = {
             "session_start": {"min": {"field": "@timestamp"}},
             # Summary metrics: use max() because the session-end summary doc
             # contains the authoritative values and we want it to win.
-            "duration_s": {"max": {"field": "gamepulse.summary.duration_s"}},
-            "avg_fps": {"max": {"field": "gamepulse.summary.avg_fps"}},
-            "low_1pct_fps": {"max": {"field": "gamepulse.summary.low_1pct_fps"}},
-            "p99_frametime_ms": {"max": {"field": "gamepulse.summary.p99_frametime_ms"}},
-            "peak_gpu_temp_c": {"max": {"field": "gamepulse.summary.peak_gpu_temp_c"}},
-            "peak_cpu_temp_c": {"max": {"field": "gamepulse.summary.peak_cpu_temp_c"}},
-            "peak_gpu_power_w": {"max": {"field": "gamepulse.summary.peak_gpu_power_w"}},
-            "total_frames": {"max": {"field": "gamepulse.summary.total_frames"}},
-            "stutter_count": {"max": {"field": "gamepulse.summary.stutter_count"}},
+            "duration_s": {"max": {"field": "rigsignal.summary.duration_s"}},
+            "avg_fps": {"max": {"field": "rigsignal.summary.avg_fps"}},
+            "low_1pct_fps": {"max": {"field": "rigsignal.summary.low_1pct_fps"}},
+            "p99_frametime_ms": {"max": {"field": "rigsignal.summary.p99_frametime_ms"}},
+            "peak_gpu_temp_c": {"max": {"field": "rigsignal.summary.peak_gpu_temp_c"}},
+            "peak_cpu_temp_c": {"max": {"field": "rigsignal.summary.peak_cpu_temp_c"}},
+            "peak_gpu_power_w": {"max": {"field": "rigsignal.summary.peak_gpu_power_w"}},
+            "total_frames": {"max": {"field": "rigsignal.summary.total_frames"}},
+            "stutter_count": {"max": {"field": "rigsignal.summary.stutter_count"}},
             # NOTE: keyword context fields (bottleneck_dominant, gpu_model,
             # driver_version, kernel_version, proton_version) are NOT computed
             # here. ES transforms' top_metrics aggregation wraps nested-path
             # fields in the full object hierarchy when writing to the destination,
             # making them incompatible with flat keyword mappings. These fields
             # are added by the post-enrichment step, which performs a source
-            # lookup by gamepulse.session.id and bulk-updates the destination docs.
+            # lookup by rigsignal.session.id and bulk-updates the destination docs.
         },
     },
     "settings": {
@@ -300,7 +300,7 @@ def wait_for_docs(es: str, key: str, timeout_s: int = 120) -> int:
 
 def _fetch_source_docs_by_session(es: str, key: str, session_ids: list[str]) -> dict[str, dict]:
     """
-    Fetch source session docs from metrics-gamepulse.session-default by session ID.
+    Fetch source session docs from metrics-rigsignal.session-default by session ID.
     Returns a dict of session_id → source fields (keyword context fields only).
     """
     if not session_ids:
@@ -310,18 +310,18 @@ def _fetch_source_docs_by_session(es: str, key: str, session_ids: list[str]) -> 
         "query": {
             "bool": {
                 "filter": [
-                    {"terms": {"gamepulse.session.id": session_ids}},
-                    {"term": {"gamepulse.summary.ended": True}},
+                    {"terms": {"rigsignal.session.id": session_ids}},
+                    {"term": {"rigsignal.summary.ended": True}},
                 ]
             }
         },
         "_source": [
-            "gamepulse.session.id",
-            "gamepulse.summary.bottleneck_dominant",
-            "gamepulse.hardware.gpu.model",
-            "gamepulse.hardware.gpu.driver_version",
+            "rigsignal.session.id",
+            "rigsignal.summary.bottleneck_dominant",
+            "rigsignal.hardware.gpu.model",
+            "rigsignal.hardware.gpu.driver_version",
             "host.os.kernel",
-            "gamepulse.compatibility.proton_version",
+            "rigsignal.compatibility.proton_version",
         ],
     }).encode()
     req = urllib.request.Request(
@@ -338,8 +338,8 @@ def _fetch_source_docs_by_session(es: str, key: str, session_ids: list[str]) -> 
     for hit in data.get("hits", {}).get("hits", []):
         src = hit["_source"]
         sid = (
-            src.get("gamepulse", {}).get("session", {}).get("id")
-            or src.get("gamepulse.session.id")
+            src.get("rigsignal", {}).get("session", {}).get("id")
+            or src.get("rigsignal.session.id")
         )
         if sid:
             result[sid] = src
@@ -405,7 +405,7 @@ def run_post_enrichment(es: str, key: str, dry_run: bool) -> None:
             # Add keyword context from source doc.
             sid = sess["src"].get("session_id", "")
             source = source_by_session.get(sid, {})
-            gp = source.get("gamepulse", {})
+            gp = source.get("rigsignal", {})
             if gp:
                 bn = gp.get("summary", {}).get("bottleneck_dominant")
                 if bn:
@@ -519,11 +519,11 @@ def main() -> None:
     reset = "--reset" in sys.argv
     enrich_only = "--enrich-only" in sys.argv
 
-    # Read credentials from environment or fall back to gamepulse.toml.
+    # Read credentials from environment or fall back to rigsignal.toml.
     es_url = os.environ.get("ES_URL", "").rstrip("/")
     api_key = os.environ.get("ES_API_KEY", "")
     if not es_url or not api_key:
-        toml = Path.home() / ".config" / "gamepulse" / "gamepulse.toml"
+        toml = Path.home() / ".config" / "rigsignal" / "rigsignal.toml"
         if toml.exists():
             for line in toml.read_text().splitlines():
                 if line.startswith("endpoint"):
@@ -531,7 +531,7 @@ def main() -> None:
                 elif line.startswith("api_key"):
                     api_key = line.split('"')[1]
     if not es_url or not api_key:
-        sys.exit("Error: ES_URL and ES_API_KEY must be set (or ~/.config/gamepulse/gamepulse.toml must exist).")
+        sys.exit("Error: ES_URL and ES_API_KEY must be set (or ~/.config/rigsignal/rigsignal.toml must exist).")
 
     print(f"ES endpoint : {es_url}")
     print(f"Transform   : {TRANSFORM_ID}")

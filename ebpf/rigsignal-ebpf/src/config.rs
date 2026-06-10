@@ -1,4 +1,4 @@
-/// Configuration — reads the shared gamepulse.toml file used by the Python collector.
+/// Configuration — reads the shared rigsignal.toml file used by the Python collector.
 ///
 /// The [ebpf] section is new; all other sections are read-only from the daemon's
 /// perspective (we only need elasticsearch.* credentials and endpoint).
@@ -22,7 +22,7 @@ pub struct ElasticsearchConfig {
 
 #[derive(Debug, Deserialize)]
 pub struct EbpfConfig {
-    /// Path to the compiled BPF object file (gamepulse-ebpf-probes ELF).
+    /// Path to the compiled BPF object file (rigsignal-ebpf-probes ELF).
     /// Defaults to the workspace-relative target path after `cargo xtask build-ebpf`.
     #[serde(default = "default_probe_path")]
     pub probe_path: PathBuf,
@@ -44,11 +44,11 @@ pub struct EbpfConfig {
 
 fn default_probe_path() -> PathBuf {
     // Walk up from the daemon binary to find the workspace root (the directory
-    // that contains gamepulse-ebpf-daemon/ as a child).
+    // that contains rigsignal-ebpf/ as a child).
     let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("."));
     let workspace = exe
         .ancestors()
-        .find(|p| p.join("gamepulse-ebpf-daemon").exists())
+        .find(|p| p.join("rigsignal-ebpf").exists())
         .unwrap_or_else(|| exe.parent().unwrap_or(std::path::Path::new(".")));
 
     // Match the BPF probe profile to the daemon profile so `cargo xtask build-ebpf`
@@ -58,7 +58,7 @@ fn default_probe_path() -> PathBuf {
     workspace
         .join("target/bpfel-unknown-none")
         .join(profile)
-        .join("gamepulse-ebpf-probes")
+        .join("rigsignal-ebpf-probes")
 }
 
 fn default_enabled_probes() -> Vec<String> {
@@ -81,18 +81,18 @@ impl Default for EbpfConfig {
 }
 
 impl Config {
-    /// Load from the standard gamepulse.toml path.
+    /// Load from the standard rigsignal.toml path.
     /// Search order:
-    ///   1. $GAMEPULSE_CONFIG env var
-    ///   2. ~/.config/gamepulse/gamepulse.toml
-    ///   3. /etc/gamepulse/gamepulse.toml
+    ///   1. $RIGSIGNAL_CONFIG env var
+    ///   2. ~/.config/rigsignal/rigsignal.toml
+    ///   3. /etc/rigsignal/rigsignal.toml
     pub fn load() -> Result<Self> {
-        let path = if let Ok(env_path) = std::env::var("GAMEPULSE_CONFIG") {
+        let path = if let Ok(env_path) = std::env::var("RIGSIGNAL_CONFIG") {
             PathBuf::from(env_path)
         } else if let Some(home) = dirs_or_home() {
-            home.join(".config/gamepulse/gamepulse.toml")
+            home.join(".config/rigsignal/rigsignal.toml")
         } else {
-            PathBuf::from("/etc/gamepulse/gamepulse.toml")
+            PathBuf::from("/etc/rigsignal/rigsignal.toml")
         };
 
         Self::load_from(&path)

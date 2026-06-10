@@ -1,7 +1,7 @@
-/// gamepulse-ebpf — GamePulse eBPF kernel telemetry daemon.
+/// rigsignal-ebpf — RigSignal eBPF kernel telemetry daemon.
 ///
 /// Usage:
-///   gamepulse-ebpf [--config <path>] [--probe-path <path>]
+///   rigsignal-ebpf [--config <path>] [--probe-path <path>]
 ///
 /// Requires: CAP_BPF + CAP_PERFMON (or root). BTF at /sys/kernel/btf/vmlinux.
 /// Build BPF programs first: `cargo xtask build-ebpf`
@@ -39,11 +39,11 @@ use shipper::EsShipper;
 
 #[derive(Parser, Debug)]
 #[command(
-    name = "gamepulse-ebpf",
-    about = "GamePulse eBPF kernel telemetry daemon"
+    name = "rigsignal-ebpf",
+    about = "RigSignal eBPF kernel telemetry daemon"
 )]
 struct Cli {
-    /// Path to gamepulse.toml (defaults to ~/.config/gamepulse/gamepulse.toml)
+    /// Path to rigsignal.toml (defaults to ~/.config/rigsignal/rigsignal.toml)
     #[arg(long)]
     config: Option<PathBuf>,
 
@@ -51,7 +51,7 @@ struct Cli {
     #[arg(long)]
     probe_path: Option<PathBuf>,
 
-    /// Log level filter (e.g. info, debug, gamepulse_ebpf_daemon=debug)
+    /// Log level filter (e.g. info, debug, rigsignal_ebpf_daemon=debug)
     #[arg(long, default_value = "info")]
     log: String,
 }
@@ -78,7 +78,7 @@ async fn main() -> Result<()> {
         .probe_path
         .unwrap_or_else(|| config.ebpf.probe_path.clone());
 
-    info!("GamePulse eBPF daemon starting");
+    info!("RigSignal eBPF daemon starting");
     info!("BPF probe path: {}", probe_path.display());
     info!("ES endpoint: {}", config.elasticsearch.endpoint);
 
@@ -139,7 +139,7 @@ async fn main() -> Result<()> {
 
     // ES shipper
     let api_key = config.elasticsearch.api_key.as_deref().ok_or_else(|| {
-        anyhow::anyhow!("No API key: set ES_API_KEY env var or api_key in gamepulse.toml")
+        anyhow::anyhow!("No API key: set ES_API_KEY env var or api_key in rigsignal.toml")
     })?;
     let mut shipper =
         EsShipper::new(&config.elasticsearch.endpoint, api_key).context("creating ES shipper")?;
@@ -243,6 +243,6 @@ async fn main() -> Result<()> {
         }
     }
 
-    info!("gamepulse-ebpf stopped");
+    info!("rigsignal-ebpf stopped");
     Ok(())
 }

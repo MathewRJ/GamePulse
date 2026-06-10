@@ -1,4 +1,4 @@
-/// Storage collector — mirrors collector/gamepulse/collectors/storage.py exactly.
+/// Storage collector — mirrors collector/rigsignal/collectors/storage.py exactly.
 ///
 /// Reads /proc/diskstats as a delta between two snapshots. First call returns
 /// None (no delta yet). Subsequent calls return one sample per tick.
@@ -6,7 +6,7 @@
 /// Device selection: Steam library path → longest /proc/mounts prefix → /dev/
 /// block device. Fallback: first non-virtual device in /proc/diskstats.
 ///
-/// Output fields (gamepulse.storage.*):
+/// Output fields (rigsignal.storage.*):
 ///   read_mbps             f64  — read throughput in MB/s (2 dp)
 ///   write_mbps            f64  — write throughput in MB/s (2 dp)
 ///   read_iops             i64  — read I/Os per second (truncated)
@@ -152,7 +152,7 @@ impl StorageCollector {
 
 impl Collector for StorageCollector {
     fn dataset(&self) -> &'static str {
-        "gamepulse.storage"
+        "rigsignal.storage"
     }
 
     fn collect(&mut self) -> Result<Option<Value>> {
@@ -240,7 +240,7 @@ impl Collector for StorageCollector {
         self.prev_time = Some(now);
 
         Ok(Some(json!({
-            "gamepulse": {
+            "rigsignal": {
                 "storage": {
                     "read_mbps": read_mbps,
                     "write_mbps": write_mbps,

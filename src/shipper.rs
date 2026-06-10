@@ -3,8 +3,8 @@
 /// Matches the Python collector's shipper exactly:
 ///   - Authorization: ApiKey <key>
 ///   - Content-Type: application/x-ndjson
-///   - Action line: {"create":{"_index":"metrics-gamepulse.<dataset>-default"}}
-///   - Index naming: metrics-gamepulse.<dataset>-default
+///   - Action line: {"create":{"_index":"metrics-rigsignal.<dataset>-default"}}
+///   - Index naming: metrics-rigsignal.<dataset>-default
 use crate::config::Config;
 use anyhow::{Context, Result};
 use reqwest::Client;
@@ -64,7 +64,7 @@ fn encode_base64(input: &[u8]) -> String {
 }
 
 /// GET /_cluster/health to verify connectivity. Returns Ok(()) on HTTP 2xx/4xx, Err on
-/// network failure. Uses the same endpoint as `gamepulse setup` so the API key
+/// network failure. Uses the same endpoint as `rigsignal setup` so the API key
 /// privileges required are identical (cluster:monitor/health, not cluster:monitor/main).
 pub async fn ping(config: &Config) -> Result<()> {
     let client = build_client()?;
@@ -111,7 +111,7 @@ pub async fn ping(config: &Config) -> Result<()> {
 /// so the correct index can be derived.
 ///
 /// Index name convention (matches Python collector):
-///   metrics-gamepulse.<dataset>-default
+///   metrics-rigsignal.<dataset>-default
 pub async fn ship(config: &Config, docs: Vec<Value>) -> Result<ShipResult> {
     if docs.is_empty() {
         return Ok(ShipResult {
@@ -134,7 +134,7 @@ pub async fn ship(config: &Config, docs: Vec<Value>) -> Result<ShipResult> {
             .get("data_stream")
             .and_then(|ds| ds.get("dataset"))
             .and_then(|d| d.as_str())
-            .unwrap_or("gamepulse.unknown");
+            .unwrap_or("rigsignal.unknown");
         let index = format!("metrics-{}-default", dataset);
         let action = serde_json::json!({"create": {"_index": index}});
         body.push_str(&serde_json::to_string(&action).context("serialising action line")?);

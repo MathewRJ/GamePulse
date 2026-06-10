@@ -12,7 +12,7 @@
 /// A background thread reads continuously and accumulates samples where
 /// focus == current game app ID. collect() drains and computes stats.
 ///
-/// Output fields (gamepulse.frame.*):
+/// Output fields (rigsignal.frame.*):
 ///   current    i64  — fps of the most recent sample in the tick window
 ///   avg_1s     f64  — mean fps over the tick interval, 1 dp
 ///   low_1pct   i64  — 1% low fps (sorted ascending percentile)
@@ -140,7 +140,7 @@ impl Drop for GamescopeFrameCollector {
 
 impl Collector for GamescopeFrameCollector {
     fn dataset(&self) -> &'static str {
-        "gamepulse.frame"
+        "rigsignal.frame"
     }
 
     fn set_game_pid(&mut self, game_pid: Option<u32>) {
@@ -186,7 +186,7 @@ impl Collector for GamescopeFrameCollector {
         let low_01pct = percentile(&fps_values, 0.1) as i64;
 
         Ok(Some(serde_json::json!({
-            "gamepulse": {
+            "rigsignal": {
                 "fps": {
                     "current": current_fps,
                     "avg_1s": avg_fps,

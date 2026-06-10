@@ -1,16 +1,16 @@
-PackageIdentifier: MathewRJ.GamePulse
-PackageVersion: 0.1.0
+PackageIdentifier: MathewRJ.RigSignal
+PackageVersion: 0.2.0
 PackageLocale: en-US
 Publisher: MathewRJ
 PublisherUrl: https://github.com/MathewRJ
-PublisherSupportUrl: https://github.com/MathewRJ/GamePulse/issues
-PackageName: GamePulse
-PackageUrl: https://github.com/MathewRJ/GamePulse
+PublisherSupportUrl: https://github.com/MathewRJ/RigSignal/issues
+PackageName: RigSignal
+PackageUrl: https://github.com/MathewRJ/RigSignal
 License: MIT
-LicenseUrl: https://github.com/MathewRJ/GamePulse/blob/main/LICENSE
+LicenseUrl: https://github.com/MathewRJ/RigSignal/blob/main/LICENSE
 ShortDescription: Gaming performance telemetry agent for Elasticsearch
 Description: |-
-  GamePulse is a real-time gaming performance telemetry agent that captures
+  RigSignal is a real-time gaming performance telemetry agent that captures
   CPU, GPU, memory, storage, network, audio, power, and frame-timing metrics
   while you play, streaming them to Elasticsearch for live dashboards and
   historical analysis. Supports Steam, Proton, Lutris, Heroic, and Bottles.

@@ -1,11 +1,11 @@
-/// Elasticsearch document structs for the GamePulse eBPF data streams.
+/// Elasticsearch document structs for the RigSignal eBPF data streams.
 ///
-/// Aggregate probe snapshots ship to `metrics-gamepulse.ebpf-default`.
-/// Per-thread scheduler rows ship to `metrics-gamepulse.ebpf_thread-default`.
+/// Aggregate probe snapshots ship to `metrics-rigsignal.ebpf-default`.
+/// Per-thread scheduler rows ship to `metrics-rigsignal.ebpf_thread-default`.
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
-/// Top-level aggregate document sent to metrics-gamepulse.ebpf-default.
+/// Top-level aggregate document sent to metrics-rigsignal.ebpf-default.
 #[derive(Debug, Serialize)]
 pub struct EbpfMetricDoc {
     #[serde(rename = "@timestamp")]
@@ -13,13 +13,13 @@ pub struct EbpfMetricDoc {
 
     pub data_stream: DataStream,
 
-    pub gamepulse: GamePulseFields,
+    pub rigsignal: RigSignalFields,
 
     /// Host info — populated once at startup from /etc/hostname and uname.
     pub host: HostFields,
 }
 
-/// Top-level per-thread scheduler document sent to metrics-gamepulse.ebpf_thread-default.
+/// Top-level per-thread scheduler document sent to metrics-rigsignal.ebpf_thread-default.
 #[derive(Debug, Serialize)]
 pub struct EbpfThreadDoc {
     #[serde(rename = "@timestamp")]
@@ -27,7 +27,7 @@ pub struct EbpfThreadDoc {
 
     pub data_stream: DataStream,
 
-    pub gamepulse: GamePulseThreadFields,
+    pub rigsignal: RigSignalThreadFields,
 
     pub host: HostFields,
 }
@@ -41,8 +41,8 @@ pub enum EbpfDocument {
 impl EbpfDocument {
     pub fn index(&self) -> &'static str {
         match self {
-            EbpfDocument::Metric(_) => "metrics-gamepulse.ebpf-default",
-            EbpfDocument::Thread(_) => "metrics-gamepulse.ebpf_thread-default",
+            EbpfDocument::Metric(_) => "metrics-rigsignal.ebpf-default",
+            EbpfDocument::Thread(_) => "metrics-rigsignal.ebpf_thread-default",
         }
     }
 
@@ -78,7 +78,7 @@ impl Default for DataStream {
     fn default() -> Self {
         DataStream {
             ds_type: "metrics",
-            dataset: "gamepulse.ebpf",
+            dataset: "rigsignal.ebpf",
             namespace: "default",
         }
     }
@@ -88,7 +88,7 @@ impl DataStream {
     pub fn ebpf_thread() -> Self {
         DataStream {
             ds_type: "metrics",
-            dataset: "gamepulse.ebpf_thread",
+            dataset: "rigsignal.ebpf_thread",
             namespace: "default",
         }
     }
@@ -106,13 +106,13 @@ pub struct OsFields {
 }
 
 #[derive(Debug, Serialize)]
-pub struct GamePulseFields {
+pub struct RigSignalFields {
     pub session: SessionRef,
     pub ebpf: EbpfPayload,
 }
 
 #[derive(Debug, Serialize)]
-pub struct GamePulseThreadFields {
+pub struct RigSignalThreadFields {
     pub session: SessionRef,
     pub ebpf_thread: ThreadMetric,
 }

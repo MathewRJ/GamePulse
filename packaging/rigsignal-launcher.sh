@@ -1,35 +1,35 @@
 #!/bin/sh
-# gamepulse — unified launcher CLI for the GamePulse telemetry agent.
+# rigsignal — unified launcher CLI for the RigSignal telemetry agent.
 #
 # Usage:
-#   gamepulse setup              First-run: configure ES endpoint + API key
-#   gamepulse start              Start agent (+ eBPF if sudo available)
-#   gamepulse stop               Stop both services gracefully
-#   gamepulse status             Show service state + last session label
-#   gamepulse run %command%      Steam launch option: start → game → stop
+#   rigsignal setup              First-run: configure ES endpoint + API key
+#   rigsignal start              Start agent (+ eBPF if sudo available)
+#   rigsignal stop               Stop both services gracefully
+#   rigsignal status             Show service state + last session label
+#   rigsignal run %command%      Steam launch option: start → game → stop
 #
 # Steam integration:
-#   In game Properties → Launch Options:  gamepulse run %command%
+#   In game Properties → Launch Options:  rigsignal run %command%
 
-AGENT_UNIT="gamepulse-agent"
-EBPF_UNIT="gamepulse-ebpf"
+AGENT_UNIT="rigsignal-agent"
+EBPF_UNIT="rigsignal-ebpf"
 
 # User config path — mirrors what the Rust agent's Config::load() searches first.
-# The agent also reads /etc/gamepulse/gamepulse.toml (system-wide), but setup
+# The agent also reads /etc/rigsignal/rigsignal.toml (system-wide), but setup
 # writes the user config so credentials stay per-user and never world-readable.
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/gamepulse"
-CONFIG_FILE="$CONFIG_DIR/gamepulse.toml"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/rigsignal"
+CONFIG_FILE="$CONFIG_DIR/rigsignal.toml"
 
 # ── Launcher debug log ─────────────────────────────────────────────────────────
 # _llog always writes timestamped entries to a persistent file so Gaming Mode
 # decisions (invisible at launch time) are readable afterwards in Desktop Mode:
-#   cat ~/.local/share/gamepulse/launcher.log
+#   cat ~/.local/share/rigsignal/launcher.log
 #
-# Set GAMEPULSE_DEBUG=1 in Steam launch options to also capture the full shell
+# Set RIGSIGNAL_DEBUG=1 in Steam launch options to also capture the full shell
 # trace (set -x) in the same file — every branch, every command:
-#   GAMEPULSE_DEBUG=1 gamepulse run %command%
+#   RIGSIGNAL_DEBUG=1 rigsignal run %command%
 
-_LOG_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/gamepulse"
+_LOG_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/rigsignal"
 _LOG_FILE="$_LOG_DIR/launcher.log"
 _llog() { printf '%s %s\n' "$(date '+%Y-%m-%dT%H:%M:%S')" "$*" >> "$_LOG_FILE" 2>/dev/null || true; }
 
@@ -40,7 +40,7 @@ if [ -f "$_LOG_FILE" ]; then
     [ "${_lsz:-0}" -gt 1048576 ] && mv "$_LOG_FILE" "${_LOG_FILE}.old" 2>/dev/null || true
 fi
 
-if [ "${GAMEPULSE_DEBUG:-0}" = "1" ]; then
+if [ "${RIGSIGNAL_DEBUG:-0}" = "1" ]; then
     # Redirect stderr to the log file before set -x so the shell trace lands there.
     # The game process will inherit fd 2 → its stderr also goes to the log in this mode.
     exec 2>>"$_LOG_FILE"
@@ -68,7 +68,7 @@ _die()  { _err "$*"; exit 1; }
 # ── TOML helpers ───────────────────────────────────────────────────────────────
 
 # Extract value from a  key = "value"  TOML line. Strips surrounding quotes.
-# Works for the simple flat values gamepulse.toml uses (no multiline, no escapes).
+# Works for the simple flat values rigsignal.toml uses (no multiline, no escapes).
 toml_get() {
     # $1 = key name, $2 = file path
     grep "^$1[[:space:]]*=" "$2" 2>/dev/null \
@@ -163,15 +163,15 @@ ebpf_stop() {
 
 # ── Agent binary resolution ────────────────────────────────────────────────────
 
-# Look next to this script first — the user-mode installer puts gamepulse and
-# gamepulse-agent in the same directory (~/.local/bin/). Gamescope / Gaming Mode
+# Look next to this script first — the user-mode installer puts rigsignal and
+# rigsignal-agent in the same directory (~/.local/bin/). Gamescope / Gaming Mode
 # may not have ~/.local/bin on PATH, so we can't rely on PATH alone.
 resolve_agent_bin() {
     _script_dir="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
-    if [ -x "$_script_dir/gamepulse-agent" ]; then
-        echo "$_script_dir/gamepulse-agent"
-    elif command -v gamepulse-agent >/dev/null 2>&1; then
-        command -v gamepulse-agent
+    if [ -x "$_script_dir/rigsignal-agent" ]; then
+        echo "$_script_dir/rigsignal-agent"
+    elif command -v rigsignal-agent >/dev/null 2>&1; then
+        command -v rigsignal-agent
     else
         echo ""
     fi
@@ -201,13 +201,13 @@ cmd_setup() {
     fi
 
     # Print a brief explanation.
-    printf "\n${_GRN}GamePulse Setup${_NC}\n"
+    printf "\n${_GRN}RigSignal Setup${_NC}\n"
     printf "===============\n"
-    printf "GamePulse ships gaming metrics to Elasticsearch.\n"
+    printf "RigSignal ships gaming metrics to Elasticsearch.\n"
     printf "You need an Elastic Cloud deployment (or self-hosted ES 8.13+).\n\n"
     printf "You will need:\n"
     printf "  - Your Elasticsearch endpoint URL\n"
-    printf "  - An API key with write access to metrics-gamepulse.* indices\n\n"
+    printf "  - An API key with write access to metrics-rigsignal.* indices\n\n"
 
     # Prompt for endpoint.
     printf "Elasticsearch endpoint\n"
@@ -254,8 +254,8 @@ cmd_setup() {
     # Write atomically: write to temp file then move.
     tmp_cfg="${CONFIG_FILE}.tmp.$$"
     cat > "$tmp_cfg" << TOML
-# GamePulse configuration — written by 'gamepulse setup'
-# Edit this file to change settings. Re-run 'gamepulse setup' to update credentials.
+# RigSignal configuration — written by 'rigsignal setup'
+# Edit this file to change settings. Re-run 'rigsignal setup' to update credentials.
 # SECURITY: this file contains your API key. Permissions are set to 600.
 
 [elasticsearch]
@@ -285,23 +285,23 @@ TOML
 
     # If the eBPF daemon is installed, sync credentials to the system config so it
     # can reach Elasticsearch without a separate manual step.
-    if [ -f /usr/local/bin/gamepulse-ebpf ] && command -v sudo >/dev/null 2>&1; then
+    if [ -f /usr/local/bin/rigsignal-ebpf ] && command -v sudo >/dev/null 2>&1; then
         _steamos_ro_setup=0
         if command -v steamos-readonly >/dev/null 2>&1; then
             sudo steamos-readonly disable 2>/dev/null && _steamos_ro_setup=1
         fi
-        sudo mkdir -p /etc/gamepulse
-        sudo install -m 600 "$CONFIG_FILE" /etc/gamepulse/gamepulse.toml
+        sudo mkdir -p /etc/rigsignal
+        sudo install -m 600 "$CONFIG_FILE" /etc/rigsignal/rigsignal.toml
         [ "$_steamos_ro_setup" = "1" ] && sudo steamos-readonly enable 2>/dev/null || true
-        _ok "eBPF daemon config updated (/etc/gamepulse/gamepulse.toml)"
+        _ok "eBPF daemon config updated (/etc/rigsignal/rigsignal.toml)"
         # Restart the daemon so it picks up the new credentials immediately.
-        if systemctl is-active --quiet gamepulse-ebpf 2>/dev/null; then
-            sudo systemctl restart gamepulse-ebpf 2>/dev/null || true
+        if systemctl is-active --quiet rigsignal-ebpf 2>/dev/null; then
+            sudo systemctl restart rigsignal-ebpf 2>/dev/null || true
             _ok "eBPF daemon restarted with new credentials"
         fi
     fi
 
-    _info "Run 'gamepulse start' to begin collecting, or add 'gamepulse run %command%' as a Steam launch option."
+    _info "Run 'rigsignal start' to begin collecting, or add 'rigsignal run %command%' as a Steam launch option."
 }
 
 # ── Subcommand: start ──────────────────────────────────────────────────────────
@@ -360,17 +360,17 @@ cmd_status() {
 }
 
 # ── Subcommand: run ────────────────────────────────────────────────────────────
-# Steam launch option form: gamepulse run %command%
+# Steam launch option form: rigsignal run %command%
 # Steam expands %command% to the full game executable + arguments.
 
 cmd_run() {
     if [ $# -eq 0 ]; then
-        _die "Usage: gamepulse run <command> [args...]"
+        _die "Usage: rigsignal run <command> [args...]"
     fi
 
     # Strip leading KEY=VALUE args and export them so users can write:
-    #   gamepulse run GAMEPULSE_LOG=debug %command%
-    # rather than needing to place env vars before 'gamepulse' in the launch option.
+    #   rigsignal run RIGSIGNAL_LOG=debug %command%
+    # rather than needing to place env vars before 'rigsignal' in the launch option.
     while [ $# -gt 0 ]; do
         case "$1" in
             [A-Za-z_]*=*)
@@ -399,7 +399,7 @@ cmd_run() {
     AGENT_BIN="$(resolve_agent_bin)"
     _llog "cmd_run: AGENT_BIN='$AGENT_BIN'"
     if [ -z "$AGENT_BIN" ]; then
-        _warn "gamepulse-agent not found — launching game without telemetry."
+        _warn "rigsignal-agent not found — launching game without telemetry."
         _info "Re-run the installer or add ~/.local/bin to PATH."
         _llog "cmd_run: agent not found — exec-ing game directly without telemetry"
         exec "$@"
@@ -411,18 +411,18 @@ cmd_run() {
     # layer — the host binary cannot inject across the container boundary.
     # autostart_log=1 is written to ~/.config/MangoHud/MangoHud.conf by the
     # installer so it applies unconditionally; no_display=1 hides the overlay.
-    # Set GAMEPULSE_MANGOHUD=0 to opt out entirely.
-    # Set GAMEPULSE_MANGOHUD=display to show the overlay.
-    if [ "${GAMEPULSE_MANGOHUD:-auto}" != "0" ] && [ -z "${MANGOHUD:-}" ]; then
+    # Set RIGSIGNAL_MANGOHUD=0 to opt out entirely.
+    # Set RIGSIGNAL_MANGOHUD=display to show the overlay.
+    if [ "${RIGSIGNAL_MANGOHUD:-auto}" != "0" ] && [ -z "${MANGOHUD:-}" ]; then
         MANGOHUD=1
         export MANGOHUD
         _llog "cmd_run: MANGOHUD=1 set (SLR bundled MangoHud, autostart_log via conf)"
-        if [ "${GAMEPULSE_MANGOHUD:-auto}" != "display" ]; then
+        if [ "${RIGSIGNAL_MANGOHUD:-auto}" != "display" ]; then
             MANGOHUD_CONFIG="no_display=1"
             export MANGOHUD_CONFIG
             _llog "cmd_run: MANGOHUD_CONFIG=no_display=1 (overlay hidden)"
         else
-            _llog "cmd_run: GAMEPULSE_MANGOHUD=display — overlay visible"
+            _llog "cmd_run: RIGSIGNAL_MANGOHUD=display — overlay visible"
         fi
     fi
 
@@ -478,23 +478,23 @@ cmd_run() {
 
 usage() {
     cat << 'EOF'
-GamePulse launcher
+RigSignal launcher
 
 Usage:
-  gamepulse setup              Configure Elasticsearch endpoint and API key
-  gamepulse start              Start agent (+ eBPF if sudo available)
-  gamepulse stop               Stop both services gracefully
-  gamepulse status             Show service status and last session info
-  gamepulse run <cmd> [args]   Start services, run command, stop on exit
+  rigsignal setup              Configure Elasticsearch endpoint and API key
+  rigsignal start              Start agent (+ eBPF if sudo available)
+  rigsignal stop               Stop both services gracefully
+  rigsignal status             Show service status and last session info
+  rigsignal run <cmd> [args]   Start services, run command, stop on exit
 
 Steam integration — set in game Properties → Launch Options:
-  gamepulse run %command%
+  rigsignal run %command%
 
 Examples:
-  gamepulse setup
-  gamepulse start
-  gamepulse status
-  gamepulse run ./mygame --fullscreen
+  rigsignal setup
+  rigsignal start
+  rigsignal status
+  rigsignal run ./mygame --fullscreen
 EOF
 }
 

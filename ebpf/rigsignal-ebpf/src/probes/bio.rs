@@ -1,10 +1,11 @@
-/// Memory pressure probe — userspace side.
+/// Block I/O latency probe — userspace side.
 ///
-/// Attaches two tracepoints from the gamepulse-ebpf-probes BPF object:
-///   exceptions/page_fault_user                  — game thread page faults
-///   vmscan/mm_vmscan_direct_reclaim_begin        — direct memory reclaim events
+/// Attaches two tracepoints from the rigsignal-ebpf-probes BPF object:
+///   block/block_rq_issue
+///   block/block_rq_complete
 ///
-/// Produces a MemSnapshot per 1-second interval.
+/// Drains the BIO_EVENTS ring buffer synchronously on every collect() call
+/// (same pattern as SchedProbe — avoids AsyncFd/EPOLLET race).
 use anyhow::{Context, Result};
 use aya::{
     maps::{MapData, RingBuf},
@@ -14,34 +15,31 @@ use aya::{
 use tracing::{debug, warn};
 
 use super::{Probe, ProbeRequirements};
-use crate::aggregator::{MemAggregator, RawMemEvent};
+use crate::aggregator::{BioAggregator, RawBioEvent};
 use crate::es_model::EbpfDocument;
 
-pub struct MemProbe {
-    aggregator: MemAggregator,
+pub struct BioProbe {
+    aggregator: BioAggregator,
     ring_buf: Option<RingBuf<MapData>>,
 }
 
-impl MemProbe {
+impl BioProbe {
     pub fn new(host_name: String, kernel_version: String) -> Self {
-        MemProbe {
-            aggregator: MemAggregator::new(host_name, kernel_version),
+        BioProbe {
+            aggregator: BioAggregator::new(host_name, kernel_version),
             ring_buf: None,
         }
     }
 }
 
-impl Probe for MemProbe {
+impl Probe for BioProbe {
     fn name(&self) -> &'static str {
-        "mem"
+        "bio"
     }
 
     fn requirements(&self) -> ProbeRequirements {
         ProbeRequirements {
-            tracepoints: vec![
-                "exceptions/page_fault_user",
-                "vmscan/mm_vmscan_direct_reclaim_begin",
-            ],
+            tracepoints: vec!["block/block_rq_issue", "block/block_rq_complete"],
             kprobe_symbols: vec![],
             kernel_modules: vec![],
             min_kernel: (5, 8),
@@ -64,19 +62,14 @@ impl Probe for MemProbe {
                 Ok(())
             };
 
-        attach(ebpf, "page_fault_user", "exceptions", "page_fault_user")?;
-        attach(
-            ebpf,
-            "mm_vmscan_direct_reclaim_begin",
-            "vmscan",
-            "mm_vmscan_direct_reclaim_begin",
-        )?;
+        attach(ebpf, "block_rq_issue", "block", "block_rq_issue")?;
+        attach(ebpf, "block_rq_complete", "block", "block_rq_complete")?;
 
         let ring_buf = RingBuf::try_from(
-            ebpf.take_map("MEM_EVENTS")
-                .context("MEM_EVENTS map not found")?,
+            ebpf.take_map("BIO_EVENTS")
+                .context("BIO_EVENTS map not found")?,
         )
-        .context("MEM_EVENTS map type mismatch")?;
+        .context("BIO_EVENTS map type mismatch")?;
 
         self.ring_buf = Some(ring_buf);
         Ok(())
@@ -84,7 +77,7 @@ impl Probe for MemProbe {
 
     fn collect(&mut self, session_id: &str) -> Result<Vec<EbpfDocument>> {
         use std::mem::size_of;
-        let event_size = size_of::<RawMemEvent>();
+        let event_size = size_of::<RawBioEvent>();
         let mut event_count = 0usize;
 
         if let Some(rb) = &mut self.ring_buf {
@@ -92,21 +85,22 @@ impl Probe for MemProbe {
                 let bytes: &[u8] = &*item;
                 if bytes.len() < event_size {
                     warn!(
-                        "mem ring buf item too small: {} < {}",
+                        "bio ring buf item too small: {} < {}",
                         bytes.len(),
                         event_size
                     );
                     continue;
                 }
+                // SAFETY: RawBioEvent is repr(C), size verified above.
                 let event =
-                    unsafe { std::ptr::read_unaligned(bytes.as_ptr() as *const RawMemEvent) };
+                    unsafe { std::ptr::read_unaligned(bytes.as_ptr() as *const RawBioEvent) };
                 self.aggregator.push(event);
                 event_count += 1;
             }
         }
 
         if event_count > 0 {
-            debug!("drained {} mem events from ring buffer", event_count);
+            debug!("drained {} bio events from ring buffer", event_count);
         }
 
         let doc = self.aggregator.flush(session_id);

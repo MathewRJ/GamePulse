@@ -1,9 +1,9 @@
 /// Host environment enricher — collected once at startup.
 ///
-/// Mirrors collector/gamepulse/enricher/host.py.
+/// Mirrors collector/rigsignal/enricher/host.py.
 /// Returns a serde_json::Value snapshot with:
 ///   host.os.{type, kernel, name, version, platform}
-///   gamepulse.hardware.{cpu, gpu, ram, device}
+///   rigsignal.hardware.{cpu, gpu, ram, device}
 ///
 /// Collected once at startup; added to the session start/end document only
 /// (not to every per-tick document, matching Python cli.py behaviour).
@@ -563,7 +563,7 @@ fn collect_monitors() -> Vec<Value> {
 // ── Public entry point ─────────────────────────────────────────────────────────
 
 /// Build the host enrichment snapshot. Called once at startup.
-/// Returns a serde_json::Value merging host.os.* and gamepulse.hardware.*.
+/// Returns a serde_json::Value merging host.os.* and rigsignal.hardware.*.
 pub fn collect_snapshot() -> Value {
     let os = os_info();
     let cpu = cpu_info();
@@ -593,7 +593,7 @@ pub fn collect_snapshot() -> Value {
     if !hardware.is_empty() {
         doc.as_object_mut()
             .unwrap()
-            .insert("gamepulse".to_string(), json!({ "hardware": hardware }));
+            .insert("rigsignal".to_string(), json!({ "hardware": hardware }));
     }
     doc
 }

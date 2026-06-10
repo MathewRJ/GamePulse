@@ -1,5 +1,5 @@
 [workspace]
-# Root workspace for the GamePulse production agent.
+# Root workspace for the RigSignal production agent.
 # The eBPF daemon lives in its own workspace (ebpf/) because it requires
 # a cross-compilation target (bpfel-unknown-none) and a custom xtask build
 # step — merging it here would complicate all host-target builds.

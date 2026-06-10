@@ -6,22 +6,22 @@
 # the nightly Rust + bpf-linker toolchain the eBPF build requires.
 #
 # Environment variables expected at makepkg invocation time:
-#   PKGVER   — release version string without leading 'v' (e.g. 0.1.0)
-#   REPOROOT — absolute path to the GamePulse repo root
+#   PKGVER   — release version string without leading 'v' (e.g. 0.2.0)
+#   REPOROOT — absolute path to the RigSignal repo root
 #
 # Invocation (from .github/packaging/):
-#   PKGVER=0.1.0 REPOROOT=/path/to/repo makepkg --nodeps --noextract --nosign
+#   PKGVER=0.2.0 REPOROOT=/path/to/repo makepkg --nodeps --noextract --nosign
 
-pkgname=gamepulse
-pkgver="${PKGVER:-0.1.0}"
+pkgname=rigsignal
+pkgver="${PKGVER:-0.2.0}"
 pkgrel=1
-pkgdesc="GamePulse gaming performance telemetry agent — ships CPU/GPU/memory/frame metrics to Elasticsearch"
+pkgdesc="RigSignal gaming performance telemetry agent — ships CPU/GPU/memory/frame metrics to Elasticsearch"
 arch=('x86_64')
-url="https://github.com/MathewRJ/GamePulse"
+url="https://github.com/MathewRJ/RigSignal"
 license=('MIT')
 depends=()
 optdepends=('mangohud: frame timing data collection')
-backup=('etc/gamepulse/gamepulse.toml')
+backup=('etc/rigsignal/rigsignal.toml')
 source=()
 sha256sums=()
 
@@ -29,25 +29,25 @@ sha256sums=()
 _reporoot="$(realpath "${REPOROOT:-../..}")"
 
 package() {
-    install -Dm755 "${_reporoot}/target/release/gamepulse-agent" \
-        "${pkgdir}/usr/bin/gamepulse-agent"
+    install -Dm755 "${_reporoot}/target/release/rigsignal-agent" \
+        "${pkgdir}/usr/bin/rigsignal-agent"
 
-    install -Dm755 "${_reporoot}/packaging/gamepulse-launcher.sh" \
-        "${pkgdir}/usr/bin/gamepulse"
+    install -Dm755 "${_reporoot}/packaging/rigsignal-launcher.sh" \
+        "${pkgdir}/usr/bin/rigsignal"
 
-    install -Dm644 "${_reporoot}/packaging/systemd/gamepulse-agent.service" \
-        "${pkgdir}/usr/lib/systemd/user/gamepulse-agent.service"
+    install -Dm644 "${_reporoot}/packaging/systemd/rigsignal-agent.service" \
+        "${pkgdir}/usr/lib/systemd/user/rigsignal-agent.service"
 
-    install -Dm644 "${_reporoot}/packaging/systemd/gamepulse-ebpf.service" \
-        "${pkgdir}/usr/lib/systemd/system/gamepulse-ebpf.service"
+    install -Dm644 "${_reporoot}/packaging/systemd/rigsignal-ebpf.service" \
+        "${pkgdir}/usr/lib/systemd/system/rigsignal-ebpf.service"
 
-    install -Dm644 "${_reporoot}/packaging/config/gamepulse.toml.example" \
-        "${pkgdir}/etc/gamepulse/gamepulse.toml"
+    install -Dm644 "${_reporoot}/packaging/config/rigsignal.toml.example" \
+        "${pkgdir}/etc/rigsignal/rigsignal.toml"
 
     # ---- Starter game profiles ----
     for _profile in "${_reporoot}"/profiles/*.toml; do
         install -Dm644 "${_profile}" \
-            "${pkgdir}/usr/share/gamepulse/profiles/$(basename "${_profile}")"
+            "${pkgdir}/usr/share/rigsignal/profiles/$(basename "${_profile}")"
     done
 
     install -Dm644 "${_reporoot}/LICENSE" \

@@ -1,10 +1,10 @@
-// GamePulse production agent — Phase 6 main loop.
+// RigSignal production agent — Phase 6 main loop.
 //
 // Wires all 8 collectors into a 1-second tick loop, handles game detection,
 // writes session.json for the eBPF daemon, ships docs to Elasticsearch, and
 // builds a session summary document on shutdown.
 //
-// Mirrors the structure of collector/gamepulse/cli.py exactly.
+// Mirrors the structure of collector/rigsignal/cli.py exactly.
 
 #[cfg(all(feature = "ebpf", not(target_os = "linux")))]
 compile_error!(
@@ -53,14 +53,14 @@ enum Commands {
 
 #[derive(Parser)]
 #[command(
-    name = "gamepulse-agent",
+    name = "rigsignal-agent",
     version,
-    about = "GamePulse cross-platform gaming telemetry agent"
+    about = "RigSignal cross-platform gaming telemetry agent"
 )]
 struct Cli {
     /// Path to config file. If unset, searches platform defaults:
-    /// Linux: ~/.config/gamepulse/gamepulse.toml then /etc/gamepulse/gamepulse.toml.
-    /// Windows: %APPDATA%\GamePulse\gamepulse.toml then %PROGRAMDATA%\GamePulse\gamepulse.toml.
+    /// Linux: ~/.config/rigsignal/rigsignal.toml then /etc/rigsignal/rigsignal.toml.
+    /// Windows: %APPDATA%\RigSignal\rigsignal.toml then %PROGRAMDATA%\RigSignal\rigsignal.toml.
     #[arg(short, long, value_name = "PATH")]
     config: Option<PathBuf>,
 
@@ -73,7 +73,7 @@ struct Cli {
     verbose: bool,
 
     /// Log verbosity level: error | warn | info | debug | trace
-    /// Overrides --verbose and GAMEPULSE_LOG when set.
+    /// Overrides --verbose and RIGSIGNAL_LOG when set.
     #[arg(long, value_name = "LEVEL", value_parser = ["error", "warn", "info", "debug", "trace"])]
     log_level: Option<String>,
 
@@ -197,7 +197,7 @@ fn add_data_stream(doc: &mut Value, dataset: &str) {
 
 // ── Tier 1 settings overlay builder (B.7) ────────────────────────────────────
 
-/// Build the `{ "gamepulse": { "settings": { … } } }` overlay from merged
+/// Build the `{ "rigsignal": { "settings": { … } } }` overlay from merged
 /// CLI and config values. Returns `None` if no settings were provided at all
 /// (so the key is simply absent from session docs).
 #[allow(clippy::too_many_arguments)]
@@ -268,7 +268,7 @@ fn build_settings_overlay(
     s.insert("source".into(), Value::String("manual".to_string()));
     s.insert("confidence".into(), Value::String("high".to_string()));
 
-    Some(json!({ "gamepulse": { "settings": Value::Object(s) } }))
+    Some(json!({ "rigsignal": { "settings": Value::Object(s) } }))
 }
 
 /// Parse "--upscaler dlss:quality" into (tech, Option<preset>).
@@ -304,7 +304,7 @@ fn build_session_start_doc(
     if let Some(settings) = &session.settings_overlay {
         doc = deep_merge(doc, settings.clone());
     }
-    add_data_stream(&mut doc, "gamepulse.session");
+    add_data_stream(&mut doc, "rigsignal.session");
     doc
 }
 
@@ -327,7 +327,7 @@ fn build_game_detected_doc(
     let compat_overlay = if compat.is_empty() {
         json!({})
     } else {
-        json!({ "gamepulse": { "compatibility": compat } })
+        json!({ "rigsignal": { "compatibility": compat } })
     };
     let mut doc = deep_merge(
         deep_merge(deep_merge(ts, base), host_snapshot.clone()),
@@ -336,7 +336,7 @@ fn build_game_detected_doc(
     if let Some(settings) = &session.settings_overlay {
         doc = deep_merge(doc, settings.clone());
     }
-    add_data_stream(&mut doc, "gamepulse.session");
+    add_data_stream(&mut doc, "rigsignal.session");
     doc
 }
 
@@ -375,7 +375,7 @@ impl SessionAccumulators {
         let mut tick_cpu_util: Option<f64> = None;
 
         for doc in docs {
-            let gp = match doc.get("gamepulse").and_then(|g| g.as_object()) {
+            let gp = match doc.get("rigsignal").and_then(|g| g.as_object()) {
                 Some(g) => g,
                 None => continue,
             };
@@ -502,14 +502,14 @@ fn build_summary_doc(
     let mut base = session.base_doc(hostname);
 
     // If the target exited before the summary is built, session.current_game is None.
-    // Inject the last known target fields so gamepulse.game.* appear in the summary.
+    // Inject the last known target fields so rigsignal.game.* appear in the summary.
     if let (Some(target), None) = (last_game, session.current_game.as_ref()) {
-        let overlay = json!({ "gamepulse": { "game": session::target_to_game_doc(target) } });
+        let overlay = json!({ "rigsignal": { "game": session::target_to_game_doc(target) } });
         base = deep_merge(base, overlay);
     }
 
     let ts = json!({ "@timestamp": utc_now() });
-    let summary_overlay = json!({ "gamepulse": { "summary": summary } });
+    let summary_overlay = json!({ "rigsignal": { "summary": summary } });
     let mut doc = deep_merge(
         deep_merge(deep_merge(ts, base), host_snapshot.clone()),
         summary_overlay,
@@ -517,7 +517,7 @@ fn build_summary_doc(
     if let Some(settings) = &session.settings_overlay {
         doc = deep_merge(doc, settings.clone());
     }
-    add_data_stream(&mut doc, "gamepulse.session");
+    add_data_stream(&mut doc, "rigsignal.session");
     doc
 }
 
@@ -594,7 +594,7 @@ async fn dry_run() -> Result<()> {
 // ── Main loop ─────────────────────────────────────────────────────────────────
 
 /// Resolve the effective log filter string from CLI flags and environment.
-/// Precedence (highest first): --log-level > --verbose > GAMEPULSE_LOG > "info"
+/// Precedence (highest first): --log-level > --verbose > RIGSIGNAL_LOG > "info"
 /// Print loaded modules + Tier 2 detection result for `pid`. Implements the
 /// `dllscan` debug subcommand. Output goes to stdout; ranges from "0 modules
 /// (process gone or access denied)" to a full enumeration with the inferred
@@ -621,7 +621,7 @@ fn resolve_log_filter(verbose: bool, log_level: Option<&str>) -> String {
     if verbose {
         return "debug".to_string();
     }
-    std::env::var("GAMEPULSE_LOG").unwrap_or_else(|_| "info".to_string())
+    std::env::var("RIGSIGNAL_LOG").unwrap_or_else(|_| "info".to_string())
 }
 
 #[tokio::main]
@@ -888,7 +888,7 @@ async fn main() -> Result<()> {
                             if let Err(e) = shipper::ship(&cfg, vec![summary_doc]).await {
                                 tracing::warn!("Failed to ship summary doc on game exit: {}", e);
                             } else {
-                                if let Err(e) = shipper::trigger_transform_sync(&cfg, "gamepulse-game-timeline").await {
+                                if let Err(e) = shipper::trigger_transform_sync(&cfg, "rigsignal-game-timeline").await {
                                     tracing::warn!("transform schedule_now failed (non-fatal): {}", e);
                                 }
                             }
@@ -984,13 +984,13 @@ async fn main() -> Result<()> {
         } else {
             // Trigger an immediate transform sync so the Games dashboard
             // reflects this session within seconds rather than up to 60 s.
-            if let Err(e) = shipper::trigger_transform_sync(&cfg, "gamepulse-game-timeline").await {
+            if let Err(e) = shipper::trigger_transform_sync(&cfg, "rigsignal-game-timeline").await {
                 tracing::warn!("transform schedule_now failed (non-fatal): {}", e);
             }
         }
     }
 
-    tracing::info!("GamePulse agent stopped after {} ticks", tick);
+    tracing::info!("RigSignal agent stopped after {} ticks", tick);
     Ok(())
 }
 
@@ -1008,14 +1008,14 @@ mod tests {
         // --verbose produces "debug" when no --log-level
         assert_eq!(resolve_log_filter(true, None), "debug");
 
-        // Neither flag → falls back to GAMEPULSE_LOG or "info"
+        // Neither flag → falls back to RIGSIGNAL_LOG or "info"
         // Remove the env var so the test is deterministic.
-        std::env::remove_var("GAMEPULSE_LOG");
+        std::env::remove_var("RIGSIGNAL_LOG");
         assert_eq!(resolve_log_filter(false, None), "info");
 
-        // GAMEPULSE_LOG is honoured when no CLI flags
-        std::env::set_var("GAMEPULSE_LOG", "error");
+        // RIGSIGNAL_LOG is honoured when no CLI flags
+        std::env::set_var("RIGSIGNAL_LOG", "error");
         assert_eq!(resolve_log_filter(false, None), "error");
-        std::env::remove_var("GAMEPULSE_LOG");
+        std::env::remove_var("RIGSIGNAL_LOG");
     }
 }

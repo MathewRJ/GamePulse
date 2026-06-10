@@ -12,7 +12,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-STASH_DIR="$(mktemp -d /tmp/gamepulse-test-stash.XXXXXX)"
+STASH_DIR="$(mktemp -d /tmp/rigsignal-test-stash.XXXXXX)"
 HIDDEN=()
 
 hide_dir() {

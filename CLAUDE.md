@@ -1,8 +1,8 @@
-# GamePulse — Contributor Guide
+# RigSignal — Contributor Guide
 
 ## What this project is
 
-GamePulse is an open-source gaming performance telemetry platform. It collects, ships, and
+RigSignal is an open-source gaming performance telemetry platform. It collects, ships, and
 visualises real-world gaming metrics to Elasticsearch via an Elastic integration package.
 
 **Stack:** Rust agent (`src/`), eBPF daemon (`ebpf/`), Elastic integration package
@@ -33,4 +33,4 @@ After any pipeline/manifest change: run `elastic-package check`.
 ## Development workflow
 
 This integration is developed using an AI-assisted workflow documented in `docs/archive/AGENT-SYSTEM.md`.
-The workflow infrastructure lives in a separate private repository and is not a dependency of GamePulse.
+The workflow infrastructure lives in a separate private repository and is not a dependency of RigSignal.

@@ -1,4 +1,4 @@
-/// Session file watcher — monitors $XDG_RUNTIME_DIR/gamepulse/session.json
+/// Session file watcher — monitors $XDG_RUNTIME_DIR/rigsignal/session.json
 /// (written by the Python collector when a game is detected).
 ///
 /// When the file appears or changes: parse it and update game_pids_map in the
@@ -40,9 +40,9 @@ pub struct SessionState {
 /// Canonical path for the session file.
 pub fn session_file_path() -> PathBuf {
     if let Ok(xdg_runtime) = std::env::var("XDG_RUNTIME_DIR") {
-        PathBuf::from(xdg_runtime).join("gamepulse/session.json")
+        PathBuf::from(xdg_runtime).join("rigsignal/session.json")
     } else {
-        PathBuf::from("/tmp/gamepulse/session.json")
+        PathBuf::from("/tmp/rigsignal/session.json")
     }
 }
 

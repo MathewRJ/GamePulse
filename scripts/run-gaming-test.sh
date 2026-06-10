@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# GamePulse gaming session test runner
+# RigSignal gaming session test runner
 #
 # Usage:
 #   ES_URL=https://... ES_API_KEY=... bash scripts/run-gaming-test.sh
-#   GAMEPULSE_TEST_HOST=mygamingpc ES_URL=https://... ES_API_KEY=... bash scripts/run-gaming-test.sh
+#   RIGSIGNAL_TEST_HOST=mygamingpc ES_URL=https://... ES_API_KEY=... bash scripts/run-gaming-test.sh
 #
 # Flow:
 #   1. Check credentials
-#   2. Deploy collector to the target host (GAMEPULSE_TEST_HOST, default: localhost)
+#   2. Deploy collector to the target host (RIGSIGNAL_TEST_HOST, default: localhost)
 #   3. Prompt: launch a game, then press Enter
 #   4. Run collector interactively over SSH (live output, Ctrl+C to stop)
 #   5. Query ES for doc counts per stream
 
-REMOTE="${GAMEPULSE_TEST_HOST:-localhost}"
+REMOTE="${RIGSIGNAL_TEST_HOST:-localhost}"
 REMOTE_VENV=/tmp/gp-venv
 REMOTE_COLLECTOR=/tmp/gp-collector
 
@@ -28,7 +28,7 @@ if [[ -z "${ES_API_KEY:-}" ]]; then
     exit 1
 fi
 
-echo "==> GamePulse gaming session test"
+echo "==> RigSignal gaming session test"
 echo ""
 
 # ── 2. Deploy collector ───────────────────────────────────────────────────────
@@ -62,7 +62,7 @@ ssh -t "${REMOTE}" "bash -c '
     export ES_URL=\"${ES_URL}\"
     export ES_API_KEY=\"${ES_API_KEY}\"
     export PYTHONPATH=${REMOTE_COLLECTOR}/collector
-    exec ${REMOTE_VENV}/bin/python3 -m gamepulse.cli --debug
+    exec ${REMOTE_VENV}/bin/python3 -m rigsignal.cli --debug
 '"
 set -e
 
@@ -72,15 +72,15 @@ echo "==> Data in Elasticsearch (doc counts per stream):"
 echo ""
 
 STREAMS=(
-    "metrics-gamepulse.gpu-default"
-    "metrics-gamepulse.cpu-default"
-    "metrics-gamepulse.memory-default"
-    "metrics-gamepulse.storage-default"
-    "metrics-gamepulse.frame-default"
-    "metrics-gamepulse.network-default"
-    "metrics-gamepulse.power-default"
-    "metrics-gamepulse.audio-default"
-    "metrics-gamepulse.session-default"
+    "metrics-rigsignal.gpu-default"
+    "metrics-rigsignal.cpu-default"
+    "metrics-rigsignal.memory-default"
+    "metrics-rigsignal.storage-default"
+    "metrics-rigsignal.frame-default"
+    "metrics-rigsignal.network-default"
+    "metrics-rigsignal.power-default"
+    "metrics-rigsignal.audio-default"
+    "metrics-rigsignal.session-default"
 )
 
 for stream in "${STREAMS[@]}"; do

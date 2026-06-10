@@ -1,6 +1,6 @@
 name: agent-ci
 
-# Deterministic CI gates for the GamePulse multi-agent pipeline.
+# Deterministic CI gates for the RigSignal multi-agent pipeline.
 # No LLM calls — the user runs on Pro / Plus / free subscriptions and has
 # no API keys. LLM audits run locally via `gpx audit security` and the
 # optional `.githooks/pre-push` hook, not in this workflow.

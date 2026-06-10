@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# kibana-lib.sh — minimal Kibana curl helper for GamePulse dashboard scripts.
+# kibana-lib.sh — minimal Kibana curl helper for RigSignal dashboard scripts.
 # Source, don't execute: `. "$(dirname "$0")/kibana-lib.sh"`
 #
 # Reads env:

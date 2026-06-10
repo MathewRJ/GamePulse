@@ -18,7 +18,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-STASH_DIR="$(mktemp -d /tmp/gamepulse-build-stash.XXXXXX)"
+STASH_DIR="$(mktemp -d /tmp/rigsignal-build-stash.XXXXXX)"
 HIDDEN=()
 
 hide_dir() {
@@ -67,7 +67,7 @@ elastic-package build "$@"
 # local package-registry (v1.37.0 in the 8.13.0 stack) rejects hyphenated
 # directory names. These component templates are loaded by Kibana directly and
 # are not needed for local registry serving.
-ZIP=$(ls build/packages/gamepulse-*.zip 2>/dev/null | head -1)
+ZIP=$(ls build/packages/rigsignal-*.zip 2>/dev/null | head -1)
 if [ -n "$ZIP" ]; then
   echo "==> Stripping elastic/component-templates/ from $(basename "$ZIP") ..."
   python3 - "$ZIP" <<'PYEOF'

@@ -291,26 +291,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gamepulse-agent"
-version = "0.1.7"
-dependencies = [
- "anyhow",
- "chrono",
- "clap",
- "fs2",
- "reqwest",
- "serde",
- "serde_json",
- "serde_yaml",
- "tokio",
- "toml",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "windows",
-]
-
-[[package]]
 name = "getrandom"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -995,6 +975,26 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "webpki-roots",
+]
+
+[[package]]
+name = "rigsignal"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap",
+ "fs2",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tokio",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "windows",
 ]
 
 [[package]]

@@ -4,7 +4,7 @@
   "created": "2026-04-07",
   "api_version": "Elastic-Api-Version: 1",
   "data": {
-    "title": "GamePulse - Game Library",
+    "title": "RigSignal - Game Library",
     "description": "Per-game performance summary: FPS, frame time, stutter, session count, and GPU/CPU load broken out by game title",
     "time_range": {
       "from": "now-30d",
@@ -23,7 +23,7 @@
         "config": {
           "title": "Game",
           "data_view_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2",
-          "field_name": "gamepulse.game.name.keyword"
+          "field_name": "rigsignal.game.name.keyword"
         }
       },
       {
@@ -53,7 +53,7 @@
         "config": {
           "title": "Source",
           "data_view_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2",
-          "field_name": "gamepulse.game.source"
+          "field_name": "rigsignal.game.source"
         }
       },
       {
@@ -68,7 +68,7 @@
         "config": {
           "title": "Launcher",
           "data_view_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2",
-          "field_name": "gamepulse.game.launcher"
+          "field_name": "rigsignal.game.launcher"
         }
       },
       {
@@ -106,13 +106,13 @@
                 "x": {
                   "operation": "terms",
                   "fields": [
-                    "gamepulse.game.name.keyword"
+                    "rigsignal.game.name.keyword"
                   ]
                 },
                 "y": [
                   {
                     "operation": "average",
-                    "field": "gamepulse.fps.avg_1s",
+                    "field": "rigsignal.fps.avg_1s",
                     "label": "Avg FPS"
                   }
                 ]
@@ -156,13 +156,13 @@
                 "x": {
                   "operation": "terms",
                   "fields": [
-                    "gamepulse.game.name.keyword"
+                    "rigsignal.game.name.keyword"
                   ]
                 },
                 "y": [
                   {
                     "operation": "average",
-                    "field": "gamepulse.fps.low_1pct",
+                    "field": "rigsignal.fps.low_1pct",
                     "label": "1% low FPS"
                   }
                 ]
@@ -210,14 +210,14 @@
                 "y": [
                   {
                     "operation": "average",
-                    "field": "gamepulse.fps.avg_1s",
+                    "field": "rigsignal.fps.avg_1s",
                     "label": "Avg FPS"
                   }
                 ],
                 "breakdown_by": {
                   "operation": "terms",
                   "fields": [
-                    "gamepulse.game.name.keyword"
+                    "rigsignal.game.name.keyword"
                   ]
                 }
               }
@@ -264,14 +264,14 @@
                 "y": [
                   {
                     "operation": "average",
-                    "field": "gamepulse.gpu.utilisation_pct",
+                    "field": "rigsignal.gpu.utilisation_pct",
                     "label": "GPU util %"
                   }
                 ],
                 "breakdown_by": {
                   "operation": "terms",
                   "fields": [
-                    "gamepulse.game.name.keyword"
+                    "rigsignal.game.name.keyword"
                   ]
                 }
               }
@@ -318,14 +318,14 @@
                 "y": [
                   {
                     "operation": "average",
-                    "field": "gamepulse.gpu.power_w",
+                    "field": "rigsignal.gpu.power_w",
                     "label": "GPU power W"
                   }
                 ],
                 "breakdown_by": {
                   "operation": "terms",
                   "fields": [
-                    "gamepulse.game.name.keyword"
+                    "rigsignal.game.name.keyword"
                   ]
                 }
               }
@@ -353,42 +353,42 @@
             "metrics": [
               {
                 "operation": "average",
-                "field": "gamepulse.fps.avg_1s",
+                "field": "rigsignal.fps.avg_1s",
                 "label": "Avg FPS"
               },
               {
                 "operation": "average",
-                "field": "gamepulse.fps.low_1pct",
+                "field": "rigsignal.fps.low_1pct",
                 "label": "1% Low FPS"
               },
               {
                 "operation": "average",
-                "field": "gamepulse.fps.low_01pct",
+                "field": "rigsignal.fps.low_01pct",
                 "label": "0.1% Low FPS"
               },
               {
                 "operation": "average",
-                "field": "gamepulse.fps.frametime_ms",
+                "field": "rigsignal.fps.frametime_ms",
                 "label": "Avg Frame Time (ms)"
               },
               {
                 "operation": "max",
-                "field": "gamepulse.fps.stutter_count",
+                "field": "rigsignal.fps.stutter_count",
                 "label": "Max Stutter Count"
               },
               {
                 "operation": "average",
-                "field": "gamepulse.gpu.utilisation_pct",
+                "field": "rigsignal.gpu.utilisation_pct",
                 "label": "Avg GPU Util %"
               },
               {
                 "operation": "average",
-                "field": "gamepulse.gpu.power_w",
+                "field": "rigsignal.gpu.power_w",
                 "label": "Avg GPU Power W"
               },
               {
                 "operation": "unique_count",
-                "field": "gamepulse.session.id.keyword",
+                "field": "rigsignal.session.id.keyword",
                 "label": "Sessions"
               }
             ],
@@ -396,7 +396,7 @@
               {
                 "operation": "terms",
                 "fields": [
-                  "gamepulse.game.name.keyword"
+                  "rigsignal.game.name.keyword"
                 ]
               }
             ]
@@ -438,7 +438,7 @@
                 "x": {
                   "operation": "terms",
                   "fields": [
-                    "gamepulse.game.source"
+                    "rigsignal.game.source"
                   ],
                   "size": 10
                 },
@@ -451,14 +451,14 @@
                 "breakdown_by": {
                   "operation": "terms",
                   "fields": [
-                    "gamepulse.game.launcher"
+                    "rigsignal.game.launcher"
                   ],
                   "size": 10
                 },
                 "filters": [
                   {
                     "field": "data_stream.dataset",
-                    "value": "gamepulse.session"
+                    "value": "rigsignal.session"
                   }
                 ]
               }

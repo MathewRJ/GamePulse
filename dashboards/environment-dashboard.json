@@ -4,7 +4,7 @@
   "created": "2026-04-26",
   "api_version": "Elastic-Api-Version: 2023-10-31",
   "data": {
-    "title": "GamePulse - Environment",
+    "title": "RigSignal - Environment",
     "time_range": {
       "from": "now-24h",
       "to": "now"
@@ -22,7 +22,7 @@
         "config": {
           "title": "Game",
           "data_view_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2",
-          "field_name": "gamepulse.game.name"
+          "field_name": "rigsignal.game.name"
         }
       },
       {
@@ -37,7 +37,7 @@
         "config": {
           "title": "Session",
           "data_view_id": "18dd83e8-6f88-474f-b434-a4b6c14a04a2",
-          "field_name": "gamepulse.session.id"
+          "field_name": "rigsignal.session.id"
         }
       },
       {
@@ -75,7 +75,7 @@
             {
               "type": "primary",
               "operation": "max",
-              "field": "gamepulse.cpu.temperature_c",
+              "field": "rigsignal.cpu.temperature_c",
               "label": "Peak CPU Temp °C"
             }
           ]
@@ -101,7 +101,7 @@
             {
               "type": "primary",
               "operation": "max",
-              "field": "gamepulse.gpu.temperature_c",
+              "field": "rigsignal.gpu.temperature_c",
               "label": "Peak GPU Temp °C"
             }
           ]
@@ -127,7 +127,7 @@
             {
               "type": "primary",
               "operation": "average",
-              "field": "gamepulse.gpu.utilisation_pct",
+              "field": "rigsignal.gpu.utilisation_pct",
               "label": "Avg GPU Util %"
             }
           ]
@@ -153,7 +153,7 @@
             {
               "type": "primary",
               "operation": "max",
-              "field": "gamepulse.memory.system_used_mb",
+              "field": "rigsignal.memory.system_used_mb",
               "label": "Peak RAM Used MB"
             }
           ]
@@ -197,12 +197,12 @@
               "y": [
                 {
                   "operation": "average",
-                  "field": "gamepulse.gpu.utilisation_pct",
+                  "field": "rigsignal.gpu.utilisation_pct",
                   "label": "GPU Util %"
                 },
                 {
                   "operation": "max",
-                  "field": "gamepulse.gpu.temperature_c",
+                  "field": "rigsignal.gpu.temperature_c",
                   "label": "GPU Temp °C",
                   "axis": "y2"
                 }
@@ -249,12 +249,12 @@
               "y": [
                 {
                   "operation": "average",
-                  "field": "gamepulse.cpu.total_utilisation_pct",
+                  "field": "rigsignal.cpu.total_utilisation_pct",
                   "label": "CPU Util %"
                 },
                 {
                   "operation": "max",
-                  "field": "gamepulse.cpu.temperature_c",
+                  "field": "rigsignal.cpu.temperature_c",
                   "label": "CPU Temp °C",
                   "axis": "y2"
                 }
@@ -301,7 +301,7 @@
               "y": [
                 {
                   "operation": "average",
-                  "field": "gamepulse.memory.system_used_mb",
+                  "field": "rigsignal.memory.system_used_mb",
                   "label": "System RAM Used MB"
                 }
               ]
@@ -328,21 +328,21 @@
           "metrics": [
             {
               "operation": "last_value",
-              "field": "gamepulse.game.name",
+              "field": "rigsignal.game.name",
               "time_field": "@timestamp",
               "multi_value": false,
               "label": "Game"
             },
             {
               "operation": "last_value",
-              "field": "gamepulse.hardware.gpu.model",
+              "field": "rigsignal.hardware.gpu.model",
               "time_field": "@timestamp",
               "multi_value": false,
               "label": "GPU"
             },
             {
               "operation": "last_value",
-              "field": "gamepulse.hardware.gpu.driver_version",
+              "field": "rigsignal.hardware.gpu.driver_version",
               "time_field": "@timestamp",
               "multi_value": false,
               "label": "Driver"
@@ -359,7 +359,7 @@
             {
               "operation": "terms",
               "fields": [
-                "gamepulse.session.id"
+                "rigsignal.session.id"
               ],
               "limit": 20,
               "rank_by": {

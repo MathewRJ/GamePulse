@@ -59,7 +59,7 @@ impl NetworkCollector {
 
 impl Collector for NetworkCollector {
     fn dataset(&self) -> &'static str {
-        "gamepulse.network"
+        "rigsignal.network"
     }
 
     fn set_game_pid(&mut self, pid: Option<u32>) {
@@ -100,7 +100,7 @@ impl Collector for NetworkCollector {
             .sum();
 
         Ok(Some(json!({
-            "gamepulse": {
+            "rigsignal": {
                 "network": {
                     "bytes_sent_per_sec": sent_bps,
                     "bytes_recv_per_sec": recv_bps,

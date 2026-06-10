@@ -1,5 +1,5 @@
-PackageIdentifier: MathewRJ.GamePulse
-PackageVersion: 0.1.0
+PackageIdentifier: MathewRJ.RigSignal
+PackageVersion: 0.2.0
 InstallerLocale: en-US
 InstallerType: msi
 Scope: machine
@@ -13,7 +13,7 @@ InstallerSwitches:
 UpgradeBehavior: install
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/MathewRJ/GamePulse/releases/download/v0.1.0/gamepulse-agent-0.1.0-x86_64.msi
+    InstallerUrl: https://github.com/MathewRJ/RigSignal/releases/download/v0.2.0/rigsignal-agent-0.2.0-x86_64.msi
     InstallerSha256: a1dc0fd682a5077d0ecc1dfbbbc9165c113352140f9a35d2432454052d903eea
     ProductCode: "{BE0591C8-711E-42C3-834C-FEE9ECD794A4}"
 ManifestType: installer

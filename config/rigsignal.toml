@@ -1,5 +1,5 @@
-# GamePulse Agent Configuration
-# Copy to ~/.config/gamepulse/gamepulse.toml or alongside the binary
+# RigSignal Agent Configuration
+# Copy to ~/.config/rigsignal/rigsignal.toml or alongside the binary
 
 [elasticsearch]
 # Elastic Cloud or self-hosted endpoint
@@ -12,7 +12,7 @@ endpoint = "https://your-deployment.es.region.cloud.es.io:443"
 # password = "changeme"
 
 # Index name prefix
-index_prefix = "gamepulse"
+index_prefix = "rigsignal"
 
 # How often to flush buffered metrics to ES (seconds)
 flush_interval_secs = 5

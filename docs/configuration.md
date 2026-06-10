@@ -1,13 +1,13 @@
 # Configuration Reference
 
-GamePulse is configured via a TOML file. The agent checks these locations in order:
+RigSignal is configured via a TOML file. The agent checks these locations in order:
 
 1. Path specified with `--config PATH` CLI flag
-2. `$GAMEPULSE_CONFIG` environment variable
-3. `~/.config/gamepulse/gamepulse.toml`
-4. `/etc/gamepulse/gamepulse.toml`
+2. `$RIGSIGNAL_CONFIG` environment variable
+3. `~/.config/rigsignal/rigsignal.toml`
+4. `/etc/rigsignal/rigsignal.toml`
 
-Run `gamepulse setup` to create the user config interactively, or create it manually.
+Run `rigsignal setup` to create the user config interactively, or create it manually.
 
 ---
 
@@ -19,7 +19,7 @@ Run `gamepulse setup` to create the user config interactively, or create it manu
 | `api_key` | string | — | API key (recommended) |
 | `username` | string | — | Basic auth username |
 | `password` | string | — | Basic auth password |
-| `index_prefix` | string | `gamepulse` | Index name prefix |
+| `index_prefix` | string | `rigsignal` | Index name prefix |
 | `flush_interval_secs` | integer | `5` | How often to bulk-flush to ES |
 | `batch_size` | integer | `100` | Documents per bulk request |
 
@@ -90,7 +90,7 @@ All fields optional. Overridable via CLI flags (CLI wins over config).
 | `--config PATH` | Config file path |
 | `--dry-run` | Collect one cycle, print JSON to stdout, exit without shipping to ES |
 | `-v`, `--verbose` | Enable debug logging (equivalent to `--log-level debug`) |
-| `--log-level LEVEL` | `error` \| `warn` \| `info` \| `debug` \| `trace`. Overrides `--verbose` and `GAMEPULSE_LOG` |
+| `--log-level LEVEL` | `error` \| `warn` \| `info` \| `debug` \| `trace`. Overrides `--verbose` and `RIGSIGNAL_LOG` |
 | `--print-config` | Print resolved config (credentials redacted) to stdout and exit |
 | `--label TEXT` | Session label override |
 | `--preset VALUE` | Graphics preset (see `[session.settings]`) |
@@ -106,7 +106,7 @@ All fields optional. Overridable via CLI flags (CLI wins over config).
 ### `diagnose` subcommand
 
 ```bash
-gamepulse-agent diagnose [--output PATH]
+rigsignal-agent diagnose [--output PATH]
 ```
 
 Writes a single-file bug report: kernel version, OS, CPU, RAM, GPU (vendor/model/VRAM/driver),
@@ -121,12 +121,12 @@ redacted in the output.
 |----------|-------------|
 | `ES_API_KEY` | Overrides `[elasticsearch].api_key` in TOML |
 | `ES_URL` | Overrides `[elasticsearch].endpoint` in TOML |
-| `GAMEPULSE_CONFIG` | Config file path (overridden by `--config`) |
-| `GAMEPULSE_LOG` | Log level: `error` \| `warn` \| `info` \| `debug` \| `trace` |
-| `GAMEPULSE_PROFILES_DIR` | First search path for per-game profile TOML files (D.7) |
-| `GAMEPULSE_PRESENTMON` | Full path to `PresentMon.exe` (Windows; overrides binary-dir and PATH lookup) |
+| `RIGSIGNAL_CONFIG` | Config file path (overridden by `--config`) |
+| `RIGSIGNAL_LOG` | Log level: `error` \| `warn` \| `info` \| `debug` \| `trace` |
+| `RIGSIGNAL_PROFILES_DIR` | First search path for per-game profile TOML files (D.7) |
+| `RIGSIGNAL_PRESENTMON` | Full path to `PresentMon.exe` (Windows; overrides binary-dir and PATH lookup) |
 
-Log level precedence: `--log-level` > `--verbose` > `GAMEPULSE_LOG` > `info`
+Log level precedence: `--log-level` > `--verbose` > `RIGSIGNAL_LOG` > `info`
 
 ---
 

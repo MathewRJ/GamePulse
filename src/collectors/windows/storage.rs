@@ -55,7 +55,7 @@ impl StorageCollector {
 
 impl Collector for StorageCollector {
     fn dataset(&self) -> &'static str {
-        "gamepulse.storage"
+        "rigsignal.storage"
     }
 
     fn set_game_pid(&mut self, pid: Option<u32>) {
@@ -88,7 +88,7 @@ impl Collector for StorageCollector {
             .unwrap_or(0.0) as u64;
 
         Ok(Some(json!({
-            "gamepulse": {
+            "rigsignal": {
                 "storage": {
                     "read_bytes_per_sec": read_bps,
                     "write_bytes_per_sec": write_bps,

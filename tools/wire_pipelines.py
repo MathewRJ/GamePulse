@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Set default_pipeline on all GamePulse index templates to route docs through
+"""Set default_pipeline on all RigSignal index templates to route docs through
 the corresponding ingest pipeline.
 
-Pipeline naming: <type>-gamepulse.<dataset>-default
-Template naming: metrics-gamepulse.<dataset>  (or logs-gamepulse.<dataset>)
+Pipeline naming: <type>-rigsignal.<dataset>-default
+Template naming: metrics-rigsignal.<dataset>  (or logs-rigsignal.<dataset>)
 
 Usage:
     python3 tools/wire_pipelines.py [--dry-run]
@@ -47,12 +47,12 @@ def api(method: str, path: str, body: dict | None = None, dry_run: bool = False)
 
 def pipeline_id(dataset: str) -> str:
     stream_type = "logs" if dataset in LOGS_DATASETS else "metrics"
-    return f"{stream_type}-gamepulse.{dataset}-default"
+    return f"{stream_type}-rigsignal.{dataset}-default"
 
 
 def template_name(dataset: str) -> str:
-    # Existing templates were all created under metrics-gamepulse.* prefix
-    return f"metrics-gamepulse.{dataset}"
+    # Existing templates were all created under metrics-rigsignal.* prefix
+    return f"metrics-rigsignal.{dataset}"
 
 
 def main() -> None:

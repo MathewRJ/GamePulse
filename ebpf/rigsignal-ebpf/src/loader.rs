@@ -22,7 +22,7 @@ pub struct LoadedProbes {
 
 /// Load the BPF object and attach all enabled probes.
 ///
-/// `probe_path` — path to the compiled gamepulse-ebpf-probes ELF.
+/// `probe_path` — path to the compiled rigsignal-ebpf-probes ELF.
 /// `probes`     — candidate probes to attempt (ordered by priority).
 pub fn load_probes(
     probe_path: &std::path::Path,
@@ -100,7 +100,7 @@ fn check_capabilities() -> Result<()> {
         bail!(
             "insufficient capabilities for BPF (need CAP_BPF + CAP_PERFMON).\n  \
              Run as root, or grant capabilities:\n  \
-             sudo setcap 'cap_bpf,cap_perfmon,cap_sys_admin+eip' $(which gamepulse-ebpf)"
+             sudo setcap 'cap_bpf,cap_perfmon,cap_sys_admin+eip' $(which rigsignal-ebpf)"
         );
     }
     Ok(())

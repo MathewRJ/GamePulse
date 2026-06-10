@@ -1,10 +1,18 @@
 # Changelog
 
-All notable changes to GamePulse will be documented in this file.
+All notable changes to RigSignal will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
+
+## [0.2.0] — 2026-06-10
+
+### Changed
+
+- **Renamed the project from GamePulse to RigSignal** across crates, binaries, packaging, documentation, install paths (`/etc/rigsignal/`, `~/.config/rigsignal/`), environment variables (`RIGSIGNAL_*`), and release metadata. Elasticsearch data streams move from `metrics-gamepulse.*` to `metrics-rigsignal.*` (old data ages out via ILM; no reindex). The Windows MSI carries a new product identity — GamePulse ≤ 0.1.7 must be uninstalled separately. Earlier entries in this changelog have had names updated to the current paths; the releases they describe shipped under the GamePulse name.
+
+---
 
 ### Fixed
 
@@ -12,15 +20,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 - **Audio collector blocking tick loop** (`src/collectors/linux/audio.rs`): `pw-top -b` (PipeWire stats) was spawned every tick and blocked ~2 seconds waiting for a PipeWire refresh cycle, reducing the collection rate from 1/sec to ~0.33/sec. PipeWire stats are now cached for 5 seconds so `pw-top` runs at most once every 5 ticks; all other ticks return the cached value instantly.
 
-- **Launcher: env vars in wrong position crash** (`packaging/gamepulse-launcher.sh`): placing an env var after `run` (e.g. `gamepulse run GAMEPULSE_LOG=debug %command%`) was treated as the first positional arg of the exec command and caused an immediate crash. The launcher now strips and exports leading `KEY=VALUE` args before exec, making both forms equivalent.
+- **Launcher: env vars in wrong position crash** (`packaging/rigsignal-launcher.sh`): placing an env var after `run` (e.g. `rigsignal run RIGSIGNAL_LOG=debug %command%`) was treated as the first positional arg of the exec command and caused an immediate crash. The launcher now strips and exports leading `KEY=VALUE` args before exec, making both forms equivalent.
 
-- **Launcher: agent stop blocked exit** (`packaging/gamepulse-launcher.sh`): the background watcher called `systemctl stop` synchronously, holding the watcher process open until the agent fully flushed and shut down. Changed to `--no-block` so the stop signal is sent and the watcher exits immediately.
+- **Launcher: agent stop blocked exit** (`packaging/rigsignal-launcher.sh`): the background watcher called `systemctl stop` synchronously, holding the watcher process open until the agent fully flushed and shut down. Changed to `--no-block` so the stop signal is sent and the watcher exits immediately.
 
-- **MangoHud CSV not written with Steam Linux Runtime games** (`packaging/gamepulse-launcher.sh`): wrapping the game command with the host `mangohud` binary prevented frame timing CSV output because pressure-vessel (Steam Linux Runtime) uses its own bundled MangoHud layer which ignored the host binary's configuration. The launcher now exports `MANGOHUD=1` instead, which pressure-vessel intercepts to inject its own MangoHud — then honours `~/.config/MangoHud/MangoHud.conf` and `MANGOHUD_CONFIG` normally.
+- **MangoHud CSV not written with Steam Linux Runtime games** (`packaging/rigsignal-launcher.sh`): wrapping the game command with the host `mangohud` binary prevented frame timing CSV output because pressure-vessel (Steam Linux Runtime) uses its own bundled MangoHud layer which ignored the host binary's configuration. The launcher now exports `MANGOHUD=1` instead, which pressure-vessel intercepts to inject its own MangoHud — then honours `~/.config/MangoHud/MangoHud.conf` and `MANGOHUD_CONFIG` normally.
 
 ### Added
 
-- **MangoHud `autostart_log`** (`packaging/install.sh`, `packaging/gamepulse-launcher.sh`): installer now writes `autostart_log=1` to `~/.config/MangoHud/MangoHud.conf` so MangoHud writes frame timing CSVs immediately on game start without requiring an F2 keypress. Previously `output_folder` alone was insufficient — MangoHud required explicit log-start to write data. Set `GAMEPULSE_MANGOHUD=0` to disable MangoHud integration entirely.
+- **MangoHud `autostart_log`** (`packaging/install.sh`, `packaging/rigsignal-launcher.sh`): installer now writes `autostart_log=1` to `~/.config/MangoHud/MangoHud.conf` so MangoHud writes frame timing CSVs immediately on game start without requiring an F2 keypress. Previously `output_folder` alone was insufficient — MangoHud required explicit log-start to write data. Set `RIGSIGNAL_MANGOHUD=0` to disable MangoHud integration entirely.
 
 - **MangoHud `output_folder`**: installer now ensures `~/.config/MangoHud/MangoHud.conf` contains `output_folder=$HOME/.local/share/MangoHud` so the agent can read frame timing CSV data.
 
@@ -30,7 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
-- **eBPF nightly CI** (`ebpf/gamepulse-ebpf-daemon/src/`): five dead-code stubs (`LatencyHistogram::is_empty`, `SessionInfo::steam_app_id`, `EsShipper::batch_size`, `EsShipper::queue`, `EbpfConfig::enabled_probes`) now suppressed with per-item `#[allow(dead_code)]` — nightly's `-D warnings` was treating them as errors.
+- **eBPF nightly CI** (`ebpf/rigsignal-ebpf/src/`): five dead-code stubs (`LatencyHistogram::is_empty`, `SessionInfo::steam_app_id`, `EsShipper::batch_size`, `EsShipper::queue`, `EbpfConfig::enabled_probes`) now suppressed with per-item `#[allow(dead_code)]` — nightly's `-D warnings` was treating them as errors.
 - **Smoke test**: `cpu.clock_mhz_avg` demoted to optional check — the field is absent on GitHub-hosted runners where cpufreq is not exposed.
 - **Formatting**: `cargo fmt` pass on `src/diagnose.rs`, `src/profiles.rs`, `src/session.rs`, `src/shipper.rs`, `src/main.rs`.
 
@@ -42,18 +50,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Documentation
 
-- `docs/README.md` retitled `# GamePulse — Elastic Integration` with a callout pointing to the project README — clarifies that this file is the Fleet integration guide bundled into the Elastic Package Registry.
+- `docs/README.md` retitled `# RigSignal — Elastic Integration` with a callout pointing to the project README — clarifies that this file is the Fleet integration guide bundled into the Elastic Package Registry.
 - Root `README.md` documentation section rewritten as a labelled table with one row per guide and an audience column.
 
 ---
 
 ### Added (2026-05-08)
 
-- **Launcher debug log** (`~/.local/share/gamepulse/launcher.log`): the launcher now writes timestamped entries for every key decision in `cmd_run` (agent binary resolved, systemctl outcome, PID captured, exec path taken). The log file persists across sessions and is readable in Desktop Mode after a Gaming Mode run — eliminating the "invisible crash" debugging problem. Set `GAMEPULSE_DEBUG=1` in Steam launch options (`GAMEPULSE_DEBUG=1 gamepulse run %command%`) to additionally capture a full shell trace (`set -x`) in the same file. Log rotates at 1 MB to `.old`.
+- **Launcher debug log** (`~/.local/share/rigsignal/launcher.log`): the launcher now writes timestamped entries for every key decision in `cmd_run` (agent binary resolved, systemctl outcome, PID captured, exec path taken). The log file persists across sessions and is readable in Desktop Mode after a Gaming Mode run — eliminating the "invisible crash" debugging problem. Set `RIGSIGNAL_DEBUG=1` in Steam launch options (`RIGSIGNAL_DEBUG=1 rigsignal run %command%`) to additionally capture a full shell trace (`set -x`) in the same file. Log rotates at 1 MB to `.old`.
 
-- **Unified installer with eBPF** (`install.sh`): the Linux release tarball now includes the `gamepulse-ebpf` daemon and `gamepulse-ebpf-probes` BPF blob built in CI (nightly Rust + `bpf-linker`). `install.sh` automatically installs the eBPF daemon to `/usr/local/bin/` and its system service when `sudo` is available — no separate AUR/yay step required. On SteamOS, the installer temporarily disables the read-only filesystem (`steamos-readonly disable`) and re-enables it after. If `sudo` is unavailable or the install fails, the script degrades gracefully and reports agent-only mode.
+- **Unified installer with eBPF** (`install.sh`): the Linux release tarball now includes the `rigsignal-ebpf` daemon and `rigsignal-ebpf-probes` BPF blob built in CI (nightly Rust + `bpf-linker`). `install.sh` automatically installs the eBPF daemon to `/usr/local/bin/` and its system service when `sudo` is available — no separate AUR/yay step required. On SteamOS, the installer temporarily disables the read-only filesystem (`steamos-readonly disable`) and re-enables it after. If `sudo` is unavailable or the install fails, the script degrades gracefully and reports agent-only mode.
 
-- **eBPF build in CI** (`release.yml`): new `build-ebpf` job builds `gamepulse-ebpf-probes` (BPF target) and `gamepulse-ebpf` daemon using nightly Rust from the workspace `rust-toolchain.toml`. The eBPF binaries and a `/usr/local/`-based service file are bundled into the Linux tarball alongside the agent.
+- **eBPF build in CI** (`release.yml`): new `build-ebpf` job builds `rigsignal-ebpf-probes` (BPF target) and `rigsignal-ebpf` daemon using nightly Rust from the workspace `rust-toolchain.toml`. The eBPF binaries and a `/usr/local/`-based service file are bundled into the Linux tarball alongside the agent.
 
 ### Milestone D — Linux portable packaging (2026-04-27)
 
@@ -64,7 +72,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   Gate 3 — for Tier 3 settings capture (`src/profiles.rs`, `profiles/`)
 - GitHub Actions release workflow: `.deb` (cargo-deb), `.rpm` (cargo-generate-rpm), and
   Arch `.pkg.tar.zst` (makepkg) attached to GitHub Releases on `v*` tag pushes
-- `gamepulse-agent diagnose` subcommand: single-file bug-report dump covering kernel,
+- `rigsignal-agent diagnose` subcommand: single-file bug-report dump covering kernel,
   GPU, Elasticsearch reachability, and resolved config path
 - Unified logging flags: `--verbose` / `--log-level LEVEL` / `--print-config` (redacted)
 
@@ -74,7 +82,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   power (GetSystemPowerStatus), audio (WASAPI), GPU (DXGI VRAM + PDH util + WMI temperature),
   frame timing (PresentMon subprocess with auto-discovery)
 - PDH infrastructure (`src/collectors/windows/pdh.rs`) wrapping Windows Performance Counters
-- `gamepulse.gpu.temp_source` field distinguishing `hwmon` (Linux) from `wmi_acpi` (Windows)
+- `rigsignal.gpu.temp_source` field distinguishing `hwmon` (Linux) from `wmi_acpi` (Windows)
 - Platform parity gaps documented: `cpu.game_utilisation_pct`, `gpu.power_w`, `audio.xruns`,
   `storage.game_io` require ETW/vendor SDK and are deferred to later milestones
 
@@ -83,7 +91,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Multi-launcher game detection: Lutris (YAML game configs + WINEPREFIX scan), Heroic
   (Epic and GOG via installed.json), Bottles (bottle.yml + WINEPREFIX), plus manual
   `--target-pid` / `--target-name` override flags
-- `gamepulse.game.source` and `gamepulse.game.launcher` fields on all session and metric docs
+- `rigsignal.game.source` and `rigsignal.game.launcher` fields on all session and metric docs
 - Proton/Wine env var enrichment (`PROTON_VERSION`, `DXVK_CONFIG_FILE`) wired to all launchers
 - `steam_app_id` made conditional (present only when `source == steam`)
 
@@ -97,7 +105,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   `ubuntu-latest` and `windows-latest` for every push to `main` and every PR
 - eBPF feature flag (`--features ebpf`) with compile-time Linux guard
 - Session label counter: format changed from `<slug>-YYYYMMDD-HHMMSS` to `<slug>-YYYYMMDD-N`;
-  counter persisted atomically to `$XDG_STATE_HOME/gamepulse/session-counters.json`
+  counter persisted atomically to `$XDG_STATE_HOME/rigsignal/session-counters.json`
 - Tier 1 settings capture: `[session.settings]` TOML section and CLI flags `--preset`,
   `--upscaler`, `--frame-gen`, `--features`, `--resolution`, `--vsync`, `--notes`
 - Signal handling ported to cross-platform (`tokio::signal::ctrl_c` on Windows)
@@ -124,7 +132,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
-- **Gamescope / Gaming Mode (launcher)**: `cmd_run` now falls back to running `gamepulse-agent` directly in the background when `systemctl --user` fails (DBUS absent in Gamescope). Previously the launcher exited, preventing the game from launching. The agent binary is resolved relative to the launcher's own directory so `~/.local/bin` does not need to be on PATH in the gamescope session.
+- **Gamescope / Gaming Mode (launcher)**: `cmd_run` now falls back to running `rigsignal-agent` directly in the background when `systemctl --user` fails (DBUS absent in Gamescope). Previously the launcher exited, preventing the game from launching. The agent binary is resolved relative to the launcher's own directory so `~/.local/bin` does not need to be on PATH in the gamescope session.
 
 ---
 

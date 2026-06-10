@@ -1,9 +1,9 @@
-/// CPU collector — mirrors collector/gamepulse/collectors/cpu.py exactly.
+/// CPU collector — mirrors collector/rigsignal/collectors/cpu.py exactly.
 ///
 /// Reads /proc/stat (utilisation), sysfs cpufreq (clock), hwmon (temperature),
 /// and sysfs boost/governor flags.
 ///
-/// Output fields (gamepulse.cpu.*):
+/// Output fields (rigsignal.cpu.*):
 ///   total_utilisation_pct  f64   — average across all logical CPUs
 ///   per_core               [f64] — per-logical-CPU utilisation
 ///   clock_mhz_avg          u64   — average scaling_cur_freq in MHz (optional)
@@ -221,7 +221,7 @@ impl CpuCollector {
 
 impl Collector for CpuCollector {
     fn dataset(&self) -> &'static str {
-        "gamepulse.cpu"
+        "rigsignal.cpu"
     }
 
     fn set_game_pid(&mut self, pid: Option<u32>) {
@@ -269,6 +269,6 @@ impl Collector for CpuCollector {
             obj.insert("governor".to_string(), Value::from(gov));
         }
 
-        Ok(Some(json!({ "gamepulse": { "cpu": cpu } })))
+        Ok(Some(json!({ "rigsignal": { "cpu": cpu } })))
     }
 }

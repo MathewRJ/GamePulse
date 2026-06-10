@@ -1,6 +1,6 @@
 # eBPF Deep Telemetry Guide
 
-GamePulse's eBPF probes trace kernel-level behaviour to answer the question that FPS counters can't: *why* did performance drop?
+RigSignal's eBPF probes trace kernel-level behaviour to answer the question that FPS counters can't: *why* did performance drop?
 
 ## Requirements
 
@@ -17,17 +17,17 @@ Most modern gaming distros (SteamOS 3.5+, Fedora 38+, Ubuntu 22.04+, Arch) meet 
 The system service runs with the required capabilities:
 
 ```bash
-sudo systemctl enable --now gamepulse-agent
+sudo systemctl enable --now rigsignal-agent
 ```
 
-Set `ebpf = true` in `/etc/gamepulse/gamepulse.toml`.
+Set `ebpf = true` in `/etc/rigsignal/rigsignal.toml`.
 
 ### Option 2: Capabilities on the binary
 
 If you prefer not to run as root:
 
 ```bash
-sudo setcap 'cap_bpf,cap_perfmon,cap_sys_admin,cap_dac_read_search+ep' /usr/local/bin/gamepulse-agent
+sudo setcap 'cap_bpf,cap_perfmon,cap_sys_admin,cap_dac_read_search+ep' /usr/local/bin/rigsignal-agent
 ```
 
 Then set `ebpf = true` in your config and run the user service.
@@ -35,7 +35,7 @@ Then set `ebpf = true` in your config and run the user service.
 ### Option 3: Run manually as root
 
 ```bash
-sudo gamepulse-agent --config ~/.config/gamepulse/gamepulse.toml --debug
+sudo rigsignal-agent --config ~/.config/rigsignal/rigsignal.toml --debug
 ```
 
 ## The probes
@@ -96,7 +96,7 @@ Kprobe on `dma_fence_default_wait`. Measures how long the CPU blocks waiting for
 
 ## Stutter correlation
 
-GamePulse automatically correlates eBPF data to detect stutter causes:
+RigSignal automatically correlates eBPF data to detect stutter causes:
 
 - **Scheduling stutter**: p99 scheduler latency > 5ms
 - **I/O stutter**: p99 bio latency > 10ms
@@ -106,7 +106,7 @@ When these thresholds are crossed, a `StutterEvent` is emitted with the cause cl
 
 ## Building the BPF programs
 
-The eBPF kernel programs are in `gamepulse-ebpf/`. To build them from source:
+The eBPF kernel programs are in `rigsignal-ebpf/`. To build them from source:
 
 ```bash
 # Install nightly Rust and BPF linker
@@ -114,7 +114,7 @@ rustup install nightly
 cargo install bpf-linker
 
 # Build BPF programs
-cd gamepulse-ebpf
+cd rigsignal-ebpf
 cargo +nightly build --target bpfel-unknown-none -Z build-std=core --release
 ```
 
@@ -135,4 +135,4 @@ The compiled BPF bytecode is then embedded into the agent binary at compile time
 **No data from probes** — the probes are attached but no events are hitting:
 - Ensure a game is running (probes filter by game PID)
 - Check that `game_detection = true` in config
-- Run with `RUST_LOG=gamepulse=debug` for verbose output
+- Run with `RUST_LOG=rigsignal=debug` for verbose output

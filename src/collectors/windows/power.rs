@@ -27,7 +27,7 @@ impl PowerCollector {
 
 impl Collector for PowerCollector {
     fn dataset(&self) -> &'static str {
-        "gamepulse.power"
+        "rigsignal.power"
     }
 
     fn set_game_pid(&mut self, pid: Option<u32>) {
@@ -65,6 +65,6 @@ impl Collector for PowerCollector {
             obj.insert("battery_pct".to_string(), Value::from(pct));
         }
 
-        Ok(Some(json!({ "gamepulse": { "power": power } })))
+        Ok(Some(json!({ "rigsignal": { "power": power } })))
     }
 }

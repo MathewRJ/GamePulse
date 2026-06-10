@@ -1,11 +1,11 @@
 [package]
-name = "gamepulse-ebpf-daemon"
-version = "0.1.0"
+name = "rigsignal-ebpf"
+version = "0.2.0"
 edition = "2021"
-description = "GamePulse eBPF daemon — kernel telemetry for gaming performance"
+description = "RigSignal eBPF daemon — kernel telemetry for gaming performance"
 
 [[bin]]
-name = "gamepulse-ebpf"
+name = "rigsignal-ebpf"
 path = "src/main.rs"
 
 [dependencies]

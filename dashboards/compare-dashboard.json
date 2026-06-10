@@ -4,7 +4,7 @@
   "id": "828db140-b330-4d26-8045-40a7895bfc41",
   "kibana_url": "https://your-deployment.kb.us-central1.gcp.elastic.cloud",
   "data": {
-    "title": "GamePulse - Compare",
+    "title": "RigSignal - Compare",
     "time_range": {
       "from": "now-30d",
       "to": "now"

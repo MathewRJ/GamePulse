@@ -1,6 +1,6 @@
 [package]
-name = "gamepulse-ebpf-probes"
-version = "0.1.0"
+name = "rigsignal-ebpf-probes"
+version = "0.2.0"
 edition = "2021"
 
 # This crate compiles to bpfel-unknown-none (BPF bytecode).
@@ -8,7 +8,7 @@ edition = "2021"
 # Do NOT add to the host-target workspace default-members.
 
 [[bin]]
-name = "gamepulse-ebpf-probes"
+name = "rigsignal-ebpf-probes"
 path = "src/main.rs"
 
 [dependencies]

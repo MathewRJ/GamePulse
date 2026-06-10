@@ -1,8 +1,8 @@
 [package]
 name = "xtask"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
-description = "Build helpers for gamepulse-ebpf workspace"
+description = "Build helpers for rigsignal-ebpf workspace"
 
 [[bin]]
 name = "xtask"

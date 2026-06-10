@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Apply session_label runtime field to all GamePulse data views.
+Apply session_label runtime field to all RigSignal data views.
 
 session_label is a human-readable identifier: {game-slug}-{first-8-of-session-id}
 It is used as the breakdown_by dimension in all XY chart panels so each
@@ -39,23 +39,23 @@ def api(method, path, body=None):
         raise Exception(f"HTTP {e.code} {method} {path}: {e.read().decode()[:400]}")
 
 
-# Full script for data views that carry gamepulse.game.name
+# Full script for data views that carry rigsignal.game.name
 FULL_SCRIPT = """\
-if (doc['gamepulse.game.name'].size() > 0 && doc['gamepulse.session.id'].size() > 0) {
-  String name = doc['gamepulse.game.name'].value.toLowerCase();
+if (doc['rigsignal.game.name'].size() > 0 && doc['rigsignal.session.id'].size() > 0) {
+  String name = doc['rigsignal.game.name'].value.toLowerCase();
   String game = /[^a-z0-9]+/.matcher(name).replaceAll('-');
   while (game.endsWith('-')) { game = game.substring(0, game.length()-1); }
   if (game.startsWith('-')) { game = game.substring(1); }
   if (game.length() > 20) { game = game.substring(0, 20); }
-  emit(game + '-' + doc['gamepulse.session.id'].value.substring(0, 8));
-} else if (doc['gamepulse.session.id'].size() > 0) {
-  emit('session-' + doc['gamepulse.session.id'].value.substring(0, 8));
+  emit(game + '-' + doc['rigsignal.session.id'].value.substring(0, 8));
+} else if (doc['rigsignal.session.id'].size() > 0) {
+  emit('session-' + doc['rigsignal.session.id'].value.substring(0, 8));
 }"""
 
 # Simplified script for eBPF — that stream carries session.id but not game.name
 EBPF_SCRIPT = """\
-if (doc['gamepulse.session.id'].size() > 0) {
-  emit('session-' + doc['gamepulse.session.id'].value.substring(0, 8));
+if (doc['rigsignal.session.id'].size() > 0) {
+  emit('session-' + doc['rigsignal.session.id'].value.substring(0, 8));
 }"""
 
 # Map data view ID → which script to use
@@ -69,7 +69,7 @@ DATA_VIEWS = {
     'gp-dv-power':   FULL_SCRIPT,
     'gp-dv-audio':   FULL_SCRIPT,
     'gp-dv-network': FULL_SCRIPT,
-    'gp-dv-ebpf':    EBPF_SCRIPT,   # eBPF stream has no gamepulse.game.name field
+    'gp-dv-ebpf':    EBPF_SCRIPT,   # eBPF stream has no rigsignal.game.name field
 }
 
 

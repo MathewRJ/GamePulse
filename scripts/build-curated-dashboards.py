@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Build curated GamePulse dashboard saved objects from verified panels.
+"""Build curated RigSignal dashboard saved objects from verified panels.
 
 The generated dashboards intentionally reuse panels from the current verified
-GamePulse suite. That keeps the saved-object Lens state close to known-good
+RigSignal suite. That keeps the saved-object Lens state close to known-good
 exports while letting us reshape the user experience around higher-level
 dashboard concepts.
 """
@@ -20,14 +20,14 @@ NORMALIZED_DIR = ROOT / "kibana" / "dashboard"
 IMPORT_DIR = ROOT / "dashboards"
 
 NAV = (
-    "**GamePulse** &nbsp;.&nbsp; "
-    "[Command Center](/app/dashboards#/view/gamepulse-gp-command-center) &nbsp;|&nbsp; "
-    "[Regression Lab](/app/dashboards#/view/gamepulse-gp-regression-lab) &nbsp;|&nbsp; "
-    "[Player Overview](/app/dashboards#/view/gamepulse-gp-home) &nbsp;|&nbsp; "
-    "[Game Performance](/app/dashboards#/view/gamepulse-gp-game-perf) &nbsp;|&nbsp; "
-    "[Engine](/app/dashboards#/view/gamepulse-gp-engine) &nbsp;|&nbsp; "
-    "[Hardware](/app/dashboards#/view/gamepulse-gp-hardware) &nbsp;|&nbsp; "
-    "[Software](/app/dashboards#/view/gamepulse-gp-software) &nbsp;|&nbsp; "
+    "**RigSignal** &nbsp;.&nbsp; "
+    "[Command Center](/app/dashboards#/view/rigsignal-gp-command-center) &nbsp;|&nbsp; "
+    "[Regression Lab](/app/dashboards#/view/rigsignal-gp-regression-lab) &nbsp;|&nbsp; "
+    "[Player Overview](/app/dashboards#/view/rigsignal-gp-home) &nbsp;|&nbsp; "
+    "[Game Performance](/app/dashboards#/view/rigsignal-gp-game-perf) &nbsp;|&nbsp; "
+    "[Engine](/app/dashboards#/view/rigsignal-gp-engine) &nbsp;|&nbsp; "
+    "[Hardware](/app/dashboards#/view/rigsignal-gp-hardware) &nbsp;|&nbsp; "
+    "[Software](/app/dashboards#/view/rigsignal-gp-software) &nbsp;|&nbsp; "
     "[Compare](/app/dashboards#/view/828db140-b330-4d26-8045-40a7895bfc41)"
 )
 
@@ -38,11 +38,11 @@ def load(name: str) -> dict:
 
 
 SOURCES = {
-    "home": load("gamepulse-gp-home.json"),
-    "game": load("gamepulse-gp-game-perf.json"),
-    "hardware": load("gamepulse-gp-hardware.json"),
-    "software": load("gamepulse-gp-software.json"),
-    "engine": load("gamepulse-gp-engine.json"),
+    "home": load("rigsignal-gp-home.json"),
+    "game": load("rigsignal-gp-game-perf.json"),
+    "hardware": load("rigsignal-gp-hardware.json"),
+    "software": load("rigsignal-gp-software.json"),
+    "engine": load("rigsignal-gp-engine.json"),
 }
 
 
@@ -177,8 +177,8 @@ def build_command_center() -> dict:
         panels.append(source_panel(source, panel_index, x=x, y=y, w=w, h=h))
         source_map.setdefault(source, set()).add(panel_index)
     return normalized_dashboard(
-        "gamepulse-gp-command-center",
-        "GamePulse - Performance Command Center",
+        "rigsignal-gp-command-center",
+        "RigSignal - Performance Command Center",
         "Curated 90-day gamer overview: session health, game history, FPS trend, and likely regression causes.",
         panels,
         source_map,
@@ -217,8 +217,8 @@ def build_regression_lab() -> dict:
         panels.append(source_panel(source, panel_index, x=x, y=y, w=w, h=h))
         source_map.setdefault(source, set()).add(panel_index)
     return normalized_dashboard(
-        "gamepulse-gp-regression-lab",
-        "GamePulse - Regression Lab",
+        "rigsignal-gp-regression-lab",
+        "RigSignal - Regression Lab",
         "Curated 90-day regression dashboard for driver, Proton, kernel, hardware, and low-level causality checks.",
         panels,
         source_map,

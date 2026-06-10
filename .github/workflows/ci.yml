@@ -84,4 +84,4 @@ jobs:
         run: cargo build --manifest-path src/Cargo.toml --locked
 
       - name: Run smoke test
-        run: bash scripts/smoke-test.sh ./target/debug/gamepulse-agent
+        run: bash scripts/smoke-test.sh ./target/debug/rigsignal-agent

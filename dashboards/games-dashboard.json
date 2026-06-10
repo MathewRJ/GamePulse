@@ -18,7 +18,7 @@
       "from": "now-30d",
       "to": "now"
     },
-    "title": "GamePulse - Games",
+    "title": "RigSignal - Games",
     "panels": [
       {
         "grid": {
@@ -84,7 +84,7 @@
         "config": {
           "data_source": {
             "type": "esql",
-            "query": "FROM gamepulse-game-timeline | STATS `Total Sessions` = COUNT(*)"
+            "query": "FROM rigsignal-game-timeline | STATS `Total Sessions` = COUNT(*)"
           },
           "type": "metric",
           "sampling": 1,
@@ -125,7 +125,7 @@
         "config": {
           "data_source": {
             "type": "esql",
-            "query": "FROM gamepulse-game-timeline | STATS `Games Played` = COUNT_DISTINCT(game_name)"
+            "query": "FROM rigsignal-game-timeline | STATS `Games Played` = COUNT_DISTINCT(game_name)"
           },
           "type": "metric",
           "sampling": 1,
@@ -166,7 +166,7 @@
         "config": {
           "data_source": {
             "type": "esql",
-            "query": "FROM gamepulse-game-timeline | STATS `Total Hours` = ROUND(SUM(duration_s) / 3600.0, 1)"
+            "query": "FROM rigsignal-game-timeline | STATS `Total Hours` = ROUND(SUM(duration_s) / 3600.0, 1)"
           },
           "type": "metric",
           "sampling": 1,

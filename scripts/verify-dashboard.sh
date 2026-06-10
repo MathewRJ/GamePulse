@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # verify-dashboard.sh — verify a deployed Kibana dashboard is UI-renderable,
 # not just import-valid. Uses a Playwright-based headless browser verification
-# framework adapted for GamePulse env + integration-package rules.
+# framework adapted for RigSignal env + integration-package rules.
 #
 # Usage:
 #   scripts/verify-dashboard.sh <dashboard-id> [--expected-panel-types t1,t2,...]
@@ -152,7 +152,7 @@ if [ -n "$lens_issues" ]; then
 fi
 echo "OK lens invariants: all Lens panels have resolvable datasource layers"
 
-# 3. data_stream.dataset filter (GamePulse integration rule).
+# 3. data_stream.dataset filter (RigSignal integration rule).
 # Passes if EITHER:
 #   (a) the dashboard carries a dashboard-level data_stream.dataset filter in
 #       kibanaSavedObjectMeta.searchSourceJSON (covers all panels implicitly), OR

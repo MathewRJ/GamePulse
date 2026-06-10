@@ -1,10 +1,10 @@
-/// Audio collector — mirrors collector/gamepulse/collectors/audio.py exactly.
+/// Audio collector — mirrors collector/rigsignal/collectors/audio.py exactly.
 ///
 /// Detects the audio backend (PipeWire / PulseAudio / ALSA) at construction
 /// time by probing pw-cli and pactl. On each collect() tick, reads stats from
 /// the running backend.
 ///
-/// Output fields (gamepulse.audio.*):
+/// Output fields (rigsignal.audio.*):
 ///   backend          str  — always present: "pipewire", "pulseaudio", "alsa", "unknown"
 ///   xruns            i64  — delta xruns since last tick (PipeWire, 2nd call+)
 ///   latency_ms       f64  — quantum/rate latency in ms, 2 dp (PipeWire, when parseable)
@@ -233,7 +233,7 @@ impl AudioCollector {
 
 impl Collector for AudioCollector {
     fn dataset(&self) -> &'static str {
-        "gamepulse.audio"
+        "rigsignal.audio"
     }
 
     fn collect(&mut self) -> Result<Option<Value>> {
@@ -269,6 +269,6 @@ impl Collector for AudioCollector {
             }
         }
 
-        Ok(Some(serde_json::json!({ "gamepulse": { "audio": audio } })))
+        Ok(Some(serde_json::json!({ "rigsignal": { "audio": audio } })))
     }
 }

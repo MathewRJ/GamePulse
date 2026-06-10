@@ -1,10 +1,10 @@
-/// GPU scheduler latency probe — userspace side.
+/// Memory pressure probe — userspace side.
 ///
-/// Attaches two tracepoints from the gamepulse-ebpf-probes BPF object:
-///   gpu_scheduler/drm_sched_job_queue
-///   gpu_scheduler/drm_sched_job_run
+/// Attaches two tracepoints from the rigsignal-ebpf-probes BPF object:
+///   exceptions/page_fault_user                  — game thread page faults
+///   vmscan/mm_vmscan_direct_reclaim_begin        — direct memory reclaim events
 ///
-/// Measures time from job queue entry to hardware dispatch per game GPU job.
+/// Produces a MemSnapshot per 1-second interval.
 use anyhow::{Context, Result};
 use aya::{
     maps::{MapData, RingBuf},
@@ -14,33 +14,33 @@ use aya::{
 use tracing::{debug, warn};
 
 use super::{Probe, ProbeRequirements};
-use crate::aggregator::{GpuAggregator, RawGpuSchedEvent};
+use crate::aggregator::{MemAggregator, RawMemEvent};
 use crate::es_model::EbpfDocument;
 
-pub struct GpuSchedProbe {
-    aggregator: GpuAggregator,
+pub struct MemProbe {
+    aggregator: MemAggregator,
     ring_buf: Option<RingBuf<MapData>>,
 }
 
-impl GpuSchedProbe {
+impl MemProbe {
     pub fn new(host_name: String, kernel_version: String) -> Self {
-        GpuSchedProbe {
-            aggregator: GpuAggregator::new(host_name, kernel_version),
+        MemProbe {
+            aggregator: MemAggregator::new(host_name, kernel_version),
             ring_buf: None,
         }
     }
 }
 
-impl Probe for GpuSchedProbe {
+impl Probe for MemProbe {
     fn name(&self) -> &'static str {
-        "gpu_sched"
+        "mem"
     }
 
     fn requirements(&self) -> ProbeRequirements {
         ProbeRequirements {
             tracepoints: vec![
-                "gpu_scheduler/drm_sched_job_queue",
-                "gpu_scheduler/drm_sched_job_run",
+                "exceptions/page_fault_user",
+                "vmscan/mm_vmscan_direct_reclaim_begin",
             ],
             kprobe_symbols: vec![],
             kernel_modules: vec![],
@@ -64,24 +64,19 @@ impl Probe for GpuSchedProbe {
                 Ok(())
             };
 
+        attach(ebpf, "page_fault_user", "exceptions", "page_fault_user")?;
         attach(
             ebpf,
-            "drm_sched_job_queue",
-            "gpu_scheduler",
-            "drm_sched_job_queue",
-        )?;
-        attach(
-            ebpf,
-            "drm_sched_job_run",
-            "gpu_scheduler",
-            "drm_sched_job_run",
+            "mm_vmscan_direct_reclaim_begin",
+            "vmscan",
+            "mm_vmscan_direct_reclaim_begin",
         )?;
 
         let ring_buf = RingBuf::try_from(
-            ebpf.take_map("GPU_SCHED_EVENTS")
-                .context("GPU_SCHED_EVENTS map not found")?,
+            ebpf.take_map("MEM_EVENTS")
+                .context("MEM_EVENTS map not found")?,
         )
-        .context("GPU_SCHED_EVENTS map type mismatch")?;
+        .context("MEM_EVENTS map type mismatch")?;
 
         self.ring_buf = Some(ring_buf);
         Ok(())
@@ -89,7 +84,7 @@ impl Probe for GpuSchedProbe {
 
     fn collect(&mut self, session_id: &str) -> Result<Vec<EbpfDocument>> {
         use std::mem::size_of;
-        let event_size = size_of::<RawGpuSchedEvent>();
+        let event_size = size_of::<RawMemEvent>();
         let mut event_count = 0usize;
 
         if let Some(rb) = &mut self.ring_buf {
@@ -97,21 +92,21 @@ impl Probe for GpuSchedProbe {
                 let bytes: &[u8] = &*item;
                 if bytes.len() < event_size {
                     warn!(
-                        "gpu_sched ring buf item too small: {} < {}",
+                        "mem ring buf item too small: {} < {}",
                         bytes.len(),
                         event_size
                     );
                     continue;
                 }
                 let event =
-                    unsafe { std::ptr::read_unaligned(bytes.as_ptr() as *const RawGpuSchedEvent) };
+                    unsafe { std::ptr::read_unaligned(bytes.as_ptr() as *const RawMemEvent) };
                 self.aggregator.push(event);
                 event_count += 1;
             }
         }
 
         if event_count > 0 {
-            debug!("drained {} gpu_sched events from ring buffer", event_count);
+            debug!("drained {} mem events from ring buffer", event_count);
         }
 
         let doc = self.aggregator.flush(session_id);

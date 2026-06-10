@@ -2,7 +2,7 @@
 
 ## Overview
 
-GamePulse is a single Rust binary that runs alongside games, collecting metrics from multiple sources and shipping them to Elasticsearch. It's designed for minimal overhead (< 0.5% CPU, < 30 MB RAM) and zero configuration beyond the ES endpoint.
+RigSignal is a single Rust binary that runs alongside games, collecting metrics from multiple sources and shipping them to Elasticsearch. It's designed for minimal overhead (< 0.5% CPU, < 30 MB RAM) and zero configuration beyond the ES endpoint.
 
 ## Data flow
 
@@ -105,7 +105,7 @@ Manages 9 independent kernel probes:
 4. Reads BPF maps each collection tick and converts to histograms
 5. Correlates across probes to detect stutter causes
 
-The BPF programs themselves are in `gamepulse-ebpf/` and compile to BPF bytecode using Aya.
+The BPF programs themselves are in `rigsignal-ebpf/` and compile to BPF bytecode using Aya.
 
 ### DLL Scanner (`src/dllscan.rs`)
 
@@ -116,15 +116,15 @@ On Windows, the DLL scanner inspects the loaded modules of the target game proce
 - `d3d12.dll` via VKD3D-Proton — DirectX 12-over-Vulkan
 - Vulkan ICD — native Vulkan
 
-Results populate `gamepulse.settings.graphics_api` in the session document.
+Results populate `rigsignal.settings.graphics_api` in the session document.
 
 ### Profile Loader (`src/profiles.rs`)
 
-Game-specific telemetry profiles live in TOML files under `profiles/` (overridable via `GAMEPULSE_PROFILES_DIR`). A profile can set per-game collection intervals, eBPF probe selection, and metadata overrides for games that don't expose standard launch parameters. The profile loader resolves the active profile at session start based on Steam App ID or game name match.
+Game-specific telemetry profiles live in TOML files under `profiles/` (overridable via `RIGSIGNAL_PROFILES_DIR`). A profile can set per-game collection intervals, eBPF probe selection, and metadata overrides for games that don't expose standard launch parameters. The profile loader resolves the active profile at session start based on Steam App ID or game name match.
 
 ### Diagnose subcommand (`src/diagnose.rs`)
 
-`gamepulse diagnose` runs a pre-flight check that verifies:
+`rigsignal diagnose` runs a pre-flight check that verifies:
 
 1. Elasticsearch connectivity and API key permissions
 2. Required index templates and component templates are present

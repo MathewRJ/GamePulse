@@ -1,4 +1,4 @@
-# GamePulse — Kibana Dashboards
+# RigSignal — Kibana Dashboards
 
 ## Current dashboards
 
@@ -16,7 +16,7 @@
 | Hardware | `dashboards/hardware-dashboard.json` | `ed9d9b94-2003-429c-b294-9d3f2ef737e7` |
 | Compare | `dashboards/compare-dashboard.json` | `828db140-b330-4d26-8045-40a7895bfc41` |
 | Engine | `dashboards/engine-dashboard.json` | `7ec220c4-0c7a-4538-9b86-9a664b4a7d2f` |
-| Baseline (UI export) | `dashboards/gamepulse-dashboard.ndjson` | — |
+| Baseline (UI export) | `dashboards/rigsignal-dashboard.ndjson` | — |
 
 ---
 
@@ -78,11 +78,11 @@ or the panel migration version is stale.
 Before building any Lens panel, confirm the field exists and has data:
 
 ```esql
-FROM metrics-gamepulse.frame-default
-| WHERE gamepulse.fps.avg_1s IS NOT NULL
-| STATS avg_fps = AVG(gamepulse.fps.avg_1s),
-        p95_frametime = PERCENTILE(gamepulse.fps.frametime_ms, 95)
-  BY gamepulse.session.id
+FROM metrics-rigsignal.frame-default
+| WHERE rigsignal.fps.avg_1s IS NOT NULL
+| STATS avg_fps = AVG(rigsignal.fps.avg_1s),
+        p95_frametime = PERCENTILE(rigsignal.fps.frametime_ms, 95)
+  BY rigsignal.session.id
 | SORT avg_fps DESC
 | LIMIT 10
 ```
@@ -91,24 +91,24 @@ FROM metrics-gamepulse.frame-default
 
 | Data view ID | Pattern | Use for |
 |---|---|---|
-| `18dd83e8-6f88-474f-b434-a4b6c14a04a2` | `metrics-gamepulse.*` | Multi-stream dashboards |
-| `gp-dv-frame` | `metrics-gamepulse.frame-default` | FPS/frametime panels |
-| `gp-dv-gpu` | `metrics-gamepulse.gpu-default` | GPU metrics panels |
-| `gp-dv-cpu` | `metrics-gamepulse.cpu-default` | CPU metrics panels |
-| `gp-dv-session` | `metrics-gamepulse.session-default` | Session config panels |
-| `gp-dv-storage` | `metrics-gamepulse.storage-default` | Storage I/O panels |
-| `gp-dv-timeline` | `gamepulse-game-timeline` | Games dashboard |
+| `18dd83e8-6f88-474f-b434-a4b6c14a04a2` | `metrics-rigsignal.*` | Multi-stream dashboards |
+| `gp-dv-frame` | `metrics-rigsignal.frame-default` | FPS/frametime panels |
+| `gp-dv-gpu` | `metrics-rigsignal.gpu-default` | GPU metrics panels |
+| `gp-dv-cpu` | `metrics-rigsignal.cpu-default` | CPU metrics panels |
+| `gp-dv-session` | `metrics-rigsignal.session-default` | Session config panels |
+| `gp-dv-storage` | `metrics-rigsignal.storage-default` | Storage I/O panels |
+| `gp-dv-timeline` | `rigsignal-game-timeline` | Games dashboard |
 
 ### Building a dashboard — step by step
 
 1. Go to Dashboards → Create new dashboard
 2. Add filter controls first (before panels):
-   - Game: `gamepulse.game.name.keyword`, data view = wildcard
-   - Session ID: `gamepulse.session.id.keyword`, data view = wildcard
+   - Game: `rigsignal.game.name.keyword`, data view = wildcard
+   - Session ID: `rigsignal.session.id.keyword`, data view = wildcard
    - OS: `host.os.type.keyword`, data view = wildcard
 3. Add panels using Lens only (never Vega, TSVB, or legacy visualizations)
 4. For every panel: add a `data_stream.dataset` filter to the panel's filter bar
-5. Set panel titles without the package name ("FPS Timeline" not "[GamePulse] FPS Timeline")
+5. Set panel titles without the package name ("FPS Timeline" not "[RigSignal] FPS Timeline")
 6. Save the dashboard
 
 ### Elastic compliance rules
@@ -128,7 +128,7 @@ Counter-type fields do not support `avg()` in Kibana Lens on TSDS-backed streams
 | counter | Average | Max or Rate |
 | gauge | — | All aggregations supported |
 
-Most `gamepulse.*` fields are gauges (use any aggregation). Check `fields.yml` `metric_type` if unsure.
+Most `rigsignal.*` fields are gauges (use any aggregation). Check `fields.yml` `metric_type` if unsure.
 
 ### Recommended panel types
 
@@ -263,8 +263,8 @@ XY chart `y` metric items accept an `"axis"` property to assign them to a right 
   "data_source": { "type": "data_view_reference", "ref_id": "..." },
   "x": { "operation": "date_histogram", "field": "@timestamp" },
   "y": [
-    { "operation": "average", "field": "gamepulse.gpu.utilisation_pct", "label": "GPU Util %" },
-    { "operation": "max", "field": "gamepulse.gpu.temperature_c", "label": "GPU Temp °C", "axis": "y2" }
+    { "operation": "average", "field": "rigsignal.gpu.utilisation_pct", "label": "GPU Util %" },
+    { "operation": "max", "field": "rigsignal.gpu.temperature_c", "label": "GPU Temp °C", "axis": "y2" }
   ]
 }]
 ```
@@ -414,7 +414,7 @@ Bucket columns (terms): `"isTransposed": true`. Metric columns (count): `"isTran
 
 ### Filter controls (options_list_control)
 
-Filter dropdowns are stored in `attributes.pinned_panels`. Field names for text fields must use `.keyword` sub-field (e.g. `gamepulse.game.name.keyword`). Using the bare text field silently produces a non-functional filter control.
+Filter dropdowns are stored in `attributes.pinned_panels`. Field names for text fields must use `.keyword` sub-field (e.g. `rigsignal.game.name.keyword`). Using the bare text field silently produces a non-functional filter control.
 
 **Note:** `.keyword` sub-fields only exist on indices created before the 2026-04-12 reindex. Indices from 2026-04-12 onwards use native `keyword` type — use base field paths (no `.keyword`) in ES|QL queries targeting these indices. Filter controls always need `.keyword` regardless (Kibana requirement).
 

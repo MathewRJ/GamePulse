@@ -1,21 +1,21 @@
 #!/bin/sh
-# GamePulse uninstaller
+# RigSignal uninstaller
 #
 # Removes everything installed by install.sh, in reverse order.
 #
 # Usage:
-#   gamepulse-uninstall           # remove everything (prompts for sudo for eBPF)
-#   gamepulse-uninstall --user-only   # remove user-space files only (no sudo needed)
+#   rigsignal-uninstall           # remove everything (prompts for sudo for eBPF)
+#   rigsignal-uninstall --user-only   # remove user-space files only (no sudo needed)
 #
 # What gets removed:
 #   User-space (no sudo):
-#     ~/.local/bin/gamepulse-agent
-#     ~/.local/bin/gamepulse
-#     ~/.config/systemd/user/gamepulse-agent.service
+#     ~/.local/bin/rigsignal-agent
+#     ~/.local/bin/rigsignal
+#     ~/.config/systemd/user/rigsignal-agent.service
 #   System-wide (sudo required, skipped with --user-only):
-#     /usr/local/bin/gamepulse-ebpf
-#     /usr/local/lib/gamepulse/  (entire directory)
-#     /etc/systemd/system/gamepulse-ebpf.service
+#     /usr/local/bin/rigsignal-ebpf
+#     /usr/local/lib/rigsignal/  (entire directory)
+#     /etc/systemd/system/rigsignal-ebpf.service
 
 set -e
 
@@ -69,20 +69,20 @@ USER_BIN="${HOME}/.local/bin"
 USER_SERVICE="${HOME}/.config/systemd/user"
 
 if command -v systemctl >/dev/null 2>&1; then
-    systemctl --user stop gamepulse-agent 2>/dev/null || true
-    systemctl --user disable gamepulse-agent 2>/dev/null || true
+    systemctl --user stop rigsignal-agent 2>/dev/null || true
+    systemctl --user disable rigsignal-agent 2>/dev/null || true
     systemctl --user daemon-reload 2>/dev/null || true
 fi
 
-remove_file "$USER_BIN/gamepulse-agent"
-remove_file "$USER_BIN/gamepulse"
-remove_file "$USER_SERVICE/gamepulse-agent.service"
+remove_file "$USER_BIN/rigsignal-agent"
+remove_file "$USER_BIN/rigsignal"
+remove_file "$USER_SERVICE/rigsignal-agent.service"
 
 # ── System-wide removal (sudo) ────────────────────────────────────────────────
 
-EBPF_BIN="/usr/local/bin/gamepulse-ebpf"
-EBPF_LIB="/usr/local/lib/gamepulse"
-EBPF_SVC="/etc/systemd/system/gamepulse-ebpf.service"
+EBPF_BIN="/usr/local/bin/rigsignal-ebpf"
+EBPF_LIB="/usr/local/lib/rigsignal"
+EBPF_SVC="/etc/systemd/system/rigsignal-ebpf.service"
 
 _has_system_files=0
 [ -f "$EBPF_BIN" ] && _has_system_files=1
@@ -112,8 +112,8 @@ elif [ "$_has_system_files" = "1" ]; then
         fi
 
         if command -v systemctl >/dev/null 2>&1; then
-            sudo systemctl stop gamepulse-ebpf 2>/dev/null || true
-            sudo systemctl disable gamepulse-ebpf 2>/dev/null || true
+            sudo systemctl stop rigsignal-ebpf 2>/dev/null || true
+            sudo systemctl disable rigsignal-ebpf 2>/dev/null || true
             sudo systemctl daemon-reload 2>/dev/null || true
         fi
 
@@ -130,4 +130,4 @@ fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 
-printf '\n  GamePulse uninstalled.\n\n'
+printf '\n  RigSignal uninstalled.\n\n'

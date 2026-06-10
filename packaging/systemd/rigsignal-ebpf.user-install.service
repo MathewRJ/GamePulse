@@ -1,10 +1,10 @@
 [Unit]
-Description=GamePulse eBPF kernel daemon
+Description=RigSignal eBPF kernel daemon
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/gamepulse-ebpf --config /etc/gamepulse/gamepulse.toml --probe-path /usr/local/lib/gamepulse/gamepulse-ebpf-probes
+ExecStart=/usr/local/bin/rigsignal-ebpf --config /etc/rigsignal/rigsignal.toml --probe-path /usr/local/lib/rigsignal/rigsignal-ebpf-probes
 Restart=on-failure
 RestartSec=5
 # eBPF requires elevated capabilities

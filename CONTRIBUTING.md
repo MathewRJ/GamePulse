@@ -1,10 +1,10 @@
-# Contributing to GamePulse
+# Contributing to RigSignal
 
-Thank you for your interest in contributing to GamePulse! This project aims to build an open, community-driven gaming telemetry platform, and contributions of all kinds are welcome.
+Thank you for your interest in contributing to RigSignal! This project aims to build an open, community-driven gaming telemetry platform, and contributions of all kinds are welcome.
 
 ## Ways to Contribute
 
-- **Report bugs** — open an issue with reproduction steps, your hardware/OS info, and `gamepulse-agent --debug --once` output
+- **Report bugs** — open an issue with reproduction steps, your hardware/OS info, and `rigsignal-agent --debug --once` output
 - **Request features** — describe the use case, not just the feature
 - **Submit telemetry** — run the agent and opt in to public sharing to grow the community dataset
 - **Write code** — see Development below
@@ -24,8 +24,8 @@ Thank you for your interest in contributing to GamePulse! This project aims to b
 ### Building
 
 ```bash
-git clone https://github.com/MathewRJ/GamePulse.git
-cd GamePulse
+git clone https://github.com/MathewRJ/RigSignal.git
+cd RigSignal
 cargo build          # Debug build
 cargo build --release # Optimised build
 cargo test           # Run tests
@@ -80,7 +80,7 @@ src/
 ### Adding a New eBPF Probe
 
 1. Create the userspace loader in `src/ebpf/probes/your_probe.rs`
-2. Create the BPF program in `gamepulse-ebpf/src/your_probe.rs`
+2. Create the BPF program in `rigsignal-ebpf/src/your_probe.rs`
 3. Register in `src/ebpf/probes/mod.rs`
 4. Add to the probe factory list in `src/ebpf/mod.rs`
 

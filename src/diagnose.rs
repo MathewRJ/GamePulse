@@ -1,4 +1,4 @@
-/// `gamepulse-agent diagnose` — single-file bug-report dump.
+/// `rigsignal-agent diagnose` — single-file bug-report dump.
 ///
 /// Collects: kernel version, GPU driver, Elasticsearch reachability, and a log
 /// of every probe step taken during this run. Output goes to stdout (default)
@@ -26,7 +26,7 @@ pub async fn run(cfg: &Config, config_path: Option<&Path>, output: Option<&Path>
     // ── Header ────────────────────────────────────────────────────────────────
 
     let ts = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, true);
-    writeln!(report, "=== GamePulse Diagnostic Report ===")?;
+    writeln!(report, "=== RigSignal Diagnostic Report ===")?;
     writeln!(report, "Generated:  {ts}")?;
     writeln!(report, "Version:    {}", env!("CARGO_PKG_VERSION"))?;
     writeln!(report)?;
@@ -57,12 +57,12 @@ pub async fn run(cfg: &Config, config_path: Option<&Path>, output: Option<&Path>
     let hostname = host::hostname();
     note!("kernel {kernel}, OS {os_name} {os_version}");
 
-    let cpu_model = get(&["gamepulse", "hardware", "cpu", "model"]);
-    let cpu_cores = get_i64(&["gamepulse", "hardware", "cpu", "cores"]);
-    let cpu_threads = get_i64(&["gamepulse", "hardware", "cpu", "threads"]);
-    let cpu_boost = get_i64(&["gamepulse", "hardware", "cpu", "boost_clock_mhz"]);
-    let ram_total = get_i64(&["gamepulse", "hardware", "ram", "total_mb"]);
-    let device_type = get(&["gamepulse", "hardware", "device", "type"]);
+    let cpu_model = get(&["rigsignal", "hardware", "cpu", "model"]);
+    let cpu_cores = get_i64(&["rigsignal", "hardware", "cpu", "cores"]);
+    let cpu_threads = get_i64(&["rigsignal", "hardware", "cpu", "threads"]);
+    let cpu_boost = get_i64(&["rigsignal", "hardware", "cpu", "boost_clock_mhz"]);
+    let ram_total = get_i64(&["rigsignal", "hardware", "ram", "total_mb"]);
+    let device_type = get(&["rigsignal", "hardware", "device", "type"]);
 
     writeln!(report, "System")?;
     writeln!(report, "  Hostname:   {hostname}")?;
@@ -91,12 +91,12 @@ pub async fn run(cfg: &Config, config_path: Option<&Path>, output: Option<&Path>
 
     // ── GPU ───────────────────────────────────────────────────────────────────
 
-    let gpu_vendor = get(&["gamepulse", "hardware", "gpu", "vendor"]);
-    let gpu_model = get(&["gamepulse", "hardware", "gpu", "model"]);
-    let gpu_vram = get_i64(&["gamepulse", "hardware", "gpu", "vram_mb"]);
-    let gpu_driver = get(&["gamepulse", "hardware", "gpu", "driver_version"]);
-    let gpu_mesa = get(&["gamepulse", "hardware", "gpu", "mesa_version"]);
-    let gpu_vulkan = get(&["gamepulse", "hardware", "gpu", "vulkan_driver"]);
+    let gpu_vendor = get(&["rigsignal", "hardware", "gpu", "vendor"]);
+    let gpu_model = get(&["rigsignal", "hardware", "gpu", "model"]);
+    let gpu_vram = get_i64(&["rigsignal", "hardware", "gpu", "vram_mb"]);
+    let gpu_driver = get(&["rigsignal", "hardware", "gpu", "driver_version"]);
+    let gpu_mesa = get(&["rigsignal", "hardware", "gpu", "mesa_version"]);
+    let gpu_vulkan = get(&["rigsignal", "hardware", "gpu", "vulkan_driver"]);
 
     if gpu_vendor.is_some() || gpu_model.is_some() {
         note!(
@@ -168,9 +168,9 @@ pub async fn run(cfg: &Config, config_path: Option<&Path>, output: Option<&Path>
         .unwrap_or_else(|| {
             // Reproduce the same default-search logic as Config::load.
             let home_candidate = dirs_next_home()
-                .map(|h| h.join(".config/gamepulse/gamepulse.toml"))
+                .map(|h| h.join(".config/rigsignal/rigsignal.toml"))
                 .map(|p| p.display().to_string())
-                .unwrap_or_else(|| "~/.config/gamepulse/gamepulse.toml".into());
+                .unwrap_or_else(|| "~/.config/rigsignal/rigsignal.toml".into());
             home_candidate
         });
     writeln!(report, "  File:       {config_file_str}")?;

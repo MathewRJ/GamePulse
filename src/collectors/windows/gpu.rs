@@ -188,7 +188,7 @@ impl Drop for GpuCollector {
 
 impl Collector for GpuCollector {
     fn dataset(&self) -> &'static str {
-        "gamepulse.gpu"
+        "rigsignal.gpu"
     }
 
     fn set_game_pid(&mut self, pid: Option<u32>) {
@@ -247,6 +247,6 @@ impl Collector for GpuCollector {
             return Ok(None);
         }
 
-        Ok(Some(json!({ "gamepulse": { "gpu": gpu } })))
+        Ok(Some(json!({ "rigsignal": { "gpu": gpu } })))
     }
 }

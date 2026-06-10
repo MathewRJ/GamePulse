@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Deploy GamePulse ingest pipelines to Elasticsearch.
+"""Deploy RigSignal ingest pipelines to Elasticsearch.
 
 Pipeline naming convention follows the Elastic integration package standard:
-  metrics-gamepulse.<dataset>-default  (metrics data streams)
-  logs-gamepulse.<dataset>-default     (logs data streams, e.g. events)
+  metrics-rigsignal.<dataset>-default  (metrics data streams)
+  logs-rigsignal.<dataset>-default     (logs data streams, e.g. events)
 
 Usage:
     python3 tools/deploy_pipelines.py [--dry-run]
@@ -25,7 +25,7 @@ DS_ROOT = ROOT / "data_stream"
 
 def pipeline_id(dataset: str) -> str:
     stream_type = "logs" if dataset in LOGS_DATASETS else "metrics"
-    return f"{stream_type}-gamepulse.{dataset}-default"
+    return f"{stream_type}-rigsignal.{dataset}-default"
 
 
 def load_pipeline(dataset: str) -> dict:

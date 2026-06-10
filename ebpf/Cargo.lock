@@ -527,34 +527,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gamepulse-ebpf-daemon"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "aya",
- "aya-log",
- "chrono",
- "clap",
- "nix",
- "notify",
- "reqwest",
- "serde",
- "serde_json",
- "tokio",
- "toml",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "gamepulse-ebpf-probes"
-version = "0.1.0"
-dependencies = [
- "aya-ebpf",
- "aya-log-ebpf",
-]
-
-[[package]]
 name = "getrandom"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1353,6 +1325,34 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "webpki-roots",
+]
+
+[[package]]
+name = "rigsignal-ebpf"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "aya",
+ "aya-log",
+ "chrono",
+ "clap",
+ "nix",
+ "notify",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "rigsignal-ebpf-probes"
+version = "0.2.0"
+dependencies = [
+ "aya-ebpf",
+ "aya-log-ebpf",
 ]
 
 [[package]]
@@ -2351,7 +2351,7 @@ checksum = "1ffae5123b2d3fc086436f8834ae3ab053a283cfac8fe0a0b8eaae044768a4c4"
 
 [[package]]
 name = "xtask"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",

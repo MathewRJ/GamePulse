@@ -1,6 +1,6 @@
-# Getting Started with GamePulse
+# Getting Started with RigSignal
 
-This guide walks you through installing GamePulse, connecting it to Elasticsearch, and seeing your first gaming telemetry data.
+This guide walks you through installing RigSignal, connecting it to Elasticsearch, and seeing your first gaming telemetry data.
 
 ## Prerequisites
 
@@ -13,29 +13,29 @@ This guide walks you through installing GamePulse, connecting it to Elasticsearc
 ### Arch Linux / CachyOS / Steam Deck (AUR)
 
 ```bash
-yay -S gamepulse
+yay -S rigsignal
 ```
 
 ### Debian / Ubuntu
 
 ```bash
-sudo apt install ./gamepulse_*.deb   # download from GitHub releases
+sudo apt install ./rigsignal_*.deb   # download from GitHub releases
 ```
 
 ### Fedora / RHEL
 
 ```bash
-sudo dnf install ./gamepulse-*.rpm   # download from GitHub releases
+sudo dnf install ./rigsignal-*.rpm   # download from GitHub releases
 ```
 
 ### Build from source
 
 ```bash
-git clone https://github.com/MathewRJ/GamePulse.git
-cd GamePulse/src
+git clone https://github.com/MathewRJ/RigSignal.git
+cd RigSignal/src
 cargo build --release
-sudo cp target/release/gamepulse-agent /usr/local/bin/gamepulse-agent
-sudo install -Dm755 ../packaging/gamepulse-launcher.sh /usr/local/bin/gamepulse
+sudo cp target/release/rigsignal-agent /usr/local/bin/rigsignal-agent
+sudo install -Dm755 ../packaging/rigsignal-launcher.sh /usr/local/bin/rigsignal
 ```
 
 ## Step 2: Configure
@@ -43,17 +43,17 @@ sudo install -Dm755 ../packaging/gamepulse-launcher.sh /usr/local/bin/gamepulse
 ### Option A — Interactive setup (recommended)
 
 ```bash
-gamepulse setup
+rigsignal setup
 ```
 
 Prompts for your Elasticsearch endpoint and API key, tests connectivity, and writes
-`~/.config/gamepulse/gamepulse.toml` (mode 600).
+`~/.config/rigsignal/rigsignal.toml` (mode 600).
 
 ### Option B — Edit the config file directly
 
 ```bash
-mkdir -p ~/.config/gamepulse
-cat > ~/.config/gamepulse/gamepulse.toml << 'EOF'
+mkdir -p ~/.config/rigsignal
+cat > ~/.config/rigsignal/rigsignal.toml << 'EOF'
 [elasticsearch]
 endpoint = "https://your-deployment.es.us-central1.gcp.elastic.cloud"
 api_key = "your-api-key"
@@ -61,12 +61,12 @@ EOF
 ```
 
 The API key needs `monitor` on the cluster and `auto_configure`/`create_doc`/`create_index`
-on `metrics-gamepulse.*` and `logs-gamepulse.*`. See [install.md](install.md) for details.
+on `metrics-rigsignal.*` and `logs-rigsignal.*`. See [install.md](install.md) for details.
 
 ## Step 3: Verify
 
 ```bash
-gamepulse-agent diagnose
+rigsignal-agent diagnose
 ```
 
 Prints kernel version, GPU info, Elasticsearch reachability, and the resolved config path.
@@ -79,30 +79,30 @@ Pass `--output report.txt` to save a bug report.
 In Steam → right-click game → Properties → Launch Options:
 
 ```
-gamepulse run %command%
+rigsignal run %command%
 ```
 
 ### Always-on service
 
 ```bash
 # User-level agent (no root)
-systemctl --user enable --now gamepulse-agent
+systemctl --user enable --now rigsignal-agent
 
 # System-level eBPF daemon (requires sudo, for kernel-level tracing)
-sudo systemctl enable --now gamepulse-ebpf
+sudo systemctl enable --now rigsignal-ebpf
 ```
 
 ### Other launchers
 
-GamePulse auto-detects games from Steam, Lutris, Heroic (Epic/GOG), and Bottles.
+RigSignal auto-detects games from Steam, Lutris, Heroic (Epic/GOG), and Bottles.
 No extra configuration is needed — just run the agent alongside your launcher.
 
 To monitor a specific process regardless of launcher:
 
 ```bash
-gamepulse-agent --target-name cyberpunk2077
+rigsignal-agent --target-name cyberpunk2077
 # or
-gamepulse-agent --target-pid 12345
+rigsignal-agent --target-pid 12345
 ```
 
 ## What happens automatically
@@ -118,7 +118,7 @@ Once the agent is running and a game is detected:
 
 ## Frame timing (optional)
 
-Frame data (`gamepulse.frame`) requires MangoHud. All other 7 metric streams work without it.
+Frame data (`rigsignal.frame`) requires MangoHud. All other 7 metric streams work without it.
 
 ```bash
 # Enable MangoHud logging globally
@@ -130,7 +130,7 @@ EOF
 
 Or per-game in Steam launch options:
 ```
-MANGOHUD=1 MANGOHUD_LOG=1 gamepulse run %command%
+MANGOHUD=1 MANGOHUD_LOG=1 rigsignal run %command%
 ```
 
 On Steam Deck, MangoHud is pre-installed — enable the overlay in Quick Access.

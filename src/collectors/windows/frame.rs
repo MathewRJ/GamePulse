@@ -20,10 +20,10 @@
 //! returns `None` permanently for this session. We do not attempt
 //! fallback column guessing.
 //!
-//! Field-path note: this collector emits under `gamepulse.fps.*` (not
-//! `gamepulse.frame.*`) to match the Linux collector and the
+//! Field-path note: this collector emits under `rigsignal.fps.*` (not
+//! `rigsignal.frame.*`) to match the Linux collector and the
 //! `SessionAccumulators` reader in `src/main.rs`. The dataset name is
-//! still `gamepulse.frame`.
+//! still `rigsignal.frame`.
 
 use crate::collectors::Collector;
 use anyhow::Result;
@@ -68,7 +68,7 @@ pub(crate) struct FrameSample {
 // ── PresentMon discovery ──────────────────────────────────────────────────────
 
 fn find_presentmon() -> Option<PathBuf> {
-    if let Ok(env_path) = std::env::var("GAMEPULSE_PRESENTMON") {
+    if let Ok(env_path) = std::env::var("RIGSIGNAL_PRESENTMON") {
         let p = PathBuf::from(env_path);
         if p.is_file() {
             return Some(p);
@@ -151,7 +151,7 @@ impl FrameSource for PresentMonSource {
                 if !self.presentmon_missing_logged {
                     tracing::warn!(
                         "PresentMon.exe not found. Frame timing unavailable. \
-                         Set GAMEPULSE_PRESENTMON=/path/to/PresentMon.exe or \
+                         Set RIGSIGNAL_PRESENTMON=/path/to/PresentMon.exe or \
                          place PresentMon.exe alongside the agent binary."
                     );
                     self.presentmon_missing_logged = true;
@@ -352,14 +352,14 @@ impl FrameCollector {
 
 impl Collector for FrameCollector {
     fn dataset(&self) -> &'static str {
-        "gamepulse.frame"
+        "rigsignal.frame"
     }
 
     fn collect(&mut self) -> Result<Option<Value>> {
         match self.source.next_sample() {
             None => Ok(None),
             Some(s) => Ok(Some(json!({
-                "gamepulse": {
+                "rigsignal": {
                     "fps": {
                         "avg_1s": s.fps,
                         "current": s.current_fps,

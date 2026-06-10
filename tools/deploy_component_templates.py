@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Deploy GamePulse component templates to Elasticsearch.
+"""Deploy RigSignal component templates to Elasticsearch.
 
-Component templates declare explicit field mappings for gamepulse.* fields so
+Component templates declare explicit field mappings for rigsignal.* fields so
 Kibana shows them in the field list even before any docs with those fields
-arrive. Templates use the gamepulse.* namespace to match actual document paths.
+arrive. Templates use the rigsignal.* namespace to match actual document paths.
 
 Usage:
     python3 tools/deploy_component_templates.py [--dry-run]
@@ -19,18 +19,18 @@ ROOT = Path(__file__).parent.parent
 TEMPLATE_DIR = ROOT / "elastic" / "component-templates"
 
 TEMPLATES = [
-    "gamepulse-audio-mappings",
-    "gamepulse-cpu-mappings",
-    "gamepulse-ebpf-mappings",
-    "gamepulse-events-mappings",
-    "gamepulse-frame-mappings",
-    "gamepulse-gpu-mappings",
-    "gamepulse-host-environment",
-    "gamepulse-memory-mappings",
-    "gamepulse-network-mappings",
-    "gamepulse-power-mappings",
-    "gamepulse-session-context",
-    "gamepulse-storage-mappings",
+    "rigsignal-audio-mappings",
+    "rigsignal-cpu-mappings",
+    "rigsignal-ebpf-mappings",
+    "rigsignal-events-mappings",
+    "rigsignal-frame-mappings",
+    "rigsignal-gpu-mappings",
+    "rigsignal-host-environment",
+    "rigsignal-memory-mappings",
+    "rigsignal-network-mappings",
+    "rigsignal-power-mappings",
+    "rigsignal-session-context",
+    "rigsignal-storage-mappings",
 ]
 
 

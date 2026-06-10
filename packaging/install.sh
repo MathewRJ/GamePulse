@@ -1,19 +1,19 @@
 #!/bin/sh
-# GamePulse user-mode installer
+# RigSignal user-mode installer
 #
 # Installs to ~/.local/bin/ — no root required, survives SteamOS / immutable-OS updates.
 #
 # Usage:
-#   curl -sSfL https://mathewrj.github.io/GamePulse-Integration/install.sh | sh
-#   curl -sSfL https://mathewrj.github.io/GamePulse-Integration/install.sh | sh -s -- --version 0.2.0
+#   curl -sSfL https://mathewrj.github.io/RigSignal-Integration/install.sh | sh
+#   curl -sSfL https://mathewrj.github.io/RigSignal-Integration/install.sh | sh -s -- --version 0.2.0
 #
 # After install:
-#   gamepulse setup    # configure Elasticsearch endpoint + API key
-#   gamepulse start    # start the agent
+#   rigsignal setup    # configure Elasticsearch endpoint + API key
+#   rigsignal start    # start the agent
 
 set -e
 
-REPO="MathewRJ/GamePulse"
+REPO="MathewRJ/RigSignal"
 INSTALL_BIN="${HOME}/.local/bin"
 INSTALL_SERVICE="${HOME}/.config/systemd/user"
 GITHUB_API="https://api.github.com/repos/${REPO}"
@@ -77,7 +77,7 @@ if [ -z "$VERSION" ]; then
     [ -n "$VERSION" ] || err "Could not determine latest release. Check https://github.com/${REPO}/releases"
 fi
 
-info "Installing GamePulse v${VERSION} (${ARCH})"
+info "Installing RigSignal v${VERSION} (${ARCH})"
 
 # ── SteamOS detection ─────────────────────────────────────────────────────────
 
@@ -92,7 +92,7 @@ fi
 
 # ── Download ──────────────────────────────────────────────────────────────────
 
-TARBALL="gamepulse-${VERSION}-linux-${ARCH}.tar.gz"
+TARBALL="rigsignal-${VERSION}-linux-${ARCH}.tar.gz"
 DOWNLOAD_URL="${GITHUB_RELEASES}/v${VERSION}/${TARBALL}"
 
 TMP=$(mktemp -d)
@@ -111,18 +111,18 @@ add_installed() { INSTALLED="${INSTALLED}  + $1\n"; }
 add_skipped()   { SKIPPED="${SKIPPED}  - $1\n"; }
 
 mkdir -p "$INSTALL_BIN"
-install -m 755 "$TMP/gamepulse-agent"  "$INSTALL_BIN/gamepulse-agent"
-install -m 755 "$TMP/gamepulse"        "$INSTALL_BIN/gamepulse"
-add_installed "$INSTALL_BIN/gamepulse-agent  (collector)"
-add_installed "$INSTALL_BIN/gamepulse  (launcher CLI)"
+install -m 755 "$TMP/rigsignal-agent"  "$INSTALL_BIN/rigsignal-agent"
+install -m 755 "$TMP/rigsignal"        "$INSTALL_BIN/rigsignal"
+add_installed "$INSTALL_BIN/rigsignal-agent  (collector)"
+add_installed "$INSTALL_BIN/rigsignal  (launcher CLI)"
 
 # ── Install user systemd service ──────────────────────────────────────────────
 
 if command -v systemctl >/dev/null 2>&1; then
     mkdir -p "$INSTALL_SERVICE"
-    install -m 644 "$TMP/gamepulse-agent.service" "$INSTALL_SERVICE/gamepulse-agent.service"
+    install -m 644 "$TMP/rigsignal-agent.service" "$INSTALL_SERVICE/rigsignal-agent.service"
     systemctl --user daemon-reload 2>/dev/null || true
-    add_installed "$INSTALL_SERVICE/gamepulse-agent.service  (user systemd service)"
+    add_installed "$INSTALL_SERVICE/rigsignal-agent.service  (user systemd service)"
 else
     info "systemctl not found — skipping service install (non-systemd system)"
     add_skipped "systemd user service (systemctl not found)"
@@ -134,17 +134,17 @@ fi
 # If absent, the agent runs without kernel-level telemetry — all other streams
 # (CPU, GPU, memory, frame timing, etc.) are unaffected.
 
-EBPF_BIN="$TMP/gamepulse-ebpf"
-EBPF_PROBES="$TMP/gamepulse-ebpf-probes"
+EBPF_BIN="$TMP/rigsignal-ebpf"
+EBPF_PROBES="$TMP/rigsignal-ebpf-probes"
 
 if [ "$NO_EBPF" = "1" ]; then
     info "Skipping eBPF daemon (--no-ebpf)"
-    add_skipped "gamepulse-ebpf (--no-ebpf flag)"
+    add_skipped "rigsignal-ebpf (--no-ebpf flag)"
 elif [ -f "$EBPF_BIN" ]; then
     if ! command -v sudo >/dev/null 2>&1; then
         info "eBPF daemon found but sudo not available — skipping system install."
-        info "To install manually: sudo cp $EBPF_BIN /usr/local/bin/gamepulse-ebpf"
-        add_skipped "gamepulse-ebpf (sudo not available)"
+        info "To install manually: sudo cp $EBPF_BIN /usr/local/bin/rigsignal-ebpf"
+        add_skipped "rigsignal-ebpf (sudo not available)"
     else
         info "Installing eBPF daemon (kernel tracing — requires sudo)..."
 
@@ -154,43 +154,43 @@ elif [ -f "$EBPF_BIN" ]; then
             sudo steamos-readonly disable 2>/dev/null && _steamos_ro=1
         fi
 
-        if sudo install -m 755 "$EBPF_BIN" /usr/local/bin/gamepulse-ebpf 2>/dev/null; then
-            add_installed "/usr/local/bin/gamepulse-ebpf  (eBPF kernel daemon)"
+        if sudo install -m 755 "$EBPF_BIN" /usr/local/bin/rigsignal-ebpf 2>/dev/null; then
+            add_installed "/usr/local/bin/rigsignal-ebpf  (eBPF kernel daemon)"
 
             if [ -f "$EBPF_PROBES" ]; then
-                sudo mkdir -p /usr/local/lib/gamepulse
-                sudo install -m 644 "$EBPF_PROBES" /usr/local/lib/gamepulse/gamepulse-ebpf-probes
-                add_installed "/usr/local/lib/gamepulse/gamepulse-ebpf-probes  (eBPF probe bytecode)"
+                sudo mkdir -p /usr/local/lib/rigsignal
+                sudo install -m 644 "$EBPF_PROBES" /usr/local/lib/rigsignal/rigsignal-ebpf-probes
+                add_installed "/usr/local/lib/rigsignal/rigsignal-ebpf-probes  (eBPF probe bytecode)"
             fi
 
-            if [ -f "$TMP/gamepulse-ebpf.service" ] && command -v systemctl >/dev/null 2>&1; then
-                sudo install -m 644 "$TMP/gamepulse-ebpf.service" /etc/systemd/system/gamepulse-ebpf.service
+            if [ -f "$TMP/rigsignal-ebpf.service" ] && command -v systemctl >/dev/null 2>&1; then
+                sudo install -m 644 "$TMP/rigsignal-ebpf.service" /etc/systemd/system/rigsignal-ebpf.service
                 sudo systemctl daemon-reload 2>/dev/null || true
-                add_installed "/etc/systemd/system/gamepulse-ebpf.service  (system service)"
+                add_installed "/etc/systemd/system/rigsignal-ebpf.service  (system service)"
             fi
 
             # Write system config so the eBPF daemon can connect to ES immediately.
-            # If the user already ran 'gamepulse setup', copy their credentials.
-            # Otherwise write a placeholder; 'gamepulse setup' will update it.
-            sudo mkdir -p /etc/gamepulse
-            _user_cfg="${XDG_CONFIG_HOME:-$HOME/.config}/gamepulse/gamepulse.toml"
+            # If the user already ran 'rigsignal setup', copy their credentials.
+            # Otherwise write a placeholder; 'rigsignal setup' will update it.
+            sudo mkdir -p /etc/rigsignal
+            _user_cfg="${XDG_CONFIG_HOME:-$HOME/.config}/rigsignal/rigsignal.toml"
             if [ -f "$_user_cfg" ]; then
-                sudo install -m 600 "$_user_cfg" /etc/gamepulse/gamepulse.toml
-                add_installed "/etc/gamepulse/gamepulse.toml  (eBPF daemon config — copied from user config)"
+                sudo install -m 600 "$_user_cfg" /etc/rigsignal/rigsignal.toml
+                add_installed "/etc/rigsignal/rigsignal.toml  (eBPF daemon config — copied from user config)"
             else
-                sudo install -m 600 "$TMP/gamepulse.toml" /etc/gamepulse/gamepulse.toml 2>/dev/null || \
-                    printf '[elasticsearch]\nendpoint = ""\n' | sudo tee /etc/gamepulse/gamepulse.toml >/dev/null
-                add_installed "/etc/gamepulse/gamepulse.toml  (eBPF daemon config — run 'gamepulse setup' to fill in credentials)"
+                sudo install -m 600 "$TMP/rigsignal.toml" /etc/rigsignal/rigsignal.toml 2>/dev/null || \
+                    printf '[elasticsearch]\nendpoint = ""\n' | sudo tee /etc/rigsignal/rigsignal.toml >/dev/null
+                add_installed "/etc/rigsignal/rigsignal.toml  (eBPF daemon config — run 'rigsignal setup' to fill in credentials)"
             fi
 
             # Enable and start the eBPF service so kernel tracing is active immediately.
             if command -v systemctl >/dev/null 2>&1; then
-                sudo systemctl enable --now gamepulse-ebpf 2>/dev/null || true
-                add_installed "gamepulse-ebpf.service  (enabled + started)"
+                sudo systemctl enable --now rigsignal-ebpf 2>/dev/null || true
+                add_installed "rigsignal-ebpf.service  (enabled + started)"
             fi
         else
             info "sudo install failed — eBPF skipped. Re-run with sudo access to enable kernel tracing."
-            add_skipped "gamepulse-ebpf (sudo install failed)"
+            add_skipped "rigsignal-ebpf (sudo install failed)"
         fi
 
         [ "$_steamos_ro" = "1" ] && sudo steamos-readonly enable 2>/dev/null || true
@@ -198,7 +198,7 @@ elif [ -f "$EBPF_BIN" ]; then
 else
     info "eBPF daemon not included in this release — kernel tracing unavailable."
     info "Agent-only mode: FPS, CPU, GPU, memory, frame timing streams are unaffected."
-    add_skipped "gamepulse-ebpf (not included in this release)"
+    add_skipped "rigsignal-ebpf (not included in this release)"
 fi
 
 # ── MangoHud config (frame timing CSV) ───────────────────────────────────────
@@ -248,7 +248,7 @@ esac
 # ── Summary ───────────────────────────────────────────────────────────────────
 
 printf '\n'
-printf '  GamePulse v%s installed.\n' "$VERSION"
+printf '  RigSignal v%s installed.\n' "$VERSION"
 printf '\n'
 printf '  Installed:\n'
 printf '%b' "$INSTALLED"
@@ -260,20 +260,20 @@ fi
 printf '\n'
 printf '  Next steps:\n'
 if [ "$IS_STEAMOS" = "1" ]; then
-    printf '    1. If gamepulse is not found, open a new terminal or run:\n'
+    printf '    1. If rigsignal is not found, open a new terminal or run:\n'
     printf '         export PATH="%s:$PATH"\n' "$INSTALL_BIN"
     printf '    2. Run setup:\n'
 else
     printf '    1. Run setup:\n'
 fi
-printf '         gamepulse setup\n'
+printf '         rigsignal setup\n'
 printf '    2. Add to Steam launch options:\n'
-printf '         gamepulse run %%command%%\n'
-if printf '%b' "$INSTALLED" | grep -q "gamepulse-ebpf.service  (enabled"; then
+printf '         rigsignal run %%command%%\n'
+if printf '%b' "$INSTALLED" | grep -q "rigsignal-ebpf.service  (enabled"; then
     printf '    3. eBPF kernel telemetry is active. To check status:\n'
-    printf '         sudo systemctl status gamepulse-ebpf\n'
-elif printf '%b' "$INSTALLED" | grep -q "gamepulse-ebpf"; then
+    printf '         sudo systemctl status rigsignal-ebpf\n'
+elif printf '%b' "$INSTALLED" | grep -q "rigsignal-ebpf"; then
     printf '    3. Enable eBPF kernel telemetry at boot:\n'
-    printf '         sudo systemctl enable --now gamepulse-ebpf\n'
+    printf '         sudo systemctl enable --now rigsignal-ebpf\n'
 fi
 printf '\n'

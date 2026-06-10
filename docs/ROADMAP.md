@@ -1,6 +1,6 @@
-# GamePulse — Roadmap
+# RigSignal — Roadmap
 
-This file defines the milestones and work packages for GamePulse. It describes structure only — current status lives in `docs/STATUS.md`.
+This file defines the milestones and work packages for RigSignal. It describes structure only — current status lives in `docs/STATUS.md`.
 
 ## Milestone structure
 
@@ -42,7 +42,7 @@ Established `docs/STATUS.md` as single source of truth; stripped planning docs; 
 | B.4 | Platform dispatch in `src/main.rs` via `#[cfg(target_os)]` |
 | B.5 | GitHub Actions CI matrix — `cargo check` on linux + windows targets for every PR |
 | B.6 | eBPF as `features = ["ebpf"]` flag, Linux-only |
-| B.7 | Settings capture schema (manual Tier 1) — new `gamepulse.settings.*` fields on session stream; CLI flags; config section |
+| B.7 | Settings capture schema (manual Tier 1) — new `rigsignal.settings.*` fields on session stream; CLI flags; config section |
 | B.8 | Session label counter — change auto-generated label from `-HHMMSS` to `-N` per-game-per-day counter |
 
 ---
@@ -54,12 +54,12 @@ Established `docs/STATUS.md` as single source of truth; stripped planning docs; 
 | WP | Deliverable |
 |---|---|
 | B2.1 | `Target` enum in `src/session.rs` wrapping Steam/Lutris/Heroic/Bottles/UserSpecified variants; refactor current Steam-only detection as one source of many |
-| B2.2 | Schema generalisation: `gamepulse.game.steam_app_id` becomes optional; add `gamepulse.game.source` (steam\|lutris\|heroic\|bottles\|user_specified\|auto_detected) and `gamepulse.game.launcher` (human-readable) fields. Backwards-compatible addition. |
+| B2.2 | Schema generalisation: `rigsignal.game.steam_app_id` becomes optional; add `rigsignal.game.source` (steam\|lutris\|heroic\|bottles\|user_specified\|auto_detected) and `rigsignal.game.launcher` (human-readable) fields. Backwards-compatible addition. |
 | B2.3 | Lutris detection via `~/.local/share/lutris/games/*.yml` config parse |
 | B2.4 | Heroic detection via `~/.config/heroic/` JSON config parse |
 | B2.5 | Bottles detection via Bottles' config format |
 | B2.6 | Proton/Wine detection generalised via environment variables (`WINEPREFIX`, `PROTONPATH`, `STEAM_COMPAT_*`, `UMU_ID`). Works for Steam-launched Proton, Lutris-launched Wine, Heroic-launched Wine, umu-launcher, and raw Wine invocations. |
-| B2.7 | User-specified target CLI: `--target-process <name>`, `--target-pid <pid>`, `gamepulse run <command>`. Config-file equivalent in `[session]` section. |
+| B2.7 | User-specified target CLI: `--target-process <name>`, `--target-pid <pid>`, `rigsignal run <command>`. Config-file equivalent in `[session]` section. |
 | B2.8 | Dashboard query updates: existing dashboards that filter on `steam_app_id` switch to filtering on a launcher-agnostic identifier. Minimum-churn updates only. |
 
 ---
@@ -70,7 +70,7 @@ Established `docs/STATUS.md` as single source of truth; stripped planning docs; 
 
 **Scope: NOT COMMITTED.** This phase is placeheld to reserve roadmap position. Work packages are sketched below but no implementation happens until Phase B2 ships and real usage signal exists. The decision to commit Phase B3 depends on whether B2's manual-target UX turns out to be a genuine pain point for users or merely a theoretical one.
 
-**Architectural note:** Inspired by behavioural-classification patterns from EDR systems (e.g. Elastic Defend) — specifically the insight that "is this process X-type" is better answered by observing kernel-level runtime behaviour than by matching allowlists. Implementation is a lightweight in-agent classifier reusing GamePulse's existing eBPF infrastructure (gpu_sched, gpu_submit, page fault probes). **No third-party EDR dependency, no Elastic Defend integration** — the pattern is borrowed, the product is not. Licensing, performance overhead, installation friction, and data-model pollution all rule out literal reuse of Defend.
+**Architectural note:** Inspired by behavioural-classification patterns from EDR systems (e.g. Elastic Defend) — specifically the insight that "is this process X-type" is better answered by observing kernel-level runtime behaviour than by matching allowlists. Implementation is a lightweight in-agent classifier reusing RigSignal's existing eBPF infrastructure (gpu_sched, gpu_submit, page fault probes). **No third-party EDR dependency, no Elastic Defend integration** — the pattern is borrowed, the product is not. Licensing, performance overhead, installation friction, and data-model pollution all rule out literal reuse of Defend.
 
 **B3.0 — small precursor (shipped in Phase C)**: cfg-gate the existing Linux `/proc/*/environ` Steam scanner in `src/session.rs` so it doesn't run on Windows. This was a prerequisite to Windows game-detection work and shipped alongside the Phase C Windows collectors.
 
@@ -105,9 +105,9 @@ All 8 work packages (C.1–C.8) shipped. Per-collector parity gaps and upgrade p
 | C.7 | GPU — AMD | ADLX SDK |
 | C.8 | Frame timing | PresentMon sidecar process + CSV parsing |
 | C.9 | Game detection | Steam registry `HKCU\Software\Valve\Steam\Apps\<appid>\Running` + process scan |
-| C.10 | Session lifecycle | Port `src/session.rs` paths — `%APPDATA%\GamePulse\session.json` |
+| C.10 | Session lifecycle | Port `src/session.rs` paths — `%APPDATA%\RigSignal\session.json` |
 | C.11 | ETW image-load subscription for Tier 2 settings auto-detect |
-| C.12 | Port `src/host.rs` hardware enrichment to Windows — `cpu_info()`, `gpu_info()`, `ram_info()` currently read `/proc` and `/sys` and produce empty `gamepulse.hardware.*` blocks on Windows session docs. Re-use the data we already collect via PDH (cpu model/cores), DXGI (gpu vendor/model/VRAM), and `GlobalMemoryStatusEx` (ram). Surfaced 2026-04-29 by live ES smoke test. |
+| C.12 | Port `src/host.rs` hardware enrichment to Windows — `cpu_info()`, `gpu_info()`, `ram_info()` currently read `/proc` and `/sys` and produce empty `rigsignal.hardware.*` blocks on Windows session docs. Re-use the data we already collect via PDH (cpu model/cores), DXGI (gpu vendor/model/VRAM), and `GlobalMemoryStatusEx` (ram). Surfaced 2026-04-29 by live ES smoke test. |
 
 ---
 
@@ -119,13 +119,13 @@ All 8 work packages (C.1–C.8) shipped. Per-collector parity gaps and upgrade p
 |---|---|
 | D.1 | `.deb` build + Ubuntu 24.04 clean-VM smoke test |
 | D.2 | `.rpm` build + Fedora 40 clean-VM smoke test |
-| D.3 | Unified `--verbose`, `--log-level`, `--dry-run`, `--print-config` flags; consolidate with `GAMEPULSE_LOG` env |
+| D.3 | Unified `--verbose`, `--log-level`, `--dry-run`, `--print-config` flags; consolidate with `RIGSIGNAL_LOG` env |
 | D.4 | Optional keyring credential storage via D-Bus Secret Service (libsecret); plaintext TOML fallback |
-| D.5 | `gamepulse diagnose` subcommand — single-file bug-report dump (kernel, driver, ES reach, last 20 log lines) |
+| D.5 | `rigsignal diagnose` subcommand — single-file bug-report dump (kernel, driver, ES reach, last 20 log lines) |
 | D.6 | GitHub Actions release workflow — on tag `v*` builds .deb, .rpm, Arch pkg.tar.zst; attaches to GitHub Release |
 | D.7 | Game profile loader + three starter profiles (Starfield, Cyberpunk 2077, Baldur's Gate 3) for Tier 3 settings capture |
 | D.8 | Linux DLL scan via `/proc/<pid>/maps` for Tier 2 settings auto-detect |
-| D.9 | Extend `dllscan` + `gamepulse.settings.graphics_api` schema for native (non-DXVK) D3D11 / D3D12 detection on Windows. Today the chain only detects D3D12-via-VKD3D and D3D11-via-DXVK; native Windows games returning only `d3d11.dll`/`d3d12.dll` produce `graphics_api: None`. Add `dx11` and `dx12` enum values (no `_via_*` suffix) and matcher fragments. Extension of D.8 (Linux) and the post-Milestone-E Windows EnumProcessModules backend. |
+| D.9 | Extend `dllscan` + `rigsignal.settings.graphics_api` schema for native (non-DXVK) D3D11 / D3D12 detection on Windows. Today the chain only detects D3D12-via-VKD3D and D3D11-via-DXVK; native Windows games returning only `d3d11.dll`/`d3d12.dll` produce `graphics_api: None`. Add `dx11` and `dx12` enum values (no `_via_*` suffix) and matcher fragments. Extension of D.8 (Linux) and the post-Milestone-E Windows EnumProcessModules backend. |
 
 ---
 
@@ -133,10 +133,10 @@ All 8 work packages (C.1–C.8) shipped. Per-collector parity gaps and upgrade p
 
 | WP | Deliverable |
 |---|---|
-| E.1 | Portable zip: `gamepulse-<ver>-windows-x64.zip` with agent, config template, README |
-| E.2 | WiX MSI: installs to `Program Files\GamePulse\`, registers Windows Service |
-| E.3 | Windows `gamepulse.exe setup` — mirrors Linux UX; credentials in `%APPDATA%\GamePulse\gamepulse.toml` (current-user ACL) |
-| E.4 | Steam launch wrapper: `gamepulse.exe run %command%` — subprocess + wait + stop |
+| E.1 | Portable zip: `rigsignal-<ver>-windows-x64.zip` with agent, config template, README |
+| E.2 | WiX MSI: installs to `Program Files\RigSignal\`, registers Windows Service |
+| E.3 | Windows `rigsignal.exe setup` — mirrors Linux UX; credentials in `%APPDATA%\RigSignal\rigsignal.toml` (current-user ACL) |
+| E.4 | Steam launch wrapper: `rigsignal.exe run %command%` — subprocess + wait + stop |
 | E.5 | Windows Service (admin install) vs Scheduled Task (user install) — both paths tested |
 | E.6 | Code signing — self-signed for beta; plan EV cert later |
 | E.7 | GitHub Actions Windows runner builds MSI + zip on tag |
@@ -168,7 +168,7 @@ All 8 work packages (C.1–C.8) shipped. Per-collector parity gaps and upgrade p
 - `CHANGELOG.md` entry for the submitted version
 - ECS compliance review
 - Parity matrix from Phase F cited in PR description
-- Fork `elastic/integrations`, add `packages/gamepulse/`, submit PR
+- Fork `elastic/integrations`, add `packages/rigsignal/`, submit PR
 - Engage Elastic integrations team for review
 
 ---
@@ -181,15 +181,15 @@ Forks from `main` after Phase B lands. Targets air-gapped benchmarkers, reviewer
 |---|---|
 | H1 | Fork `offline` branch from `main`; add `.github/workflows/sync-docs-from-main.yml` to cherry-pick doc changes daily |
 | H2 | Bundled stack — native Elasticsearch + Kibana tar/zip (not Docker by default); pinned version; persistent volume next to binaries |
-| H3 | Offline install flow — `gamepulse setup --local`; saved-objects API asset import (bypasses Fleet registry) |
-| H4 | Export tooling — `gamepulse export` outputs `sessions.csv`, `frames.jsonl`, `metrics/<stream>.jsonl` filterable by session/time |
+| H3 | Offline install flow — `rigsignal setup --local`; saved-objects API asset import (bypasses Fleet registry) |
+| H4 | Export tooling — `rigsignal export` outputs `sessions.csv`, `frames.jsonl`, `metrics/<stream>.jsonl` filterable by session/time |
 | H5 | Merge-from-main cadence — docs auto-sync; code merges manual on feature stability boundaries |
 
 ---
 
 ## Phase G-ext — ebpf_thread Dashboard Panels
 
-Depends on Phase G. The `metrics-gamepulse.ebpf_thread-default` TSDB stream is live but unvisualized. These panels add per-thread scheduler drill-down — the "which thread caused this stutter?" answer that aggregate eBPF metrics cannot provide.
+Depends on Phase G. The `metrics-rigsignal.ebpf_thread-default` TSDB stream is live but unvisualized. These panels add per-thread scheduler drill-down — the "which thread caused this stutter?" answer that aggregate eBPF metrics cannot provide.
 
 | WP | Deliverable |
 |---|---|
@@ -210,7 +210,7 @@ Forks from `main` after Phase G closes. Android is the largest gaming platform b
 
 **Architecture notes:**
 - Rust `#[cfg(target_os)]` guards are already in place — adding an `android` module tree is scaffolding-only.
-- GamePulse sends directly to the ES bulk API (no Elastic Agent in the chain). Elastic Fleet is irrelevant on Android — there is no Elastic Agent for Android, and that is fine. The existing `elastic/integrations` package assets (data streams, ingest pipelines, dashboards) are fully compatible with Android-sourced data.
+- RigSignal sends directly to the ES bulk API (no Elastic Agent in the chain). Elastic Fleet is irrelevant on Android — there is no Elastic Agent for Android, and that is fine. The existing `elastic/integrations` package assets (data streams, ingest pipelines, dashboards) are fully compatible with Android-sourced data.
 - eBPF is **permanently out of scope** on Android: `BPF_PROG_LOAD` + `CAP_BPF` are restricted to system services under SELinux policy; `gpu_scheduler` tracepoints not exposed in AOSP.
 
 | WP | Deliverable | Complexity |

@@ -2,8 +2,8 @@
 ///
 /// Reads the loaded-module list of a running process and infers:
 ///   - Graphics API  → written to `Target.graphics_api` as an env-based fallback
-///   - Upscaler tech → written to `gamepulse.settings.upscaler.tech` in the overlay
-///   - Frame-gen tech → written to `gamepulse.settings.frame_gen` in the overlay
+///   - Upscaler tech → written to `rigsignal.settings.upscaler.tech` in the overlay
+///   - Frame-gen tech → written to `rigsignal.settings.frame_gen` in the overlay
 ///
 /// Detection works because games (and Proton) load DLLs/SOs whose names encode
 /// the technology: `libdxvk.so.2`, `nvngx_dlss.dll`, `libxess.so`,
@@ -31,7 +31,7 @@ pub fn graphics_api_from_maps(pid: u32) -> Option<String> {
     detect_graphics_api_from_paths(&paths)
 }
 
-/// Build a `{ "gamepulse": { "settings": { … } } }` overlay from maps-detected
+/// Build a `{ "rigsignal": { "settings": { … } } }` overlay from maps-detected
 /// upscaler and frame-generation technology. Returns `Value::Null` if nothing
 /// was detected. Sets `source = "auto_detected"`, `confidence = "medium"`.
 pub fn settings_overlay_from_maps(pid: u32) -> Value {
@@ -55,7 +55,7 @@ pub fn settings_overlay_from_maps(pid: u32) -> Value {
     settings.insert("source".into(), json!("auto_detected"));
     settings.insert("confidence".into(), json!("medium"));
 
-    json!({ "gamepulse": { "settings": Value::Object(settings) } })
+    json!({ "rigsignal": { "settings": Value::Object(settings) } })
 }
 
 // ── Detection logic ───────────────────────────────────────────────────────────
@@ -91,7 +91,7 @@ pub(crate) fn detect_graphics_api_from_paths(paths: &[String]) -> Option<String>
 }
 
 /// Detect upscaler technology from mapped file paths.
-/// Returns a string matching the `gamepulse.settings.upscaler.tech` field values.
+/// Returns a string matching the `rigsignal.settings.upscaler.tech` field values.
 pub(crate) fn detect_upscaler_from_paths(paths: &[String]) -> Option<String> {
     let any = |fragment: &str| paths.iter().any(|p| p.contains(fragment));
 
@@ -113,7 +113,7 @@ pub(crate) fn detect_upscaler_from_paths(paths: &[String]) -> Option<String> {
 }
 
 /// Detect frame-generation technology from mapped file paths.
-/// Returns a string matching the `gamepulse.settings.frame_gen` field values.
+/// Returns a string matching the `rigsignal.settings.frame_gen` field values.
 pub(crate) fn detect_frame_gen_from_paths(paths: &[String]) -> Option<String> {
     let any = |fragment: &str| paths.iter().any(|p| p.contains(fragment));
 

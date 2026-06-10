@@ -76,7 +76,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: agent-binary-linux-x86_64
-          path: target/release/gamepulse-agent
+          path: target/release/rigsignal-agent
 
   # ── 1b. Build eBPF daemon + probes (Linux x86_64, nightly Rust) ─────────────
   build-ebpf:
@@ -111,8 +111,8 @@ jobs:
       - name: Stage eBPF binaries (flat, no nested paths in artifact)
         run: |
           mkdir -p ebpf-artifacts
-          cp ebpf/target/release/gamepulse-ebpf                             ebpf-artifacts/
-          cp ebpf/target/bpfel-unknown-none/release/gamepulse-ebpf-probes   ebpf-artifacts/
+          cp ebpf/target/release/rigsignal-ebpf                             ebpf-artifacts/
+          cp ebpf/target/bpfel-unknown-none/release/rigsignal-ebpf-probes   ebpf-artifacts/
 
       - name: Upload eBPF artefacts
         uses: actions/upload-artifact@v4
@@ -142,28 +142,28 @@ jobs:
 
       - name: Mark binaries executable
         run: |
-          chmod +x target/release/gamepulse-agent
-          chmod +x target/ebpf/gamepulse-ebpf
+          chmod +x target/release/rigsignal-agent
+          chmod +x target/ebpf/rigsignal-ebpf
 
       - name: Build tarball
         run: |
           VERSION="${{ needs.setup.outputs.version }}"
-          DIR="gamepulse-${VERSION}-linux-x86_64"
+          DIR="rigsignal-${VERSION}-linux-x86_64"
           mkdir -p "dist-tar/${DIR}"
 
           # Agent + launcher + user service
-          cp target/release/gamepulse-agent                            "dist-tar/${DIR}/gamepulse-agent"
-          cp packaging/gamepulse-launcher.sh                           "dist-tar/${DIR}/gamepulse"
-          cp packaging/systemd/gamepulse-agent.user-install.service    "dist-tar/${DIR}/gamepulse-agent.service"
+          cp target/release/rigsignal-agent                            "dist-tar/${DIR}/rigsignal-agent"
+          cp packaging/rigsignal-launcher.sh                           "dist-tar/${DIR}/rigsignal"
+          cp packaging/systemd/rigsignal-agent.user-install.service    "dist-tar/${DIR}/rigsignal-agent.service"
 
           # eBPF daemon + probes + system service (installed by install.sh with sudo)
-          cp target/ebpf/gamepulse-ebpf                                "dist-tar/${DIR}/gamepulse-ebpf"
-          cp target/ebpf/gamepulse-ebpf-probes                         "dist-tar/${DIR}/gamepulse-ebpf-probes"
-          cp packaging/systemd/gamepulse-ebpf.user-install.service     "dist-tar/${DIR}/gamepulse-ebpf.service"
+          cp target/ebpf/rigsignal-ebpf                                "dist-tar/${DIR}/rigsignal-ebpf"
+          cp target/ebpf/rigsignal-ebpf-probes                         "dist-tar/${DIR}/rigsignal-ebpf-probes"
+          cp packaging/systemd/rigsignal-ebpf.user-install.service     "dist-tar/${DIR}/rigsignal-ebpf.service"
 
-          chmod +x "dist-tar/${DIR}/gamepulse-agent" \
-                   "dist-tar/${DIR}/gamepulse" \
-                   "dist-tar/${DIR}/gamepulse-ebpf"
+          chmod +x "dist-tar/${DIR}/rigsignal-agent" \
+                   "dist-tar/${DIR}/rigsignal" \
+                   "dist-tar/${DIR}/rigsignal-ebpf"
           cd dist-tar
           tar -czf "${DIR}.tar.gz" "${DIR}/"
 
@@ -171,7 +171,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: linux-tarball
-          path: dist-tar/gamepulse-*-linux-x86_64.tar.gz
+          path: dist-tar/rigsignal-*-linux-x86_64.tar.gz
 
       - name: Upload install.sh artefact
         uses: actions/upload-artifact@v4
@@ -202,7 +202,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: agent-binary-windows-x86_64
-          path: target/release/gamepulse-agent.exe
+          path: target/release/rigsignal-agent.exe
 
   # ── 3. .deb (Debian / Ubuntu) ───────────────────────────────────────────────
   package-deb:
@@ -222,7 +222,7 @@ jobs:
           path: target/release/
 
       - name: Mark binary executable
-        run: chmod +x target/release/gamepulse-agent
+        run: chmod +x target/release/rigsignal-agent
 
       - name: Install cargo-binstall (fast binary installer)
         uses: cargo-bins/cargo-binstall@main
@@ -257,7 +257,7 @@ jobs:
           path: target/release/
 
       - name: Mark binary executable
-        run: chmod +x target/release/gamepulse-agent
+        run: chmod +x target/release/rigsignal-agent
 
       - name: Install cargo-binstall
         uses: cargo-bins/cargo-binstall@main
@@ -293,7 +293,7 @@ jobs:
           path: target/release/
 
       - name: Mark binary executable
-        run: chmod +x target/release/gamepulse-agent
+        run: chmod +x target/release/rigsignal-agent
 
       - name: Create unprivileged build user (makepkg refuses to run as root)
         run: |
@@ -324,7 +324,7 @@ jobs:
   # ── 6. Windows .msi (cargo-wix + WiX Toolset 3) ─────────────────────────────
   # WiX 3 is pre-installed on windows-latest runners; cargo-wix is a small
   # cargo subcommand that drives candle.exe + light.exe with the wxs source
-  # at .github/packaging/main.wxs. The MSI installs to Program Files\GamePulse\
+  # at .github/packaging/main.wxs. The MSI installs to Program Files\RigSignal\
   # and adds bin\ to the system PATH.
   package-windows:
     name: package .msi (windows)

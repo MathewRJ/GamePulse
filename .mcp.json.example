@@ -10,7 +10,7 @@
       ],
       "env": {
         "KIBANA_URL": "https://your-deployment.kb.us-central1.gcp.elastic.cloud",
-        "AUTH_HEADER": "ApiKey ${GAMEPULSE_MCP_API_KEY}"
+        "AUTH_HEADER": "ApiKey ${RIGSIGNAL_MCP_API_KEY}"
       }
     }
   }

@@ -7,7 +7,7 @@
 ///
 /// Merge precedence (highest first):
 ///   1. CLI flags (source = "manual", confidence = "high")
-///   2. [session.settings] in gamepulse.toml  (same)
+///   2. [session.settings] in rigsignal.toml  (same)
 ///   3. Game profile (source = "profile", confidence = "medium")
 ///
 /// Profile TOML format:
@@ -25,10 +25,10 @@
 ///   notes = "some note"
 ///
 /// Profile search order (first directory wins for same-named profiles):
-///   1. $GAMEPULSE_PROFILES_DIR env var
-///   2. ~/.config/gamepulse/profiles/
-///   3. /etc/gamepulse/profiles/
-///   4. /usr/share/gamepulse/profiles/
+///   1. $RIGSIGNAL_PROFILES_DIR env var
+///   2. ~/.config/rigsignal/profiles/
+///   3. /etc/rigsignal/profiles/
+///   4. /usr/share/rigsignal/profiles/
 ///   5. {exe}/../../../profiles/  (dev build fallback — target/release → repo root)
 use crate::session::Target;
 use serde::Deserialize;
@@ -96,7 +96,7 @@ pub fn find_profile(target: &Target) -> Option<GameProfile> {
     })
 }
 
-/// Build a `{ "gamepulse": { "settings": { … } } }` JSON overlay from a profile.
+/// Build a `{ "rigsignal": { "settings": { … } } }` JSON overlay from a profile.
 /// Sets `source = "profile"` and `confidence = "medium"`.
 /// Returns `serde_json::Value::Null` if the profile has no settings fields.
 pub fn to_overlay(profile: &GameProfile) -> Value {
@@ -149,7 +149,7 @@ pub fn to_overlay(profile: &GameProfile) -> Value {
     settings.insert("source".into(), json!("profile"));
     settings.insert("confidence".into(), json!("medium"));
 
-    json!({ "gamepulse": { "settings": Value::Object(settings) } })
+    json!({ "rigsignal": { "settings": Value::Object(settings) } })
 }
 
 // ── Directory discovery + loading ─────────────────────────────────────────────
@@ -158,19 +158,19 @@ pub fn to_overlay(profile: &GameProfile) -> Value {
 ///
 /// Search order (first found wins for any given game):
 ///
-/// 1. `$GAMEPULSE_PROFILES_DIR` env var (any platform)
-/// 2. Per-user dir — Linux `~/.config/gamepulse/profiles/`,
-///    Windows `%APPDATA%\GamePulse\profiles\`
-/// 3. System-local — Linux `/etc/gamepulse/profiles/`,
-///    Windows `%PROGRAMDATA%\GamePulse\profiles\`
-/// 4. System-package — Linux `/usr/share/gamepulse/profiles/`;
+/// 1. `$RIGSIGNAL_PROFILES_DIR` env var (any platform)
+/// 2. Per-user dir — Linux `~/.config/rigsignal/profiles/`,
+///    Windows `%APPDATA%\RigSignal\profiles\`
+/// 3. System-local — Linux `/etc/rigsignal/profiles/`,
+///    Windows `%PROGRAMDATA%\RigSignal\profiles\`
+/// 4. System-package — Linux `/usr/share/rigsignal/profiles/`;
 ///    Windows uses the binary-relative fallback below instead
 /// 5. Binary-relative — `<exe>/../profiles/` (MSI/zip install layout) and
 ///    `<exe>/../../profiles/` (dev: `target/release/...`)
 pub fn profile_dirs() -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = Vec::new();
 
-    if let Ok(p) = std::env::var("GAMEPULSE_PROFILES_DIR") {
+    if let Ok(p) = std::env::var("RIGSIGNAL_PROFILES_DIR") {
         if !p.is_empty() {
             dirs.push(PathBuf::from(p));
         }
@@ -184,29 +184,29 @@ pub fn profile_dirs() -> Vec<PathBuf> {
             .map(|u| PathBuf::from("/home").join(u))
             .or_else(|| std::env::var("HOME").ok().map(PathBuf::from));
         if let Some(h) = home {
-            dirs.push(h.join(".config/gamepulse/profiles"));
+            dirs.push(h.join(".config/rigsignal/profiles"));
         }
-        dirs.push(PathBuf::from("/etc/gamepulse/profiles"));
-        dirs.push(PathBuf::from("/usr/share/gamepulse/profiles"));
+        dirs.push(PathBuf::from("/etc/rigsignal/profiles"));
+        dirs.push(PathBuf::from("/usr/share/rigsignal/profiles"));
     }
 
     #[cfg(windows)]
     {
         if let Ok(appdata) = std::env::var("APPDATA") {
-            dirs.push(PathBuf::from(appdata).join("GamePulse").join("profiles"));
+            dirs.push(PathBuf::from(appdata).join("RigSignal").join("profiles"));
         }
         if let Ok(programdata) = std::env::var("PROGRAMDATA") {
             dirs.push(
                 PathBuf::from(programdata)
-                    .join("GamePulse")
+                    .join("RigSignal")
                     .join("profiles"),
             );
         }
     }
 
     // Binary-relative fallbacks (cross-platform). Try one-up
-    // (MSI/zip install: `bin/gamepulse-agent.exe` → `../profiles/`) and
-    // two-up (dev: `target/release/gamepulse-agent` → `../../profiles/`).
+    // (MSI/zip install: `bin/rigsignal-agent.exe` → `../profiles/`) and
+    // two-up (dev: `target/release/rigsignal-agent` → `../../profiles/`).
     if let Ok(exe) = std::env::current_exe() {
         if let Some(exe_dir) = exe.parent() {
             let install = exe_dir.join("../profiles");
@@ -322,7 +322,7 @@ mod tests {
             },
         };
         let ov = to_overlay(&profile);
-        let settings = &ov["gamepulse"]["settings"];
+        let settings = &ov["rigsignal"]["settings"];
         assert_eq!(settings["source"], "profile");
         assert_eq!(settings["confidence"], "medium");
         assert_eq!(settings["preset"], "ultra");
@@ -331,15 +331,15 @@ mod tests {
     #[test]
     fn test_profile_dirs_env_override_listed_first() {
         // Use a deliberately unique sentinel so we don't disturb real env state.
-        let sentinel = std::env::temp_dir().join("gamepulse-profile-test-XYZ");
+        let sentinel = std::env::temp_dir().join("rigsignal-profile-test-XYZ");
         // SAFETY: tests run in the same process — set_var is safe in single-thread cargo
         // test, and this test does not rely on concurrency.
         unsafe {
-            std::env::set_var("GAMEPULSE_PROFILES_DIR", &sentinel);
+            std::env::set_var("RIGSIGNAL_PROFILES_DIR", &sentinel);
         }
         let dirs = profile_dirs();
         unsafe {
-            std::env::remove_var("GAMEPULSE_PROFILES_DIR");
+            std::env::remove_var("RIGSIGNAL_PROFILES_DIR");
         }
         assert_eq!(dirs.first(), Some(&sentinel));
     }
@@ -348,11 +348,11 @@ mod tests {
     #[cfg(windows)]
     fn test_profile_dirs_includes_windows_paths() {
         // With APPDATA set (always set on Windows runners), profile_dirs should
-        // include a path under APPDATA\GamePulse\profiles.
+        // include a path under APPDATA\RigSignal\profiles.
         let dirs = profile_dirs();
         let appdata = std::env::var("APPDATA").expect("APPDATA must be set on Windows");
         let expected = std::path::PathBuf::from(&appdata)
-            .join("GamePulse")
+            .join("RigSignal")
             .join("profiles");
         assert!(
             dirs.iter().any(|d| d == &expected),

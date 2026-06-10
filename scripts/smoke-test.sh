@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# F.7 — CI smoke test for the GamePulse agent.
+# F.7 — CI smoke test for the RigSignal agent.
 # Runs the agent once in dry-run mode and verifies that all required fields
 # appear in the output. GPU, audio, power, frame, and eBPF are not checked
 # here because they depend on hardware / daemons absent in CI runners.
@@ -9,7 +9,7 @@
 
 set -euo pipefail
 
-BINARY="${1:-./target/debug/gamepulse-agent}"
+BINARY="${1:-./target/debug/rigsignal-agent}"
 
 if [[ ! -x "$BINARY" ]]; then
     echo "ERROR: binary not found or not executable: $BINARY" >&2

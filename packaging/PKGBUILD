@@ -1,8 +1,8 @@
 # Maintainer: MathewRJ <https://github.com/MathewRJ>
-# AUR: https://aur.archlinux.org/packages/gamepulse
+# AUR: https://aur.archlinux.org/packages/rigsignal
 #
 # For AUR submission, replace the local source= line below with:
-#   source=("${pkgname}-${pkgver}::git+https://github.com/MathewRJ/GamePulse.git#tag=v${pkgver}")
+#   source=("${pkgname}-${pkgver}::git+https://github.com/MathewRJ/RigSignal.git#tag=v${pkgver}")
 #   sha256sums=('SKIP')
 #
 # Prerequisites (not in official repos — install once before makepkg):
@@ -10,17 +10,17 @@
 #   rustup component add rust-src --toolchain nightly
 #   cargo install bpf-linker
 #
-pkgname=gamepulse
-pkgver=0.1.0
+pkgname=rigsignal
+pkgver=0.2.0
 pkgrel=1
 pkgdesc="Gaming performance telemetry agent — ships CPU/GPU/memory/frame metrics to Elasticsearch"
 arch=('x86_64')
-url="https://github.com/MathewRJ/GamePulse"
+url="https://github.com/MathewRJ/RigSignal"
 license=('MIT')
 depends=()
 makedepends=('rust')
 optdepends=('mangohud: frame timing data collection')
-backup=('etc/gamepulse/gamepulse.toml')
+backup=('etc/rigsignal/rigsignal.toml')
 install=
 # Disable LTO: ring's build script compiles C/ASM via cc and produces GCC LTO
 # bitcode objects when CFLAGS contains -flto. Rust's LLD linker cannot resolve
@@ -59,7 +59,7 @@ build() {
     cd "${_repodir}"
 
     # --- Build the Rust agent ---
-    echo "==> Building gamepulse-agent (release)..."
+    echo "==> Building rigsignal-agent (release)..."
     cargo build --release --manifest-path src/Cargo.toml
 
     # --- Build eBPF probes (requires nightly + bpf-linker + rust-src) ---
@@ -69,47 +69,47 @@ build() {
     echo "==> Building eBPF probes (bpfel-unknown-none, release)..."
     (cd ebpf && RUSTFLAGS="" cargo xtask build-ebpf --release 2>/dev/null) || \
     RUSTFLAGS="" cargo +nightly build \
-        -p gamepulse-ebpf-probes \
+        -p rigsignal-ebpf-probes \
         --target bpfel-unknown-none \
         -Z build-std=core \
         --release \
         --manifest-path ebpf/Cargo.toml
 
     # --- Build eBPF daemon (embeds probes at compile time) ---
-    echo "==> Building gamepulse-ebpf daemon (release)..."
+    echo "==> Building rigsignal-ebpf daemon (release)..."
     cargo build --release \
-        -p gamepulse-ebpf-daemon \
+        -p rigsignal-ebpf \
         --manifest-path ebpf/Cargo.toml
 }
 
 package() {
     # ---- Binaries ----
-    install -Dm755 "${_repodir}/target/release/gamepulse-agent" \
-        "${pkgdir}/usr/bin/gamepulse-agent"
-    install -Dm755 "${_repodir}/ebpf/target/release/gamepulse-ebpf" \
-        "${pkgdir}/usr/bin/gamepulse-ebpf"
+    install -Dm755 "${_repodir}/target/release/rigsignal-agent" \
+        "${pkgdir}/usr/bin/rigsignal-agent"
+    install -Dm755 "${_repodir}/ebpf/target/release/rigsignal-ebpf" \
+        "${pkgdir}/usr/bin/rigsignal-ebpf"
 
-    # ---- eBPF probe ELF (kernel bytecode loaded by gamepulse-ebpf at runtime) ----
-    install -Dm755 "${_repodir}/ebpf/target/bpfel-unknown-none/release/gamepulse-ebpf-probes" \
-        "${pkgdir}/usr/lib/gamepulse/gamepulse-ebpf-probes"
+    # ---- eBPF probe ELF (kernel bytecode loaded by rigsignal-ebpf at runtime) ----
+    install -Dm755 "${_repodir}/ebpf/target/bpfel-unknown-none/release/rigsignal-ebpf-probes" \
+        "${pkgdir}/usr/lib/rigsignal/rigsignal-ebpf-probes"
 
-    # ---- systemd user unit (gamepulse-agent runs as the gaming user) ----
-    install -Dm644 "${startdir}/systemd/gamepulse-agent.service" \
-        "${pkgdir}/usr/lib/systemd/user/gamepulse-agent.service"
+    # ---- systemd user unit (rigsignal-agent runs as the gaming user) ----
+    install -Dm644 "${startdir}/systemd/rigsignal-agent.service" \
+        "${pkgdir}/usr/lib/systemd/user/rigsignal-agent.service"
 
-    # ---- systemd system unit (gamepulse-ebpf needs CAP_BPF/PERFMON) ----
-    install -Dm644 "${startdir}/systemd/gamepulse-ebpf.service" \
-        "${pkgdir}/usr/lib/systemd/system/gamepulse-ebpf.service"
+    # ---- systemd system unit (rigsignal-ebpf needs CAP_BPF/PERFMON) ----
+    install -Dm644 "${startdir}/systemd/rigsignal-ebpf.service" \
+        "${pkgdir}/usr/lib/systemd/system/rigsignal-ebpf.service"
 
     # ---- Launcher CLI ----
     # Single entry-point for start/stop/run/setup subcommands.
-    # 'gamepulse run %command%' is the Steam launch option form.
-    install -Dm755 "${startdir}/gamepulse-launcher.sh" \
-        "${pkgdir}/usr/bin/gamepulse"
+    # 'rigsignal run %command%' is the Steam launch option form.
+    install -Dm755 "${startdir}/rigsignal-launcher.sh" \
+        "${pkgdir}/usr/bin/rigsignal"
 
     # ---- Config ----
     # Install example as the default config (backup= in PKGBUILD protects user edits
     # from being overwritten on upgrade). User should edit this with their ES credentials.
-    install -Dm644 "${startdir}/config/gamepulse.toml.example" \
-        "${pkgdir}/etc/gamepulse/gamepulse.toml"
+    install -Dm644 "${startdir}/config/rigsignal.toml.example" \
+        "${pkgdir}/etc/rigsignal/rigsignal.toml"
 }

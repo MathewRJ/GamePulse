@@ -1,6 +1,6 @@
 /// Schedlatency probe — userspace side.
 ///
-/// Attaches three tracepoints from the gamepulse-ebpf-probes BPF object:
+/// Attaches three tracepoints from the rigsignal-ebpf-probes BPF object:
 ///   sched/sched_wakeup
 ///   sched/sched_switch
 ///   sched/sched_migrate_task

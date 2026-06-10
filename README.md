@@ -1,10 +1,10 @@
-# GamePulse
+# RigSignal
 
-GamePulse is a gaming performance telemetry platform. A lightweight Rust agent collects FPS, frame times, GPU/CPU temperatures, storage I/O, memory pressure, and more from Linux gaming PCs and ships them to Elasticsearch for analysis in Kibana. Windows support is available (Phases B–C complete). The legacy Python reference implementation (`collector/`) remains for debugging and field validation.
+RigSignal is a gaming performance telemetry platform. A lightweight Rust agent collects FPS, frame times, GPU/CPU temperatures, storage I/O, memory pressure, and more from Linux gaming PCs and ships them to Elasticsearch for analysis in Kibana. Windows support is available (Phases B–C complete). The legacy Python reference implementation (`collector/`) remains for debugging and field validation.
 
 ---
 
-## Why GamePulse?
+## Why RigSignal?
 
 Existing tools (MangoHud, MSI Afterburner, CapFrameX) are local-only. They can't answer questions like:
 
@@ -13,7 +13,7 @@ Existing tools (MangoHud, MSI Afterburner, CapFrameX) are local-only. They can't
 - Is my SD card causing storage stutter vs the internal NVMe?
 - What's the performance-per-watt sweet spot on my Steam Deck for this game?
 
-GamePulse ships structured telemetry to Elasticsearch, enabling cross-session, cross-hardware, and cross-configuration comparisons backed by real data.
+RigSignal ships structured telemetry to Elasticsearch, enabling cross-session, cross-hardware, and cross-configuration comparisons backed by real data.
 
 ---
 
@@ -22,31 +22,31 @@ GamePulse ships structured telemetry to Elasticsearch, enabling cross-session, c
 ### Arch Linux / CachyOS / Manjaro
 
 ```bash
-yay -S gamepulse-git
+yay -S rigsignal-git
 ```
 
 ### Other Linux (one-liner)
 
 ```bash
-curl -sSfL https://mathewrj.github.io/GamePulse-Integration/install.sh | sh
+curl -sSfL https://mathewrj.github.io/RigSignal-Integration/install.sh | sh
 ```
 
 ### Windows
 
 ```powershell
-winget install MathewRJ.GamePulse
+winget install MathewRJ.RigSignal
 ```
 
-Or download the MSI from the [Releases page](https://github.com/MathewRJ/GamePulse/releases).
+Or download the MSI from the [Releases page](https://github.com/MathewRJ/RigSignal/releases).
 
 ### First run
 
 ```bash
 # Prompts for your Elasticsearch endpoint + API key, then activates the eBPF daemon if installed
-gamepulse setup
+rigsignal setup
 
 # Add to Steam launch options for any game:
-gamepulse run %command%
+rigsignal run %command%
 ```
 
 The installer also configures MangoHud to write frame-timing CSVs automatically — no extra setup needed. Data starts flowing to Elasticsearch the next time you launch a game through Steam.
@@ -55,15 +55,15 @@ The installer also configures MangoHud to write frame-timing CSVs automatically 
 
 ## Connecting to Elasticsearch
 
-GamePulse requires an Elasticsearch endpoint. You have two options:
+RigSignal requires an Elasticsearch endpoint. You have two options:
 
 ### Option A — Elastic Cloud (easiest, free tier available)
 
 Sign up at [cloud.elastic.co](https://cloud.elastic.co/). The free trial gives you a fully managed deployment with Kibana included. After creating a deployment:
 
 1. Note your **Elasticsearch endpoint** (shown on the deployment overview page)
-2. In Kibana → Stack Management → API Keys, create a key with `auto_configure` + `create_doc` + `create_index` on `metrics-gamepulse.*` and `logs-gamepulse.*`
-3. Run `gamepulse setup` and enter the endpoint and API key when prompted
+2. In Kibana → Stack Management → API Keys, create a key with `auto_configure` + `create_doc` + `create_index` on `metrics-rigsignal.*` and `logs-rigsignal.*`
+3. Run `rigsignal setup` and enter the endpoint and API key when prompted
 
 ### Option B — Local Elasticsearch (free, runs on your own machine)
 
@@ -83,7 +83,7 @@ cd elasticsearch-*/
 
 On first start, Elasticsearch prints a generated `elastic` superuser password and an enrollment token — save both. It listens on `https://localhost:9200` by default (TLS enabled since ES 8.0).
 
-Create an API key for GamePulse (run this in a new terminal):
+Create an API key for RigSignal (run this in a new terminal):
 
 ```bash
 curl -u elastic:<your-generated-password> \
@@ -91,12 +91,12 @@ curl -u elastic:<your-generated-password> \
   -H "Content-Type: application/json" \
   --cacert elasticsearch-*/config/certs/http_ca.crt \
   -d '{
-    "name": "gamepulse",
+    "name": "rigsignal",
     "role_descriptors": {
-      "gamepulse_writer": {
+      "rigsignal_writer": {
         "cluster": ["monitor"],
         "indices": [{
-          "names": ["metrics-gamepulse.*", "logs-gamepulse.*"],
+          "names": ["metrics-rigsignal.*", "logs-rigsignal.*"],
           "privileges": ["auto_configure", "create_doc", "create_index"]
         }]
       }
@@ -107,12 +107,12 @@ curl -u elastic:<your-generated-password> \
 Then run setup:
 
 ```bash
-gamepulse setup
+rigsignal setup
 # Endpoint: https://localhost:9200
 # API key: <the encoded value from the curl output above>
 ```
 
-If you get a TLS error with a self-signed cert, add `tls_skip_verify = true` to `~/.config/gamepulse/gamepulse.toml` (fine for local dev, not for shared instances).
+If you get a TLS error with a self-signed cert, add `tls_skip_verify = true` to `~/.config/rigsignal/rigsignal.toml` (fine for local dev, not for shared instances).
 
 For Kibana, download it separately from [elastic.co/downloads/kibana](https://www.elastic.co/downloads/kibana) and enroll it using the enrollment token printed at Elasticsearch startup. Both need to be the same version.
 
@@ -122,7 +122,7 @@ See [`docs/install.md`](docs/install.md) for the full installation guide includi
 
 ## What's working today
 
-The Rust production agent (`gamepulse-agent`) is Linux-complete and Elasticsearch-verified — a live 40-minute Starfield session confirmed all 8 metric streams (CPU, GPU, memory, storage, network, audio, power, frame) shipping correctly. The eBPF daemon (`gamepulse-ebpf`, Sprints 1–3) is ES-confirmed for kernel-level scheduler, I/O, GPU fence, futex, IRQ, and VFS probes. Windows collectors are implemented for all 8 streams (Phases B–C complete, some platform gaps documented in `docs/STATUS.md`). Seven Kibana dashboards are built and tested against Elastic Cloud Serverless. An integration package submission is in progress at [elastic/integrations#18878](https://github.com/elastic/integrations/pull/18878).
+The Rust production agent (`rigsignal-agent`) is Linux-complete and Elasticsearch-verified — a live 40-minute Starfield session confirmed all 8 metric streams (CPU, GPU, memory, storage, network, audio, power, frame) shipping correctly. The eBPF daemon (`rigsignal-ebpf`, Sprints 1–3) is ES-confirmed for kernel-level scheduler, I/O, GPU fence, futex, IRQ, and VFS probes. Windows collectors are implemented for all 8 streams (Phases B–C complete, some platform gaps documented in `docs/STATUS.md`). Seven Kibana dashboards are built and tested against Elastic Cloud Serverless. An integration package submission is in progress at [elastic/integrations#18878](https://github.com/elastic/integrations/pull/18878).
 
 ---
 
@@ -136,7 +136,7 @@ See [`docs/STATUS.md`](docs/STATUS.md) for current state and [`docs/ROADMAP.md`]
 
 | Guide | Link | Audience |
 |---|---|---|
-| **Elastic Fleet integration** | [`docs/README.md`](docs/README.md) | Adding GamePulse to Kibana Fleet |
+| **Elastic Fleet integration** | [`docs/README.md`](docs/README.md) | Adding RigSignal to Kibana Fleet |
 | Installation | [`docs/install.md`](docs/install.md) | Installing the agent (Elastic Cloud, self-hosted, AUR, .deb/.rpm) |
 | Configuration reference | [`docs/configuration.md`](docs/configuration.md) | All config options |
 | eBPF kernel telemetry | [`docs/ebpf.md`](docs/ebpf.md) | eBPF daemon setup and probe reference |

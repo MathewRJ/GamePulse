@@ -1,11 +1,10 @@
-/// Block I/O latency probe — userspace side.
+/// GPU scheduler latency probe — userspace side.
 ///
-/// Attaches two tracepoints from the gamepulse-ebpf-probes BPF object:
-///   block/block_rq_issue
-///   block/block_rq_complete
+/// Attaches two tracepoints from the rigsignal-ebpf-probes BPF object:
+///   gpu_scheduler/drm_sched_job_queue
+///   gpu_scheduler/drm_sched_job_run
 ///
-/// Drains the BIO_EVENTS ring buffer synchronously on every collect() call
-/// (same pattern as SchedProbe — avoids AsyncFd/EPOLLET race).
+/// Measures time from job queue entry to hardware dispatch per game GPU job.
 use anyhow::{Context, Result};
 use aya::{
     maps::{MapData, RingBuf},
@@ -15,31 +14,34 @@ use aya::{
 use tracing::{debug, warn};
 
 use super::{Probe, ProbeRequirements};
-use crate::aggregator::{BioAggregator, RawBioEvent};
+use crate::aggregator::{GpuAggregator, RawGpuSchedEvent};
 use crate::es_model::EbpfDocument;
 
-pub struct BioProbe {
-    aggregator: BioAggregator,
+pub struct GpuSchedProbe {
+    aggregator: GpuAggregator,
     ring_buf: Option<RingBuf<MapData>>,
 }
 
-impl BioProbe {
+impl GpuSchedProbe {
     pub fn new(host_name: String, kernel_version: String) -> Self {
-        BioProbe {
-            aggregator: BioAggregator::new(host_name, kernel_version),
+        GpuSchedProbe {
+            aggregator: GpuAggregator::new(host_name, kernel_version),
             ring_buf: None,
         }
     }
 }
 
-impl Probe for BioProbe {
+impl Probe for GpuSchedProbe {
     fn name(&self) -> &'static str {
-        "bio"
+        "gpu_sched"
     }
 
     fn requirements(&self) -> ProbeRequirements {
         ProbeRequirements {
-            tracepoints: vec!["block/block_rq_issue", "block/block_rq_complete"],
+            tracepoints: vec![
+                "gpu_scheduler/drm_sched_job_queue",
+                "gpu_scheduler/drm_sched_job_run",
+            ],
             kprobe_symbols: vec![],
             kernel_modules: vec![],
             min_kernel: (5, 8),
@@ -62,14 +64,24 @@ impl Probe for BioProbe {
                 Ok(())
             };
 
-        attach(ebpf, "block_rq_issue", "block", "block_rq_issue")?;
-        attach(ebpf, "block_rq_complete", "block", "block_rq_complete")?;
+        attach(
+            ebpf,
+            "drm_sched_job_queue",
+            "gpu_scheduler",
+            "drm_sched_job_queue",
+        )?;
+        attach(
+            ebpf,
+            "drm_sched_job_run",
+            "gpu_scheduler",
+            "drm_sched_job_run",
+        )?;
 
         let ring_buf = RingBuf::try_from(
-            ebpf.take_map("BIO_EVENTS")
-                .context("BIO_EVENTS map not found")?,
+            ebpf.take_map("GPU_SCHED_EVENTS")
+                .context("GPU_SCHED_EVENTS map not found")?,
         )
-        .context("BIO_EVENTS map type mismatch")?;
+        .context("GPU_SCHED_EVENTS map type mismatch")?;
 
         self.ring_buf = Some(ring_buf);
         Ok(())
@@ -77,7 +89,7 @@ impl Probe for BioProbe {
 
     fn collect(&mut self, session_id: &str) -> Result<Vec<EbpfDocument>> {
         use std::mem::size_of;
-        let event_size = size_of::<RawBioEvent>();
+        let event_size = size_of::<RawGpuSchedEvent>();
         let mut event_count = 0usize;
 
         if let Some(rb) = &mut self.ring_buf {
@@ -85,22 +97,21 @@ impl Probe for BioProbe {
                 let bytes: &[u8] = &*item;
                 if bytes.len() < event_size {
                     warn!(
-                        "bio ring buf item too small: {} < {}",
+                        "gpu_sched ring buf item too small: {} < {}",
                         bytes.len(),
                         event_size
                     );
                     continue;
                 }
-                // SAFETY: RawBioEvent is repr(C), size verified above.
                 let event =
-                    unsafe { std::ptr::read_unaligned(bytes.as_ptr() as *const RawBioEvent) };
+                    unsafe { std::ptr::read_unaligned(bytes.as_ptr() as *const RawGpuSchedEvent) };
                 self.aggregator.push(event);
                 event_count += 1;
             }
         }
 
         if event_count > 0 {
-            debug!("drained {} bio events from ring buffer", event_count);
+            debug!("drained {} gpu_sched events from ring buffer", event_count);
         }
 
         let doc = self.aggregator.flush(session_id);

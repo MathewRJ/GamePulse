@@ -13,7 +13,7 @@
     "timeFrom": "now-30d",
     "timeRestore": true,
     "timeTo": "now",
-    "title": "GamePulse — Home"
+    "title": "RigSignal — Home"
   },
   "coreMigrationVersion": "8.8.0",
   "id": "home-dashboard-2026-04-13",

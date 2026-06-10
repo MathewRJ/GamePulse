@@ -1,5 +1,5 @@
 [elasticsearch]
 # Elastic Cloud Serverless endpoint URL
 endpoint = "https://your-deployment.es.us-central1.gcp.elastic.cloud"
-# API key with write access to metrics-gamepulse.* data streams
+# API key with write access to metrics-rigsignal.* data streams
 api_key = "YOUR_API_KEY_HERE"

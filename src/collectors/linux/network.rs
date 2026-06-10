@@ -1,4 +1,4 @@
-/// Network collector — mirrors collector/gamepulse/collectors/network.py exactly.
+/// Network collector — mirrors collector/rigsignal/collectors/network.py exactly.
 ///
 /// Reads /proc/net/dev (interface counters) and /proc/net/snmp (TCP retransmits)
 /// as a delta between two snapshots. First call returns None (no delta yet).
@@ -6,7 +6,7 @@
 /// Interface selection: pick the non-virtual interface with the highest cumulative
 /// rx_bytes (same heuristic as Python _primary_interface).
 ///
-/// Output fields (gamepulse.network.*):
+/// Output fields (rigsignal.network.*):
 ///   rx_mbps                  f64  — receive throughput in MB/s (3 dp)
 ///   tx_mbps                  f64  — transmit throughput in MB/s (3 dp)
 ///   rx_packets_per_sec       f64  — receive packet rate (1 dp)
@@ -136,7 +136,7 @@ impl NetworkCollector {
 
 impl Collector for NetworkCollector {
     fn dataset(&self) -> &'static str {
-        "gamepulse.network"
+        "rigsignal.network"
     }
 
     fn collect(&mut self) -> Result<Option<Value>> {
@@ -205,7 +205,7 @@ impl Collector for NetworkCollector {
         self.prev_retransmits = retransmits_total;
 
         Ok(Some(json!({
-            "gamepulse": {
+            "rigsignal": {
                 "network": {
                     "rx_mbps": rx_mbps,
                     "tx_mbps": tx_mbps,

@@ -57,7 +57,7 @@ impl AudioCollector {
 
 impl Collector for AudioCollector {
     fn dataset(&self) -> &'static str {
-        "gamepulse.audio"
+        "rigsignal.audio"
     }
 
     fn set_game_pid(&mut self, pid: Option<u32>) {
@@ -66,7 +66,7 @@ impl Collector for AudioCollector {
 
     fn collect(&mut self) -> Result<Option<Value>> {
         Ok(Some(json!({
-            "gamepulse": {
+            "rigsignal": {
                 "audio": {
                     "backend": "wasapi",
                 }

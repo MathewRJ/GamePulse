@@ -1,4 +1,4 @@
-/// AMD GPU collector — mirrors collector/gamepulse/collectors/gpu/amd_linux.py exactly.
+/// AMD GPU collector — mirrors collector/rigsignal/collectors/gpu/amd_linux.py exactly.
 ///
 /// Discovers the best AMD DRM card at construction time using the same scoring
 /// heuristic as the Python collector. Candidates are scanned from
@@ -15,7 +15,7 @@
 /// cross-vendor ambiguity when multiple amdgpu cards are present (e.g. iGPU +
 /// discrete). Matches Python _find_hwmon() exactly.
 ///
-/// Output fields (gamepulse.gpu.*):
+/// Output fields (rigsignal.gpu.*):
 ///   utilisation_pct      f64  — gpu_busy_percent cast to float
 ///   clock_mhz            i64  — active clock from pp_dpm_sclk (* marker)
 ///   memory_used_mb       i64  — VRAM used in MiB (bytes // 1_048_576)
@@ -187,7 +187,7 @@ impl GpuAmdCollector {
 
 impl Collector for GpuAmdCollector {
     fn dataset(&self) -> &'static str {
-        "gamepulse.gpu"
+        "rigsignal.gpu"
     }
 
     fn set_game_pid(&mut self, pid: Option<u32>) {
@@ -271,6 +271,6 @@ impl Collector for GpuAmdCollector {
             return Ok(None);
         }
 
-        Ok(Some(json!({ "gamepulse": { "gpu": gpu } })))
+        Ok(Some(json!({ "rigsignal": { "gpu": gpu } })))
     }
 }

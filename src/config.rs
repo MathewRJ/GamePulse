@@ -1,4 +1,4 @@
-/// Configuration — reads the shared gamepulse.toml file.
+/// Configuration — reads the shared rigsignal.toml file.
 ///
 /// Mirrors the Python collector's config.py exactly so both agents
 /// read the same file without conflict.
@@ -17,7 +17,7 @@ pub struct Config {
     pub session: SessionConfig,
 }
 
-/// Optional per-session metadata the user can set in gamepulse.toml.
+/// Optional per-session metadata the user can set in rigsignal.toml.
 ///
 /// [session]
 /// label = "after-driver-update"
@@ -28,7 +28,7 @@ pub struct Config {
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct SessionConfig {
     /// A short human-readable annotation for this session (e.g. "proton-9-test").
-    /// Written to every doc as gamepulse.session.label for easy dashboard filtering.
+    /// Written to every doc as rigsignal.session.label for easy dashboard filtering.
     pub label: Option<String>,
     #[serde(default)]
     pub settings: SessionSettingsConfig,
@@ -65,7 +65,7 @@ pub struct ElasticsearchConfig {
 }
 
 fn default_index_prefix() -> String {
-    "gamepulse".to_string()
+    "rigsignal".to_string()
 }
 fn default_flush_interval_secs() -> u64 {
     5
@@ -154,19 +154,19 @@ impl Config {
     ///
     /// Search order:
     ///   1. `path` argument (from --config CLI flag)
-    ///   2. $GAMEPULSE_CONFIG env var
+    ///   2. $RIGSIGNAL_CONFIG env var
     ///
     /// Linux fallback chain (when neither of the above is set):
-    ///   3. ~/.config/gamepulse/gamepulse.toml
-    ///   4. /etc/gamepulse/gamepulse.toml
+    ///   3. ~/.config/rigsignal/rigsignal.toml
+    ///   4. /etc/rigsignal/rigsignal.toml
     ///
     /// Windows fallback chain (when neither of the above is set):
-    ///   3. %APPDATA%\GamePulse\gamepulse.toml          (per-user)
-    ///   4. %PROGRAMDATA%\GamePulse\gamepulse.toml      (system-wide)
+    ///   3. %APPDATA%\RigSignal\rigsignal.toml          (per-user)
+    ///   4. %PROGRAMDATA%\RigSignal\rigsignal.toml      (system-wide)
     pub fn load(path: Option<&PathBuf>) -> Result<Self> {
         let candidates: Vec<PathBuf> = if let Some(p) = path {
             vec![p.clone()]
-        } else if let Ok(env_path) = std::env::var("GAMEPULSE_CONFIG") {
+        } else if let Ok(env_path) = std::env::var("RIGSIGNAL_CONFIG") {
             vec![PathBuf::from(env_path)]
         } else {
             let mut v = Vec::new();
@@ -175,24 +175,24 @@ impl Config {
                 if let Ok(appdata) = std::env::var("APPDATA") {
                     v.push(
                         PathBuf::from(appdata)
-                            .join("GamePulse")
-                            .join("gamepulse.toml"),
+                            .join("RigSignal")
+                            .join("rigsignal.toml"),
                     );
                 }
                 if let Ok(programdata) = std::env::var("PROGRAMDATA") {
                     v.push(
                         PathBuf::from(programdata)
-                            .join("GamePulse")
-                            .join("gamepulse.toml"),
+                            .join("RigSignal")
+                            .join("rigsignal.toml"),
                     );
                 }
             }
             #[cfg(not(windows))]
             {
                 if let Some(home) = home_dir() {
-                    v.push(home.join(".config/gamepulse/gamepulse.toml"));
+                    v.push(home.join(".config/rigsignal/rigsignal.toml"));
                 }
-                v.push(PathBuf::from("/etc/gamepulse/gamepulse.toml"));
+                v.push(PathBuf::from("/etc/rigsignal/rigsignal.toml"));
             }
             v
         };

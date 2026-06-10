@@ -2,7 +2,7 @@
 /// and computes 1-second snapshots ready for Elasticsearch.
 use crate::es_model::{
     BlockIoSnapshot, DataStream, EbpfDocument, EbpfMetricDoc, EbpfPayload, EbpfThreadDoc,
-    FutexSnapshot, GamePulseFields, GamePulseThreadFields, GpuFenceSnapshot, GpuSchedSnapshot,
+    FutexSnapshot, RigSignalFields, RigSignalThreadFields, GpuFenceSnapshot, GpuSchedSnapshot,
     GpuSubmitSnapshot, HostFields, IrqKindSnapshot, IrqSnapshot, LatencyHistogram, MemSnapshot,
     MigrationSnapshot, OsFields, RunqueueSnapshot, SessionRef, StutterCorrelation, ThreadMetric,
     VfsOpSnapshot, VfsSnapshot,
@@ -173,7 +173,7 @@ impl SchedAggregator {
                         kernel: self.kernel_version.clone(),
                     },
                 },
-                gamepulse: GamePulseFields {
+                rigsignal: RigSignalFields {
                     session: SessionRef {
                         id: session_id.to_string(),
                     },
@@ -223,7 +223,7 @@ impl SchedAggregator {
                                 kernel: self.kernel_version.clone(),
                             },
                         },
-                        gamepulse: GamePulseThreadFields {
+                        rigsignal: RigSignalThreadFields {
                             session: SessionRef {
                                 id: session_id.to_string(),
                             },
@@ -378,7 +378,7 @@ impl BioAggregator {
                     kernel: self.kernel_version.clone(),
                 },
             },
-            gamepulse: GamePulseFields {
+            rigsignal: RigSignalFields {
                 session: SessionRef {
                     id: session_id.to_string(),
                 },
@@ -475,7 +475,7 @@ impl GpuAggregator {
                     kernel: self.kernel_version.clone(),
                 },
             },
-            gamepulse: GamePulseFields {
+            rigsignal: RigSignalFields {
                 session: SessionRef {
                     id: session_id.to_string(),
                 },
@@ -579,7 +579,7 @@ impl MemAggregator {
                     kernel: self.kernel_version.clone(),
                 },
             },
-            gamepulse: GamePulseFields {
+            rigsignal: RigSignalFields {
                 session: SessionRef {
                     id: session_id.to_string(),
                 },
@@ -631,7 +631,7 @@ pub fn correlate(
     let mut contributing: Vec<String> = Vec::new();
 
     for doc in docs {
-        let p = &doc.gamepulse.ebpf;
+        let p = &doc.rigsignal.ebpf;
         if let Some(rq) = &p.runqueue {
             sched_max_us = rq.latency_max_us;
             if rq.latency_max_us > SPIKE_THRESHOLD_US {
@@ -673,7 +673,7 @@ pub fn correlate(
                 kernel: kernel_version.to_string(),
             },
         },
-        gamepulse: GamePulseFields {
+        rigsignal: RigSignalFields {
             session: SessionRef {
                 id: session_id.to_string(),
             },
@@ -769,7 +769,7 @@ impl FutexAggregator {
                     kernel: self.kernel_version.clone(),
                 },
             },
-            gamepulse: GamePulseFields {
+            rigsignal: RigSignalFields {
                 session: SessionRef {
                     id: session_id.to_string(),
                 },
@@ -889,7 +889,7 @@ impl IrqAggregator {
                     kernel: self.kernel_version.clone(),
                 },
             },
-            gamepulse: GamePulseFields {
+            rigsignal: RigSignalFields {
                 session: SessionRef {
                     id: session_id.to_string(),
                 },
@@ -1009,7 +1009,7 @@ impl VfsAggregator {
                     kernel: self.kernel_version.clone(),
                 },
             },
-            gamepulse: GamePulseFields {
+            rigsignal: RigSignalFields {
                 session: SessionRef {
                     id: session_id.to_string(),
                 },
@@ -1112,7 +1112,7 @@ impl GpuFenceAggregator {
                     kernel: self.kernel_version.clone(),
                 },
             },
-            gamepulse: GamePulseFields {
+            rigsignal: RigSignalFields {
                 session: SessionRef {
                     id: session_id.to_string(),
                 },
@@ -1194,7 +1194,7 @@ impl GpuSubmitAggregator {
                     kernel: self.kernel_version.clone(),
                 },
             },
-            gamepulse: GamePulseFields {
+            rigsignal: RigSignalFields {
                 session: SessionRef {
                     id: session_id.to_string(),
                 },

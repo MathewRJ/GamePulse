@@ -1,6 +1,6 @@
 /// Windows CPU collector.
 ///
-/// Emits `gamepulse.cpu.*` fields matching the Linux collector's schema so
+/// Emits `rigsignal.cpu.*` fields matching the Linux collector's schema so
 /// ingest pipelines and dashboards require no changes.
 ///
 /// # WMI thermal note
@@ -115,7 +115,7 @@ impl CpuCollector {
 
 impl Collector for CpuCollector {
     fn dataset(&self) -> &'static str {
-        "gamepulse.cpu"
+        "rigsignal.cpu"
     }
 
     fn set_game_pid(&mut self, pid: Option<u32>) {
@@ -187,6 +187,6 @@ impl Collector for CpuCollector {
             obj.insert("temperature_c".to_string(), Value::from(temp));
         }
 
-        Ok(Some(json!({ "gamepulse": { "cpu": cpu } })))
+        Ok(Some(json!({ "rigsignal": { "cpu": cpu } })))
     }
 }

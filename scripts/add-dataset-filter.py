@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-add-dataset-filter.py — add a data_stream.dataset: gamepulse.* dashboard-level
-filter to all 6 GamePulse dashboards deployed in Kibana.
+add-dataset-filter.py — add a data_stream.dataset: rigsignal.* dashboard-level
+filter to all 6 RigSignal dashboards deployed in Kibana.
 
 For each dashboard:
   1. Export saved object (with references) from Kibana
@@ -34,16 +34,16 @@ DASHBOARDS = [
 
 DATASET_FILTER = {
     "meta": {
-        "alias": "GamePulse integration scope",
+        "alias": "RigSignal integration scope",
         "disabled": False,
         "key": "data_stream.dataset",
         "negate": False,
         "type": "custom",
-        "value": "gamepulse.*",
+        "value": "rigsignal.*",
     },
     "query": {
         "wildcard": {
-            "data_stream.dataset": {"value": "gamepulse.*"}
+            "data_stream.dataset": {"value": "rigsignal.*"}
         }
     },
     "$state": {"store": "globalState"},
@@ -89,7 +89,7 @@ def inject_dataset_filter(objects, dashboard_id):
             meta_raw = attrs.get("kibanaSavedObjectMeta", {}).get("searchSourceJSON", "{}")
             meta = json.loads(meta_raw)
             filters = meta.get("filter", [])
-            # Remove any existing GamePulse dataset filter to avoid duplicates
+            # Remove any existing RigSignal dataset filter to avoid duplicates
             filters = [f for f in filters if f.get("meta", {}).get("key") != "data_stream.dataset"]
             filters.append(DATASET_FILTER)
             meta["filter"] = filters
@@ -103,7 +103,7 @@ def inject_dataset_filter(objects, dashboard_id):
 
 def import_objects(objects):
     ndjson = ("\n".join(json.dumps(o) for o in objects) + "\n").encode()
-    boundary = b"----GamePulseDatasetFilterBoundary"
+    boundary = b"----RigSignalDatasetFilterBoundary"
     body = (
         b"--" + boundary + b"\r\n"
         b'Content-Disposition: form-data; name="file"; filename="export.ndjson"\r\n'

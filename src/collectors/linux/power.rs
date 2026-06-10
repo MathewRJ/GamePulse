@@ -1,11 +1,11 @@
-/// Power collector — mirrors collector/gamepulse/collectors/power.py exactly.
+/// Power collector — mirrors collector/rigsignal/collectors/power.py exactly.
 ///
 /// Reads battery state, AC status, AMD TDP cap, and platform power profile from
 /// sysfs. All fields are optional — only present when the hardware source exists.
 /// Returns None if no power sources are available at all (e.g. VM with no battery
 /// and no amdgpu hwmon — this should not happen on target hardware).
 ///
-/// Output fields (gamepulse.power.*):
+/// Output fields (rigsignal.power.*):
 ///   battery_pct      f64  — battery charge percentage (desktop: absent)
 ///   battery_rate_w   f64  — battery discharge rate in W, 2 dp (desktop: absent)
 ///   ac_connected     bool — AC adapter online state (desktop: absent)
@@ -138,7 +138,7 @@ impl PowerCollector {
 
 impl Collector for PowerCollector {
     fn dataset(&self) -> &'static str {
-        "gamepulse.power"
+        "rigsignal.power"
     }
 
     fn collect(&mut self) -> Result<Option<Value>> {
@@ -171,6 +171,6 @@ impl Collector for PowerCollector {
             return Ok(None);
         }
 
-        Ok(Some(json!({ "gamepulse": { "power": power } })))
+        Ok(Some(json!({ "rigsignal": { "power": power } })))
     }
 }

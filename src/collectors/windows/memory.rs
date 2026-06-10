@@ -1,7 +1,7 @@
 /// Windows memory collector — uses GlobalMemoryStatusEx + GetProcessMemoryInfo.
 /// No PDH needed; all values come from Win32 system calls.
 ///
-/// Output fields (gamepulse.memory.*):
+/// Output fields (rigsignal.memory.*):
 ///   total_mb      u64  — total physical RAM in MB
 ///   used_mb       u64  — used physical RAM in MB (total - available)
 ///   available_mb  u64  — available physical RAM in MB
@@ -49,7 +49,7 @@ impl MemoryCollector {
 
 impl Collector for MemoryCollector {
     fn dataset(&self) -> &'static str {
-        "gamepulse.memory"
+        "rigsignal.memory"
     }
 
     fn set_game_pid(&mut self, pid: Option<u32>) {
@@ -87,6 +87,6 @@ impl Collector for MemoryCollector {
             }
         }
 
-        Ok(Some(json!({ "gamepulse": { "memory": mem } })))
+        Ok(Some(json!({ "rigsignal": { "memory": mem } })))
     }
 }

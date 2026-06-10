@@ -5,7 +5,7 @@
 /// until a Windows-native scanner is added (B3 follow-up).
 /// B2.7 user-specified targets bypass polling entirely (pinned at startup).
 ///
-/// Session.json: written to /tmp/gamepulse/session.json when a target is
+/// Session.json: written to /tmp/rigsignal/session.json when a target is
 /// detected; removed on game exit or agent shutdown. Fields read by the
 /// eBPF daemon's SessionInfo struct:
 ///   {"session_id":"…","game_pid":N,"game_name":"…","game_pids":[…],
@@ -38,7 +38,7 @@ pub enum TargetSource {
     AutoDetected,
 }
 
-/// A running game/application that GamePulse is scoped to. Generalises the
+/// A running game/application that RigSignal is scoped to. Generalises the
 /// previous Steam-only `DetectedGame`.
 ///
 /// Runtime invariants (not compiler-checked):
@@ -110,12 +110,12 @@ pub struct SessionManager {
     /// True when the user explicitly set a label — prevents auto-generation from
     /// overwriting it on game detection.
     label_is_manual: bool,
-    /// "auto" | "manual" — emitted as gamepulse.session.label_source.
+    /// "auto" | "manual" — emitted as rigsignal.session.label_source.
     pub label_source: &'static str,
     /// Per-game per-day ordinal counter. None for manual labels.
     pub sequence_number: Option<u32>,
     /// Pre-resolved Tier 1 settings overlay — merged into session-start and summary docs.
-    /// Structure: { "gamepulse": { "settings": { ... } } }. None if nothing configured.
+    /// Structure: { "rigsignal": { "settings": { ... } } }. None if nothing configured.
     pub settings_overlay: Option<Value>,
     session_json_path: PathBuf,
     last_scan: Option<Instant>,
@@ -141,7 +141,7 @@ impl SessionManager {
     /// the first game is detected.
     ///
     /// `settings_overlay` is a pre-built JSON value of the form
-    /// `{ "gamepulse": { "settings": { ... } } }` derived from CLI flags and
+    /// `{ "rigsignal": { "settings": { ... } } }` derived from CLI flags and
     /// [session.settings] config. Pass `None` if nothing was configured.
     pub fn new_with_label_and_settings(
         manual_label: Option<String>,
@@ -159,7 +159,7 @@ impl SessionManager {
             label_source,
             sequence_number: None,
             settings_overlay,
-            session_json_path: PathBuf::from("/tmp/gamepulse/session.json"),
+            session_json_path: PathBuf::from("/tmp/rigsignal/session.json"),
             last_scan: None,
             last_no_game_log: None,
         }
@@ -273,7 +273,7 @@ impl SessionManager {
 
         json!({
             "host": { "name": hostname },
-            "gamepulse": gp,
+            "rigsignal": gp,
         })
     }
 
@@ -325,7 +325,7 @@ impl SessionManager {
         Ok(())
     }
 
-    /// Remove /tmp/gamepulse/session.json on game exit or agent shutdown.
+    /// Remove /tmp/rigsignal/session.json on game exit or agent shutdown.
     pub fn remove_session_json(&self) {
         match std::fs::remove_file(&self.session_json_path) {
             Ok(_) => tracing::debug!("removed session.json"),
@@ -338,7 +338,7 @@ impl SessionManager {
 // ── Target helpers ────────────────────────────────────────────────────────────
 
 /// Canonical wire-format string for a `TargetSource`.
-/// Must stay in sync with the `gamepulse.game.source` enum in fields.yml.
+/// Must stay in sync with the `rigsignal.game.source` enum in fields.yml.
 /// Exhaustive match forces an update here whenever a new variant is added.
 fn target_source_str(source: TargetSource) -> &'static str {
     match source {
@@ -351,7 +351,7 @@ fn target_source_str(source: TargetSource) -> &'static str {
     }
 }
 
-/// Build the `gamepulse.game.*` doc map for a target.
+/// Build the `rigsignal.game.*` doc map for a target.
 /// Shared by `SessionManager::base_doc` (per-tick context) and
 /// `build_summary_doc` in main.rs (session-end summary).
 pub fn target_to_game_doc(target: &Target) -> serde_json::Map<String, Value> {
@@ -449,15 +449,15 @@ fn counter_file_path() -> PathBuf {
             .unwrap_or_else(|_| {
                 home_dir()
                     .map(|h| h.join(".local/state"))
-                    .unwrap_or_else(|| PathBuf::from("/var/lib/gamepulse"))
+                    .unwrap_or_else(|| PathBuf::from("/var/lib/rigsignal"))
             });
-        state_dir.join("gamepulse/session-counters.json")
+        state_dir.join("rigsignal/session-counters.json")
     }
     #[cfg(windows)]
     {
         let local_app_data = std::env::var("LOCALAPPDATA")
             .unwrap_or_else(|_| r"C:\Users\Default\AppData\Local".to_string());
-        PathBuf::from(local_app_data).join(r"GamePulse\session-counters.json")
+        PathBuf::from(local_app_data).join(r"RigSignal\session-counters.json")
     }
 }
 
@@ -1428,7 +1428,7 @@ pub(crate) fn scan_for_steam_game() -> Option<Target> {
 
         // Pick first non-helper process as the representative for metadata.
         // Wine/Proton subprocesses are in all_pids for eBPF but bad sources of metadata.
-        // Shell interpreters are also excluded: the gamepulse launcher's watcher
+        // Shell interpreters are also excluded: the rigsignal launcher's watcher
         // subshell inherits Steam env vars and would otherwise be misidentified
         // as the game, preventing correct game-exit detection.
         if representative.is_none() {

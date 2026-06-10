@@ -1,5 +1,5 @@
 /// MangoHud frame timing collector — mirrors
-/// collector/gamepulse/collectors/frame/mangohud.py exactly.
+/// collector/rigsignal/collectors/frame/mangohud.py exactly.
 ///
 /// Watches the most recently modified CSV in ~/.local/share/MangoHud (or
 /// /tmp/MangoHud fallback). Reads new lines incrementally on every tick
@@ -8,7 +8,7 @@
 /// Returns None when no log is present, no new lines since last tick,
 /// or no valid fps rows in the new data.
 ///
-/// Output fields (gamepulse.fps.*):
+/// Output fields (rigsignal.fps.*):
 ///   current            i64  — fps of last frame in window (int(fps_values[-1]))
 ///   avg_1s             f64  — mean fps over interval, 1 dp
 ///   low_1pct           i64  — 1% low fps (sorted bottom percentile)
@@ -190,7 +190,7 @@ impl MangoHudCollector {
 
 impl Collector for MangoHudCollector {
     fn dataset(&self) -> &'static str {
-        "gamepulse.frame"
+        "rigsignal.frame"
     }
 
     fn set_game_pid(&mut self, pid: Option<u32>) {
@@ -267,6 +267,6 @@ impl Collector for MangoHudCollector {
         }
         fps_map.insert("stutter_count".to_string(), Value::from(stutter_count));
 
-        Ok(Some(serde_json::json!({ "gamepulse": { "fps": fps_map } })))
+        Ok(Some(serde_json::json!({ "rigsignal": { "fps": fps_map } })))
     }
 }

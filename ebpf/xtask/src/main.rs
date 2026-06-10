@@ -1,4 +1,4 @@
-/// xtask — build helpers for the gamepulse-ebpf workspace.
+/// xtask — build helpers for the rigsignal-ebpf workspace.
 ///
 /// Commands:
 ///   cargo xtask build-ebpf          — compile BPF programs (debug)
@@ -22,12 +22,12 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Compile BPF probes (gamepulse-ebpf-probes) for bpfel-unknown-none
+    /// Compile BPF probes (rigsignal-ebpf-probes) for bpfel-unknown-none
     BuildEbpf {
         #[arg(long)]
         release: bool,
     },
-    /// Build the userspace daemon (gamepulse-ebpf-daemon) for the host target
+    /// Build the userspace daemon (rigsignal-ebpf) for the host target
     Build {
         #[arg(long)]
         release: bool,
@@ -65,7 +65,7 @@ fn build_ebpf(workspace: &Path, release: bool) -> Result<()> {
     let mut args = vec![
         "+nightly",
         "build",
-        "-p", "gamepulse-ebpf-probes",
+        "-p", "rigsignal-ebpf-probes",
         "--target", "bpfel-unknown-none",
         "-Z", "build-std=core",
     ];
@@ -88,19 +88,19 @@ fn build_ebpf(workspace: &Path, release: bool) -> Result<()> {
     let out = workspace
         .join("target/bpfel-unknown-none")
         .join(profile)
-        .join("gamepulse-ebpf-probes");
+        .join("rigsignal-ebpf-probes");
 
     println!("BPF probes built: {}", out.display());
     Ok(())
 }
 
 fn build_daemon(workspace: &Path, release: bool) -> Result<()> {
-    println!("Building gamepulse-ebpf daemon...");
+    println!("Building rigsignal-ebpf daemon...");
 
     let mut args = vec![
         "build".to_string(),
         "-p".to_string(),
-        "gamepulse-ebpf-daemon".to_string(),
+        "rigsignal-ebpf".to_string(),
     ];
 
     if release {
@@ -121,7 +121,7 @@ fn build_daemon(workspace: &Path, release: bool) -> Result<()> {
     let out = workspace
         .join("target")
         .join(profile)
-        .join("gamepulse-ebpf");
+        .join("rigsignal-ebpf");
 
     println!("daemon built: {}", out.display());
     Ok(())
@@ -144,7 +144,7 @@ fn workspace_root() -> Result<PathBuf> {
     // Walk up to find the Cargo.toml workspace root.
     let exe = std::env::current_exe().context("getting executable path")?;
     exe.ancestors()
-        .find(|p| p.join("Cargo.toml").exists() && p.join("gamepulse-ebpf-daemon").exists())
+        .find(|p| p.join("Cargo.toml").exists() && p.join("rigsignal-ebpf").exists())
         .map(|p| p.to_path_buf())
-        .context("could not locate workspace root (expected gamepulse-ebpf-daemon/ directory)")
+        .context("could not locate workspace root (expected rigsignal-ebpf/ directory)")
 }

@@ -1,10 +1,10 @@
 [package]
-name = "gamepulse-agent"
-version = "0.1.7"
+name = "rigsignal"
+version = "0.2.0"
 edition = "2021"
 
 [[bin]]
-name = "gamepulse-agent"
+name = "rigsignal-agent"
 path = "main.rs"
 
 [features]
@@ -65,7 +65,7 @@ maintainer = "MathewRJ <https://github.com/MathewRJ>"
 copyright = "2026, MathewRJ"
 license-file = ["../LICENSE", "0"]
 extended-description = """\
-GamePulse gaming performance telemetry agent.
+RigSignal gaming performance telemetry agent.
 Ships CPU, GPU, memory, storage, network, audio, power, and frame metrics
 to Elasticsearch for live analysis and historical comparison."""
 section = "utils"
@@ -74,13 +74,13 @@ priority = "optional"
 # $auto resolves shared-library dependencies (glibc, etc.) from the binary.
 depends = "$auto"
 assets = [
-    ["../target/release/gamepulse-agent", "usr/bin/gamepulse-agent", "755"],
-    ["../packaging/gamepulse-launcher.sh", "usr/bin/gamepulse", "755"],
-    ["../packaging/systemd/gamepulse-agent.service", "usr/lib/systemd/user/gamepulse-agent.service", "644"],
-    ["../packaging/config/gamepulse.toml.example", "etc/gamepulse/gamepulse.toml", "644"],
-    ["../profiles/starfield.toml", "usr/share/gamepulse/profiles/starfield.toml", "644"],
-    ["../profiles/cyberpunk-2077.toml", "usr/share/gamepulse/profiles/cyberpunk-2077.toml", "644"],
-    ["../profiles/baldurs-gate-3.toml", "usr/share/gamepulse/profiles/baldurs-gate-3.toml", "644"],
+    ["../target/release/rigsignal-agent", "usr/bin/rigsignal-agent", "755"],
+    ["../packaging/rigsignal-launcher.sh", "usr/bin/rigsignal", "755"],
+    ["../packaging/systemd/rigsignal-agent.service", "usr/lib/systemd/user/rigsignal-agent.service", "644"],
+    ["../packaging/config/rigsignal.toml.example", "etc/rigsignal/rigsignal.toml", "644"],
+    ["../profiles/starfield.toml", "usr/share/rigsignal/profiles/starfield.toml", "644"],
+    ["../profiles/cyberpunk-2077.toml", "usr/share/rigsignal/profiles/cyberpunk-2077.toml", "644"],
+    ["../profiles/baldurs-gate-3.toml", "usr/share/rigsignal/profiles/baldurs-gate-3.toml", "644"],
 ]
 
 # ── WiX MSI metadata (cargo-wix) ─────────────────────────────────────────────
@@ -89,8 +89,8 @@ assets = [
 # upgrade-guid / path-guid are stable across releases — never change them or
 # upgrades stop being detected as upgrades.
 [package.metadata.wix]
-upgrade-guid = "D09227C0-8367-4FB7-BA3D-027E0D47F7A3"
-path-guid    = "EDE10EE8-4579-4E3D-AC7B-4C21446D6498"
+upgrade-guid = "862FBC47-5257-4EC9-9854-0D10D2B8FD29"
+path-guid    = "CC21BF89-4193-4289-8D44-847AA7B6EC72"
 license      = false
 eula         = false
 
@@ -99,13 +99,13 @@ eula         = false
 # Run: cargo generate-rpm --manifest-path src/Cargo.toml
 [package.metadata.generate-rpm]
 license = "MIT"
-summary = "GamePulse gaming performance telemetry agent"
+summary = "RigSignal gaming performance telemetry agent"
 assets = [
-    { source = "../target/release/gamepulse-agent", dest = "/usr/bin/gamepulse-agent", mode = "755" },
-    { source = "../packaging/gamepulse-launcher.sh", dest = "/usr/bin/gamepulse", mode = "755" },
-    { source = "../packaging/systemd/gamepulse-agent.service", dest = "/usr/lib/systemd/user/gamepulse-agent.service", mode = "644" },
-    { source = "../packaging/config/gamepulse.toml.example", dest = "/etc/gamepulse/gamepulse.toml", mode = "644", config = true },
-    { source = "../profiles/starfield.toml", dest = "/usr/share/gamepulse/profiles/starfield.toml", mode = "644" },
-    { source = "../profiles/cyberpunk-2077.toml", dest = "/usr/share/gamepulse/profiles/cyberpunk-2077.toml", mode = "644" },
-    { source = "../profiles/baldurs-gate-3.toml", dest = "/usr/share/gamepulse/profiles/baldurs-gate-3.toml", mode = "644" },
+    { source = "../target/release/rigsignal-agent", dest = "/usr/bin/rigsignal-agent", mode = "755" },
+    { source = "../packaging/rigsignal-launcher.sh", dest = "/usr/bin/rigsignal", mode = "755" },
+    { source = "../packaging/systemd/rigsignal-agent.service", dest = "/usr/lib/systemd/user/rigsignal-agent.service", mode = "644" },
+    { source = "../packaging/config/rigsignal.toml.example", dest = "/etc/rigsignal/rigsignal.toml", mode = "644", config = true },
+    { source = "../profiles/starfield.toml", dest = "/usr/share/rigsignal/profiles/starfield.toml", mode = "644" },
+    { source = "../profiles/cyberpunk-2077.toml", dest = "/usr/share/rigsignal/profiles/cyberpunk-2077.toml", mode = "644" },
+    { source = "../profiles/baldurs-gate-3.toml", dest = "/usr/share/rigsignal/profiles/baldurs-gate-3.toml", mode = "644" },
 ]

@@ -1,26 +1,26 @@
-# GamePulse — Installation Guide
+# RigSignal — Installation Guide
 
 ## Quick start
 
 ```bash
 # Arch Linux / CachyOS / Manjaro
-yay -S gamepulse-git
+yay -S rigsignal-git
 
 # Other Linux (one-liner)
-curl -sSfL https://mathewrj.github.io/GamePulse-Integration/install.sh | sh
+curl -sSfL https://mathewrj.github.io/RigSignal-Integration/install.sh | sh
 
 # Windows
-winget install MathewRJ.GamePulse
+winget install MathewRJ.RigSignal
 ```
 
 Then:
 
 ```bash
 # Prompts for your Elasticsearch endpoint + API key
-gamepulse setup
+rigsignal setup
 
 # Add to Steam launch options for any game:
-gamepulse run %command%
+rigsignal run %command%
 ```
 
 Data starts flowing to Elasticsearch the next time you launch a game.
@@ -49,19 +49,19 @@ Sign up at [cloud.elastic.co](https://cloud.elastic.co/). The free tier (8 GB) i
 
 ### 2. Get an API key
 
-In Kibana → Stack Management → API Keys, create a key with cluster `monitor` and index `auto_configure` + `create_doc` privileges on `metrics-gamepulse.*`. Note:
+In Kibana → Stack Management → API Keys, create a key with cluster `monitor` and index `auto_configure` + `create_doc` privileges on `metrics-rigsignal.*`. Note:
 - Your **Elasticsearch endpoint** (e.g. `https://your-deployment.es.us-central1.gcp.elastic.cloud`)
 - The **API key** (base64 encoded, shown once at creation)
 
 For a personal deployment, `all` cluster + index privileges is simpler and fine.
 
-### 3. Run `gamepulse setup`
+### 3. Run `rigsignal setup`
 
 ```bash
-gamepulse setup
+rigsignal setup
 ```
 
-This prompts for your ES endpoint and API key, verifies connectivity, and writes `~/.config/gamepulse/gamepulse.toml` (mode 600). The integration package is installed to your Kibana instance automatically.
+This prompts for your ES endpoint and API key, verifies connectivity, and writes `~/.config/rigsignal/rigsignal.toml` (mode 600). The integration package is installed to your Kibana instance automatically.
 
 ---
 
@@ -94,7 +94,7 @@ docker run -d --name elasticsearch \
 
 On first start, Elasticsearch generates a `elastic` superuser password and a Kibana enrollment token — save both. It listens on `https://localhost:9200` (TLS is enabled by default since ES 8.0).
 
-### 2. Create a GamePulse API key
+### 2. Create a RigSignal API key
 
 ```bash
 curl -u elastic:<your-password> \
@@ -102,12 +102,12 @@ curl -u elastic:<your-password> \
   -H "Content-Type: application/json" \
   --cacert elasticsearch-*/config/certs/http_ca.crt \
   -d '{
-    "name": "gamepulse",
+    "name": "rigsignal",
     "role_descriptors": {
-      "gamepulse_writer": {
+      "rigsignal_writer": {
         "cluster": ["monitor"],
         "indices": [{
-          "names": ["metrics-gamepulse.*", "logs-gamepulse.*"],
+          "names": ["metrics-rigsignal.*", "logs-rigsignal.*"],
           "privileges": ["auto_configure", "create_doc", "create_index"]
         }]
       }
@@ -117,15 +117,15 @@ curl -u elastic:<your-password> \
 
 The response includes an `encoded` field — that base64 string is your API key.
 
-### 3. Run `gamepulse setup`
+### 3. Run `rigsignal setup`
 
 ```bash
-gamepulse setup
+rigsignal setup
 # Elasticsearch endpoint: https://localhost:9200
 # API key: <the encoded value from above>
 ```
 
-If you see a TLS certificate error with a locally-issued cert, add this to `~/.config/gamepulse/gamepulse.toml`:
+If you see a TLS certificate error with a locally-issued cert, add this to `~/.config/rigsignal/rigsignal.toml`:
 
 ```toml
 [elasticsearch]
@@ -147,7 +147,7 @@ cd kibana-*/
 
 Kibana listens on `http://localhost:5601` by default. Log in as `elastic` with the password from step 1.
 
-### 5. Install the GamePulse integration package
+### 5. Install the RigSignal integration package
 
 Once Kibana is running, install the integration package via the Fleet API:
 
@@ -156,10 +156,10 @@ curl -X POST "https://localhost:5601/api/fleet/epm/packages" \
   -u elastic:<your-password> \
   -H "kbn-xsrf: true" \
   -H "Content-Type: application/zip" \
-  --data-binary @gamepulse-0.1.0.zip
+  --data-binary @rigsignal-0.1.0.zip
 ```
 
-Or navigate to Kibana → Fleet → Integrations → search "GamePulse" if the package is available in the registry.
+Or navigate to Kibana → Fleet → Integrations → search "RigSignal" if the package is available in the registry.
 
 > For contributors: `elastic-package stack up` from the repo root starts a local stack with the package pre-loaded automatically.
 
@@ -170,33 +170,33 @@ Or navigate to Kibana → Fleet → Integrations → search "GamePulse" if the p
 ### Arch Linux / CachyOS / Manjaro (AUR)
 
 ```bash
-yay -S gamepulse-git
+yay -S rigsignal-git
 ```
 
 Or manually:
 
 ```bash
-git clone https://aur.archlinux.org/gamepulse-git.git
-cd gamepulse-git
+git clone https://aur.archlinux.org/rigsignal-git.git
+cd rigsignal-git
 makepkg -si
 ```
 
 ### Debian / Ubuntu (.deb)
 
-Download the latest `.deb` from the [GitHub releases page](https://github.com/MathewRJ/GamePulse/releases):
+Download the latest `.deb` from the [GitHub releases page](https://github.com/MathewRJ/RigSignal/releases):
 
 ```bash
-sudo apt install ./gamepulse_*.deb
+sudo apt install ./rigsignal_*.deb
 ```
 
-The package installs `gamepulse-agent` and `gamepulse` (launcher) to `/usr/bin/`, the systemd user unit, and an example config to `/etc/gamepulse/gamepulse.toml`.
+The package installs `rigsignal-agent` and `rigsignal` (launcher) to `/usr/bin/`, the systemd user unit, and an example config to `/etc/rigsignal/rigsignal.toml`.
 
 ### Fedora / RHEL (.rpm)
 
-Download the latest `.rpm` from the [GitHub releases page](https://github.com/MathewRJ/GamePulse/releases):
+Download the latest `.rpm` from the [GitHub releases page](https://github.com/MathewRJ/RigSignal/releases):
 
 ```bash
-sudo dnf install ./gamepulse-*.rpm
+sudo dnf install ./rigsignal-*.rpm
 ```
 
 ### Building from source
@@ -204,23 +204,23 @@ sudo dnf install ./gamepulse-*.rpm
 Requires Rust 1.77+ and the Aya eBPF toolchain:
 
 ```bash
-git clone https://github.com/MathewRJ/GamePulse.git
-cd GamePulse/src
+git clone https://github.com/MathewRJ/RigSignal.git
+cd RigSignal/src
 cargo build --release
-sudo cp target/release/gamepulse-agent /usr/local/bin/gamepulse-agent
-# Install the launcher wrapper as 'gamepulse'
-sudo install -Dm755 ../packaging/gamepulse-launcher.sh /usr/local/bin/gamepulse
+sudo cp target/release/rigsignal-agent /usr/local/bin/rigsignal-agent
+# Install the launcher wrapper as 'rigsignal'
+sudo install -Dm755 ../packaging/rigsignal-launcher.sh /usr/local/bin/rigsignal
 ```
 
 For the eBPF daemon (requires kernel 5.8+ and `CAP_BPF`):
 
 ```bash
-cd GamePulse/ebpf
+cd RigSignal/ebpf
 RUSTFLAGS="" cargo xtask build-ebpf --release
 RUSTFLAGS="" cargo build --release
-sudo cp target/release/gamepulse-ebpf /usr/local/bin/
-sudo install -m 644 target/bpfel-unknown-none/release/gamepulse-ebpf-probes \
-  /usr/lib/gamepulse/gamepulse-ebpf-probes
+sudo cp target/release/rigsignal-ebpf /usr/local/bin/
+sudo install -m 644 target/bpfel-unknown-none/release/rigsignal-ebpf-probes \
+  /usr/lib/rigsignal/rigsignal-ebpf-probes
 ```
 
 ---
@@ -228,10 +228,10 @@ sudo install -m 644 target/bpfel-unknown-none/release/gamepulse-ebpf-probes \
 ## Windows installer
 
 The Windows MSI installer shipped in Milestone E and is available on the
-[GitHub Releases page](https://github.com/MathewRJ/GamePulse/releases).
-Download `gamepulse-<version>-x86_64-windows.msi` and run the installer — it installs
-`gamepulse.exe` to `Program Files\GamePulse\` and registers the Windows Service.
-A portable zip (`gamepulse-<version>-windows-x64.zip`) is also available for users
+[GitHub Releases page](https://github.com/MathewRJ/RigSignal/releases).
+Download `rigsignal-<version>-x86_64-windows.msi` and run the installer — it installs
+`rigsignal.exe` to `Program Files\RigSignal\` and registers the Windows Service.
+A portable zip (`rigsignal-<version>-windows-x64.zip`) is also available for users
 who prefer not to use the installer. eBPF is not available on Windows; all other
 metric streams are supported.
 
@@ -240,13 +240,13 @@ metric streams are supported.
 ## MangoHud setup (optional — needed for frame timing data)
 
 The agent ships all 8 metric streams regardless. MangoHud is only needed to populate
-`gamepulse.frame` (FPS, frame time, 1%/0.1% lows, stutter). All other streams (CPU, GPU,
+`rigsignal.frame` (FPS, frame time, 1%/0.1% lows, stutter). All other streams (CPU, GPU,
 memory, storage, network, audio, power) work without it.
 
 To enable frame data, add to Steam launch options:
 
 ```
-MANGOHUD=1 MANGOHUD_LOG=1 gamepulse run %command%
+MANGOHUD=1 MANGOHUD_LOG=1 rigsignal run %command%
 ```
 
 Or set globally in `~/.config/MangoHud/MangoHud.conf`:
@@ -266,21 +266,21 @@ For continuous collection even outside Steam:
 
 ```bash
 # User-level agent (no root, no eBPF)
-systemctl --user enable --now gamepulse-agent
+systemctl --user enable --now rigsignal-agent
 
 # System-level eBPF daemon (requires sudo, runs as root with CAP_BPF)
-sudo systemctl enable --now gamepulse-ebpf
+sudo systemctl enable --now rigsignal-ebpf
 ```
 
 Service files are installed by the AUR package to the correct locations. For manual installs, copy from `packaging/systemd/`.
 
-> **Dev installs (build from source):** The unit's `ExecStart` defaults to `/usr/bin/gamepulse-agent`, but a source build installs to `/usr/local/bin/`. Create a drop-in to override:
+> **Dev installs (build from source):** The unit's `ExecStart` defaults to `/usr/bin/rigsignal-agent`, but a source build installs to `/usr/local/bin/`. Create a drop-in to override:
 > ```bash
-> mkdir -p ~/.config/systemd/user/gamepulse-agent.service.d
-> cat > ~/.config/systemd/user/gamepulse-agent.service.d/override.conf <<'EOF'
+> mkdir -p ~/.config/systemd/user/rigsignal-agent.service.d
+> cat > ~/.config/systemd/user/rigsignal-agent.service.d/override.conf <<'EOF'
 > [Service]
 > ExecStart=
-> ExecStart=/usr/local/bin/gamepulse-agent
+> ExecStart=/usr/local/bin/rigsignal-agent
 > EOF
 > systemctl --user daemon-reload
 > ```
@@ -291,10 +291,10 @@ Service files are installed by the AUR package to the correct locations. For man
 
 Config is read from (in priority order):
 1. `--config PATH` CLI flag
-2. `~/.config/gamepulse/gamepulse.toml`
-3. `/etc/gamepulse/gamepulse.toml`
+2. `~/.config/rigsignal/rigsignal.toml`
+3. `/etc/rigsignal/rigsignal.toml`
 
-`gamepulse setup` writes `~/.config/gamepulse/gamepulse.toml` automatically. See `docs/configuration.md` for the full reference.
+`rigsignal setup` writes `~/.config/rigsignal/rigsignal.toml` automatically. See `docs/configuration.md` for the full reference.
 
 ---
 
@@ -302,7 +302,7 @@ Config is read from (in priority order):
 
 The API key you provide needs:
 - `monitor` privilege on the cluster
-- `auto_configure`, `create_doc`, `create_index` on indices `metrics-gamepulse.*` and `logs-gamepulse.*`
+- `auto_configure`, `create_doc`, `create_index` on indices `metrics-rigsignal.*` and `logs-rigsignal.*`
 
 For a personal deployment, `all` cluster + index privileges is simpler and fine.
 
@@ -313,7 +313,7 @@ For a personal deployment, `all` cluster + index privileges is simpler and fine.
 After configuring, run the diagnostics subcommand before starting a game:
 
 ```bash
-gamepulse-agent diagnose
+rigsignal-agent diagnose
 ```
 
 This outputs kernel version, GPU info, Elasticsearch reachability (with the API key redacted),
@@ -323,6 +323,6 @@ and the resolved config path. Use `--output report.txt` to save it for bug repor
 
 ## Contributor tooling
 
-The Elastic Agent Builder MCP server lets Claude Code and claude.ai query Elasticsearch directly during dashboard builds and field validation. This is optional developer convenience — it is not required to run GamePulse.
+The Elastic Agent Builder MCP server lets Claude Code and claude.ai query Elasticsearch directly during dashboard builds and field validation. This is optional developer convenience — it is not required to run RigSignal.
 
-Setup instructions and the API key creation recipe are in `.agents/skills/elastic-mcp-setup/SKILL.md`. The template config is in `.mcp.json.example` at the repo root; copy it to `.mcp.json` (gitignored) and set `GAMEPULSE_MCP_API_KEY` before restarting Claude Code.
+Setup instructions and the API key creation recipe are in `.agents/skills/elastic-mcp-setup/SKILL.md`. The template config is in `.mcp.json.example` at the repo root; copy it to `.mcp.json` (gitignored) and set `RIGSIGNAL_MCP_API_KEY` before restarting Claude Code.

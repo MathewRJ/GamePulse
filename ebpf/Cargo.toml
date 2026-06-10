@@ -1,12 +1,12 @@
 [workspace]
 members = [
-    "gamepulse-ebpf-probes",
-    "gamepulse-ebpf-daemon",
+    "rigsignal-ebpf-probes",
+    "rigsignal-ebpf",
     "xtask",
 ]
 # default-members excludes the BPF probes crate from host-target builds.
 # Use `cargo xtask build-ebpf` to compile probes for bpfel-unknown-none.
-default-members = ["gamepulse-ebpf-daemon"]
+default-members = ["rigsignal-ebpf"]
 resolver = "2"
 
 # BPF programs need panic=abort and higher optimisation.
