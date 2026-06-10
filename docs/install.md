@@ -231,6 +231,8 @@ The Windows MSI installer shipped in Milestone E and is available on the
 [GitHub Releases page](https://github.com/MathewRJ/RigSignal/releases).
 Download `rigsignal-<version>-x86_64-windows.msi` and run the installer — it installs
 `rigsignal.exe` to `Program Files\RigSignal\` and registers the Windows Service.
+The installer bundles Intel GameTechDev PresentMon v2.4.1 (MIT license) for Windows
+frame timing. Set `RIGSIGNAL_PRESENTMON` to override it with your own copy.
 A portable zip (`rigsignal-<version>-windows-x64.zip`) is also available for users
 who prefer not to use the installer. eBPF is not available on Windows; all other
 metric streams are supported.

@@ -38,6 +38,8 @@ winget install MathewRJ.RigSignal
 ```
 
 Or download the MSI from the [Releases page](https://github.com/MathewRJ/RigSignal/releases).
+The Windows installer bundles Intel GameTechDev PresentMon v2.4.1 (MIT license)
+for frame timing; set `RIGSIGNAL_PRESENTMON` to override it with your own copy.
 
 ### First run
 

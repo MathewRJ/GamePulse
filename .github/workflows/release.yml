@@ -357,6 +357,44 @@ jobs:
         # but the actual cargo-wix.exe binary is missing from the runner.
         run: cargo binstall cargo-wix --no-confirm --locked --force
 
+      - name: Stage PresentMon
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $targetDir = "target/release"
+          New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+
+          $presentMonPath = Join-Path $targetDir "PresentMon.exe"
+          Invoke-WebRequest `
+            -Uri "https://github.com/GameTechDev/PresentMon/releases/download/v2.4.1/PresentMon-2.4.1-x64.exe" `
+            -OutFile $presentMonPath
+
+          $expectedHash = "d74183e7ae630f72cd3690be0373ecbfdc6cbb86578148aab8fa2a7166068f34"
+          $actualHash = (Get-FileHash -Algorithm SHA256 $presentMonPath).Hash.ToLowerInvariant()
+          if ($actualHash -ne $expectedHash) {
+            throw "PresentMon SHA-256 mismatch: expected $expectedHash, got $actualHash"
+          }
+
+          $licensePath = Join-Path $targetDir "PresentMon-LICENSE.txt"
+          try {
+            Invoke-WebRequest `
+              -Uri "https://raw.githubusercontent.com/GameTechDev/PresentMon/v2.4.1/LICENSE.txt" `
+              -OutFile $licensePath
+          } catch {
+            $statusCode = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
+            if ($statusCode -eq 404) {
+              Invoke-WebRequest `
+                -Uri "https://raw.githubusercontent.com/GameTechDev/PresentMon/v2.4.1/LICENSE" `
+                -OutFile $licensePath
+            } else {
+              throw
+            }
+          }
+
+          Invoke-WebRequest `
+            -Uri "https://raw.githubusercontent.com/GameTechDev/PresentMon/v2.4.1/THIRD_PARTY.txt" `
+            -OutFile (Join-Path $targetDir "PresentMon-THIRD_PARTY.txt")
+
       - name: Build .msi
         shell: pwsh
         run: |

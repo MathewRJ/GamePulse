@@ -133,7 +133,7 @@ Or per-game in Steam launch options:
 MANGOHUD=1 MANGOHUD_LOG=1 rigsignal run %command%
 ```
 
-On Steam Deck, MangoHud is pre-installed — enable the overlay in Quick Access.
+On Steam Deck, MangoHud is included by default — enable the overlay in Quick Access.
 
 ## Next steps
 

@@ -60,6 +60,30 @@
                                 KeyPath='yes'
                                 DiskId='1'/>
                         </Component>
+                        <Component Id='PresentMonBinary' Guid='3F3721D4-9D04-481E-B8F2-A33D3DE275B2' Win64='yes'>
+                            <File
+                                Id='PresentMonExe'
+                                Name='PresentMon.exe'
+                                Source='$(var.CargoTargetBinDir)\PresentMon.exe'
+                                KeyPath='yes'
+                                DiskId='1'/>
+                        </Component>
+                        <Component Id='PresentMonLicense' Guid='34A97506-B5A2-41E8-945F-C4C138921FCA' Win64='yes'>
+                            <File
+                                Id='PresentMonLicenseTxt'
+                                Name='PresentMon-LICENSE.txt'
+                                Source='$(var.CargoTargetBinDir)\PresentMon-LICENSE.txt'
+                                KeyPath='yes'
+                                DiskId='1'/>
+                        </Component>
+                        <Component Id='PresentMonThirdParty' Guid='EA9EDD92-B11B-485B-89C7-42B36D6E4D64' Win64='yes'>
+                            <File
+                                Id='PresentMonThirdPartyTxt'
+                                Name='PresentMon-THIRD_PARTY.txt'
+                                Source='$(var.CargoTargetBinDir)\PresentMon-THIRD_PARTY.txt'
+                                KeyPath='yes'
+                                DiskId='1'/>
+                        </Component>
                         <Component Id='PathEntry' Guid='CC21BF89-4193-4289-8D44-847AA7B6EC72' Win64='yes' KeyPath='yes'>
                             <Environment
                                 Id='UpdatePath'
@@ -117,6 +141,9 @@
                  Display='expand'
                  Absent='disallow'>
             <ComponentRef Id='AgentBinary'/>
+            <ComponentRef Id='PresentMonBinary'/>
+            <ComponentRef Id='PresentMonLicense'/>
+            <ComponentRef Id='PresentMonThirdParty'/>
             <ComponentRef Id='PathEntry'/>
             <ComponentRef Id='ConfigExample'/>
             <ComponentRef Id='Profiles'/>

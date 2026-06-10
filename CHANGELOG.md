@@ -28,6 +28,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **Windows PresentMon bundle**: the MSI now includes Intel GameTechDev PresentMon
+  v2.4.1 plus MIT and third-party license texts; set `RIGSIGNAL_PRESENTMON` to
+  override it with a custom copy.
+
 - **MangoHud `autostart_log`** (`packaging/install.sh`, `packaging/rigsignal-launcher.sh`): installer now writes `autostart_log=1` to `~/.config/MangoHud/MangoHud.conf` so MangoHud writes frame timing CSVs immediately on game start without requiring an F2 keypress. Previously `output_folder` alone was insufficient — MangoHud required explicit log-start to write data. Set `RIGSIGNAL_MANGOHUD=0` to disable MangoHud integration entirely.
 
 - **MangoHud `output_folder`**: installer now ensures `~/.config/MangoHud/MangoHud.conf` contains `output_folder=$HOME/.local/share/MangoHud` so the agent can read frame timing CSV data.
