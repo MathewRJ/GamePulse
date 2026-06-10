@@ -545,7 +545,8 @@ fn build_collectors(game_pid: Option<u32>) -> Vec<Box<dyn Collector>> {
             Box::new(collectors::MangoHudCollector::new(game_pid))
         };
     #[cfg(not(target_os = "linux"))]
-    let frame_collector: Box<dyn Collector> = Box::new(collectors::MangoHudCollector::new(game_pid));
+    let frame_collector: Box<dyn Collector> =
+        Box::new(collectors::MangoHudCollector::new(game_pid));
 
     vec![
         Box::new(collectors::CpuCollector::new(game_pid)),

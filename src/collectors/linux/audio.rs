@@ -248,7 +248,9 @@ impl Collector for AudioCollector {
         if backend == "pipewire" {
             // Copy primitive values out immediately so the borrow on self ends
             // before we mutate self.prev_xruns.
-            let pw = self.pipewire_stats_cached().map(|s| (s.xruns, s.latency_ms));
+            let pw = self
+                .pipewire_stats_cached()
+                .map(|s| (s.xruns, s.latency_ms));
             if let Some((xruns_total, lat)) = pw {
                 if let Some(prev) = self.prev_xruns {
                     audio.insert(

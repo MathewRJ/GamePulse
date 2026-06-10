@@ -1445,7 +1445,10 @@ pub(crate) fn scan_for_steam_game() -> Option<Target> {
                 .and_then(|p| Some(p.to_string_lossy().to_lowercase()))
                 .unwrap_or_default();
             let skip_contains = ["proton", "wine", "steam", "reaper"];
-            let skip_basename = ["sh", "bash", "dash", "zsh", "fish", "ksh", "python", "python3", "perl", "ruby", "node"];
+            let skip_basename = [
+                "sh", "bash", "dash", "zsh", "fish", "ksh", "python", "python3", "perl", "ruby",
+                "node",
+            ];
             let exe_basename = std::path::Path::new(&exe_path)
                 .file_name()
                 .and_then(|n| n.to_str())
@@ -1514,9 +1517,8 @@ pub fn resolve_user_target(
     name_override: Option<&str>,
 ) -> Option<Target> {
     let system = System::new_with_specifics(
-        RefreshKind::nothing().with_processes(
-            ProcessRefreshKind::nothing().with_exe(UpdateKind::Always),
-        ),
+        RefreshKind::nothing()
+            .with_processes(ProcessRefreshKind::nothing().with_exe(UpdateKind::Always)),
     );
 
     let pid = match (pid_override, name_override) {

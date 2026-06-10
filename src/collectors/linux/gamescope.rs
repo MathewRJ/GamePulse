@@ -146,8 +146,7 @@ impl Collector for GamescopeFrameCollector {
     fn set_game_pid(&mut self, game_pid: Option<u32>) {
         if let Some(pid) = game_pid {
             // Read the Steam App ID from the game's environment.
-            let env = std::fs::read_to_string(format!("/proc/{}/environ", pid))
-                .unwrap_or_default();
+            let env = std::fs::read_to_string(format!("/proc/{}/environ", pid)).unwrap_or_default();
             let id = env
                 .split('\0')
                 .find(|s| s.starts_with("SteamAppId="))
