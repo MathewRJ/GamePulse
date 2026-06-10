@@ -27,6 +27,7 @@ use collectors::Collector;
 use serde_json::{json, Value};
 use session::SessionEvent;
 use std::path::PathBuf;
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
 // ── CLI ───────────────────────────────────────────────────────────────────────
 
@@ -41,8 +42,8 @@ enum Commands {
     },
 
     /// Dump the loaded-module list and Tier 2 detection result for a target
-    /// process. Reads /proc/<PID>/maps on Linux or EnumProcessModules on
-    /// Windows. Useful for debugging upscaler / frame-gen / graphics-API
+    /// process. Reads loaded module paths using the platform-specific scanner.
+    /// Useful for debugging upscaler / frame-gen / graphics-API
     /// auto-detection without launching a full session.
     Dllscan {
         /// Process ID to inspect.
@@ -123,8 +124,8 @@ struct Cli {
     #[arg(long, value_name = "PID")]
     target_pid: Option<u32>,
 
-    /// Skip auto-detection; find a process by name (matched against /proc/*/comm
-    /// and /proc/*/exe basename, case-insensitive). First match wins.
+    /// Skip auto-detection; find a process by name (matched against process name
+    /// and executable basename, case-insensitive). First match wins.
     #[arg(long, value_name = "NAME")]
     target_name: Option<String>,
 
@@ -167,7 +168,13 @@ fn poll_pinned_target(
     pinned: &session::Target,
     current: &mut Option<session::Target>,
 ) -> session::SessionEvent {
-    let alive = std::path::Path::new(&format!("/proc/{}", pinned.pid)).exists();
+    let mut system = System::new();
+    let pid = Pid::from_u32(pinned.pid);
+    let alive = system.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&[pid]),
+        true,
+        ProcessRefreshKind::nothing(),
+    ) > 0;
     match (current.is_some(), alive) {
         (false, true) => {
             *current = Some(pinned.clone());

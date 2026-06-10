@@ -20,6 +20,7 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
+use sysinfo::{Pid, Process, ProcessRefreshKind, RefreshKind, System, UpdateKind};
 use uuid::Uuid;
 
 // ── Target (detected game/app) ─────────────────────────────────────────────────
@@ -649,6 +650,13 @@ mod tests {
     fn test_resolve_user_target_invalid_pid() {
         let result = resolve_user_target(Some(9_999_999), None);
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_resolve_user_target_self_pid() {
+        let result = resolve_user_target(Some(std::process::id()), None);
+        assert!(result.is_some());
+        assert!(!result.unwrap().display_name.is_empty());
     }
 
     #[test]
@@ -1496,41 +1504,36 @@ pub(crate) fn scan_for_steam_game() -> Option<Target> {
 /// Called from main.rs at startup when --target-pid or --target-name is given.
 /// Returns None if the process cannot be found; caller falls back to auto-detection.
 ///
-/// PID mode: validates the PID exists, reads comm/exe for a display name, runs
-/// standard enrichment helpers on the process environ.
+/// PID mode: validates the PID exists, reads process metadata for a display name,
+/// runs standard enrichment helpers on the process environ where available.
 ///
-/// Name mode: scans /proc for a process whose comm or exe basename matches
+/// Name mode: scans processes for a process whose name or exe basename matches
 /// case-insensitively; uses the first match as the PID and proceeds as PID mode.
 pub fn resolve_user_target(
     pid_override: Option<u32>,
     name_override: Option<&str>,
 ) -> Option<Target> {
+    let system = System::new_with_specifics(
+        RefreshKind::nothing().with_processes(
+            ProcessRefreshKind::nothing().with_exe(UpdateKind::Always),
+        ),
+    );
+
     let pid = match (pid_override, name_override) {
         (Some(p), _) => {
-            if !std::path::Path::new(&format!("/proc/{}", p)).exists() {
+            if system.process(Pid::from_u32(p)).is_none() {
                 tracing::warn!("--target-pid {}: process not found", p);
                 return None;
             }
             p
         }
         (None, Some(name)) => {
-            let found = std::fs::read_dir("/proc")
-                .ok()?
-                .filter_map(|e| e.ok())
-                .filter_map(|e| e.file_name().to_str()?.parse::<u32>().ok())
-                .find(|&pid| {
-                    let comm = std::fs::read_to_string(format!("/proc/{}/comm", pid))
-                        .map(|s| s.trim().to_lowercase())
-                        .unwrap_or_default();
-                    if comm == name.to_lowercase() {
-                        return true;
-                    }
-                    std::fs::read_link(format!("/proc/{}/exe", pid))
-                        .ok()
-                        .and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_lowercase()))
-                        .map(|base| base == name.to_lowercase())
-                        .unwrap_or(false)
-                });
+            let wanted = name.to_lowercase();
+            let found = system
+                .processes()
+                .iter()
+                .find(|(_, process)| process_matches_name(process, &wanted))
+                .map(|(pid, _)| pid.as_u32());
             match found {
                 Some(p) => p,
                 None => {
@@ -1542,24 +1545,24 @@ pub fn resolve_user_target(
         (None, None) => return None,
     };
 
-    let comm = std::fs::read_to_string(format!("/proc/{}/comm", pid))
-        .map(|s| s.trim().to_string())
-        .unwrap_or_default();
-    let exe_base = std::fs::read_link(format!("/proc/{}/exe", pid))
-        .ok()
-        .and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string()));
-    let display_name = if !comm.is_empty() {
-        comm
-    } else if let Some(base) = exe_base {
-        base
-    } else {
-        format!("pid-{}", pid)
-    };
+    let process = system.process(Pid::from_u32(pid))?;
+    let display_name = process_display_name(process, pid);
 
-    let env = read_environ(pid).unwrap_or_default();
-    let (graphics_api, _) = graphics_api_with_maps_fallback(&env, pid);
-    let proton_version = proton_version_from_env(&env);
-    let dxvk_version = dxvk_version_from_env(&env);
+    #[cfg(unix)]
+    let (graphics_api, proton_version, dxvk_version) = {
+        let env = read_environ(pid).unwrap_or_default();
+        let (graphics_api, _) = graphics_api_with_maps_fallback(&env, pid);
+        (
+            graphics_api,
+            proton_version_from_env(&env),
+            dxvk_version_from_env(&env),
+        )
+    };
+    #[cfg(windows)]
+    let (graphics_api, proton_version, dxvk_version) =
+        (crate::dllscan::graphics_api_from_maps(pid), None, None);
+    #[cfg(not(any(unix, windows)))]
+    let (graphics_api, proton_version, dxvk_version) = (None, None, None);
 
     Some(Target {
         source: TargetSource::UserSpecified,
@@ -1572,4 +1575,31 @@ pub fn resolve_user_target(
         proton_version,
         dxvk_version,
     })
+}
+
+fn process_matches_name(process: &Process, wanted: &str) -> bool {
+    let name = process.name().to_string_lossy().to_lowercase();
+    if name == wanted {
+        return true;
+    }
+
+    process
+        .exe()
+        .and_then(|p| p.file_name())
+        .map(|n| n.to_string_lossy().to_lowercase() == wanted)
+        .unwrap_or(false)
+}
+
+fn process_display_name(process: &Process, pid: u32) -> String {
+    let name = process.name().to_string_lossy().trim().to_string();
+    if !name.is_empty() {
+        return name;
+    }
+
+    process
+        .exe()
+        .and_then(|p| p.file_name())
+        .map(|n| n.to_string_lossy().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| format!("pid-{}", pid))
 }
