@@ -45,6 +45,7 @@ windows = { version = "0.58", features = [
     "Win32_Graphics_Dxgi",
     "Win32_Graphics_Dxgi_Common",
 ] }
+winreg = "0.56.0"
 
 [lints.rust]
 # Public API fields deserialized from TOML/config and collectors trait methods are
