@@ -59,7 +59,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: rigsignal-agent-windows
-          path: src/target/release/rigsignal-agent.exe
+          # Workspace root Cargo.toml puts binaries in the root target dir.
+          path: target/release/rigsignal-agent.exe
+          if-no-files-found: error
 
   fmt:
     name: rustfmt
