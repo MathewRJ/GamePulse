@@ -81,10 +81,10 @@ pub(crate) fn detect_graphics_api_from_paths(paths: &[String]) -> Option<String>
     // Native Windows Direct3D. These stay below DXVK/Wine matchers so Proton
     // translated games keep the more specific existing values.
     if any("d3d12.dll") {
-        return Some("dx12_via_vkd3d".into());
+        return Some("dx12".into());
     }
     if any("d3d11.dll") {
-        return Some("dx11_via_dxvk".into());
+        return Some("dx11".into());
     }
     // Native Vulkan (or Vulkan-based runtime that didn't match above).
     if any("libvulkan") || any("vulkan-1.dll") {
@@ -281,19 +281,13 @@ mod tests {
     #[test]
     fn test_gfx_native_d3d12_only() {
         let p = paths(&[r"c:\windows\system32\d3d12.dll"]);
-        assert_eq!(
-            detect_graphics_api_from_paths(&p).as_deref(),
-            Some("dx12_via_vkd3d")
-        );
+        assert_eq!(detect_graphics_api_from_paths(&p).as_deref(), Some("dx12"));
     }
 
     #[test]
     fn test_gfx_native_d3d11_only() {
         let p = paths(&[r"c:\windows\system32\d3d11.dll"]);
-        assert_eq!(
-            detect_graphics_api_from_paths(&p).as_deref(),
-            Some("dx11_via_dxvk")
-        );
+        assert_eq!(detect_graphics_api_from_paths(&p).as_deref(), Some("dx11"));
     }
 
     #[test]
@@ -368,10 +362,7 @@ mod tests {
             r"c:\windows\system32\d3d12.dll",
         ]);
         assert_eq!(detect_upscaler_from_paths(&p).as_deref(), Some("dlss"));
-        assert_eq!(
-            detect_graphics_api_from_paths(&p).as_deref(),
-            Some("dx12_via_vkd3d")
-        );
+        assert_eq!(detect_graphics_api_from_paths(&p).as_deref(), Some("dx12"));
     }
 
     #[test]
