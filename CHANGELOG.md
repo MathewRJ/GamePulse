@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-06-11
+
+### Fixed
+
+- **Steam library VDF path unescaping** (`src/collectors/windows/game_detect.rs`): library paths containing backslashes (e.g. drives other than C:) were stored in `libraryfolders.vdf` with escape sequences (`\\`) that were not unescaped before filesystem lookups, causing game detection to silently fail for Steam libraries on non-default drives. Found in live Windows e2e.
+
+- **Native D3D11/D3D12 graphics API labels** (`src/dllscan.rs`): the native Direct3D 11 and Direct3D 12 matchers were reporting translation-layer values (`dx11_via_dxvk`, `dx12_via_vkd3d`) instead of `dx11` and `dx12`, meaning games using native D3D without any compatibility layer were misclassified. Found in live Windows e2e.
+
+- **Primary game PID chosen by working set** (`src/collectors/windows/launchers.rs`): when PresentMon was asked to attach to a game, it could latch onto a helper process (crash reporter, DRM service) that shares the same image name but has a smaller working set than the actual game. The primary PID is now selected by largest working set among all matching processes, ensuring PresentMon attaches to the render process. Found in live Windows e2e.
+
 ## [0.2.0] — 2026-06-10
 
 ### Changed
