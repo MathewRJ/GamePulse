@@ -599,7 +599,13 @@ pub(crate) fn parse_vdf_paths(content: &str) -> Vec<PathBuf> {
         .filter_map(|line| {
             let trimmed = line.trim();
             if trimmed.starts_with("\"path\"") {
-                trimmed.split('"').nth(3).map(PathBuf::from)
+                // VDF escapes backslashes, so Windows paths are stored as
+                // "D:\\SteamLibrary". Unescape so downstream prefix matching
+                // against real exe paths (single backslashes) works.
+                trimmed
+                    .split('"')
+                    .nth(3)
+                    .map(|p| PathBuf::from(p.replace("\\\\", "\\")))
             } else {
                 None
             }
@@ -777,7 +783,32 @@ mod tests {
             parse_vdf_paths(VDF),
             vec![
                 PathBuf::from("/mnt/fast/SteamLibrary"),
-                PathBuf::from(r"D:\\Games\\SteamLibrary")
+                PathBuf::from(r"D:\Games\SteamLibrary")
+            ]
+        );
+    }
+
+    #[test]
+    fn test_parse_vdf_paths_unescapes_windows_backslashes() {
+        const VDF: &str = r#"
+"libraryfolders"
+{
+    "0"
+    {
+        "path"  "/home/user/.local/share/Steam"
+    }
+    "1"
+    {
+        "path"  "D:\\SteamLibrary"
+    }
+}
+"#;
+
+        assert_eq!(
+            parse_vdf_paths(VDF),
+            vec![
+                PathBuf::from("/home/user/.local/share/Steam"),
+                PathBuf::from(r"D:\SteamLibrary")
             ]
         );
     }
