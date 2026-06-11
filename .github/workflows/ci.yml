@@ -50,6 +50,17 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: cargo clippy --manifest-path src/Cargo.toml --locked --features ebpf -- -D warnings
 
+      - name: Build release binary (windows only)
+        if: matrix.os == 'windows-latest'
+        run: cargo build --release --manifest-path src/Cargo.toml --locked
+
+      - name: Upload windows agent binary artifact
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rigsignal-agent-windows
+          path: src/target/release/rigsignal-agent.exe
+
   fmt:
     name: rustfmt
     runs-on: ubuntu-latest
