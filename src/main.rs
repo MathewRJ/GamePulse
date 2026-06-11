@@ -16,7 +16,6 @@ mod config;
 mod diagnose;
 mod dllscan;
 mod host;
-#[cfg(windows)]
 mod launchers_windows;
 mod profiles;
 mod session;
