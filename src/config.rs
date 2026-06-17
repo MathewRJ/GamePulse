@@ -331,7 +331,10 @@ mod tests {
         .unwrap();
 
         assert_eq!(cfg.output.mode, OutputMode::Elasticsearch);
-        assert!(cfg.output.spool_dir.ends_with(".local/state/rigsignal/spool"));
+        assert!(cfg
+            .output
+            .spool_dir
+            .ends_with(".local/state/rigsignal/spool"));
         assert_eq!(cfg.output.max_file_bytes, 10_485_760);
         assert_eq!(cfg.output.max_file_age_secs, 300);
     }
