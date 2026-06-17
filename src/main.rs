@@ -25,8 +25,10 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 use clap::{Parser, Subcommand};
 use collectors::Collector;
+use config::OutputMode;
 use serde_json::{json, Value};
 use session::SessionEvent;
+use shipper::SpoolWriter;
 use std::path::PathBuf;
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
@@ -633,6 +635,24 @@ fn resolve_log_filter(verbose: bool, log_level: Option<&str>) -> String {
     std::env::var("RIGSIGNAL_LOG").unwrap_or_else(|_| "info".to_string())
 }
 
+async fn write_output(
+    cfg: &config::Config,
+    spool_writer: &mut Option<SpoolWriter>,
+    docs: Vec<Value>,
+) -> Result<shipper::ShipResult> {
+    if let Some(writer) = spool_writer {
+        let attempted = docs.len();
+        writer.write_docs(&docs)?;
+        Ok(shipper::ShipResult {
+            attempted,
+            succeeded: attempted,
+            failed: 0,
+        })
+    } else {
+        shipper::ship(cfg, docs).await
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -670,8 +690,17 @@ async fn main() -> Result<()> {
         return dry_run().await;
     }
 
-    // ES connectivity check
-    shipper::ping(&cfg).await?;
+    let mut spool_writer = match cfg.output.mode {
+        OutputMode::Elasticsearch => {
+            shipper::ping(&cfg).await?;
+            None
+        }
+        OutputMode::Spool => Some(SpoolWriter::new(
+            &cfg.output.spool_dir,
+            cfg.output.max_file_bytes,
+            cfg.output.max_file_age_secs,
+        )?),
+    };
 
     // Collect host info once at startup
     tracing::info!("Collecting host environment snapshot…");
@@ -773,7 +802,7 @@ async fn main() -> Result<()> {
 
     // Ship session-start document
     let start_doc = build_session_start_doc(&session, &host_snapshot, &hostname);
-    if let Err(e) = shipper::ship(&cfg, vec![start_doc]).await {
+    if let Err(e) = write_output(&cfg, &mut spool_writer, vec![start_doc]).await {
         tracing::warn!("Failed to ship session-start doc: {}", e);
     }
 
@@ -868,7 +897,7 @@ async fn main() -> Result<()> {
                         let game_doc = build_game_detected_doc(
                             &session, &host_snapshot, &hostname, &target,
                         );
-                        if let Err(e) = shipper::ship(&cfg, vec![game_doc]).await {
+                        if let Err(e) = write_output(&cfg, &mut spool_writer, vec![game_doc]).await {
                             tracing::warn!("Failed to ship game-detected doc: {}", e);
                         }
                     }
@@ -894,9 +923,9 @@ async fn main() -> Result<()> {
                                 "Shipping session summary on game exit ({}s, {} ticks)",
                                 duration_s, session_tick
                             );
-                            if let Err(e) = shipper::ship(&cfg, vec![summary_doc]).await {
+                            if let Err(e) = write_output(&cfg, &mut spool_writer, vec![summary_doc]).await {
                                 tracing::warn!("Failed to ship summary doc on game exit: {}", e);
-                            } else {
+                            } else if matches!(cfg.output.mode, OutputMode::Elasticsearch) {
                                 if let Err(e) = shipper::trigger_transform_sync(&cfg, "rigsignal-game-timeline").await {
                                     tracing::warn!("transform schedule_now failed (non-fatal): {}", e);
                                 }
@@ -942,26 +971,32 @@ async fn main() -> Result<()> {
                 // timeouts do not stall the 1-second collection timer.
                 if !tick_docs.is_empty() {
                     let n = tick_docs.len();
-                    let cfg_ship = cfg.clone();
                     let tick_num = tick;
-                    tokio::spawn(async move {
-                        match shipper::ship(&cfg_ship, tick_docs).await {
-                            Ok(r) => {
-                                if r.failed > 0 {
-                                    tracing::warn!(
-                                        "Tick {}: {}/{} docs failed",
-                                        tick_num,
-                                        r.failed,
-                                        n
-                                    );
-                                } else {
-                                    tracing::debug!("Tick {}: shipped {} docs", tick_num, n);
+                    if matches!(cfg.output.mode, OutputMode::Elasticsearch) {
+                        let cfg_ship = cfg.clone();
+                        tokio::spawn(async move {
+                            match shipper::ship(&cfg_ship, tick_docs).await {
+                                Ok(r) => {
+                                    if r.failed > 0 {
+                                        tracing::warn!(
+                                            "Tick {}: {}/{} docs failed",
+                                            tick_num,
+                                            r.failed,
+                                            n
+                                        );
+                                    } else {
+                                        tracing::debug!("Tick {}: shipped {} docs", tick_num, n);
+                                    }
                                 }
+                                Err(e) => tracing::warn!("Tick {} bulk error: {}", tick_num, e),
                             }
-                            Err(e) => tracing::warn!("Tick {} bulk error: {}", tick_num, e),
+                        });
+                    } else if let Err(e) = write_output(&cfg, &mut spool_writer, tick_docs).await {
+                        tracing::warn!("Tick {} spool error: {}", tick_num, e);
+                    } else {
+                        tracing::debug!("Tick {}: spooled {} docs", tick_num, n);
+                    }
                         }
-                    });
-                }
             }
 
             _ = &mut shutdown_rx => {
@@ -988,9 +1023,9 @@ async fn main() -> Result<()> {
             duration_s,
             session_tick
         );
-        if let Err(e) = shipper::ship(&cfg, vec![summary_doc]).await {
+        if let Err(e) = write_output(&cfg, &mut spool_writer, vec![summary_doc]).await {
             tracing::warn!("Failed to ship summary doc: {}", e);
-        } else {
+        } else if matches!(cfg.output.mode, OutputMode::Elasticsearch) {
             // Trigger an immediate transform sync so the Games dashboard
             // reflects this session within seconds rather than up to 60 s.
             if let Err(e) = shipper::trigger_transform_sync(&cfg, "rigsignal-game-timeline").await {

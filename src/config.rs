@@ -10,11 +10,60 @@ use std::path::PathBuf;
 pub struct Config {
     pub elasticsearch: ElasticsearchConfig,
     #[serde(default)]
+    pub output: OutputConfig,
+    #[serde(default)]
     pub collection: CollectionConfig,
     #[serde(default)]
     pub privacy: PrivacyConfig,
     #[serde(default)]
     pub session: SessionConfig,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum OutputMode {
+    #[default]
+    Elasticsearch,
+    Spool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct OutputConfig {
+    #[serde(default)]
+    pub mode: OutputMode,
+    #[serde(default = "default_spool_dir")]
+    pub spool_dir: PathBuf,
+    #[serde(default = "default_max_file_bytes")]
+    pub max_file_bytes: u64,
+    #[serde(default = "default_max_file_age_secs")]
+    pub max_file_age_secs: u64,
+}
+
+fn default_spool_dir() -> PathBuf {
+    if let Some(home) = home_dir() {
+        home.join(".local/state/rigsignal/spool")
+    } else {
+        PathBuf::from(".local/state/rigsignal/spool")
+    }
+}
+
+fn default_max_file_bytes() -> u64 {
+    10_485_760
+}
+
+fn default_max_file_age_secs() -> u64 {
+    300
+}
+
+impl Default for OutputConfig {
+    fn default() -> Self {
+        Self {
+            mode: OutputMode::Elasticsearch,
+            spool_dir: default_spool_dir(),
+            max_file_bytes: default_max_file_bytes(),
+            max_file_age_secs: default_max_file_age_secs(),
+        }
+    }
 }
 
 /// Optional per-session metadata the user can set in rigsignal.toml.
@@ -265,4 +314,47 @@ fn home_dir() -> Option<PathBuf> {
         }
     }
     std::env::var("HOME").ok().map(PathBuf::from)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_defaults_output_when_absent() {
+        let cfg: Config = toml::from_str(
+            r#"
+            [elasticsearch]
+            endpoint = "http://localhost:9200"
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(cfg.output.mode, OutputMode::Elasticsearch);
+        assert!(cfg.output.spool_dir.ends_with(".local/state/rigsignal/spool"));
+        assert_eq!(cfg.output.max_file_bytes, 10_485_760);
+        assert_eq!(cfg.output.max_file_age_secs, 300);
+    }
+
+    #[test]
+    fn config_deserializes_spool_output() {
+        let cfg: Config = toml::from_str(
+            r#"
+            [elasticsearch]
+            endpoint = "http://localhost:9200"
+
+            [output]
+            mode = "spool"
+            spool_dir = "/tmp/rigsignal-spool"
+            max_file_bytes = 1024
+            max_file_age_secs = 30
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(cfg.output.mode, OutputMode::Spool);
+        assert_eq!(cfg.output.spool_dir, PathBuf::from("/tmp/rigsignal-spool"));
+        assert_eq!(cfg.output.max_file_bytes, 1024);
+        assert_eq!(cfg.output.max_file_age_secs, 30);
+    }
 }
