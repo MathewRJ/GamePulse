@@ -9,12 +9,121 @@ use crate::config::Config;
 use anyhow::{Context, Result};
 use reqwest::Client;
 use serde_json::Value;
+use std::fs::{File, OpenOptions};
+use std::io::{BufWriter, Write};
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tracing::{debug, info, warn};
 
 pub struct ShipResult {
     pub attempted: usize,
     pub succeeded: usize,
     pub failed: usize,
+}
+
+pub struct SpoolWriter {
+    dir: PathBuf,
+    max_file_bytes: u64,
+    max_file_age: Duration,
+    active_path: PathBuf,
+    writer: BufWriter<File>,
+    current_file_bytes: u64,
+    current_file_started: Instant,
+    next_seq: u32,
+}
+
+impl SpoolWriter {
+    pub fn new(dir: impl AsRef<Path>, max_file_bytes: u64, max_file_age_secs: u64) -> Result<Self> {
+        let dir = dir.as_ref().to_path_buf();
+        std::fs::create_dir_all(&dir)
+            .with_context(|| format!("creating spool directory: {}", dir.display()))?;
+        let active_path = dir.join("rigsignal-active.ndjson.tmp");
+        let file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&active_path)
+            .with_context(|| format!("opening active spool file: {}", active_path.display()))?;
+
+        Ok(Self {
+            dir,
+            max_file_bytes,
+            max_file_age: Duration::from_secs(max_file_age_secs),
+            active_path,
+            writer: BufWriter::new(file),
+            current_file_bytes: 0,
+            current_file_started: Instant::now(),
+            next_seq: 1,
+        })
+    }
+
+    pub fn write_docs(&mut self, docs: &[Value]) -> Result<()> {
+        if docs.is_empty() {
+            return Ok(());
+        }
+
+        self.rotate_if_needed()?;
+        for doc in docs {
+            let line = serde_json::to_vec(doc).context("serialising spool doc")?;
+            self.writer
+                .write_all(&line)
+                .context("writing spool doc")?;
+            self.writer
+                .write_all(b"\n")
+                .context("writing spool newline")?;
+            self.current_file_bytes += line.len() as u64 + 1;
+            self.rotate_if_needed()?;
+        }
+        self.writer.flush().context("flushing spool writer")
+    }
+
+    fn rotate_if_needed(&mut self) -> Result<()> {
+        let size_exceeded =
+            self.max_file_bytes > 0 && self.current_file_bytes > self.max_file_bytes;
+        let age_exceeded =
+            self.max_file_age.as_secs() > 0 && self.current_file_started.elapsed() >= self.max_file_age;
+        if size_exceeded || age_exceeded {
+            self.rotate()?;
+        }
+        Ok(())
+    }
+
+    fn rotate(&mut self) -> Result<()> {
+        self.writer.flush().context("flushing spool file before rotation")?;
+        if self.current_file_bytes > 0 {
+            let final_path = self.dir.join(format!(
+                "rigsignal-{}-{}.ndjson",
+                unix_millis()?,
+                self.next_seq
+            ));
+            self.next_seq = self.next_seq.saturating_add(1);
+            std::fs::rename(&self.active_path, &final_path).with_context(|| {
+                format!(
+                    "rotating spool file {} to {}",
+                    self.active_path.display(),
+                    final_path.display()
+                )
+            })?;
+        }
+
+        let file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&self.active_path)
+            .with_context(|| format!("opening active spool file: {}", self.active_path.display()))?;
+        self.writer = BufWriter::new(file);
+        self.current_file_bytes = 0;
+        self.current_file_started = Instant::now();
+        Ok(())
+    }
+}
+
+fn unix_millis() -> Result<u128> {
+    Ok(SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("system clock is before Unix epoch")?
+        .as_millis())
 }
 
 fn build_client() -> Result<Client> {
