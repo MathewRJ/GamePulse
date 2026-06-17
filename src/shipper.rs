@@ -9,6 +9,7 @@ use crate::config::Config;
 use anyhow::{Context, Result};
 use reqwest::Client;
 use serde_json::Value;
+use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -25,11 +26,15 @@ pub struct SpoolWriter {
     dir: PathBuf,
     max_file_bytes: u64,
     max_file_age: Duration,
+    spools: HashMap<String, DatasetSpool>,
+    next_seq: u32,
+}
+
+struct DatasetSpool {
     active_path: PathBuf,
     writer: BufWriter<File>,
     current_file_bytes: u64,
     current_file_started: Instant,
-    next_seq: u32,
 }
 
 impl SpoolWriter {
@@ -37,22 +42,12 @@ impl SpoolWriter {
         let dir = dir.as_ref().to_path_buf();
         std::fs::create_dir_all(&dir)
             .with_context(|| format!("creating spool directory: {}", dir.display()))?;
-        let active_path = dir.join("rigsignal-active.ndjson.tmp");
-        let file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(&active_path)
-            .with_context(|| format!("opening active spool file: {}", active_path.display()))?;
 
         Ok(Self {
             dir,
             max_file_bytes,
             max_file_age: Duration::from_secs(max_file_age_secs),
-            active_path,
-            writer: BufWriter::new(file),
-            current_file_bytes: 0,
-            current_file_started: Instant::now(),
+            spools: HashMap::new(),
             next_seq: 1,
         })
     }
@@ -62,61 +57,134 @@ impl SpoolWriter {
             return Ok(());
         }
 
-        self.rotate_if_needed()?;
+        let mut grouped: HashMap<String, Vec<&Value>> = HashMap::new();
         for doc in docs {
-            let line = serde_json::to_vec(doc).context("serialising spool doc")?;
-            self.writer
-                .write_all(&line)
-                .context("writing spool doc")?;
-            self.writer
-                .write_all(b"\n")
-                .context("writing spool newline")?;
-            self.current_file_bytes += line.len() as u64 + 1;
-            self.rotate_if_needed()?;
+            let slug = doc
+                .get("data_stream")
+                .and_then(|ds| ds.get("dataset"))
+                .and_then(|d| d.as_str())
+                .map(dataset_slug)
+                .unwrap_or_else(|| {
+                    warn!("spool doc missing data_stream.dataset; routing to unknown");
+                    "unknown".to_string()
+                });
+            grouped.entry(slug).or_default().push(doc);
         }
-        self.writer.flush().context("flushing spool writer")
-    }
 
-    fn rotate_if_needed(&mut self) -> Result<()> {
-        let size_exceeded =
-            self.max_file_bytes > 0 && self.current_file_bytes > self.max_file_bytes;
-        let age_exceeded =
-            self.max_file_age.as_secs() > 0 && self.current_file_started.elapsed() >= self.max_file_age;
-        if size_exceeded || age_exceeded {
-            self.rotate()?;
+        for (slug, docs) in grouped {
+            self.ensure_spool(&slug)?;
+            for doc in docs {
+                let line = serde_json::to_vec(doc).context("serialising spool doc")?;
+                {
+                    let spool = self
+                        .spools
+                        .get_mut(&slug)
+                        .expect("dataset spool exists after ensure_spool");
+                    spool.writer.write_all(&line).context("writing spool doc")?;
+                    spool
+                        .writer
+                        .write_all(b"\n")
+                        .context("writing spool newline")?;
+                    spool.current_file_bytes += line.len() as u64 + 1;
+                }
+                self.rotate_if_needed(&slug)?;
+            }
+            self.spools
+                .get_mut(&slug)
+                .expect("dataset spool exists after writes")
+                .writer
+                .flush()
+                .context("flushing spool writer")?;
         }
         Ok(())
     }
 
-    fn rotate(&mut self) -> Result<()> {
-        self.writer.flush().context("flushing spool file before rotation")?;
-        if self.current_file_bytes > 0 {
-            let final_path = self.dir.join(format!(
-                "rigsignal-{}-{}.ndjson",
-                unix_millis()?,
-                self.next_seq
-            ));
-            self.next_seq = self.next_seq.saturating_add(1);
-            std::fs::rename(&self.active_path, &final_path).with_context(|| {
+    fn ensure_spool(&mut self, slug: &str) -> Result<()> {
+        if !self.spools.contains_key(slug) {
+            self.spools
+                .insert(slug.to_string(), DatasetSpool::new(&self.dir, slug)?);
+        }
+        Ok(())
+    }
+
+    fn rotate_if_needed(&mut self, slug: &str) -> Result<()> {
+        let spool = self
+            .spools
+            .get(slug)
+            .expect("dataset spool exists before rotation check");
+        let size_exceeded =
+            self.max_file_bytes > 0 && spool.current_file_bytes > self.max_file_bytes;
+        let age_exceeded = self.max_file_age.as_secs() > 0
+            && spool.current_file_started.elapsed() >= self.max_file_age;
+        if size_exceeded || age_exceeded {
+            self.rotate(slug)?;
+        }
+        Ok(())
+    }
+
+    fn rotate(&mut self, slug: &str) -> Result<()> {
+        let final_path = {
+            let spool = self
+                .spools
+                .get_mut(slug)
+                .expect("dataset spool exists before rotation");
+            spool
+                .writer
+                .flush()
+                .context("flushing spool file before rotation")?;
+            if spool.current_file_bytes == 0 {
+                None
+            } else {
+                Some((
+                    spool.active_path.clone(),
+                    self.dir.join(format!(
+                        "rigsignal-{}-{}-{}.ndjson",
+                        slug,
+                        unix_millis()?,
+                        self.next_seq
+                    )),
+                ))
+            }
+        };
+
+        if let Some((active_path, final_path)) = final_path {
+            std::fs::rename(&active_path, &final_path).with_context(|| {
                 format!(
                     "rotating spool file {} to {}",
-                    self.active_path.display(),
+                    active_path.display(),
                     final_path.display()
                 )
             })?;
+            self.next_seq = self.next_seq.saturating_add(1);
         }
 
+        self.spools
+            .insert(slug.to_string(), DatasetSpool::new(&self.dir, slug)?);
+        Ok(())
+    }
+}
+
+impl DatasetSpool {
+    fn new(dir: &Path, slug: &str) -> Result<Self> {
+        let active_path = dir.join(format!("rigsignal-{}.ndjson.tmp", slug));
         let file = OpenOptions::new()
             .create(true)
             .write(true)
             .truncate(true)
-            .open(&self.active_path)
-            .with_context(|| format!("opening active spool file: {}", self.active_path.display()))?;
-        self.writer = BufWriter::new(file);
-        self.current_file_bytes = 0;
-        self.current_file_started = Instant::now();
-        Ok(())
+            .open(&active_path)
+            .with_context(|| format!("opening active spool file: {}", active_path.display()))?;
+
+        Ok(Self {
+            active_path,
+            writer: BufWriter::new(file),
+            current_file_bytes: 0,
+            current_file_started: Instant::now(),
+        })
     }
+}
+
+fn dataset_slug(dataset: &str) -> String {
+    dataset.rsplit('.').next().unwrap_or(dataset).to_string()
 }
 
 fn unix_millis() -> Result<u128> {
@@ -332,4 +400,73 @@ pub async fn trigger_transform_sync(config: &Config, transform_id: &str) -> Resu
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use std::fs;
+
+    fn temp_spool_dir(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "rigsignal-{}-{}-{}",
+            name,
+            std::process::id(),
+            unix_millis().expect("system clock should be after Unix epoch")
+        ))
+    }
+
+    #[test]
+    fn dataset_slug_uses_last_dot_segment() {
+        assert_eq!(dataset_slug("rigsignal.frame"), "frame");
+        assert_eq!(dataset_slug("rigsignal.ebpf_thread"), "ebpf_thread");
+    }
+
+    #[test]
+    fn write_docs_creates_per_dataset_spool_files() -> Result<()> {
+        let dir = temp_spool_dir("mixed-dataset-spool");
+        let mut writer = SpoolWriter::new(&dir, 0, 0)?;
+        let docs = vec![
+            json!({
+                "data_stream": { "dataset": "rigsignal.frame" },
+                "rigsignal": { "frame": { "fps": 60.0 } }
+            }),
+            json!({
+                "data_stream": { "dataset": "rigsignal.ebpf_thread" },
+                "rigsignal": { "ebpf_thread": { "pid": 1234 } }
+            }),
+            json!({
+                "data_stream": { "dataset": "rigsignal.frame" },
+                "rigsignal": { "frame": { "fps": 59.5 } }
+            }),
+            json!({
+                "rigsignal": { "unknown": true }
+            }),
+        ];
+
+        writer.write_docs(&docs)?;
+
+        let frame_path = dir.join("rigsignal-frame.ndjson.tmp");
+        let ebpf_path = dir.join("rigsignal-ebpf_thread.ndjson.tmp");
+        let unknown_path = dir.join("rigsignal-unknown.ndjson.tmp");
+        assert!(frame_path.exists());
+        assert!(ebpf_path.exists());
+        assert!(unknown_path.exists());
+
+        let frame_lines = fs::read_to_string(&frame_path)?;
+        let ebpf_lines = fs::read_to_string(&ebpf_path)?;
+        let unknown_lines = fs::read_to_string(&unknown_path)?;
+        assert_eq!(frame_lines.lines().count(), 2);
+        assert_eq!(ebpf_lines.lines().count(), 1);
+        assert_eq!(unknown_lines.lines().count(), 1);
+        assert!(frame_lines.contains("\"fps\":60.0"));
+        assert!(frame_lines.contains("\"fps\":59.5"));
+        assert!(ebpf_lines.contains("\"pid\":1234"));
+        assert!(unknown_lines.contains("\"unknown\":true"));
+
+        drop(writer);
+        fs::remove_dir_all(&dir)?;
+        Ok(())
+    }
 }
