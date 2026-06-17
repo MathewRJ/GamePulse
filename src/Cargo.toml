@@ -1,6 +1,6 @@
 [package]
 name = "rigsignal"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 description = "Gaming telemetry agent for Elastic: FPS, frame timing, GPU/CPU/thermal metrics, and game-session detection across Linux, Steam Deck, and Windows"
 license = "Apache-2.0"
