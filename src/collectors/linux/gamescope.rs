@@ -17,6 +17,11 @@
 ///   avg_1s     f64  — mean fps over the tick interval, 1 dp
 ///   low_1pct   i64  — 1% low fps (sorted ascending percentile)
 ///   low_01pct  i64  — 0.1% low fps
+///   frametime_ms f64 — mean sample-derived frametime in ms, 3 dp
+///   stutter_count i64 — samples with derived ft > 2×avg ft (0 default)
+///
+/// Frametime values are approximations derived from per-sample FPS
+/// (1000 / fps), not per-frame measurements.
 ///
 /// Returns None when the game has no focus or collected no samples this tick.
 use crate::collectors::Collector;
@@ -180,19 +185,72 @@ impl Collector for GamescopeFrameCollector {
             (fps_values.iter().sum::<f64>() / fps_values.len() as f64 * 10.0).round() / 10.0;
         let current_fps = *fps_values.last().unwrap() as i64;
 
+        let ft_values: Vec<f64> = fps_values
+            .iter()
+            .filter(|&&fps| fps > 0.0)
+            .map(|&fps| 1000.0 / fps)
+            .collect();
+
         fps_values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         let low_1pct = percentile(&fps_values, 1.0) as i64;
         let low_01pct = percentile(&fps_values, 0.1) as i64;
 
-        Ok(Some(serde_json::json!({
-            "rigsignal": {
-                "fps": {
-                    "current": current_fps,
-                    "avg_1s": avg_fps,
-                    "low_1pct": low_1pct,
-                    "low_01pct": low_01pct,
-                }
-            }
-        })))
+        let mut fps_map = serde_json::Map::new();
+        fps_map.insert("current".to_string(), Value::from(current_fps));
+        fps_map.insert("avg_1s".to_string(), Value::from(avg_fps));
+        fps_map.insert("low_1pct".to_string(), Value::from(low_1pct));
+        fps_map.insert("low_01pct".to_string(), Value::from(low_01pct));
+
+        let stutter_count = if ft_values.is_empty() {
+            0
+        } else {
+            let avg_ft =
+                (ft_values.iter().sum::<f64>() / ft_values.len() as f64 * 1000.0).round() / 1000.0;
+            let stutter_count = ft_values.iter().filter(|&&ft| ft > 2.0 * avg_ft).count() as i64;
+            fps_map.insert("frametime_ms".to_string(), Value::from(avg_ft));
+            stutter_count
+        };
+        fps_map.insert("stutter_count".to_string(), Value::from(stutter_count));
+
+        Ok(Some(serde_json::json!({ "rigsignal": { "fps": fps_map } })))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn collect_emits_sample_derived_frametime_and_stutter_count() {
+        let mut collector = GamescopeFrameCollector::new(None);
+        *collector.samples.lock().unwrap() = vec![60.0, 60.0, 10.0];
+
+        let doc = collector
+            .collect()
+            .expect("gamescope collection should succeed")
+            .expect("gamescope collection should return a document");
+
+        let fps = &doc["rigsignal"]["fps"];
+        assert_eq!(fps["frametime_ms"].as_f64(), Some(44.444));
+        assert_eq!(fps["stutter_count"].as_i64(), Some(1));
+        assert_eq!(fps["current"].as_i64(), Some(10));
+        assert_eq!(fps["avg_1s"].as_f64(), Some(43.3));
+        assert_eq!(fps["low_1pct"].as_i64(), Some(10));
+        assert_eq!(fps["low_01pct"].as_i64(), Some(10));
+    }
+
+    #[test]
+    fn collect_ignores_non_positive_fps_when_deriving_frametime() {
+        let mut collector = GamescopeFrameCollector::new(None);
+        *collector.samples.lock().unwrap() = vec![60.0, 0.0, -10.0];
+
+        let doc = collector
+            .collect()
+            .expect("gamescope collection should succeed")
+            .expect("gamescope collection should return a document");
+
+        let fps = &doc["rigsignal"]["fps"];
+        assert_eq!(fps["frametime_ms"].as_f64(), Some(16.667));
+        assert_eq!(fps["stutter_count"].as_i64(), Some(0));
     }
 }
