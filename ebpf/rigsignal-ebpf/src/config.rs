@@ -54,7 +54,11 @@ fn default_probe_path() -> PathBuf {
     // Match the BPF probe profile to the daemon profile so `cargo xtask build-ebpf`
     // (debug, default) and `cargo xtask build-ebpf --release` both work without
     // needing --probe-path.
-    let profile = if cfg!(debug_assertions) { "debug" } else { "release" };
+    let profile = if cfg!(debug_assertions) {
+        "debug"
+    } else {
+        "release"
+    };
     workspace
         .join("target/bpfel-unknown-none")
         .join(profile)
