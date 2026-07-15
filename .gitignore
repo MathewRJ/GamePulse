@@ -49,3 +49,7 @@ node_modules/
 
 # docs/archive/ is intentionally tracked — sanitised history for contributors
 !docs/archive/
+
+# AI orchestration artifacts stay out of this repo (see Workflow repo)
+worktrees/
+packaging/.claude/
