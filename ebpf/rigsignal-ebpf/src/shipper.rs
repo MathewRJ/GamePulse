@@ -73,11 +73,8 @@ impl EsShipper {
         let status = resp.status();
         if !status.is_success() {
             let text = resp.text().await.unwrap_or_default();
-            error!(
-                "ES bulk API returned {}: {}",
-                status,
-                &text[..text.len().min(500)]
-            );
+            let preview: String = text.chars().take(500).collect();
+            error!("ES bulk API returned {}: {}", status, preview);
             // Docs are dropped on error — eBPF telemetry is best-effort.
             return Ok(());
         }
@@ -90,11 +87,45 @@ impl EsShipper {
             .unwrap_or(false)
         {
             if let Some(items) = resp_body.get("items").and_then(|i| i.as_array()) {
-                let error_count = items
-                    .iter()
-                    .filter(|item| item.get("index").and_then(|idx| idx.get("error")).is_some())
-                    .count();
-                warn!("{}/{} docs had bulk errors", error_count, count);
+                let (conflict_count, real_error_count, first_reason) = items.iter().fold(
+                    (0usize, 0usize, None::<&str>),
+                    |(conflicts, errors, reason), item| {
+                        let Some(op) = item.get("create") else {
+                            return (conflicts, errors, reason);
+                        };
+                        let Some(err) = op.get("error") else {
+                            return (conflicts, errors, reason);
+                        };
+                        let is_conflict = err
+                            .get("type")
+                            .and_then(|t| t.as_str())
+                            == Some("version_conflict_engine_exception");
+                        if is_conflict {
+                            (conflicts + 1, errors, reason)
+                        } else {
+                            let r = reason.or_else(|| {
+                                err.get("reason").and_then(|r| r.as_str())
+                            });
+                            (conflicts, errors + 1, r)
+                        }
+                    },
+                );
+                if conflict_count > 0 {
+                    debug!(
+                        "{}/{} docs skipped — duplicate TSDB id (version conflict)",
+                        conflict_count, count
+                    );
+                }
+                if real_error_count > 0 {
+                    if let Some(reason) = first_reason {
+                        warn!(
+                            "{}/{} docs had bulk errors; first reason: {}",
+                            real_error_count, count, reason
+                        );
+                    } else {
+                        warn!("{}/{} docs had bulk errors", real_error_count, count);
+                    }
+                }
             }
         }
 
