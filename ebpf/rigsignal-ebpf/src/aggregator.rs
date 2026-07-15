@@ -2,10 +2,10 @@
 /// and computes 1-second snapshots ready for Elasticsearch.
 use crate::es_model::{
     BlockIoSnapshot, DataStream, EbpfDocument, EbpfMetricDoc, EbpfPayload, EbpfThreadDoc,
-    FutexSnapshot, RigSignalFields, RigSignalThreadFields, GpuFenceSnapshot, GpuSchedSnapshot,
-    GpuSubmitSnapshot, HostFields, IrqKindSnapshot, IrqSnapshot, LatencyHistogram, MemSnapshot,
-    MigrationSnapshot, OsFields, RunqueueSnapshot, SessionRef, StutterCorrelation, ThreadMetric,
-    VfsOpSnapshot, VfsSnapshot,
+    FutexSnapshot, GpuFenceSnapshot, GpuSchedSnapshot, GpuSubmitSnapshot, HostFields,
+    IrqKindSnapshot, IrqSnapshot, LatencyHistogram, MemSnapshot, MigrationSnapshot, OsFields,
+    RigSignalFields, RigSignalThreadFields, RunqueueSnapshot, SessionRef, StutterCorrelation,
+    ThreadMetric, VfsOpSnapshot, VfsSnapshot,
 };
 use chrono::Utc;
 use std::collections::HashMap;

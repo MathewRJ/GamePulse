@@ -90,8 +90,8 @@ fn collect_tids_recursive(pid: u32, tids: &mut Vec<u32>, depth: u8) {
 pub fn read_session(path: &Path) -> Result<(SessionInfo, Vec<u32>)> {
     let content = std::fs::read_to_string(path)
         .with_context(|| format!("reading session file: {}", path.display()))?;
-    let mut info: SessionInfo = serde_json::from_str(&content)
-        .with_context(|| "parsing session.json")?;
+    let mut info: SessionInfo =
+        serde_json::from_str(&content).with_context(|| "parsing session.json")?;
     // Back-compat: if the collector didn't write game_pids, fall back to game_pid.
     if info.game_pids.is_empty() {
         info.game_pids = vec![info.game_pid];
@@ -108,6 +108,15 @@ pub fn read_session(path: &Path) -> Result<(SessionInfo, Vec<u32>)> {
     Ok((info, tids))
 }
 
+fn active_session_state(path: &Path) -> Result<SessionState> {
+    let (info, tids) = read_session(path)?;
+    Ok(SessionState {
+        active: true,
+        tids,
+        info: Some(info),
+    })
+}
+
 /// Spawn the session watcher task.
 ///
 /// Returns a shared `Arc<Mutex<SessionState>>` that other tasks can read,
@@ -121,12 +130,8 @@ pub fn spawn_watcher(
 
     // Seed with current state if session file already exists
     let initial_state = if session_path.exists() {
-        match read_session(&session_path) {
-            Ok((info, tids)) => SessionState {
-                active: true,
-                tids: tids.clone(),
-                info: Some(info),
-            },
+        match active_session_state(&session_path) {
+            Ok(state) => state,
             Err(e) => {
                 warn!("could not read existing session file: {e}");
                 SessionState::default()
@@ -160,10 +165,7 @@ pub fn spawn_watcher(
     let _ = std::fs::create_dir_all(&watch_dir);
     {
         use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(
-            &watch_dir,
-            std::fs::Permissions::from_mode(0o1777),
-        );
+        let _ = std::fs::set_permissions(&watch_dir, std::fs::Permissions::from_mode(0o1777));
     }
 
     std::thread::spawn(move || {
@@ -200,12 +202,7 @@ pub fn spawn_watcher(
                     // an active session — avoids re-populating GAME_PIDS every 30 s.
                     let already_active = state_clone.lock().unwrap().active;
                     if !already_active && session_path.exists() {
-                        if let Ok((info, tids)) = read_session(&session_path) {
-                            let new_state = SessionState {
-                                active: true,
-                                tids,
-                                info: Some(info),
-                            };
+                        if let Ok(new_state) = active_session_state(&session_path) {
                             *state_clone.lock().unwrap() = new_state.clone();
                             let _ = tx.try_send(new_state);
                         }
@@ -216,22 +213,15 @@ pub fn spawn_watcher(
             };
 
             // Only react to events on our specific file
-            let affects_session = event
-                .paths
-                .iter()
-                .any(|p| p == &session_path);
+            let affects_session = event.paths.iter().any(|p| p == &session_path);
             if !affects_session {
                 continue;
             }
 
             let new_state = match event.kind {
                 EventKind::Create(_) | EventKind::Modify(_) => {
-                    match read_session(&session_path) {
-                        Ok((info, tids)) => SessionState {
-                            active: true,
-                            tids,
-                            info: Some(info),
-                        },
+                    match active_session_state(&session_path) {
+                        Ok(state) => state,
                         Err(e) => {
                             warn!("error reading session file: {e}");
                             continue;
@@ -239,8 +229,18 @@ pub fn spawn_watcher(
                     }
                 }
                 EventKind::Remove(_) => {
-                    info!("session file removed — game ended");
-                    SessionState::default()
+                    if session_path.exists() {
+                        match active_session_state(&session_path) {
+                            Ok(state) => state,
+                            Err(e) => {
+                                warn!("error reading replaced session file: {e}");
+                                continue;
+                            }
+                        }
+                    } else {
+                        info!("session file removed — game ended");
+                        SessionState::default()
+                    }
                 }
                 _ => continue,
             };
@@ -251,4 +251,121 @@ pub fn spawn_watcher(
     });
 
     Ok((state, rx))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_session_path(test_name: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir()
+            .join(format!(
+                "rigsignal-ebpf-{test_name}-{}-{nanos}",
+                std::process::id()
+            ))
+            .join("session.json")
+    }
+
+    fn write_session_file(path: &Path, session_id: &str, game_pid: u32) {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let doc = json!({
+            "session_id": session_id,
+            "game_pid": game_pid,
+            "game_name": "test-game",
+            "game_pids": [game_pid],
+        });
+        std::fs::write(path, serde_json::to_string(&doc).unwrap()).unwrap();
+    }
+
+    async fn recv_session_id(
+        rx: &mut mpsc::Receiver<SessionState>,
+        expected_session_id: &str,
+    ) -> SessionState {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(1);
+        loop {
+            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+            assert!(
+                !remaining.is_zero(),
+                "timed out waiting for session {expected_session_id}"
+            );
+            match tokio::time::timeout(remaining, rx.recv()).await {
+                Ok(Some(state))
+                    if state.info.as_ref().map(|i| i.session_id.as_str())
+                        == Some(expected_session_id) =>
+                {
+                    return state;
+                }
+                Ok(Some(_)) => continue,
+                Ok(None) => panic!("watcher channel closed"),
+                Err(_) => panic!("timed out waiting for session {expected_session_id}"),
+            }
+        }
+    }
+
+    async fn write_until_observed(
+        path: &Path,
+        rx: &mut mpsc::Receiver<SessionState>,
+        session_id: &str,
+        game_pid: u32,
+    ) -> SessionState {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(1);
+        loop {
+            write_session_file(path, session_id, game_pid);
+            match tokio::time::timeout(Duration::from_millis(100), rx.recv()).await {
+                Ok(Some(state))
+                    if state.info.as_ref().map(|i| i.session_id.as_str()) == Some(session_id) =>
+                {
+                    return state;
+                }
+                Ok(Some(_)) | Err(_) => {
+                    assert!(
+                        tokio::time::Instant::now() < deadline,
+                        "timed out waiting for session {session_id}"
+                    );
+                    tokio::time::sleep(Duration::from_millis(25)).await;
+                }
+                Ok(None) => panic!("watcher channel closed"),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn watcher_observes_in_place_session_update() {
+        let session_path = temp_session_path("in-place");
+        write_session_file(&session_path, "initial", 1111);
+
+        let (_state, mut rx) = spawn_watcher(session_path.clone()).unwrap();
+        let initial = recv_session_id(&mut rx, "initial").await;
+        assert!(initial.active);
+
+        let updated = write_until_observed(&session_path, &mut rx, "updated", 2222).await;
+        assert!(updated.active);
+        assert_eq!(updated.info.unwrap().game_pid, 2222);
+
+        let _ = std::fs::remove_dir_all(session_path.parent().unwrap());
+    }
+
+    #[tokio::test]
+    async fn watcher_observes_session_after_delete_and_recreate() {
+        let session_path = temp_session_path("delete-recreate");
+        write_session_file(&session_path, "initial", 1111);
+
+        let (_state, mut rx) = spawn_watcher(session_path.clone()).unwrap();
+        let _ = recv_session_id(&mut rx, "initial").await;
+        let _ = write_until_observed(&session_path, &mut rx, "ready", 2222).await;
+
+        std::fs::remove_file(&session_path).unwrap();
+        let replaced = write_until_observed(&session_path, &mut rx, "recreated", 3333).await;
+
+        assert!(replaced.active);
+        assert_eq!(replaced.info.unwrap().game_pid, 3333);
+
+        let _ = std::fs::remove_dir_all(session_path.parent().unwrap());
+    }
 }

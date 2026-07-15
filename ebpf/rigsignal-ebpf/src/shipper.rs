@@ -96,16 +96,12 @@ impl EsShipper {
                         let Some(err) = op.get("error") else {
                             return (conflicts, errors, reason);
                         };
-                        let is_conflict = err
-                            .get("type")
-                            .and_then(|t| t.as_str())
+                        let is_conflict = err.get("type").and_then(|t| t.as_str())
                             == Some("version_conflict_engine_exception");
                         if is_conflict {
                             (conflicts + 1, errors, reason)
                         } else {
-                            let r = reason.or_else(|| {
-                                err.get("reason").and_then(|r| r.as_str())
-                            });
+                            let r = reason.or_else(|| err.get("reason").and_then(|r| r.as_str()));
                             (conflicts, errors + 1, r)
                         }
                     },
