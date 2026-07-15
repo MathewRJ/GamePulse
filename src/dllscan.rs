@@ -3,7 +3,7 @@
 /// Reads the loaded-module list of a running process and infers:
 ///   - Graphics API  → written to `Target.graphics_api` as an env-based fallback
 ///   - Upscaler tech → written to `rigsignal.settings.upscaler.tech` in the overlay
-///   - Frame-gen tech → written to `rigsignal.settings.frame_gen` in the overlay
+///   - Frame-gen tech → written to `rigsignal.settings.frame_gen.tech` in the overlay
 ///
 /// Detection works because games (and Proton) load DLLs/SOs whose names encode
 /// the technology: `libdxvk.so.2`, `nvngx_dlss.dll`, `libxess.so`,
@@ -36,8 +36,12 @@ pub fn graphics_api_from_maps(pid: u32) -> Option<String> {
 /// was detected. Sets `source = "auto_detected"`, `confidence = "medium"`.
 pub fn settings_overlay_from_maps(pid: u32) -> Value {
     let paths = read_mapped_paths(pid);
-    let upscaler = detect_upscaler_from_paths(&paths);
-    let frame_gen = detect_frame_gen_from_paths(&paths);
+    settings_overlay_from_paths(&paths)
+}
+
+fn settings_overlay_from_paths(paths: &[String]) -> Value {
+    let upscaler = detect_upscaler_from_paths(paths);
+    let frame_gen = detect_frame_gen_from_paths(paths);
 
     let mut settings = serde_json::Map::new();
 
@@ -45,7 +49,7 @@ pub fn settings_overlay_from_maps(pid: u32) -> Value {
         settings.insert("upscaler".into(), json!({ "tech": tech }));
     }
     if let Some(fg) = frame_gen {
-        settings.insert("frame_gen".into(), json!(fg));
+        settings.insert("frame_gen".into(), json!({ "tech": fg }));
     }
 
     if settings.is_empty() {
@@ -121,7 +125,7 @@ pub(crate) fn detect_upscaler_from_paths(paths: &[String]) -> Option<String> {
 }
 
 /// Detect frame-generation technology from mapped file paths.
-/// Returns a string matching the `rigsignal.settings.frame_gen` field values.
+/// Returns a string matching the `rigsignal.settings.frame_gen.tech` field values.
 pub(crate) fn detect_frame_gen_from_paths(paths: &[String]) -> Option<String> {
     let any = |fragment: &str| paths.iter().any(|p| p.contains(fragment));
 
@@ -395,21 +399,21 @@ mod tests {
         assert!(detect_frame_gen_from_paths(&p).is_none());
     }
 
-    // ── settings_overlay_from_maps ────────────────────────────────────────────
+    // ── Settings overlay ──────────────────────────────────────────────────────
 
     #[test]
     fn test_overlay_null_when_no_hints() {
         // No upscaler or frame-gen in paths → Null overlay (nothing to merge)
         let p = paths(&["/usr/lib/x86_64-linux-gnu/libvulkan.so.1"]);
-        let upscaler = detect_upscaler_from_paths(&p);
-        let frame_gen = detect_frame_gen_from_paths(&p);
-        let mut settings = serde_json::Map::new();
-        if let Some(t) = upscaler {
-            settings.insert("upscaler".into(), json!({ "tech": t }));
-        }
-        if let Some(fg) = frame_gen {
-            settings.insert("frame_gen".into(), json!(fg));
-        }
-        assert!(settings.is_empty());
+        assert!(settings_overlay_from_paths(&p).is_null());
+    }
+
+    #[test]
+    fn test_overlay_emits_frame_gen_tech_object() {
+        let p = paths(&["/pfx/drive_c/windows/system32/nvngx_dlssg.dll"]);
+        let overlay = settings_overlay_from_paths(&p);
+        let settings = &overlay["rigsignal"]["settings"];
+        assert_eq!(settings["frame_gen"]["tech"], "dlss3");
+        assert!(settings["frame_gen"].is_object());
     }
 }
