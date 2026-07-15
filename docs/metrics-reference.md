@@ -78,6 +78,12 @@ One document on game start, updated on game end. The primary correlation anchor.
 | `rigsignal.settings.confidence` | keyword | `high` \| `medium` \| `low` |
 | `rigsignal.settings.notes` | keyword | Free-text user notes |
 
+Migration note: documents with a scalar `rigsignal.settings.frame_gen` predate
+RigSignal 0.2.3. From 0.2.3 onward, the field is an object with the technology at
+`rigsignal.settings.frame_gen.tech`; reindex affected historical documents into a
+new index or roll over to a new backing index before mixing both shapes in one data
+stream.
+
 ### Session summary (updated on game exit)
 
 | Field | Type | Description |

@@ -117,7 +117,7 @@ pub fn to_overlay(profile: &GameProfile) -> Value {
     }
 
     if let Some(fg) = &s.frame_gen_tech {
-        settings.insert("frame_gen".into(), json!(fg));
+        settings.insert("frame_gen".into(), json!({ "tech": fg }));
     }
 
     if let Some(features) = &s.features_active {
@@ -317,6 +317,7 @@ mod tests {
             },
             settings: ProfileSettings {
                 preset: Some("ultra".into()),
+                frame_gen_tech: Some("dlss3".into()),
                 notes: Some("test note".into()),
                 ..Default::default()
             },
@@ -326,6 +327,8 @@ mod tests {
         assert_eq!(settings["source"], "profile");
         assert_eq!(settings["confidence"], "medium");
         assert_eq!(settings["preset"], "ultra");
+        assert_eq!(settings["frame_gen"]["tech"], "dlss3");
+        assert!(settings["frame_gen"].is_object());
     }
 
     #[test]
