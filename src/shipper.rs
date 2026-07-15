@@ -99,6 +99,27 @@ impl SpoolWriter {
         Ok(())
     }
 
+    pub fn rotate_stale_files(&mut self) -> Result<()> {
+        if self.max_file_age.as_secs() == 0 {
+            return Ok(());
+        }
+
+        let stale_slugs: Vec<String> = self
+            .spools
+            .iter()
+            .filter(|(_, spool)| {
+                spool.current_file_bytes > 0
+                    && spool.current_file_started.elapsed() >= self.max_file_age
+            })
+            .map(|(slug, _)| slug.clone())
+            .collect();
+
+        for slug in stale_slugs {
+            self.rotate(&slug)?;
+        }
+        Ok(())
+    }
+
     fn ensure_spool(&mut self, slug: &str) -> Result<()> {
         if !self.spools.contains_key(slug) {
             self.spools
@@ -407,6 +428,7 @@ mod tests {
     use super::*;
     use serde_json::json;
     use std::fs;
+    use std::time::Duration;
 
     fn temp_spool_dir(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!(
@@ -468,5 +490,52 @@ mod tests {
         drop(writer);
         fs::remove_dir_all(&dir)?;
         Ok(())
+    }
+
+    #[test]
+    fn rotate_stale_files_rotates_pending_file_without_new_writes() -> Result<()> {
+        let dir = temp_spool_dir("stale-spool");
+        let mut writer = SpoolWriter::new(&dir, 0, 1)?;
+        let docs = vec![json!({
+            "data_stream": { "dataset": "rigsignal.frame" },
+            "rigsignal": { "frame": { "fps": 60.0 } }
+        })];
+
+        writer.write_docs(&docs)?;
+        let active_path = dir.join("rigsignal-frame.ndjson.tmp");
+        assert!(active_path.exists());
+
+        std::thread::sleep(Duration::from_millis(1100));
+        writer.rotate_stale_files()?;
+
+        let final_files = final_spool_files(&dir)?;
+        assert_eq!(final_files.len(), 1);
+        assert!(active_path.exists());
+        assert_eq!(fs::read_to_string(&active_path)?, "");
+
+        let final_lines = fs::read_to_string(&final_files[0])?;
+        assert_eq!(final_lines.lines().count(), 1);
+        assert!(final_lines.contains("\"fps\":60.0"));
+
+        std::thread::sleep(Duration::from_millis(1100));
+        writer.rotate_stale_files()?;
+        assert_eq!(final_spool_files(&dir)?.len(), 1);
+
+        drop(writer);
+        fs::remove_dir_all(&dir)?;
+        Ok(())
+    }
+
+    fn final_spool_files(dir: &Path) -> Result<Vec<PathBuf>> {
+        let mut paths = Vec::new();
+        for entry in fs::read_dir(dir)? {
+            let path = entry?.path();
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if name.starts_with("rigsignal-frame-") && name.ends_with(".ndjson") {
+                paths.push(path);
+            }
+        }
+        paths.sort();
+        Ok(paths)
     }
 }
