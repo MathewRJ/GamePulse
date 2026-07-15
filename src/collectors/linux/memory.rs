@@ -4,6 +4,7 @@
 /// /proc/<pid>/stat for game-process memory and page fault metrics.
 ///
 /// Output fields (rigsignal.memory.*):
+///   total_mb          u64  — MemTotal in MB
 ///   system_used_mb    u64  — MemTotal - MemAvailable in MB
 ///   page_cache_mb     u64  — Cached in MB
 ///   shared_mb         u64  — Shmem in MB
@@ -114,12 +115,14 @@ impl Collector for MemoryCollector {
         let swap_total_kb = info.get("SwapTotal").copied().unwrap_or(0);
         let swap_free_kb = info.get("SwapFree").copied().unwrap_or(0);
 
+        let total_mb = mem_total_kb / 1024;
         let system_used_mb = mem_used_kb / 1024;
         let page_cache_mb = page_cache_kb / 1024;
         let shared_mb = shared_kb / 1024;
         let swap_used_mb = swap_total_kb.saturating_sub(swap_free_kb) / 1024;
 
         let mut mem = json!({
+            "total_mb": total_mb,
             "system_used_mb": system_used_mb,
             "page_cache_mb": page_cache_mb,
             "shared_mb": shared_mb,
@@ -141,5 +144,32 @@ impl Collector for MemoryCollector {
         }
 
         Ok(Some(json!({ "rigsignal": { "memory": mem } })))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn collect_emits_total_mb_from_memtotal() {
+        let expected_total_mb = read_meminfo()
+            .get("MemTotal")
+            .copied()
+            .expect("MemTotal should be present in /proc/meminfo")
+            / 1024;
+
+        let mut collector = MemoryCollector::new(None);
+        let doc = collector
+            .collect()
+            .expect("memory collection should succeed")
+            .expect("memory collection should return a document");
+
+        let total_mb = doc["rigsignal"]["memory"]["total_mb"]
+            .as_u64()
+            .expect("rigsignal.memory.total_mb should be a u64");
+
+        assert!(total_mb > 0);
+        assert_eq!(total_mb, expected_total_mb);
     }
 }
