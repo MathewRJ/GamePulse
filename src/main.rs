@@ -463,6 +463,10 @@ fn build_summary_doc(
     let mut summary = serde_json::Map::new();
     summary.insert("ended".to_string(), Value::Bool(true));
     summary.insert("duration_s".to_string(), Value::from(duration_s));
+    summary.insert(
+        "fps_coverage_s".to_string(),
+        Value::from(acc.fps_samples.len() as i64),
+    );
     summary.insert("stutter_count".to_string(), Value::from(acc.stutter_total));
 
     if !acc.fps_samples.is_empty() {
@@ -1067,5 +1071,42 @@ mod tests {
         std::env::set_var("RIGSIGNAL_LOG", "error");
         assert_eq!(resolve_log_filter(false, None), "error");
         std::env::remove_var("RIGSIGNAL_LOG");
+    }
+
+    #[test]
+    fn summary_total_frames_reports_sparse_fps_coverage() {
+        let mut acc = SessionAccumulators::new();
+        acc.fps_samples = vec![60.0, 30.0, 45.0];
+
+        let summary = build_summary_doc(
+            &session::SessionManager::new(),
+            &json!({}),
+            "test-host",
+            10,
+            &acc,
+            None,
+        );
+        let summary = &summary["rigsignal"]["summary"];
+
+        assert_eq!(summary["total_frames"], 135);
+        assert_eq!(summary["fps_coverage_s"], 3);
+    }
+
+    #[test]
+    fn summary_fps_coverage_matches_duration_with_full_coverage() {
+        let mut acc = SessionAccumulators::new();
+        acc.fps_samples = vec![60.0, 60.0, 60.0];
+
+        let summary = build_summary_doc(
+            &session::SessionManager::new(),
+            &json!({}),
+            "test-host",
+            3,
+            &acc,
+            None,
+        );
+        let summary = &summary["rigsignal"]["summary"];
+
+        assert_eq!(summary["fps_coverage_s"], summary["duration_s"]);
     }
 }

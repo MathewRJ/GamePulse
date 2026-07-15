@@ -93,6 +93,8 @@ stream.
 | `rigsignal.summary.fps_avg` | float | Average FPS over session |
 | `rigsignal.summary.fps_1pct_low` | float | 1% low FPS over session |
 | `rigsignal.summary.fps_01pct_low` | float | 0.1% low FPS over session |
+| `rigsignal.summary.total_frames` | long | Frames counted by summing `avg_1s` FPS samples over instrumented one-second ticks only; not session duration × average FPS. |
+| `rigsignal.summary.fps_coverage_s` | long | Number of instrumented seconds (FPS samples); the coverage denominator for `total_frames`, to compare with session duration. |
 | `rigsignal.summary.bottleneck_dominant` | keyword | `gpu` \| `cpu` \| `memory` \| `storage` |
 
 ---
