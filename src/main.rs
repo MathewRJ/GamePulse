@@ -996,7 +996,13 @@ async fn main() -> Result<()> {
                     } else {
                         tracing::debug!("Tick {}: spooled {} docs", tick_num, n);
                     }
-                        }
+                }
+
+                if let Some(writer) = spool_writer.as_mut() {
+                    if let Err(e) = writer.rotate_stale_files() {
+                        tracing::warn!("Tick {} spool rotation error: {}", tick, e);
+                    }
+                }
             }
 
             _ = &mut shutdown_rx => {
