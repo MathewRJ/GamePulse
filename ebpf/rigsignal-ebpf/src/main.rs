@@ -141,8 +141,12 @@ async fn main() -> Result<()> {
     let api_key = config.elasticsearch.api_key.as_deref().ok_or_else(|| {
         anyhow::anyhow!("No API key: set ES_API_KEY env var or api_key in rigsignal.toml")
     })?;
-    let mut shipper =
-        EsShipper::new(&config.elasticsearch.endpoint, api_key).context("creating ES shipper")?;
+    let mut shipper = EsShipper::new(
+        &config.elasticsearch.endpoint,
+        api_key,
+        config.elasticsearch.ca_cert.as_deref(),
+    )
+    .context("creating ES shipper")?;
 
     // Aggregation interval
     let interval_duration = Duration::from_secs(config.ebpf.interval_s);

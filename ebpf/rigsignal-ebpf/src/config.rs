@@ -18,6 +18,8 @@ pub struct ElasticsearchConfig {
     pub endpoint: String,
     #[serde(default)]
     pub api_key: Option<String>,
+    #[serde(default)]
+    pub ca_cert: Option<PathBuf>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -112,6 +114,11 @@ impl Config {
         if let Ok(url) = std::env::var("ES_URL") {
             if !url.is_empty() {
                 self.elasticsearch.endpoint = url;
+            }
+        }
+        if let Ok(ca_cert) = std::env::var("ES_CA_CERT") {
+            if !ca_cert.is_empty() {
+                self.elasticsearch.ca_cert = Some(PathBuf::from(ca_cert));
             }
         }
     }

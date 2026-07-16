@@ -4,7 +4,8 @@
 /// Uses the same API key and endpoint as the Python collector.
 use crate::es_model::EbpfDocument;
 use anyhow::{Context, Result};
-use reqwest::Client;
+use reqwest::{Certificate, Client};
+use std::path::Path;
 use tracing::{debug, error, warn};
 
 pub struct EsShipper {
@@ -19,11 +20,18 @@ pub struct EsShipper {
 }
 
 impl EsShipper {
-    pub fn new(endpoint: &str, api_key: &str) -> Result<Self> {
-        let client = Client::builder()
-            .timeout(std::time::Duration::from_secs(10))
-            .build()
-            .context("building HTTP client")?;
+    pub fn new(endpoint: &str, api_key: &str, ca_cert: Option<&Path>) -> Result<Self> {
+        let mut builder = Client::builder().timeout(std::time::Duration::from_secs(10));
+
+        if let Some(path) = ca_cert {
+            let pem = std::fs::read(path)
+                .with_context(|| format!("reading Elasticsearch CA cert: {}", path.display()))?;
+            let cert = Certificate::from_pem(&pem)
+                .with_context(|| format!("parsing Elasticsearch CA cert: {}", path.display()))?;
+            builder = builder.add_root_certificate(cert);
+        }
+
+        let client = builder.build().context("building HTTP client")?;
 
         let endpoint = format!("{}/_bulk", endpoint.trim_end_matches('/'));
 
