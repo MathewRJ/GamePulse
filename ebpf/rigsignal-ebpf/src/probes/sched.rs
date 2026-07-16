@@ -53,8 +53,9 @@ impl SchedProbe {
 
         // Insert new TIDs (value is unused — map acts as a set)
         for &tid in tids {
-            map.insert(tid, 1u8, 0)
-                .context("inserting TID into GAME_PIDS")?;
+            if let Err(e) = map.insert(tid, 1u8, 0) {
+                warn!(tid, "could not insert TID into GAME_PIDS: {e}");
+            }
         }
 
         debug!("updated GAME_PIDS with {} TIDs", tids.len());
