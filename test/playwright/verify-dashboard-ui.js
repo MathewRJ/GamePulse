@@ -34,6 +34,8 @@ const FAILURE_NEEDLES = [
   "Could not locate field",
   "Unknown column",
   "verification_exception",
+  "Provided column name or index is invalid",
+  "parsing_exception",
 ];
 
 function parseArgs(argv) {
