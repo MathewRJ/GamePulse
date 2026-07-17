@@ -1,6 +1,6 @@
 [package]
 name = "rigsignal-ebpf"
-version = "0.2.1"
+version = "0.2.3"
 edition = "2021"
 description = "RigSignal eBPF daemon — kernel telemetry for gaming performance"
 

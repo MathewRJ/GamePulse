@@ -6,6 +6,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.2.3] — 2026-07-17
+
+Collector/daemon fix pack from the 2026-07-14 HFW live-monitored session (evidence-linked
+backlog in `tasks/rigsignal-0.2.3-collector-fixes.md`). eBPF daemon crates align on 0.2.3.
+
+### Fixed
+
+- **Sparse-stream spool rotation** (item 1): rotation timer so sparse datasets flush on
+  time, not only on write.
+- **eBPF session watch survives file replacement** (item 2): Remove-event race on
+  session.json re-arm fixed (watcher was already dir-based; diagnosis corrected).
+- **eBPF coverage for games already running at daemon start** (seed fix): games running
+  before the daemon/probes started produced zero `ebpf`/`ebpf_thread` docs for the whole
+  session (live-pinned: FC6, 7 h). GAME_PIDS seeding now unions recorded PIDs with a
+  bounded `/proc` SteamGameId/SteamAppId environ scan, walks children of every thread
+  (Wine/Proton spawn from worker threads), collects up to 1024 TIDs (was 256), and
+  refreshes the TID set every 30 s while a session is active.
+- **frame_gen emitter unification** (item 7): all emitters use the object form; scalar
+  docs from ≤0.2.2 need reindex (see docs note).
+
+### Added
+
+- **Gamescope frametime/stutter** (item 3): `fps.frametime_ms` + `fps.stutter_count`
+  (sample-derived approximations) on the gamescope path.
+- **PipeWire audio enrichment** (item 4): `sink_name`, `card_profile`, `channels`,
+  `sample_format`, `sample_rate_hz`, `quantum`, `driver_latency_ms` — makes A/V-lag
+  card-profile diagnosis a dashboard read.
+- **Per-tick memory total** (item 6): `rigsignal.memory.total_mb`.
+- **Honest session totals** (item 8): `fps_coverage_s` + documented `total_frames`
+  semantics.
+
+### Known issues
+
+- **gpu_sched probe does not attach on SteamOS 6.16** (item 9): the valve kernel exposes
+  pre-rename tracepoints (`drm_sched_job`/`drm_run_job`); probe targets the post-6.16
+  names. Loader warn-skips cleanly (8/9 probes). Legacy-variant port with attach-time
+  format-file offset verification is designed and scheduled for 0.2.4.
+- **Client-side stream stats** (item 5): design accepted (remote_connections.txt tail +
+  DRM fdinfo decode saturation); implementation in 0.2.4.
+
 ## [0.2.1] — 2026-06-11
 
 ### Fixed
