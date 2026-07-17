@@ -1,52 +1,49 @@
-# RigSignal 0.2.3 paired deploy (2026-07-17)
+# RigSignal gpu_sched-port paired deploy (2026-07-17, post-0.2.3 — pre-0.2.4-bump build off main ad4da7d)
 
-Artifacts in this directory (hashes in `SHA256SUMS`):
+Artifacts in this directory (hashes in `SHA256SUMS`); staged on both boxes at
+`/tmp/rigsignal-gpusched/` (sha256-verified over SSH).
 
-| file | version | installs to | who installs |
+| file | state | installs to | who installs |
 |---|---|---|---|
-| `rigsignal-agent` | 0.2.3 (`--version` attests) | `~/.local/bin/rigsignal-agent` | orchestrator over SSH (user service) |
-| `rigsignal-ebpf` | 0.2.3 (no `--version` flag; attest by sha256) | `/usr/local/bin/rigsignal-ebpf` | **user** (sudo) |
-| `rigsignal-ebpf-probes` | unchanged from 07-16 (`4a25554f…` — seed fix is userspace-only) | `/usr/local/lib/rigsignal/rigsignal-ebpf-probes` | **user** (sudo; re-install is a same-hash no-op) |
+| `rigsignal-agent` | UNCHANGED 0.2.3 (`65b6bc20…`) — not part of this deploy | — | — |
+| `rigsignal-ebpf` | gpu_sched port (`feeb6d5a…`; attest by sha256, crate still says 0.2.3 — bump is gated on live validation) | `/usr/local/bin/rigsignal-ebpf` | **user** (sudo) |
+| `rigsignal-ebpf-probes` | gpu_sched port (`a301f174…` — BPF contract changed: new `GPU_SCHED_KEY_OFFSET` config map; MUST install as a pair) | `/usr/local/lib/rigsignal/rigsignal-ebpf-probes` | **user** (sudo) |
 
-Targets: **GamingPC** `deck@192.168.50.254` AND **StreamClient** `deck@192.168.50.162`
-(both run `rigsignal-agent.service` (user) + `rigsignal-ebpf.service` (system)).
+Targets: **GamingPC** `deck@192.168.50.254` AND **StreamClient** `deck@192.168.50.162`.
+Unlike the 0.2.3 deploy, BOTH pair files changed — never install one without the other.
 
-## What 0.2.3 changes at runtime
+## What this deploy changes at runtime
 
-Agent: PipeWire audio enrichment (item 4), plus items 1/2/3/6/7/8 already validated
-on-box 2026-07-16. eBPF daemon: running-game seed fix — games already running at daemon
-start now get GAME_PIDS coverage (environ-scan union, per-thread children walk, 1024-TID
-cap, 30 s active refresh).
+gpu_sched probe attaches on valve 6.16 kernels via the legacy tracepoint pair
+(`drm_sched_job`/`drm_run_job`), keyed on `id` at an attach-time-parsed offset; the
+renamed pair's offset is also parsed at attach now (no hardcoded offsets remain).
+Expected on both boxes: **9/9 probes loaded** and one info log line with
+`variant=legacy key_field=id key_offset=32`. Emitted ES fields are unchanged.
 
-## Agent (orchestrator-run, both boxes) — DONE over SSH, see session log
+## Install (USER-run, sudo, both boxes)
 
 ```sh
-scp rigsignal-agent SHA256SUMS deck@<box>:/tmp/rigsignal-0.2.3/
 ssh deck@<box>
-  cd /tmp/rigsignal-0.2.3 && sha256sum -c --ignore-missing SHA256SUMS
-  cp -a ~/.local/bin/rigsignal-agent ~/.local/bin/rigsignal-agent.bak-$(date +%Y%m%d)
-  install -m 755 rigsignal-agent ~/.local/bin/rigsignal-agent
-  systemctl --user restart rigsignal-agent
-  rigsignal-agent --version   # must print 0.2.3
+cd /tmp/rigsignal-gpusched && sha256sum -c --ignore-missing SHA256SUMS
+sudo steamos-readonly disable
+sudo cp -a /usr/local/bin/rigsignal-ebpf /usr/local/bin/rigsignal-ebpf.bak-$(date +%Y%m%d-%H%M)
+sudo cp -a /usr/local/lib/rigsignal/rigsignal-ebpf-probes /usr/local/lib/rigsignal/rigsignal-ebpf-probes.bak-$(date +%Y%m%d-%H%M)
+sudo install -m 755 rigsignal-ebpf /usr/local/bin/rigsignal-ebpf
+sudo install -m 644 rigsignal-ebpf-probes /usr/local/lib/rigsignal/rigsignal-ebpf-probes
+sudo steamos-readonly enable
+sudo systemctl restart rigsignal-ebpf
+sudo journalctl -u rigsignal-ebpf --since -2min --no-pager | grep -Ei 'gpu_sched|probes|variant'
 ```
 
-## eBPF daemon (USER-run, both boxes)
+## Live acceptance (A9.2-R — orchestrator-coordinated after install)
 
-Same procedure as the 07-16 paired install (backups, `steamos-readonly disable`,
-`install`, restart, journal check) — see the version of this file at commit 4039f80 for
-the full command block. Only `rigsignal-ebpf` differs by hash; installing the staged
-`rigsignal-ebpf-probes` over the existing one is a no-op (identical hash), which keeps
-the pair rule satisfied without a probe-contract risk.
+1. Journal shows `variant=legacy key_field=id key_offset=32` + 9/9 probes (both boxes).
+2. Orchestrator launches a game remotely on GamingPC; `gpu_sched` docs appear in
+   `metrics-rigsignal.ebpf-default`.
+3. Reference comparison (GamingPC, mid-game, USER-run):
+   `sudo /tmp/rigsignal-gpusched/gpu-sched-ftrace-reference.sh 60 /tmp/gpu-sched-ref.txt`
+   — orchestrator fetches the capture, runs `gpu-sched-reference-parse.py`, and compares
+   count + latency distribution against the daemon's docs for the same window within
+   tolerances. "9/9 loaded" alone is NOT validity.
 
-Post-install seed-fix verification (per box): with a game ALREADY running, restart
-`rigsignal-ebpf` and confirm within one interval:
-
-```sh
-sudo journalctl -u rigsignal-ebpf --since -3min --no-pager | grep -E 'seed_source|session detected'
-# expect seed_source=recorded pids|environ scan|union with tid_count > 0
-```
-
-then check `metrics-rigsignal.ebpf-default` receives docs for that session.
-
-Keep backups until a live game session confirms eBPF documents are produced.
-Restore both pair files together if rollback is required.
+Keep backups until acceptance passes; roll back both pair files together if needed.
