@@ -6,11 +6,14 @@
 #[path = "gpu_sched/format.rs"]
 mod format;
 
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    time::{Duration, Instant},
+};
 
 use anyhow::{bail, Context, Result};
 use aya::{
-    maps::{HashMap as AyaHashMap, MapData, RingBuf},
+    maps::{HashMap as AyaHashMap, MapData, PerCpuArray, RingBuf},
     programs::TracePoint,
     Ebpf,
 };
@@ -22,6 +25,8 @@ use crate::es_model::EbpfDocument;
 
 const GPU_SCHED_EVENTS_DIR: &str = "/sys/kernel/tracing/events/gpu_scheduler";
 const KEY_OFFSET_INDEX: u32 = 0;
+const LOSS_COUNTERS: usize = 4;
+const LOSS_WARN_INTERVAL: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Copy, Debug)]
 struct TracepointVariant {
@@ -29,6 +34,7 @@ struct TracepointVariant {
     queue_event: &'static str,
     run_event: &'static str,
     key_field: &'static str,
+    scope_field: &'static str,
 }
 
 const RENAMED: TracepointVariant = TracepointVariant {
@@ -36,6 +42,7 @@ const RENAMED: TracepointVariant = TracepointVariant {
     queue_event: "drm_sched_job_queue",
     run_event: "drm_sched_job_run",
     key_field: "fence_seqno",
+    scope_field: "fence_context",
 };
 
 const LEGACY: TracepointVariant = TracepointVariant {
@@ -43,11 +50,66 @@ const LEGACY: TracepointVariant = TracepointVariant {
     queue_event: "drm_sched_job",
     run_event: "drm_run_job",
     key_field: "id",
+    scope_field: "entity",
 };
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct GpuSchedKeyOffsets {
+    scope: u32,
+    sequence: u32,
+}
+
+unsafe impl aya::Pod for GpuSchedKeyOffsets {}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct LossCounters([u64; LOSS_COUNTERS]);
+
+impl LossCounters {
+    fn has_losses(self) -> bool {
+        self.0.iter().any(|count| *count > 0)
+    }
+
+    fn minus(self, previous: Self) -> Self {
+        Self(std::array::from_fn(|index| {
+            self.0[index].saturating_sub(previous.0[index])
+        }))
+    }
+}
+
+struct LossWarningTracker {
+    last_logged_at: Option<Instant>,
+    last_logged: LossCounters,
+}
+
+impl LossWarningTracker {
+    fn new() -> Self {
+        Self {
+            last_logged_at: None,
+            last_logged: LossCounters::default(),
+        }
+    }
+
+    fn observe(&mut self, counters: LossCounters, now: Instant) -> Option<LossCounters> {
+        let delta = counters.minus(self.last_logged);
+        if !delta.has_losses()
+            || self
+                .last_logged_at
+                .is_some_and(|last| now.duration_since(last) < LOSS_WARN_INTERVAL)
+        {
+            return None;
+        }
+        self.last_logged_at = Some(now);
+        self.last_logged = counters;
+        Some(delta)
+    }
+}
 
 pub struct GpuSchedProbe {
     aggregator: GpuAggregator,
     ring_buf: Option<RingBuf<MapData>>,
+    loss_counters: Option<PerCpuArray<MapData, u64>>,
+    loss_warning: LossWarningTracker,
 }
 
 impl GpuSchedProbe {
@@ -55,6 +117,8 @@ impl GpuSchedProbe {
         GpuSchedProbe {
             aggregator: GpuAggregator::new(host_name, kernel_version),
             ring_buf: None,
+            loss_counters: None,
+            loss_warning: LossWarningTracker::new(),
         }
     }
 }
@@ -84,7 +148,10 @@ fn format_path(events_dir: &Path, event: &str) -> PathBuf {
     events_dir.join(event).join("format")
 }
 
-fn parse_variant_offset(events_dir: &Path, variant: TracepointVariant) -> Result<u32> {
+fn parse_variant_offset(
+    events_dir: &Path,
+    variant: TracepointVariant,
+) -> Result<GpuSchedKeyOffsets> {
     let queue_path = format_path(events_dir, variant.queue_event);
     let run_path = format_path(events_dir, variant.run_event);
     let queue_format = std::fs::read_to_string(&queue_path)
@@ -92,30 +159,46 @@ fn parse_variant_offset(events_dir: &Path, variant: TracepointVariant) -> Result
     let run_format = std::fs::read_to_string(&run_path)
         .with_context(|| format!("reading {}", run_path.display()))?;
 
-    let queue_offset = format::parse_key_field_offset(&queue_format, variant.key_field)
+    let queue_sequence = format::parse_key_field_offset(&queue_format, variant.key_field)
         .with_context(|| format!("parsing {}", queue_path.display()))?;
-    let run_offset = format::parse_key_field_offset(&run_format, variant.key_field)
+    let run_sequence = format::parse_key_field_offset(&run_format, variant.key_field)
         .with_context(|| format!("parsing {}", run_path.display()))?;
 
-    if queue_offset != run_offset {
+    if queue_sequence != run_sequence {
         bail!(
             "{} key field '{}' offset differs between pair: {} vs {}",
             variant.name,
             variant.key_field,
-            queue_offset,
-            run_offset
+            queue_sequence,
+            run_sequence
         );
     }
-    Ok(queue_offset)
+    let queue_scope = format::parse_key_field_offset(&queue_format, variant.scope_field)
+        .with_context(|| format!("parsing {}", queue_path.display()))?;
+    let run_scope = format::parse_key_field_offset(&run_format, variant.scope_field)
+        .with_context(|| format!("parsing {}", run_path.display()))?;
+    if queue_scope != run_scope {
+        bail!(
+            "{} scope field '{}' offset differs between pair: {} vs {}",
+            variant.name,
+            variant.scope_field,
+            queue_scope,
+            run_scope
+        );
+    }
+    Ok(GpuSchedKeyOffsets {
+        scope: queue_scope,
+        sequence: queue_sequence,
+    })
 }
 
-fn configure_key_offset(ebpf: &mut Ebpf, offset: u32) -> Result<()> {
-    let mut map: AyaHashMap<&mut MapData, u32, u32> = AyaHashMap::try_from(
+fn configure_key_offset(ebpf: &mut Ebpf, offsets: GpuSchedKeyOffsets) -> Result<()> {
+    let mut map: AyaHashMap<&mut MapData, u32, GpuSchedKeyOffsets> = AyaHashMap::try_from(
         ebpf.map_mut("GPU_SCHED_KEY_OFFSET")
             .context("GPU_SCHED_KEY_OFFSET map not found")?,
     )
     .context("GPU_SCHED_KEY_OFFSET map type mismatch")?;
-    map.insert(KEY_OFFSET_INDEX, offset, 0)
+    map.insert(KEY_OFFSET_INDEX, offsets, 0)
         .context("writing GPU_SCHED_KEY_OFFSET")
 }
 
@@ -158,7 +241,9 @@ impl Probe for GpuSchedProbe {
         info!(
             variant = variant.name,
             key_field = variant.key_field,
-            key_offset = offset,
+            key_offset = offset.sequence,
+            scope_field = variant.scope_field,
+            scope_offset = offset.scope,
             "gpu_sched tracepoint variant selected"
         );
 
@@ -171,7 +256,14 @@ impl Probe for GpuSchedProbe {
         )
         .context("GPU_SCHED_EVENTS map type mismatch")?;
 
+        let loss_counters = PerCpuArray::try_from(
+            ebpf.take_map("GPU_SCHED_LOSS")
+                .context("GPU_SCHED_LOSS map not found")?,
+        )
+        .context("GPU_SCHED_LOSS map type mismatch")?;
+
         self.ring_buf = Some(ring_buf);
+        self.loss_counters = Some(loss_counters);
         Ok(())
     }
 
@@ -202,13 +294,37 @@ impl Probe for GpuSchedProbe {
             debug!("drained {} gpu_sched events from ring buffer", event_count);
         }
 
+        if let Some(counters) = self.read_loss_counters() {
+            if let Some(delta) = self.loss_warning.observe(counters, Instant::now()) {
+                warn!(
+                    key_read = delta.0[0],
+                    queue_insert = delta.0[1],
+                    run_miss = delta.0[2],
+                    ringbuf_reserve = delta.0[3],
+                    "gpu_sched BPF loss counters increased"
+                );
+            }
+        }
+
         let doc = self.aggregator.flush(session_id);
         Ok(doc.into_iter().map(Into::into).collect())
     }
 
     fn detach(&mut self) -> Result<()> {
         self.ring_buf = None;
+        self.loss_counters = None;
         Ok(())
+    }
+}
+
+impl GpuSchedProbe {
+    fn read_loss_counters(&self) -> Option<LossCounters> {
+        let counters = self.loss_counters.as_ref()?;
+        let mut values = [0; LOSS_COUNTERS];
+        for (index, value) in values.iter_mut().enumerate() {
+            *value = counters.get(&(index as u32), 0).ok()?.iter().copied().sum();
+        }
+        Some(LossCounters(values))
     }
 }
 
@@ -264,5 +380,45 @@ mod tests {
         let error = parse_variant_offset(&events_dir, LEGACY).unwrap_err();
         assert!(error.to_string().contains("offset differs between pair"));
         fs::remove_dir_all(events_dir).unwrap();
+    }
+
+    #[test]
+    fn parses_scoped_legacy_key() {
+        let events_dir = events_dir();
+        write_pair(&events_dir, LEGACY, LEGACY_FORMAT, LEGACY_FORMAT);
+        assert_eq!(
+            parse_variant_offset(&events_dir, LEGACY).unwrap(),
+            super::GpuSchedKeyOffsets {
+                scope: 8,
+                sequence: 32,
+            }
+        );
+        fs::remove_dir_all(events_dir).unwrap();
+    }
+
+    #[test]
+    fn rate_limits_loss_warnings_without_losing_counts() {
+        use std::time::{Duration, Instant};
+
+        let start = Instant::now();
+        let mut tracker = super::LossWarningTracker::new();
+        assert_eq!(
+            tracker.observe(super::LossCounters([0, 0, 3, 0]), start),
+            Some(super::LossCounters([0, 0, 3, 0]))
+        );
+        assert_eq!(
+            tracker.observe(
+                super::LossCounters([0, 0, 5, 2]),
+                start + Duration::from_secs(10)
+            ),
+            None
+        );
+        assert_eq!(
+            tracker.observe(
+                super::LossCounters([0, 0, 5, 2]),
+                start + Duration::from_secs(30)
+            ),
+            Some(super::LossCounters([0, 0, 2, 2]))
+        );
     }
 }

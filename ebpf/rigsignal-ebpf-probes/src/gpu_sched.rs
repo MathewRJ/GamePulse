@@ -16,20 +16,46 @@
 use aya_ebpf::{
     helpers::bpf_ktime_get_ns,
     macros::{map, tracepoint},
-    maps::{HashMap, RingBuf},
+    maps::{HashMap, LruHashMap, PerCpuArray, RingBuf},
     programs::TracePointContext,
 };
 
 const RING_BUF_BYTES: u32 = 256 * 1024;
 const KEY_OFFSET_INDEX: u32 = 0;
+const LOSS_KEY_READ: u32 = 0;
+const LOSS_QUEUE_INSERT: u32 = 1;
+const LOSS_RUN_MISS: u32 = 2;
+const LOSS_RINGBUF_RESERVE: u32 = 3;
+const LOSS_COUNTERS: u32 = 4;
 
-/// In-flight GPU jobs: variant-specific u64 key → queue ktime_ns.
+/// Two fields identify a scheduler job. `id` and `fence_seqno` alone are only
+/// scheduler/context scoped, so they cannot safely identify jobs across rings.
+#[repr(C)]
+pub struct GpuSchedKey {
+    pub scope: u64,
+    pub sequence: u64,
+}
+
+/// Tracepoint field offsets supplied by the userspace format-file parser.
+#[repr(C)]
+pub struct GpuSchedKeyOffsets {
+    pub scope: u32,
+    pub sequence: u32,
+}
+
+/// In-flight GPU jobs. LRU eviction bounds entries leaked by a queue event whose
+/// matching run event is absent; an evicted job is counted as a run miss later.
 #[map]
-static GPU_SCHED_TS: HashMap<u64, u64> = HashMap::with_max_entries(4096, 0);
+static GPU_SCHED_TS: LruHashMap<GpuSchedKey, u64> = LruHashMap::with_max_entries(4096, 0);
 
 /// Key-field byte offset supplied by userspace after parsing the tracepoint format.
 #[map]
-static GPU_SCHED_KEY_OFFSET: HashMap<u32, u32> = HashMap::with_max_entries(1, 0);
+static GPU_SCHED_KEY_OFFSET: HashMap<u32, GpuSchedKeyOffsets> = HashMap::with_max_entries(1, 0);
+
+/// Per-CPU loss counters read and summed by userspace each collection interval.
+/// They make loss visible without changing emitted ES fields.
+#[map]
+static GPU_SCHED_LOSS: PerCpuArray<u64> = PerCpuArray::with_max_entries(LOSS_COUNTERS, 0);
 
 /// Ring buffer carrying GpuSchedEvents to userspace.
 #[map]
@@ -44,22 +70,52 @@ pub struct GpuSchedEvent {
 }
 
 #[inline(always)]
-fn key_from_context(ctx: &TracePointContext) -> Option<u64> {
+fn count_loss(counter: u32) {
+    if let Some(value) = GPU_SCHED_LOSS.get_ptr_mut(counter) {
+        unsafe {
+            // Per-CPU map values are only updated by the current CPU, and BPF
+            // programs are non-preemptible while this update executes.
+            *value = (*value).saturating_add(1);
+        }
+    }
+}
+
+#[inline(always)]
+fn key_from_context(ctx: &TracePointContext) -> Option<GpuSchedKey> {
     let offset = unsafe { GPU_SCHED_KEY_OFFSET.get(&KEY_OFFSET_INDEX) }?;
-    unsafe { ctx.read_at(*offset as usize).ok() }
+    let scope = match unsafe { ctx.read_at(offset.scope as usize) } {
+        Ok(value) => value,
+        Err(_) => {
+            count_loss(LOSS_KEY_READ);
+            return None;
+        }
+    };
+    let sequence = match unsafe { ctx.read_at(offset.sequence as usize) } {
+        Ok(value) => value,
+        Err(_) => {
+            count_loss(LOSS_KEY_READ);
+            return None;
+        }
+    };
+    Some(GpuSchedKey { scope, sequence })
 }
 
 #[inline(always)]
-fn record_queue(key: u64) {
+fn record_queue(key: GpuSchedKey) {
     let ts = unsafe { bpf_ktime_get_ns() };
-    let _ = GPU_SCHED_TS.insert(&key, &ts, 0);
+    if GPU_SCHED_TS.insert(&key, &ts, 0).is_err() {
+        count_loss(LOSS_QUEUE_INSERT);
+    }
 }
 
 #[inline(always)]
-fn record_run(key: u64) {
+fn record_run(key: GpuSchedKey) {
     let queue_ts = match unsafe { GPU_SCHED_TS.get(&key) } {
         Some(ts) => *ts,
-        None => return,
+        None => {
+            count_loss(LOSS_RUN_MISS);
+            return;
+        }
     };
     let _ = GPU_SCHED_TS.remove(&key);
 
@@ -72,6 +128,8 @@ fn record_run(key: u64) {
             _pad: 0,
         });
         entry.submit(0);
+    } else {
+        count_loss(LOSS_RINGBUF_RESERVE);
     }
 }
 

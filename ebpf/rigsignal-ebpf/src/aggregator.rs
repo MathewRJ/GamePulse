@@ -508,6 +508,31 @@ impl GpuAggregator {
     }
 }
 
+#[cfg(test)]
+mod gpu_sched_tests {
+    use super::{GpuAggregator, RawGpuSchedEvent};
+
+    #[test]
+    fn emits_one_snapshot_for_every_second_of_a_1000_event_stream() {
+        let mut aggregator = GpuAggregator::new("host".to_string(), "kernel".to_string());
+
+        for _second in 0..5 {
+            for _event in 0..1_000 {
+                aggregator.push(RawGpuSchedEvent {
+                    latency_ns: 7_000,
+                    _pad: 0,
+                });
+            }
+            let doc = aggregator.flush("session").expect("second has events");
+            assert_eq!(
+                doc.rigsignal.ebpf.gpu_sched.unwrap().event_count,
+                1_000,
+                "each synthetic second must retain its own complete event set"
+            );
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Memory pressure aggregator
 // ---------------------------------------------------------------------------
