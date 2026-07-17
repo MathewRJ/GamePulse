@@ -7,11 +7,15 @@
 use anyhow::{Context, Result};
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Deserialize;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::mpsc;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
+
+const MAX_GAME_TIDS: usize = 1024;
+const MAX_PROC_SCAN_PIDS: usize = 32_768;
 
 /// Contents of the session.json file written by the Python collector.
 #[derive(Debug, Clone, Deserialize)]
@@ -20,7 +24,6 @@ pub struct SessionInfo {
     pub game_pid: u32,
     pub game_name: String,
     #[serde(default)]
-    #[allow(dead_code)]
     pub steam_app_id: Option<u32>,
     /// All PIDs associated with the game (includes wine/Proton subprocesses).
     /// Falls back to [game_pid] if absent (older collector versions).
@@ -46,44 +49,153 @@ pub fn session_file_path() -> PathBuf {
     }
 }
 
-/// Walk /proc/<pid>/task/ and /proc/<pid>/children recursively (bounded depth)
-/// to collect all TIDs in the process trees rooted at each of `root_pids`.
-pub fn collect_game_tids(root_pids: &[u32]) -> Vec<u32> {
-    let mut tids = Vec::new();
-    for &pid in root_pids {
-        collect_tids_recursive(pid, &mut tids, 0);
+#[derive(Debug, Clone, Copy)]
+enum TidSource {
+    RecordedPids,
+    EnvironScan,
+    Union,
+}
+
+impl TidSource {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::RecordedPids => "recorded pids",
+            Self::EnvironScan => "environ scan",
+            Self::Union => "union",
+        }
     }
+}
+
+#[derive(Debug)]
+struct TidDiscovery {
+    tids: Vec<u32>,
+    source: TidSource,
+}
+
+fn collect_game_tids_from_proc(proc_root: &Path, root_pids: &[u32]) -> Vec<u32> {
+    let mut tids = HashSet::new();
+    let mut visited_pids = HashSet::new();
+    for &pid in root_pids {
+        collect_tids_recursive(proc_root, pid, &mut tids, &mut visited_pids, 0);
+    }
+    let mut tids: Vec<_> = tids.into_iter().collect();
+    tids.sort_unstable();
     tids
 }
 
-fn collect_tids_recursive(pid: u32, tids: &mut Vec<u32>, depth: u8) {
-    if depth > 4 || tids.len() >= 256 {
+fn collect_tids_recursive(
+    proc_root: &Path,
+    pid: u32,
+    tids: &mut HashSet<u32>,
+    visited_pids: &mut HashSet<u32>,
+    depth: u8,
+) {
+    if depth > 4 || tids.len() >= MAX_GAME_TIDS || !visited_pids.insert(pid) {
         return;
     }
 
     // Add all threads of this process
-    let task_dir = format!("/proc/{}/task", pid);
+    let task_dir = proc_root.join(pid.to_string()).join("task");
+    let mut thread_ids = Vec::new();
     if let Ok(entries) = std::fs::read_dir(&task_dir) {
         for entry in entries.flatten() {
             if let Ok(name) = entry.file_name().into_string() {
                 if let Ok(tid) = name.parse::<u32>() {
-                    if !tids.contains(&tid) {
-                        tids.push(tid);
-                    }
+                    thread_ids.push(tid);
                 }
             }
         }
     }
+    thread_ids.sort_unstable();
+    thread_ids.dedup();
+    for &tid in &thread_ids {
+        if tids.len() >= MAX_GAME_TIDS {
+            break;
+        }
+        tids.insert(tid);
+    }
 
-    // Recurse into child processes
-    let children_path = format!("/proc/{}/task/{}/children", pid, pid);
-    if let Ok(content) = std::fs::read_to_string(&children_path) {
-        for child_pid_str in content.split_whitespace() {
-            if let Ok(child_pid) = child_pid_str.parse::<u32>() {
-                collect_tids_recursive(child_pid, tids, depth + 1);
+    // Wine and Proton can create child processes from worker threads, so read
+    // every /proc/<pid>/task/<tid>/children file rather than only the main one.
+    for tid in thread_ids {
+        if tids.len() >= MAX_GAME_TIDS {
+            return;
+        }
+        let children_path = task_dir.join(tid.to_string()).join("children");
+        if let Ok(content) = std::fs::read_to_string(children_path) {
+            for child_pid_str in content.split_whitespace() {
+                if let Ok(child_pid) = child_pid_str.parse::<u32>() {
+                    collect_tids_recursive(proc_root, child_pid, tids, visited_pids, depth + 1);
+                }
             }
         }
     }
+}
+
+fn find_steam_processes(proc_root: &Path, steam_app_id: u32) -> Vec<u32> {
+    let expected_game_id = format!("SteamGameId={steam_app_id}");
+    let expected_app_id = format!("SteamAppId={steam_app_id}");
+    let mut pids = Vec::new();
+    let mut scanned = 0;
+
+    let Ok(entries) = std::fs::read_dir(proc_root) else {
+        return pids;
+    };
+    for entry in entries.flatten() {
+        let Ok(pid) = entry.file_name().to_string_lossy().parse::<u32>() else {
+            continue;
+        };
+        if scanned >= MAX_PROC_SCAN_PIDS {
+            break;
+        }
+        scanned += 1;
+
+        let Ok(environ) = std::fs::read(entry.path().join("environ")) else {
+            continue;
+        };
+        if environ.split(|byte| *byte == 0).any(|entry| {
+            entry == expected_game_id.as_bytes() || entry == expected_app_id.as_bytes()
+        }) {
+            pids.push(pid);
+        }
+    }
+    pids.sort_unstable();
+    pids
+}
+
+fn discover_game_tids_from_proc(proc_root: &Path, info: &SessionInfo) -> TidDiscovery {
+    let recorded_tids = collect_game_tids_from_proc(proc_root, &info.game_pids);
+    let Some(steam_app_id) = info.steam_app_id else {
+        return TidDiscovery {
+            tids: recorded_tids,
+            source: TidSource::RecordedPids,
+        };
+    };
+
+    let environ_pids = find_steam_processes(proc_root, steam_app_id);
+    if environ_pids.is_empty() {
+        return TidDiscovery {
+            tids: recorded_tids,
+            source: TidSource::RecordedPids,
+        };
+    }
+    if recorded_tids.is_empty() {
+        return TidDiscovery {
+            tids: collect_game_tids_from_proc(proc_root, &environ_pids),
+            source: TidSource::EnvironScan,
+        };
+    }
+
+    let mut roots = info.game_pids.clone();
+    roots.extend(environ_pids);
+    TidDiscovery {
+        tids: collect_game_tids_from_proc(proc_root, &roots),
+        source: TidSource::Union,
+    }
+}
+
+fn discover_game_tids(info: &SessionInfo) -> TidDiscovery {
+    discover_game_tids_from_proc(Path::new("/proc"), info)
 }
 
 /// Read and parse the session file, collecting TIDs.
@@ -96,16 +208,17 @@ pub fn read_session(path: &Path) -> Result<(SessionInfo, Vec<u32>)> {
     if info.game_pids.is_empty() {
         info.game_pids = vec![info.game_pid];
     }
-    let tids = collect_game_tids(&info.game_pids);
+    let discovery = discover_game_tids(&info);
     info!(
         session_id = %info.session_id,
         game = %info.game_name,
         game_pid = info.game_pid,
         pid_count = info.game_pids.len(),
-        tid_count = tids.len(),
+        seed_source = discovery.source.as_str(),
+        tid_count = discovery.tids.len(),
         "session detected"
     );
-    Ok((info, tids))
+    Ok((info, discovery.tids))
 }
 
 fn active_session_state(path: &Path) -> Result<SessionState> {
@@ -115,6 +228,29 @@ fn active_session_state(path: &Path) -> Result<SessionState> {
         tids,
         info: Some(info),
     })
+}
+
+fn refreshed_active_session_state(current: &SessionState) -> Option<(SessionState, TidSource)> {
+    refreshed_active_session_state_from_proc(current, Path::new("/proc"))
+}
+
+fn refreshed_active_session_state_from_proc(
+    current: &SessionState,
+    proc_root: &Path,
+) -> Option<(SessionState, TidSource)> {
+    let info = current.info.as_ref()?.clone();
+    let discovery = discover_game_tids_from_proc(proc_root, &info);
+    if discovery.tids == current.tids {
+        return None;
+    }
+    Some((
+        SessionState {
+            active: true,
+            info: Some(info),
+            tids: discovery.tids,
+        },
+        discovery.source,
+    ))
 }
 
 /// Spawn the session watcher task.
@@ -198,10 +334,37 @@ pub fn spawn_watcher(
                 Ok(e) => e,
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                     // Safety-net: catch missed inotify events (e.g. session started
-                    // while watcher wasn't ready). Only act if we don't already have
-                    // an active session — avoids re-populating GAME_PIDS every 30 s.
-                    let already_active = state_clone.lock().unwrap().active;
-                    if !already_active && session_path.exists() {
+                    // while watcher wasn't ready), and refresh active games because
+                    // their process trees can change after the initial seed.
+                    let current = state_clone.lock().unwrap().clone();
+                    if current.active {
+                        if let Some((new_state, source)) = refreshed_active_session_state(&current)
+                        {
+                            info!(
+                                session_id = new_state
+                                    .info
+                                    .as_ref()
+                                    .map(|i| i.session_id.as_str())
+                                    .unwrap_or(""),
+                                seed_source = source.as_str(),
+                                previous_tid_count = current.tids.len(),
+                                tid_count = new_state.tids.len(),
+                                "session TID refresh changed — updating PID filter"
+                            );
+                            *state_clone.lock().unwrap() = new_state.clone();
+                            let _ = tx.try_send(new_state);
+                        } else {
+                            debug!(
+                                session_id = current
+                                    .info
+                                    .as_ref()
+                                    .map(|i| i.session_id.as_str())
+                                    .unwrap_or(""),
+                                tid_count = current.tids.len(),
+                                "session TID refresh unchanged"
+                            );
+                        }
+                    } else if session_path.exists() {
                         if let Ok(new_state) = active_session_state(&session_path) {
                             *state_clone.lock().unwrap() = new_state.clone();
                             let _ = tx.try_send(new_state);
@@ -281,6 +444,115 @@ mod tests {
             "game_pids": [game_pid],
         });
         std::fs::write(path, serde_json::to_string(&doc).unwrap()).unwrap();
+    }
+
+    fn temp_proc_root(test_name: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "rigsignal-ebpf-proc-{test_name}-{}-{nanos}",
+            std::process::id()
+        ))
+    }
+
+    fn create_process(proc_root: &Path, pid: u32, tids: &[u32]) {
+        for tid in tids {
+            std::fs::create_dir_all(
+                proc_root
+                    .join(pid.to_string())
+                    .join("task")
+                    .join(tid.to_string()),
+            )
+            .unwrap();
+        }
+    }
+
+    fn write_children(proc_root: &Path, pid: u32, tid: u32, children: &str) {
+        std::fs::write(
+            proc_root
+                .join(pid.to_string())
+                .join("task")
+                .join(tid.to_string())
+                .join("children"),
+            children,
+        )
+        .unwrap();
+    }
+
+    fn test_session_info(game_pid: u32, steam_app_id: Option<u32>) -> SessionInfo {
+        SessionInfo {
+            session_id: "test-session".to_string(),
+            game_pid,
+            game_name: "test-game".to_string(),
+            steam_app_id,
+            game_pids: vec![game_pid],
+        }
+    }
+
+    #[test]
+    fn dead_recorded_pid_uses_matching_environ_process() {
+        let proc_root = temp_proc_root("environ-discovery");
+        create_process(&proc_root, 4242, &[4242, 4243]);
+        std::fs::write(
+            proc_root.join("4242/environ"),
+            b"PATH=/usr/bin\0SteamGameId=12345\0",
+        )
+        .unwrap();
+
+        let discovery =
+            discover_game_tids_from_proc(&proc_root, &test_session_info(9999, Some(12345)));
+
+        assert!(matches!(discovery.source, TidSource::EnvironScan));
+        assert_eq!(discovery.tids, vec![4242, 4243]);
+        let _ = std::fs::remove_dir_all(proc_root);
+    }
+
+    #[test]
+    fn walks_children_of_every_thread() {
+        let proc_root = temp_proc_root("per-thread-children");
+        create_process(&proc_root, 100, &[100, 101]);
+        create_process(&proc_root, 200, &[200, 201]);
+        write_children(&proc_root, 100, 101, "200");
+
+        assert_eq!(
+            collect_game_tids_from_proc(&proc_root, &[100]),
+            vec![100, 101, 200, 201]
+        );
+        let _ = std::fs::remove_dir_all(proc_root);
+    }
+
+    #[test]
+    fn collects_up_to_game_pid_map_capacity() {
+        let proc_root = temp_proc_root("tid-cap");
+        let tids: Vec<u32> = (1..=1_100).collect();
+        create_process(&proc_root, 300, &tids);
+
+        let collected = collect_game_tids_from_proc(&proc_root, &[300]);
+
+        assert_eq!(collected.len(), MAX_GAME_TIDS);
+        assert_eq!(collected[0], 1);
+        assert_eq!(collected[MAX_GAME_TIDS - 1], MAX_GAME_TIDS as u32);
+        let _ = std::fs::remove_dir_all(proc_root);
+    }
+
+    #[test]
+    fn refresh_detects_added_tid() {
+        let proc_root = temp_proc_root("refresh");
+        create_process(&proc_root, 500, &[500]);
+        let info = test_session_info(500, None);
+        let current = SessionState {
+            active: true,
+            info: Some(info.clone()),
+            tids: collect_game_tids_from_proc(&proc_root, &info.game_pids),
+        };
+        create_process(&proc_root, 500, &[500, 501]);
+
+        let (refreshed, _) = refreshed_active_session_state_from_proc(&current, &proc_root)
+            .expect("added TID should trigger a refresh");
+        assert_eq!(refreshed.tids, vec![500, 501]);
+        let _ = std::fs::remove_dir_all(proc_root);
     }
 
     async fn recv_session_id(
