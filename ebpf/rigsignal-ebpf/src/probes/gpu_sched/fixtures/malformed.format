@@ -1,0 +1,3 @@
+name: drm_sched_job
+format:
+	field:uint64_t id;	offset:not-a-number;	size:8;	signed:0;
