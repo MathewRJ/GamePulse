@@ -14,6 +14,7 @@ mod session;
 mod shipper;
 
 use anyhow::{Context, Result};
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use clap::Parser;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -24,6 +25,7 @@ use tracing_subscriber::EnvFilter;
 
 use aggregator::correlate;
 use config::Config;
+use es_model::EbpfDocument;
 use loader::load_probes;
 use probes::bio::BioProbe;
 use probes::futex::FutexProbe;
@@ -36,6 +38,39 @@ use probes::sched::SchedProbe;
 use probes::vfs::VfsProbe;
 use session::{session_file_path, spawn_watcher};
 use shipper::EsShipper;
+
+/// TSDB derives a metric document ID from its dimensions and @timestamp.  The
+/// eBPF stream's probe discriminator is not a TSDB dimension, so snapshots
+/// collected in the same millisecond would otherwise collide.  Keep every
+/// probe in a stable, sub-second slot within the aggregation tick.
+fn metric_timestamp_offset_ms(probe: &str) -> i64 {
+    match probe {
+        "schedlatency" => 0,
+        "bio" => 1,
+        "gpu_sched" => 2,
+        "mem" => 3,
+        "futex" => 4,
+        "irq" => 5,
+        "vfs" => 6,
+        "gpu_fence" => 7,
+        "gpu_submit" => 8,
+        "stutter_correlation" => 9,
+        // All current probes have an explicit slot. Keep an unknown future
+        // probe distinct from schedlatency rather than recreating the collision.
+        _ => 10,
+    }
+}
+
+fn assign_metric_timestamps(docs: &mut [EbpfDocument], tick_timestamp: DateTime<Utc>) {
+    for doc in docs {
+        if let EbpfDocument::Metric(metric) = doc {
+            metric.timestamp = tick_timestamp
+                + ChronoDuration::milliseconds(metric_timestamp_offset_ms(
+                    metric.rigsignal.ebpf.probe,
+                ));
+        }
+    }
+}
 
 #[derive(Parser, Debug)]
 #[command(
@@ -166,6 +201,9 @@ async fn main() -> Result<()> {
         tokio::select! {
             // Aggregation tick
             _ = tick.tick() => {
+                // All snapshots below describe this aggregation tick. Do not let
+                // per-probe Utc::now() calls collapse to the same TSDB millisecond.
+                let tick_timestamp = Utc::now();
                 let session_id = {
                     let s = session_state.lock().unwrap();
                     if s.active {
@@ -199,6 +237,8 @@ async fn main() -> Result<()> {
                 if let Some(corr_doc) = correlate(&metric_docs, &host_name, &kernel_version, &sid) {
                     tick_docs.push(corr_doc.into());
                 }
+
+                assign_metric_timestamps(&mut tick_docs, tick_timestamp);
 
                 shipper.queue_all(tick_docs);
 
@@ -249,4 +289,103 @@ async fn main() -> Result<()> {
 
     info!("rigsignal-ebpf stopped");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::TimeZone;
+
+    use super::{assign_metric_timestamps, Utc};
+    use crate::{
+        aggregator::{
+            GpuAggregator, RawGpuSchedEvent, RawSchedEvent, SchedAggregator, EVENT_SWITCH,
+        },
+        es_model::EbpfDocument,
+    };
+
+    #[test]
+    fn every_gpu_window_gets_a_tsdb_timestamp_distinct_from_schedlatency() {
+        let mut sched = SchedAggregator::new("host".to_string(), "kernel".to_string());
+        let mut gpu = GpuAggregator::new("host".to_string(), "kernel".to_string());
+        let start = Utc.with_ymd_and_hms(2026, 7, 17, 20, 33, 30).unwrap();
+
+        for second in 0..5 {
+            sched.push(RawSchedEvent {
+                event_type: EVENT_SWITCH,
+                _pad: [0; 3],
+                tid: 1,
+                wait_ns: 7_000,
+                prev_cpu: 0,
+                next_cpu: 0,
+                comm: [0; 16],
+            });
+            for _ in 0..1_000 {
+                gpu.push(RawGpuSchedEvent {
+                    latency_ns: 7_000,
+                    _pad: 0,
+                });
+            }
+
+            // Runtime invokes every probe in one aggregation tick, so these
+            // documents can initially share the tick's millisecond in TSDB.
+            let mut docs = sched.flush("session");
+            docs.push(gpu.flush("session").unwrap().into());
+            let tick_timestamp = start + chrono::Duration::seconds(second);
+            for doc in &mut docs {
+                if let EbpfDocument::Metric(metric) = doc {
+                    // This mirrors the pre-fix per-probe Utc::now() calls after
+                    // Elasticsearch rounds both calls to the same millisecond.
+                    metric.timestamp = tick_timestamp;
+                }
+            }
+
+            let initial_timestamps: Vec<_> = docs
+                .iter()
+                .filter_map(|doc| match doc {
+                    EbpfDocument::Metric(metric) => Some(metric.timestamp),
+                    EbpfDocument::Thread(_) => None,
+                })
+                .collect();
+            assert!(initial_timestamps.windows(2).all(|pair| pair[0] == pair[1]));
+
+            assign_metric_timestamps(&mut docs, tick_timestamp);
+
+            let sched_timestamp = docs
+                .iter()
+                .find_map(|doc| match doc {
+                    EbpfDocument::Metric(metric)
+                        if metric.rigsignal.ebpf.probe == "schedlatency" =>
+                    {
+                        Some(metric.timestamp)
+                    }
+                    _ => None,
+                })
+                .unwrap();
+            let gpu_doc = docs
+                .iter()
+                .find_map(|doc| match doc {
+                    EbpfDocument::Metric(metric) if metric.rigsignal.ebpf.probe == "gpu_sched" => {
+                        Some(metric)
+                    }
+                    _ => None,
+                })
+                .unwrap();
+
+            assert_ne!(gpu_doc.timestamp, sched_timestamp);
+            assert_eq!(
+                gpu_doc.timestamp,
+                tick_timestamp + chrono::Duration::milliseconds(2)
+            );
+            assert_eq!(
+                gpu_doc
+                    .rigsignal
+                    .ebpf
+                    .gpu_sched
+                    .as_ref()
+                    .unwrap()
+                    .event_count,
+                1_000
+            );
+        }
+    }
 }

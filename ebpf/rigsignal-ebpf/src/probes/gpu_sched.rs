@@ -82,6 +82,29 @@ struct LossWarningTracker {
     last_logged: LossCounters,
 }
 
+struct LossCounterReadWarningTracker {
+    last_logged_at: Option<Instant>,
+}
+
+impl LossCounterReadWarningTracker {
+    fn new() -> Self {
+        Self {
+            last_logged_at: None,
+        }
+    }
+
+    fn should_log(&mut self, now: Instant) -> bool {
+        if self
+            .last_logged_at
+            .is_some_and(|last| now.duration_since(last) < LOSS_WARN_INTERVAL)
+        {
+            return false;
+        }
+        self.last_logged_at = Some(now);
+        true
+    }
+}
+
 impl LossWarningTracker {
     fn new() -> Self {
         Self {
@@ -110,6 +133,7 @@ pub struct GpuSchedProbe {
     ring_buf: Option<RingBuf<MapData>>,
     loss_counters: Option<PerCpuArray<MapData, u64>>,
     loss_warning: LossWarningTracker,
+    loss_counter_read_warning: LossCounterReadWarningTracker,
 }
 
 impl GpuSchedProbe {
@@ -119,6 +143,7 @@ impl GpuSchedProbe {
             ring_buf: None,
             loss_counters: None,
             loss_warning: LossWarningTracker::new(),
+            loss_counter_read_warning: LossCounterReadWarningTracker::new(),
         }
     }
 }
@@ -294,15 +319,23 @@ impl Probe for GpuSchedProbe {
             debug!("drained {} gpu_sched events from ring buffer", event_count);
         }
 
-        if let Some(counters) = self.read_loss_counters() {
-            if let Some(delta) = self.loss_warning.observe(counters, Instant::now()) {
-                warn!(
-                    key_read = delta.0[0],
-                    queue_insert = delta.0[1],
-                    run_miss = delta.0[2],
-                    ringbuf_reserve = delta.0[3],
-                    "gpu_sched BPF loss counters increased"
-                );
+        match self.read_loss_counters() {
+            Ok(Some(counters)) => {
+                if let Some(delta) = self.loss_warning.observe(counters, Instant::now()) {
+                    warn!(
+                        key_read = delta.0[0],
+                        queue_insert = delta.0[1],
+                        run_miss = delta.0[2],
+                        ringbuf_reserve = delta.0[3],
+                        "gpu_sched BPF loss counters increased"
+                    );
+                }
+            }
+            Ok(None) => {}
+            Err(error) => {
+                if self.loss_counter_read_warning.should_log(Instant::now()) {
+                    warn!(%error, "could not read gpu_sched BPF loss counters");
+                }
             }
         }
 
@@ -318,13 +351,20 @@ impl Probe for GpuSchedProbe {
 }
 
 impl GpuSchedProbe {
-    fn read_loss_counters(&self) -> Option<LossCounters> {
-        let counters = self.loss_counters.as_ref()?;
+    fn read_loss_counters(&self) -> Result<Option<LossCounters>> {
+        let Some(counters) = self.loss_counters.as_ref() else {
+            return Ok(None);
+        };
         let mut values = [0; LOSS_COUNTERS];
         for (index, value) in values.iter_mut().enumerate() {
-            *value = counters.get(&(index as u32), 0).ok()?.iter().copied().sum();
+            *value = counters
+                .get(&(index as u32), 0)
+                .with_context(|| format!("reading GPU_SCHED_LOSS counter {index}"))?
+                .iter()
+                .copied()
+                .sum();
         }
-        Some(LossCounters(values))
+        Ok(Some(LossCounters(values)))
     }
 }
 
@@ -420,5 +460,16 @@ mod tests {
             ),
             Some(super::LossCounters([0, 0, 2, 2]))
         );
+    }
+
+    #[test]
+    fn rate_limits_loss_counter_read_warnings() {
+        use std::time::{Duration, Instant};
+
+        let start = Instant::now();
+        let mut tracker = super::LossCounterReadWarningTracker::new();
+        assert!(tracker.should_log(start));
+        assert!(!tracker.should_log(start + Duration::from_secs(10)));
+        assert!(tracker.should_log(start + Duration::from_secs(30)));
     }
 }
