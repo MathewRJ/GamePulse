@@ -53,3 +53,8 @@ node_modules/
 # AI orchestration artifacts stay out of this repo (see Workflow repo)
 worktrees/
 packaging/.claude/
+
+# 0.2.3 deploy staging — binaries are build artifacts; SHA256SUMS is the tracked record
+deploy-staging/rigsignal-agent
+deploy-staging/rigsignal-ebpf
+deploy-staging/rigsignal-ebpf-probes
