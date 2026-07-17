@@ -1,13 +1,18 @@
-# RigSignal gpu_sched-port paired deploy (2026-07-17, post-0.2.3 — pre-0.2.4-bump build off main ad4da7d)
+# RigSignal gpu_sched-port paired deploy — FINAL state (2026-07-17 late, build off main c7288e5)
 
-Artifacts in this directory (hashes in `SHA256SUMS`); staged on both boxes at
-`/tmp/rigsignal-gpusched/` (sha256-verified over SSH).
+**DEPLOYED AND LIVE-VALIDATED on both boxes** (three install rounds: port → loss fix →
+TSDS-collision fix; A9.2-R distribution comparison PASSED 21:01Z). Artifacts here match
+what is installed (hashes in `SHA256SUMS`); staged copies at `/tmp/rigsignal-gpusched/`.
 
 | file | state | installs to | who installs |
 |---|---|---|---|
 | `rigsignal-agent` | UNCHANGED 0.2.3 (`65b6bc20…`) — not part of this deploy | — | — |
-| `rigsignal-ebpf` | gpu_sched port (`feeb6d5a…`; attest by sha256, crate still says 0.2.3 — bump is gated on live validation) | `/usr/local/bin/rigsignal-ebpf` | **user** (sudo) |
-| `rigsignal-ebpf-probes` | gpu_sched port (`a301f174…` — BPF contract changed: new `GPU_SCHED_KEY_OFFSET` config map; MUST install as a pair) | `/usr/local/lib/rigsignal/rigsignal-ebpf-probes` | **user** (sudo) |
+| `rigsignal-ebpf` | INSTALLED (`9e5f3bec…`; crate still 0.2.3 — bump gated on item 5) | `/usr/local/bin/rigsignal-ebpf` | **user** (sudo) — done |
+| `rigsignal-ebpf-probes` | INSTALLED (`ddf8199e…` — `GPU_SCHED_KEY_OFFSET` + scoped-LRU contract) | `/usr/local/lib/rigsignal/rigsignal-ebpf-probes` | **user** (sudo) — done |
+
+Post-validation live signature: 9/9 probes; `variant=legacy key_field=id key_offset=32
+scope_field=entity scope_offset=8`; seven probes at 60 docs/min. On-box `.bak-*` files
+from the first round remain the rollback point (pair-restore together).
 
 Targets: **GamingPC** `deck@192.168.50.254` AND **StreamClient** `deck@192.168.50.162`.
 Unlike the 0.2.3 deploy, BOTH pair files changed — never install one without the other.
