@@ -11,8 +11,8 @@ use fs2::FileExt;
 use reqwest::Client;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::fs::{File, OpenOptions};
-use std::io::{BufWriter, ErrorKind, Write};
+use std::fs::{File, OpenOptions, ReadDir};
+use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tracing::{debug, info, warn};
@@ -20,7 +20,12 @@ use tracing::{debug, info, warn};
 /// A 40k-file backlog clears in roughly 20 minutes at the normal 30-second
 /// rotation cadence. Keeping this at 1000 also bounds synchronous tick work.
 const RETENTION_PRUNE_BATCH: usize = 1_000;
-const RETENTION_RESCAN_INTERVAL: Duration = Duration::from_secs(60 * 60);
+/// Directory entries inspected on each rotation tick. A 40k-file directory completes a
+/// full cycle in at most 40 calls without collecting or sorting the whole directory.
+const RETENTION_SCAN_BATCH: usize = 1_000;
+/// Recovery retains at most this many bytes for the JSON parser at a time. Larger
+/// complete lines are malformed; an unterminated final chunk is partial regardless of size.
+const RECOVERY_MAX_LINE_BYTES: usize = 1024 * 1024;
 
 pub struct ShipResult {
     pub attempted: usize,
@@ -43,8 +48,9 @@ pub struct SpoolWriter {
     spools: HashMap<String, DatasetSpool>,
     next_seq: u32,
     lock_file: File,
-    retention_candidates: Vec<PathBuf>,
-    last_retention_scan: Option<Instant>,
+    retention_scan: Option<ReadDir>,
+    #[cfg(test)]
+    retention_entries_scanned: usize,
 }
 
 struct DatasetSpool {
@@ -93,8 +99,9 @@ impl SpoolWriter {
             spools: HashMap::new(),
             next_seq,
             lock_file,
-            retention_candidates: Vec::new(),
-            last_retention_scan: None,
+            retention_scan: None,
+            #[cfg(test)]
+            retention_entries_scanned: 0,
         })
     }
 
@@ -304,48 +311,69 @@ impl SpoolWriter {
         }
     }
 
+    /// Incrementally prune finals and quarantines by mtime. Deep-review finding 2 permits
+    /// directory-order deletion instead of a global oldest-first sort: every full scan
+    /// cycle sees each entry once, while each synchronous rotation does bounded work.
     fn prune_retained_files(&mut self) -> Result<()> {
+        self.prune_retained_files_with_limits(RETENTION_SCAN_BATCH, RETENTION_PRUNE_BATCH)
+    }
+
+    fn prune_retained_files_with_limits(
+        &mut self,
+        scan_batch: usize,
+        prune_batch: usize,
+    ) -> Result<()> {
         if self.retention.is_zero() {
             return Ok(());
         }
-        let should_scan = self.retention_candidates.is_empty()
-            && self
-                .last_retention_scan
-                .is_none_or(|scan| scan.elapsed() >= RETENTION_RESCAN_INTERVAL);
-        if should_scan {
-            let cutoff = SystemTime::now()
-                .checked_sub(self.retention)
-                .unwrap_or(UNIX_EPOCH);
-            let mut candidates = Vec::new();
-            for entry in std::fs::read_dir(&self.dir)
-                .with_context(|| format!("scanning spool retention directory: {}", self.dir.display()))?
-            {
-                let entry = entry?;
-                let path = entry.path();
-                if is_retained_spool_file(&path) {
-                    let modified = entry.metadata()?.modified().unwrap_or(SystemTime::now());
-                    if modified < cutoff {
-                        candidates.push((modified, path));
-                    }
-                }
-            }
-            candidates.sort_by_key(|(modified, _)| *modified);
-            self.retention_candidates = candidates
-                .into_iter()
-                .rev()
-                .map(|(_, path)| path)
-                .collect();
-            self.last_retention_scan = Some(Instant::now());
+        if self.retention_scan.is_none() {
+            self.retention_scan = Some(
+                std::fs::read_dir(&self.dir)
+                    .with_context(|| format!("scanning spool retention directory: {}", self.dir.display()))?,
+            );
         }
 
-        for _ in 0..RETENTION_PRUNE_BATCH {
-            let Some(path) = self.retention_candidates.pop() else {
-                break;
+        let cutoff = SystemTime::now()
+            .checked_sub(self.retention)
+            .unwrap_or(UNIX_EPOCH);
+        let mut deletions = 0;
+        let mut exhausted = false;
+        for _ in 0..scan_batch {
+            let entry = match self
+                .retention_scan
+                .as_mut()
+                .expect("retention scan is initialised")
+                .next()
+            {
+                Some(entry) => entry?,
+                None => {
+                    exhausted = true;
+                    break;
+                }
             };
-            remove_file_if_exists(&path)
-                .with_context(|| format!("pruning retained spool file: {}", path.display()))?;
+            #[cfg(test)]
+            {
+                self.retention_entries_scanned += 1;
+            }
+            let path = entry.path();
+            if deletions < prune_batch
+                && is_retained_spool_file(&path)
+                && entry.metadata()?.modified().unwrap_or(SystemTime::now()) < cutoff
+            {
+                remove_file_if_exists(&path)
+                    .with_context(|| format!("pruning retained spool file: {}", path.display()))?;
+                deletions += 1;
+            }
+        }
+        if exhausted {
+            self.retention_scan = None;
         }
         Ok(())
+    }
+
+    #[cfg(test)]
+    fn retention_entries_scanned(&self) -> usize {
+        self.retention_entries_scanned
     }
 }
 
@@ -408,9 +436,15 @@ where
 }
 
 /// Accepted residual risk (2026-07-18): a SIGKILL after final publication but before
-/// source `.tmp` removal will republish valid records on the next startup. This rare
+/// source `.tmp` disposal will republish valid records on the next startup. This rare
 /// duplicate-final window requires a crash during recovery from a prior crash and is
 /// the same class D2 already accepts at the Fleet reader layer.
+///
+/// Related (hardening review note, 2026-07-18): a crash between the quarantine name
+/// reservation and the source rename orphans a zero-byte `.quarantine` placeholder.
+/// It never matches the Fleet glob, the source is still reprocessed next startup, and
+/// retention prunes the debris within `spool_retention_hours` — accepted as
+/// self-healing.
 fn recover_stranded_file<F>(
     dir: &Path,
     source: &Path,
@@ -421,89 +455,97 @@ fn recover_stranded_file<F>(
 where
     F: FnMut() -> Result<()>,
 {
-    let bytes = std::fs::read(source)
-        .with_context(|| format!("reading stranded spool file: {}", source.display()))?;
-    if bytes.is_empty() {
-        return Ok(());
-    }
-
-    let mut valid = Vec::new();
+    let file = File::open(source)
+        .with_context(|| format!("opening stranded spool file: {}", source.display()))?;
+    let mut reader = BufReader::new(file);
+    let mut line = Vec::new();
+    let mut final_stage = None;
+    let mut final_writer = None;
     let mut malformed = false;
-    let complete_len = if bytes.ends_with(b"\n") {
-        bytes.len()
-    } else {
-        bytes.iter().rposition(|byte| *byte == b'\n').map_or(0, |index| index + 1)
-    };
-    for line in bytes[..complete_len].split(|byte| *byte == b'\n') {
-        if line.is_empty() {
+    let mut partial = false;
+    let millis = unix_millis()?;
+    while let Some(recovered_line) = read_recovery_line(&mut reader, &mut line)? {
+        if !recovered_line.terminated {
+            malformed |= recovered_line.oversize;
+            partial = true;
             continue;
         }
-        if serde_json::from_slice::<Value>(line).is_ok() {
-            valid.extend_from_slice(line);
-            valid.push(b'\n');
+        if recovered_line.oversize || recovered_line.bytes.is_empty() {
+            malformed |= recovered_line.oversize;
+            continue;
+        }
+        if serde_json::from_slice::<Value>(&recovered_line.bytes).is_ok() {
+            if final_writer.is_none() {
+                let (stage, writer) = create_recovery_stage(dir, slug, millis, *next_seq, "ndjson")?;
+                final_stage = Some(stage);
+                final_writer = Some(writer);
+            }
+            let writer = final_writer
+                .as_mut()
+                .expect("recovery writer exists after staging creation");
+            writer
+                .write_all(&recovered_line.bytes)
+                .context("writing recovered spool record")?;
+            writer.write_all(b"\n").context("writing recovered spool newline")?;
         } else {
             malformed = true;
         }
     }
-    let partial = complete_len != bytes.len();
+    drop(reader);
+    if final_stage.is_none() && !malformed && !partial {
+        return Ok(());
+    }
+    if let Some(mut writer) = final_writer {
+        writer
+            .flush()
+            .context("flushing recovery staging file before publication")?;
+        drop(writer);
+    }
     let quarantine_needed = malformed || partial;
-    let millis = unix_millis()?;
-    let final_stage = if valid.is_empty() {
-        None
-    } else {
-        Some(write_recovery_stage(dir, slug, millis, *next_seq, "ndjson", &valid)?)
-    };
-    let quarantine_stage = if quarantine_needed {
-        // Quarantine intentionally preserves the entire original `.tmp` bytes (valid and
-        // bad lines) for forensics, not only the malformed segment; Fleet never reads it.
-        Some(write_recovery_stage(
-            dir,
-            slug,
-            millis,
-            next_seq.saturating_add(1),
-            "quarantine",
-            &bytes,
-        )?)
+    let mut publisher = RecoveryPublisher { dir, next_seq };
+    // Reserve the target before publishing valid data so malformed input can still be
+    // moved without a copy. The source itself remains untouched until final publication.
+    let quarantine_reservation = if quarantine_needed {
+        match publisher.reserve(slug, "quarantine") {
+            Ok(reservation) => Some(reservation),
+            Err(error) => {
+                cleanup_stages(final_stage.as_deref(), None);
+                return Err(error);
+            }
+        }
     } else {
         None
     };
 
     if let Err(error) = before_publish() {
-        cleanup_stages(final_stage.as_deref(), quarantine_stage.as_deref());
+        cleanup_stages(final_stage.as_deref(), quarantine_reservation.as_deref());
         return Err(error).context("recovering stranded spool file before publication");
     }
 
-    let mut publisher = RecoveryPublisher { dir, next_seq };
-    let final_path = match final_stage
+    match final_stage
         .as_deref()
         .map(|stage| publisher.publish(stage, slug, "ndjson"))
     {
-        Some(Ok(path)) => Some(path),
+        Some(Ok(_)) => {}
         Some(Err(error)) => {
-            cleanup_stages(final_stage.as_deref(), quarantine_stage.as_deref());
+            cleanup_stages(final_stage.as_deref(), quarantine_reservation.as_deref());
             return Err(error);
         }
-        None => None,
-    };
-    let quarantine_path = match quarantine_stage
-        .as_deref()
-        .map(|stage| publisher.publish(stage, slug, "quarantine"))
-    {
-        Some(Ok(path)) => Some(path),
-        Some(Err(error)) => {
-            // A recovery is all-or-nothing per stranded source. If the second
-            // publication fails, withdraw the first before leaving the source
-            // for a clean retry on the next startup.
-            if let Some(path) = final_path.as_deref() {
-                let _ = remove_file_if_exists(path);
-            }
-            cleanup_stages(final_stage.as_deref(), quarantine_stage.as_deref());
-            return Err(error);
+        None => {}
+    }
+    let quarantine_path = if let Some(target) = quarantine_reservation {
+        if let Err(error) = std::fs::rename(source, &target) {
+            let _ = remove_file_if_exists(&target);
+            return Err(error).with_context(|| {
+                format!("quarantining recovered spool input at {}", target.display())
+            });
         }
-        None => None,
+        Some(target)
+    } else {
+        remove_file_if_exists(source)?;
+        None
     };
-    remove_file_if_exists(source)?;
-    if let Some(path) = quarantine_path {
+    if let Some(path) = quarantine_path.as_deref() {
         warn!(
             "recovered malformed or truncated spool file {}; quarantined input at {}",
             source.display(),
@@ -519,6 +561,27 @@ struct RecoveryPublisher<'a> {
 }
 
 impl RecoveryPublisher<'_> {
+    fn reserve(&mut self, slug: &str, extension: &str) -> Result<PathBuf> {
+        let millis = unix_millis()?;
+        loop {
+            let target = self.dir.join(format!(
+                "rigsignal-{}-{}-{}.{}",
+                slug, millis, *self.next_seq, extension
+            ));
+            match OpenOptions::new().create_new(true).write(true).open(&target) {
+                Ok(reservation) => {
+                    drop(reservation);
+                    *self.next_seq = self.next_seq.saturating_add(1);
+                    return Ok(target);
+                }
+                Err(error) if error.kind() == ErrorKind::AlreadyExists => {
+                    *self.next_seq = self.next_seq.saturating_add(1);
+                }
+                Err(error) => return Err(error).context("reserving recovered spool filename"),
+            }
+        }
+    }
+
     fn publish(&mut self, source: &Path, slug: &str, extension: &str) -> Result<PathBuf> {
         let millis = unix_millis()?;
         loop {
@@ -547,14 +610,13 @@ impl RecoveryPublisher<'_> {
     }
 }
 
-fn write_recovery_stage(
+fn create_recovery_stage(
     dir: &Path,
     slug: &str,
     millis: u128,
     seq: u32,
     extension: &str,
-    bytes: &[u8],
-) -> Result<PathBuf> {
+) -> Result<(PathBuf, BufWriter<File>)> {
     let stage = dir.join(format!(
         ".rigsignal-{}-{}-{}.{}.staging",
         slug, millis, seq, extension
@@ -564,15 +626,62 @@ fn write_recovery_stage(
         .write(true)
         .open(&stage)
         .with_context(|| format!("creating recovery staging file: {}", stage.display()))?;
-    let mut writer = BufWriter::new(file);
-    writer
-        .write_all(bytes)
-        .with_context(|| format!("writing recovery staging file: {}", stage.display()))?;
-    writer
-        .flush()
-        .with_context(|| format!("flushing recovery staging file: {}", stage.display()))?;
-    drop(writer);
-    Ok(stage)
+    Ok((stage, BufWriter::new(file)))
+}
+
+struct RecoveryLine {
+    bytes: Vec<u8>,
+    terminated: bool,
+    oversize: bool,
+}
+
+fn read_recovery_line(reader: &mut BufReader<File>, line: &mut Vec<u8>) -> std::io::Result<Option<RecoveryLine>> {
+    line.clear();
+    let mut oversize = false;
+    loop {
+        let (consumed, terminated, bytes_to_append, at_eof) = {
+            let buffer = reader.fill_buf()?;
+            if buffer.is_empty() {
+                (0, false, 0, true)
+            } else {
+                let newline = buffer.iter().position(|byte| *byte == b'\n');
+                let consumed = newline.map_or(buffer.len(), |index| index + 1);
+                let content_len = newline.unwrap_or(buffer.len());
+                let bytes_to_append = if oversize {
+                    0
+                } else if line.len().saturating_add(content_len) > RECOVERY_MAX_LINE_BYTES {
+                    oversize = true;
+                    0
+                } else {
+                    content_len
+                };
+                (consumed, newline.is_some(), bytes_to_append, false)
+            }
+        };
+        if at_eof {
+            return if line.is_empty() && !oversize {
+                Ok(None)
+            } else {
+                Ok(Some(RecoveryLine {
+                    bytes: std::mem::take(line),
+                    terminated: false,
+                    oversize,
+                }))
+            };
+        }
+        if bytes_to_append > 0 {
+            let buffer = reader.fill_buf()?;
+            line.extend_from_slice(&buffer[..bytes_to_append]);
+        }
+        reader.consume(consumed);
+        if terminated {
+            return Ok(Some(RecoveryLine {
+                bytes: std::mem::take(line),
+                terminated: true,
+                oversize,
+            }));
+        }
+    }
 }
 
 fn cleanup_stages(first: Option<&Path>, second: Option<&Path>) {
@@ -1089,10 +1198,10 @@ mod tests {
         let dir = temp_spool_dir("recovery-malformed-truncated");
         fs::create_dir_all(&dir)?;
         let source = dir.join("rigsignal-frame.ndjson.tmp");
-        fs::write(
-            &source,
-            b"{\"marker\":\"valid-one\"}\nnot-json\n{\"marker\":\"valid-two\"}\n{\"marker\":\"partial",
-        )?;
+        let mut original = b"{\"marker\":\"valid-one\"}\nnot-json\n{\"marker\":\"valid-two\"}\n".to_vec();
+        original.extend(std::iter::repeat_n(b'x', RECOVERY_MAX_LINE_BYTES + 1));
+        original.extend_from_slice(b"\n{\"marker\":\"partial");
+        fs::write(&source, &original)?;
 
         let writer = SpoolWriter::new(&dir, 0, 0, 72)?;
         let finals = published_spool_files(&dir)?;
@@ -1104,9 +1213,15 @@ mod tests {
             .filter(|path| path.extension().is_some_and(|ext| ext == "quarantine"))
             .collect();
         assert_eq!(quarantines.len(), 1);
+        assert_eq!(fs::read(&quarantines[0])?, original);
         let quarantined = fs::read_to_string(&quarantines[0])?;
         assert!(quarantined.contains("not-json"));
         assert!(quarantined.contains("partial"));
+        assert!(!fs::read_dir(&dir)?.any(|entry| {
+            entry
+                .ok()
+                .is_some_and(|entry| entry.path().extension().is_some_and(|ext| ext == "staging"))
+        }));
 
         drop(writer);
         fs::remove_dir_all(&dir)?;
@@ -1127,6 +1242,29 @@ mod tests {
         assert!(!staging.exists());
         assert_eq!(count_marker(&finals, "recover-once")?, 1);
         assert!(!source.exists());
+
+        drop(writer);
+        fs::remove_dir_all(&dir)?;
+        Ok(())
+    }
+
+    #[test]
+    fn startup_recovery_removes_fully_valid_source_without_quarantine() -> Result<()> {
+        let dir = temp_spool_dir("recovery-valid");
+        fs::create_dir_all(&dir)?;
+        let source = dir.join("rigsignal-frame.ndjson.tmp");
+        fs::write(&source, b"{\"marker\":\"valid-one\"}\n{\"marker\":\"valid-two\"}\n")?;
+
+        let writer = SpoolWriter::new(&dir, 0, 0, 72)?;
+        let finals = published_spool_files(&dir)?;
+        assert_eq!(count_marker(&finals, "valid-one")?, 1);
+        assert_eq!(count_marker(&finals, "valid-two")?, 1);
+        assert!(!source.exists());
+        assert!(!fs::read_dir(&dir)?.any(|entry| {
+            entry.ok().is_some_and(|entry| {
+                entry.path().extension().is_some_and(|extension| extension == "quarantine")
+            })
+        }));
 
         drop(writer);
         fs::remove_dir_all(&dir)?;
@@ -1215,6 +1353,60 @@ mod tests {
     }
 
     #[test]
+    fn retention_scan_and_deletions_are_bounded_per_call() -> Result<()> {
+        let dir = temp_spool_dir("retention-bounded");
+        let mut writer = SpoolWriter::new(&dir, 0, 0, 1)?;
+        let retained: Vec<PathBuf> = (0..4)
+            .map(|index| dir.join(format!("rigsignal-frame-{index}.ndjson")))
+            .collect();
+        for path in &retained {
+            fs::write(path, "old")?;
+            set_file_age(path, Duration::from_secs(2 * 60 * 60))?;
+        }
+
+        let scanned_before = writer.retention_entries_scanned();
+        writer.prune_retained_files_with_limits(2, 1)?;
+        assert!(writer.retention_entries_scanned() - scanned_before <= 2);
+
+        writer.prune_retained_files_with_limits(100, 1)?;
+        assert!(retained.iter().filter(|path| path.exists()).count() >= 2);
+
+        drop(writer);
+        fs::remove_dir_all(&dir)?;
+        Ok(())
+    }
+
+    #[test]
+    fn retention_rechecks_newly_eligible_files_on_the_next_cycle() -> Result<()> {
+        let dir = temp_spool_dir("retention-next-cycle");
+        let mut writer = SpoolWriter::new(&dir, 0, 0, 1)?;
+        let candidate = dir.join("rigsignal-frame-new.ndjson");
+        fs::write(&candidate, "new")?;
+
+        for _ in 0..10 {
+            writer.prune_retained_files_with_limits(1, 1)?;
+            if writer.retention_scan.is_none() {
+                break;
+            }
+        }
+        assert!(candidate.exists());
+        assert!(writer.retention_scan.is_none());
+
+        set_file_age(&candidate, Duration::from_secs(2 * 60 * 60))?;
+        for _ in 0..10 {
+            writer.prune_retained_files_with_limits(1, 1)?;
+            if !candidate.exists() {
+                break;
+            }
+        }
+        assert!(!candidate.exists());
+
+        drop(writer);
+        fs::remove_dir_all(&dir)?;
+        Ok(())
+    }
+
+    #[test]
     fn second_writer_for_a_spool_directory_fails_fast() -> Result<()> {
         let dir = temp_spool_dir("single-writer-lock");
         let writer = SpoolWriter::new(&dir, 0, 0, 72)?;
@@ -1234,6 +1426,15 @@ mod tests {
             "data_stream": { "dataset": dataset },
             "marker": marker,
         })
+    }
+
+    fn set_file_age(path: &Path, age: Duration) -> Result<()> {
+        let modified = SystemTime::now()
+            .checked_sub(age)
+            .context("test age should be representable")?;
+        let file = OpenOptions::new().write(true).open(path)?;
+        file.set_times(std::fs::FileTimes::new().set_modified(modified))?;
+        Ok(())
     }
 
     fn published_spool_files(dir: &Path) -> Result<Vec<PathBuf>> {
