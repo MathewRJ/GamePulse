@@ -707,6 +707,7 @@ async fn main() -> Result<()> {
             &cfg.output.spool_dir,
             cfg.output.max_file_bytes,
             cfg.output.max_file_age_secs,
+            cfg.output.spool_retention_hours,
         )?),
     };
 
@@ -1085,6 +1086,7 @@ async fn main() -> Result<()> {
     // ── Cleanup ───────────────────────────────────────────────────────────────
     session.remove_session_json();
 
+    let mut summary_written = false;
     if session_tick > 0 {
         let duration_s = session_start.elapsed().as_secs();
         let summary_doc = build_summary_doc(
@@ -1102,12 +1104,23 @@ async fn main() -> Result<()> {
         );
         if let Err(e) = write_output(&cfg, &mut spool_writer, vec![summary_doc]).await {
             tracing::warn!("Failed to ship summary doc: {}", e);
-        } else if matches!(cfg.output.mode, OutputMode::Elasticsearch) {
+        } else {
+            summary_written = true;
+        }
+        if summary_written && matches!(cfg.output.mode, OutputMode::Elasticsearch) {
             // Trigger an immediate transform sync so the Games dashboard
             // reflects this session within seconds rather than up to 60 s.
             if let Err(e) = shipper::trigger_transform_sync(&cfg, "rigsignal-game-timeline").await {
                 tracing::warn!("transform schedule_now failed (non-fatal): {}", e);
             }
+        }
+    }
+
+    // Finalization is deliberately outside the summary branch: a failed summary
+    // write must never strand already-buffered metric batches at shutdown.
+    if let Some(writer) = spool_writer.as_mut() {
+        if let Err(e) = writer.finalize_all() {
+            tracing::warn!("Failed to finalize spool files during shutdown: {}", e);
         }
     }
 

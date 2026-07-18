@@ -37,6 +37,8 @@ pub struct OutputConfig {
     pub max_file_bytes: u64,
     #[serde(default = "default_max_file_age_secs")]
     pub max_file_age_secs: u64,
+    #[serde(default = "default_spool_retention_hours")]
+    pub spool_retention_hours: u64,
 }
 
 fn default_spool_dir() -> PathBuf {
@@ -55,6 +57,10 @@ fn default_max_file_age_secs() -> u64 {
     300
 }
 
+fn default_spool_retention_hours() -> u64 {
+    72
+}
+
 impl Default for OutputConfig {
     fn default() -> Self {
         Self {
@@ -62,6 +68,7 @@ impl Default for OutputConfig {
             spool_dir: default_spool_dir(),
             max_file_bytes: default_max_file_bytes(),
             max_file_age_secs: default_max_file_age_secs(),
+            spool_retention_hours: default_spool_retention_hours(),
         }
     }
 }
@@ -358,6 +365,7 @@ mod tests {
             .ends_with(".local/state/rigsignal/spool"));
         assert_eq!(cfg.output.max_file_bytes, 10_485_760);
         assert_eq!(cfg.output.max_file_age_secs, 300);
+        assert_eq!(cfg.output.spool_retention_hours, 72);
     }
 
     #[test]
@@ -372,6 +380,7 @@ mod tests {
             spool_dir = "/tmp/rigsignal-spool"
             max_file_bytes = 1024
             max_file_age_secs = 30
+            spool_retention_hours = 24
             "#,
         )
         .unwrap();
@@ -380,5 +389,6 @@ mod tests {
         assert_eq!(cfg.output.spool_dir, PathBuf::from("/tmp/rigsignal-spool"));
         assert_eq!(cfg.output.max_file_bytes, 1024);
         assert_eq!(cfg.output.max_file_age_secs, 30);
+        assert_eq!(cfg.output.spool_retention_hours, 24);
     }
 }
