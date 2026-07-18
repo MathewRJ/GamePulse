@@ -18,6 +18,8 @@ mod dllscan;
 mod host;
 mod launchers_windows;
 mod profiles;
+#[cfg(target_os = "linux")]
+mod remote_connections;
 mod session;
 mod shipper;
 
@@ -793,6 +795,25 @@ async fn main() -> Result<()> {
         session_label.clone(),
         settings_overlay,
     );
+
+    // Connection events are always direct-ES keyed creates. They intentionally
+    // bypass the metric spool because spool/Fleet cannot preserve `_id` or
+    // return the per-item acknowledgement needed for the tail checkpoint.
+    #[cfg(target_os = "linux")]
+    let mut remote_connections_tailer = if cfg.elasticsearch.endpoint.trim().is_empty()
+        || !cfg.elasticsearch.has_delivery_credentials()
+    {
+        tracing::warn!("remote_connections tailer disabled: direct Elasticsearch endpoint and credentials are required");
+        None
+    } else {
+        match remote_connections::RemoteConnectionsTailer::new(hostname.clone()) {
+            Ok(tailer) => Some(tailer),
+            Err(error) => {
+                tracing::warn!(%error, "remote_connections tailer disabled during startup");
+                None
+            }
+        }
+    };
     // Keep the CLI+config overlay unchanged so we can restore it after each game ends.
     let base_settings_overlay = session.settings_overlay.clone();
     tracing::info!(
@@ -944,6 +965,40 @@ async fn main() -> Result<()> {
                         last_known_game = Some(target); // keep for shutdown-path fallback
                     }
                     SessionEvent::NoChange => {}
+                }
+
+                // This is deliberately separate from the configured metric
+                // output mode: stream-boundary events need bulk create ids and
+                // an acknowledgement before their durable source checkpoint can
+                // advance.
+                #[cfg(target_os = "linux")]
+                if let Some(tailer) = remote_connections_tailer.as_mut() {
+                    match tailer.poll(&session) {
+                        Ok(events) if !events.is_empty() => {
+                            let token = events[0].token.clone();
+                            let docs = events.into_iter().map(|event| shipper::ShipDocument {
+                                document: event.document,
+                                id: Some(event.id),
+                            }).collect();
+                            match shipper::ship_documents(&cfg, docs).await {
+                                Ok(result) if result.failed == 0 => {
+                                    if let Err(error) = tailer.ack_success(&token) {
+                                        tracing::warn!(%error, "remote_connections checkpoint acknowledgement failed");
+                                    }
+                                }
+                                Ok(result) => {
+                                    tailer.nack();
+                                    tracing::warn!(failed = result.failed, "remote_connections bulk batch retained for replay");
+                                }
+                                Err(error) => {
+                                    tailer.nack();
+                                    tracing::warn!(%error, "remote_connections bulk transport error; batch retained for replay");
+                                }
+                            }
+                        }
+                        Ok(_) => {}
+                        Err(error) => tracing::warn!(%error, "remote_connections tail error"),
+                    }
                 }
 
                 // ── Build base doc for this tick ──────────────────────────────

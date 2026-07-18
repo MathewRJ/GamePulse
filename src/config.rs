@@ -137,6 +137,17 @@ impl Default for ElasticsearchConfig {
     }
 }
 
+impl ElasticsearchConfig {
+    /// Event tail delivery needs an authenticated direct bulk path even when
+    /// metrics are configured for spool output.
+    pub fn has_delivery_credentials(&self) -> bool {
+        self.api_key
+            .as_ref()
+            .is_some_and(|key| !key.trim().is_empty())
+            || matches!((&self.username, &self.password), (Some(user), Some(password)) if !user.is_empty() && !password.is_empty())
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CollectionConfig {
     #[serde(default = "default_interval_ms")]

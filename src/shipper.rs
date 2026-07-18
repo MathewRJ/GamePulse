@@ -22,6 +22,13 @@ pub struct ShipResult {
     pub failed: usize,
 }
 
+/// A document that may use Elasticsearch's create-time idempotency key.  The id is
+/// deliberately transport metadata, never a field added to the source document.
+pub struct ShipDocument {
+    pub document: Value,
+    pub id: Option<String>,
+}
+
 pub struct SpoolWriter {
     dir: PathBuf,
     max_file_bytes: u64,
@@ -305,12 +312,21 @@ pub async fn ping(config: &Config) -> Result<()> {
     Ok(())
 }
 
-/// POST docs to /_bulk. Each doc must contain a `data_stream.dataset` field
-/// so the correct index can be derived.
-///
-/// Index name convention (matches Python collector):
-///   metrics-rigsignal.<dataset>-default
+/// POST ordinary (unkeyed) docs to /_bulk.
 pub async fn ship(config: &Config, docs: Vec<Value>) -> Result<ShipResult> {
+    ship_documents(
+        config,
+        docs.into_iter()
+            .map(|document| ShipDocument { document, id: None })
+            .collect(),
+    )
+    .await
+}
+
+/// POST documents to /_bulk, optionally using an internal create `_id`.
+/// Documents route to their managed data stream, which supplies its default
+/// pipeline; no explicit bulk pipeline parameter is ever attached.
+pub async fn ship_documents(config: &Config, docs: Vec<ShipDocument>) -> Result<ShipResult> {
     if docs.is_empty() {
         return Ok(ShipResult {
             attempted: 0,
@@ -328,16 +344,10 @@ pub async fn ship(config: &Config, docs: Vec<Value>) -> Result<ShipResult> {
 
     let mut body = String::with_capacity(attempted * 256);
     for doc in &docs {
-        let dataset = doc
-            .get("data_stream")
-            .and_then(|ds| ds.get("dataset"))
-            .and_then(|d| d.as_str())
-            .unwrap_or("rigsignal.unknown");
-        let index = format!("metrics-{}-default", dataset);
-        let action = serde_json::json!({"create": {"_index": index}});
+        let action = bulk_action(&doc.document, doc.id.as_deref())?;
         body.push_str(&serde_json::to_string(&action).context("serialising action line")?);
         body.push('\n');
-        body.push_str(&serde_json::to_string(doc).context("serialising doc")?);
+        body.push_str(&serde_json::to_string(&doc.document).context("serialising doc")?);
         body.push('\n');
     }
 
@@ -367,17 +377,30 @@ pub async fn ship(config: &Config, docs: Vec<Value>) -> Result<ShipResult> {
         .unwrap_or(false);
 
     let mut failed = 0usize;
-    if has_errors {
+    if has_errors || docs.iter().any(|doc| doc.id.is_some()) {
         if let Some(items) = resp_body.get("items").and_then(|i| i.as_array()) {
-            for item in items {
-                for action in ["create", "index"] {
-                    if let Some(err) = item.get(action).and_then(|a| a.get("error")) {
+            for (position, item) in items.iter().enumerate() {
+                let create = item.get("create").or_else(|| item.get("index"));
+                let keyed = docs.get(position).and_then(|doc| doc.id.as_ref());
+                let success = if keyed.is_some() {
+                    bulk_item_success(keyed, create)
+                } else {
+                    !has_errors || bulk_item_success(keyed, create)
+                };
+                if !success {
+                    let status = create
+                        .and_then(|action| action.get("status"))
+                        .and_then(Value::as_u64);
+                    if let Some(err) = create.and_then(|action| action.get("error")) {
                         warn!("bulk item error: {}", err);
-                        failed += 1;
-                        break;
+                    } else {
+                        warn!("bulk item returned unexpected status {:?}", status);
                     }
+                    failed += 1;
                 }
             }
+        } else {
+            failed = attempted;
         }
     }
 
@@ -388,6 +411,62 @@ pub async fn ship(config: &Config, docs: Vec<Value>) -> Result<ShipResult> {
         succeeded,
         failed,
     })
+}
+
+fn bulk_action(document: &Value, id: Option<&str>) -> Result<Value> {
+    let data_stream = document
+        .get("data_stream")
+        .and_then(Value::as_object)
+        .context("bulk document missing data_stream")?;
+    let stream_type = data_stream
+        .get("type")
+        .and_then(Value::as_str)
+        .context("bulk document missing data_stream.type")?;
+    if stream_type != "metrics" && stream_type != "logs" {
+        anyhow::bail!(
+            "unsupported data_stream.type {:?}; expected metrics or logs",
+            stream_type
+        );
+    }
+    let dataset = data_stream
+        .get("dataset")
+        .and_then(Value::as_str)
+        .context("bulk document missing data_stream.dataset")?;
+    let mut create = serde_json::Map::new();
+    create.insert(
+        "_index".to_string(),
+        Value::String(format!("{}-{}-default", stream_type, dataset)),
+    );
+    if let Some(id) = id {
+        create.insert("_id".to_string(), Value::String(id.to_string()));
+    }
+    Ok(Value::Object(serde_json::Map::from_iter([(
+        "create".to_string(),
+        Value::Object(create),
+    )])))
+}
+
+/// Interprets an injected/mock bulk item the same way the live response path
+/// does. A keyed create may be acknowledged by either a fresh 201 or the
+/// specific idempotency conflict; regular metric behaviour remains error-based.
+fn bulk_item_success(id: Option<&String>, item: Option<&Value>) -> bool {
+    let status = item
+        .and_then(|action| action.get("status"))
+        .and_then(Value::as_u64);
+    if id.is_some() && status == Some(201) {
+        return true;
+    }
+    if id.is_some()
+        && status == Some(409)
+        && item
+            .and_then(|action| action.get("error"))
+            .and_then(|error| error.get("type"))
+            .and_then(Value::as_str)
+            == Some("version_conflict_engine_exception")
+    {
+        return true;
+    }
+    id.is_none() && item.and_then(|action| action.get("error")).is_none()
 }
 
 /// Request an immediate transform sync via POST /_transform/{id}/_schedule_now.
@@ -443,6 +522,50 @@ mod tests {
     fn dataset_slug_uses_last_dot_segment() {
         assert_eq!(dataset_slug("rigsignal.frame"), "frame");
         assert_eq!(dataset_slug("rigsignal.ebpf_thread"), "ebpf_thread");
+    }
+
+    #[test]
+    fn bulk_action_routes_logs_and_accepts_an_optional_id() -> Result<()> {
+        let action = bulk_action(
+            &json!({"data_stream": {"type": "logs", "dataset": "rigsignal.events"}}),
+            Some("source-record-id"),
+        )?;
+        assert_eq!(action["create"]["_index"], "logs-rigsignal.events-default");
+        assert_eq!(action["create"]["_id"], "source-record-id");
+        let metrics = bulk_action(
+            &json!({"data_stream": {"type": "metrics", "dataset": "rigsignal.cpu"}}),
+            None,
+        )?;
+        assert_eq!(metrics["create"]["_index"], "metrics-rigsignal.cpu-default");
+        assert!(metrics["create"].get("_id").is_none());
+        assert!(bulk_action(
+            &json!({"data_stream": {"type": "traces", "dataset": "rigsignal.events"}}),
+            None,
+        )
+        .is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn keyed_bulk_acknowledges_201_and_idempotent_409_only() {
+        let source_id = "source-record-id".to_string();
+        let id = Some(&source_id);
+        assert!(bulk_item_success(id, Some(&json!({"status": 201}))));
+        assert!(bulk_item_success(
+            id,
+            Some(&json!({
+                "status": 409,
+                "error": {"type": "version_conflict_engine_exception"}
+            }))
+        ));
+        assert!(!bulk_item_success(
+            id,
+            Some(&json!({
+                "status": 409,
+                "error": {"type": "mapper_parsing_exception"}
+            }))
+        ));
+        assert!(!bulk_item_success(id, Some(&json!({"status": 500}))));
     }
 
     #[test]
