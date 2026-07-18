@@ -318,15 +318,13 @@ fn parse_fdinfo(fd: u32, path: &Path) -> Option<FdCounters> {
         }
     }
     let pdev = values.remove("drm-pdev")?;
-    let dec = values
-        .get("drm-engine-dec")
-        .and_then(|value| value.parse().ok());
-    let enc = values
-        .get("drm-engine-enc")
-        .and_then(|value| value.parse().ok());
-    let gfx = values
-        .get("drm-engine-gfx")
-        .and_then(|value| value.parse().ok());
+    // Kernel format is `drm-engine-<name>:\t<u64> ns` — parse the leading numeric
+    // token so the ` ns` suffix (or its absence) never breaks the counter.
+    let parse_ns =
+        |value: &String| value.split_whitespace().next().and_then(|t| t.parse().ok());
+    let dec = values.get("drm-engine-dec").and_then(parse_ns);
+    let enc = values.get("drm-engine-enc").and_then(parse_ns);
+    let gfx = values.get("drm-engine-gfx").and_then(parse_ns);
     if dec.is_none() && enc.is_none() && gfx.is_none() {
         return None;
     }
@@ -472,25 +470,25 @@ mod tests {
             &root,
             99,
             28,
-            "drm-pdev: 0000:03:00.0\ndrm-client-id: 7\ndrm-engine-dec: 100000000\n",
+            "drm-pdev: 0000:03:00.0\ndrm-client-id: 7\ndrm-engine-dec:\t100000000 ns\n",
         );
         fdinfo(
             &root,
             99,
             30,
-            "drm-pdev: 0000:03:00.0\ndrm-client-id: 7\ndrm-engine-dec: 100000000\n",
+            "drm-pdev: 0000:03:00.0\ndrm-client-id: 7\ndrm-engine-dec:\t100000000 ns\n",
         );
         fdinfo(
             &root,
             99,
             31,
-            "drm-pdev: 0000:04:00.0\ndrm-engine-enc: 50000000\n",
+            "drm-pdev: 0000:04:00.0\ndrm-engine-enc:\t50000000 ns\n",
         );
         fdinfo(
             &root,
             99,
             32,
-            "drm-pdev: 0000:04:00.0\ndrm-engine-enc: 50000000\n",
+            "drm-pdev: 0000:04:00.0\ndrm-engine-enc:\t50000000 ns\n",
         );
         let mut collector = StreamClientCollector::with_proc_root(root.clone());
         let start = Instant::now();
@@ -499,25 +497,25 @@ mod tests {
             &root,
             99,
             28,
-            "drm-pdev: 0000:03:00.0\ndrm-client-id: 7\ndrm-engine-dec: 200000000\n",
+            "drm-pdev: 0000:03:00.0\ndrm-client-id: 7\ndrm-engine-dec:\t200000000 ns\n",
         );
         fdinfo(
             &root,
             99,
             30,
-            "drm-pdev: 0000:03:00.0\ndrm-client-id: 7\ndrm-engine-dec: 999000000\n",
+            "drm-pdev: 0000:03:00.0\ndrm-client-id: 7\ndrm-engine-dec:\t999000000 ns\n",
         );
         fdinfo(
             &root,
             99,
             31,
-            "drm-pdev: 0000:04:00.0\ndrm-engine-enc: 100000000\n",
+            "drm-pdev: 0000:04:00.0\ndrm-engine-enc:\t100000000 ns\n",
         );
         fdinfo(
             &root,
             99,
             32,
-            "drm-pdev: 0000:04:00.0\ndrm-engine-enc: 100000000\n",
+            "drm-pdev: 0000:04:00.0\ndrm-engine-enc:\t100000000 ns\n",
         );
         let doc = collector
             .sample_at_post(
@@ -552,11 +550,11 @@ mod tests {
     fn pid_reuse_and_backwards_counter_reset_baselines() {
         let root = fixture_root();
         process(&root, 77, 1, Some("streaming_client"));
-        fdinfo(&root, 77, 3, "drm-pdev: gpu\ndrm-engine-gfx: 100\n");
+        fdinfo(&root, 77, 3, "drm-pdev: gpu\ndrm-engine-gfx:\t100 ns\n");
         let mut collector = StreamClientCollector::with_proc_root(root.clone());
         let start = Instant::now();
         collector.sample_at_post(start, start).unwrap();
-        fdinfo(&root, 77, 3, "drm-pdev: gpu\ndrm-engine-gfx: 200\n");
+        fdinfo(&root, 77, 3, "drm-pdev: gpu\ndrm-engine-gfx:\t200 ns\n");
         assert!(client(
             &collector
                 .sample_at_post(
@@ -567,7 +565,7 @@ mod tests {
         )["gfx_busy_pct"]
             .is_number());
         fs::write(root.join("77/stat"), stat(2)).unwrap();
-        fdinfo(&root, 77, 3, "drm-pdev: gpu\ndrm-engine-gfx: 300\n");
+        fdinfo(&root, 77, 3, "drm-pdev: gpu\ndrm-engine-gfx:\t300 ns\n");
         let reused = collector
             .sample_at_post(
                 start + Duration::from_secs(6),
@@ -575,7 +573,7 @@ mod tests {
             )
             .unwrap();
         assert!(client(&reused).get("gfx_busy_pct").is_none());
-        fdinfo(&root, 77, 3, "drm-pdev: gpu\ndrm-engine-gfx: 250\n");
+        fdinfo(&root, 77, 3, "drm-pdev: gpu\ndrm-engine-gfx:\t250 ns\n");
         let backwards = collector
             .sample_at_post(
                 start + Duration::from_secs(7),
@@ -634,11 +632,11 @@ mod tests {
     fn gfx_only_and_enc_only_keep_metric_shape_honest() {
         let root = fixture_root();
         process(&root, 50, 1, Some("streaming_client"));
-        fdinfo(&root, 50, 4, "drm-pdev: gpu\ndrm-engine-gfx: 10\n");
+        fdinfo(&root, 50, 4, "drm-pdev: gpu\ndrm-engine-gfx:\t10 ns\n");
         let mut collector = StreamClientCollector::with_proc_root(root.clone());
         let start = Instant::now();
         collector.sample_at_post(start, start).unwrap();
-        fdinfo(&root, 50, 4, "drm-pdev: gpu\ndrm-engine-gfx: 30\n");
+        fdinfo(&root, 50, 4, "drm-pdev: gpu\ndrm-engine-gfx:\t30 ns\n");
         let gfx = collector
             .sample_at_post(
                 start + Duration::from_secs(1),
@@ -648,14 +646,14 @@ mod tests {
         assert!(client(&gfx).get("video_busy_pct").is_none());
         assert!(client(&gfx)["gfx_busy_pct"].is_number());
 
-        fdinfo(&root, 50, 4, "drm-pdev: gpu\ndrm-engine-enc: 40\n");
+        fdinfo(&root, 50, 4, "drm-pdev: gpu\ndrm-engine-enc:\t40 ns\n");
         collector
             .sample_at_post(
                 start + Duration::from_secs(2),
                 start + Duration::from_secs(2),
             )
             .unwrap();
-        fdinfo(&root, 50, 4, "drm-pdev: gpu\ndrm-engine-enc: 60\n");
+        fdinfo(&root, 50, 4, "drm-pdev: gpu\ndrm-engine-enc:\t60 ns\n");
         let enc = collector
             .sample_at_post(
                 start + Duration::from_secs(3),
@@ -675,7 +673,7 @@ mod tests {
             &root,
             90,
             4,
-            "drm-pdev: gpu\ndrm-engine-dec: 1\ndrm-engine-gfx: 1\n",
+            "drm-pdev: gpu\ndrm-engine-dec:\t1 ns\ndrm-engine-gfx:\t1 ns\n",
         );
         let mut collector = StreamClientCollector::with_proc_root(root.clone());
         let at = Instant::now();
