@@ -1,0 +1,9 @@
+goal: "Daemon S1: retire metric_timestamp_offset_ms (uniform tick timestamps) + unknown-probe fail-closed per D3. FULL contract in tasks/rigsignal-025-s1-daemon.md in this worktree — read it FIRST. ebpf/rigsignal-ebpf/src only; no commits; no version bumps."
+files_in_scope:
+  - ebpf/rigsignal-ebpf/src/main.rs
+  - ebpf/rigsignal-ebpf/src/shipper.rs
+  - ebpf/rigsignal-ebpf/src/es_model.rs
+acceptance_criteria:
+  - cargo check and cargo test green with --manifest-path ebpf/Cargo.toml
+  - git diff confined to ebpf/rigsignal-ebpf/src/
+  - B2 unit tests including the two-unknown-probes-in-one-tick case
