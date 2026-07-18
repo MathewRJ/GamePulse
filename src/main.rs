@@ -566,6 +566,8 @@ fn build_collectors(game_pid: Option<u32>) -> Vec<Box<dyn Collector>> {
         Box::new(collectors::AudioCollector::new(game_pid)),
         frame_collector,
         Box::new(collectors::GpuCollector::new(game_pid)),
+        #[cfg(target_os = "linux")]
+        Box::new(collectors::StreamClientCollector::new()),
     ]
 }
 
@@ -1013,7 +1015,17 @@ async fn main() -> Result<()> {
                     let dataset = c.dataset();
                     match c.collect() {
                         Ok(Some(payload)) => {
-                            let mut doc = deep_merge(base.clone(), payload);
+                            // Stream-client telemetry observes a remote client.  It must
+                            // never inherit the agent's generated idle session context.
+                            let collector_base = if dataset == "rigsignal.stream_client" {
+                                deep_merge(
+                                    json!({ "@timestamp": ts }),
+                                    session.stream_client_base_doc(&hostname),
+                                )
+                            } else {
+                                base.clone()
+                            };
+                            let mut doc = deep_merge(collector_base, payload);
                             add_data_stream(&mut doc, dataset);
                             tick_docs.push(doc);
                         }

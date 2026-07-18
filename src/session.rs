@@ -282,6 +282,31 @@ impl SessionManager {
         })
     }
 
+    /// Base context for remote stream-client telemetry.  Unlike normal agent
+    /// metrics, this must not associate an idle agent session with a remote
+    /// client's activity.  The optional session and game context is included
+    /// only while a local game is active.
+    pub fn stream_client_base_doc(&self, hostname: &str) -> Value {
+        let mut root = serde_json::Map::new();
+        root.insert("host".to_string(), json!({ "name": hostname }));
+
+        if let Some(target) = &self.current_game {
+            root.insert(
+                "rigsignal".to_string(),
+                json!({
+                    "session": {
+                        "id": self.session_id,
+                        "label": self.label,
+                        "agent_version": env!("CARGO_PKG_VERSION"),
+                    },
+                    "game": target_to_game_doc(target),
+                }),
+            );
+        }
+
+        Value::Object(root)
+    }
+
     /// Write session.json for the eBPF daemon.
     ///
     /// The daemon's `SessionInfo` reads: session_id, game_pid, game_name,
@@ -879,6 +904,15 @@ mod tests {
     "name"  "Cyberpunk 2077"
     "installdir"  "Cyberpunk 2077"
 }"#;
+
+    #[test]
+    fn stream_client_base_omits_idle_session_and_game() {
+        let session = SessionManager::new();
+        let doc = session.stream_client_base_doc("host-a");
+        assert_eq!(doc["host"]["name"], "host-a");
+        assert!(doc.get("rigsignal").is_none());
+        assert!(!doc.to_string().contains("idle-"));
+    }
 }
 
 // ── Lutris detection (Unix only) ──────────────────────────────────────────────

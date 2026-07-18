@@ -7,6 +7,7 @@ pub mod memory;
 pub mod network;
 pub mod power;
 pub mod storage;
+pub mod stream_client;
 
 pub use audio::AudioCollector;
 pub use cpu::CpuCollector;
@@ -17,3 +18,4 @@ pub use memory::MemoryCollector;
 pub use network::NetworkCollector;
 pub use power::PowerCollector;
 pub use storage::StorageCollector;
+pub use stream_client::StreamClientCollector;
