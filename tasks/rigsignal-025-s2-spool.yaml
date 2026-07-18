@@ -1,0 +1,16 @@
+goal: >
+  Implement 0.2.5 S2 — spool shutdown finalization, eager startup recovery,
+  retention pruning, and single-writer flock. The FULL authoritative contract,
+  hazard warnings, and deliverables are in tasks/rigsignal-025-s2-spool.md in
+  this worktree — read it FIRST and follow it exactly. Do not commit; do not
+  bump versions.
+files_in_scope:
+  - src/shipper.rs
+  - src/main.rs
+  - src/config.rs
+  - packaging/config/rigsignal.toml.example
+  - CHANGELOG.md
+acceptance_criteria:
+  - cargo check clean and cargo test green in the worktree
+  - New tests cover A1, A2 (truncated/malformed/disk-full-retain), A3, A4 (stale regression + size-rotation + forced-stale-at-summary), A7
+  - Summary maps each Behavior item and each hazard to its implementation
