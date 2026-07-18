@@ -1,6 +1,6 @@
 # Metrics Reference
 
-RigSignal ships data to 11 metrics data streams plus one logs data stream. This
+RigSignal ships data to 12 metrics data streams plus one logs data stream. This
 repository does not currently ship a `data_stream/*/fields/fields.yml` — that
 schema is produced separately for the Elastic integration package submission
 (see `docs/README.md`). The authoritative field definitions are the collector
@@ -295,10 +295,9 @@ aggregate across the primary network interface, not per-process.
 | Field | Type | Description |
 |-------|------|-------------|
 | `rigsignal.audio.backend` | keyword | `pipewire` \| `pulseaudio` \| `alsa` \| `unknown` (Linux) \| `wasapi` (Windows). Always present. |
-| `rigsignal.audio.xruns` | long | Delta audio buffer underruns since the last tick. PipeWire only, and only from the second `pw-top` sample onward (the first tick establishes the baseline). Not emitted on PulseAudio or on Windows (WASAPI xrun detection is scaffolded but not yet implemented — `TODO(C.7-xruns)`). |
-| `rigsignal.audio.latency_ms` | float | Quantum/rate latency in ms, 2 dp. PipeWire only, present when parseable from `pw-top`. |
-| `rigsignal.audio.quantum` | long | PipeWire scheduling quantum (frames). PipeWire only, present when parseable. |
-| `rigsignal.audio.sample_rate_hz` | long | Server/default-sink sample rate. Present on both PipeWire (default-sink info) and PulseAudio (server info), when parseable; absent on Windows. |
+| `rigsignal.audio.latency_ms` | float | Configured PipeWire scheduling latency in ms, 2 dp, calculated from effective quantum and rate from `pw-metadata`. It is not observed, sink-driver, round-trip, or stream latency. |
+| `rigsignal.audio.quantum` | long | Effective PipeWire scheduling quantum in frames, from `pw-metadata`. PipeWire only, present when parseable. |
+| `rigsignal.audio.sample_rate_hz` | long | Effective PipeWire clock rate from `pw-metadata`, or PulseAudio server rate on that backend. Present when parseable; absent on Windows. |
 | `rigsignal.audio.sink_name` | keyword | Default PipeWire sink name. PipeWire only, present when parseable. Added in 0.2.3 (audio enrichment). |
 | `rigsignal.audio.card_profile` | keyword | Default sink's active device profile. PipeWire only, present when parseable. Added in 0.2.3. |
 | `rigsignal.audio.channels` | long | Default sink channel count. PipeWire only, present when parseable. Added in 0.2.3. |
@@ -306,9 +305,22 @@ aggregate across the primary network interface, not per-process.
 | `rigsignal.audio.driver_latency_ms` | float | Default sink's actual driver latency, 2 dp. PipeWire only, present when parseable. Added in 0.2.3. |
 
 Note: parsing of the PipeWire "Sample Specification" line is atomic — if the
-channel count segment fails to parse, `sample_format` and `sample_rate_hz`
-are both omitted for that tick even if individually parseable, since they
-come from the same line.
+channel count segment fails to parse, `sample_format` is omitted for that
+tick. PipeWire's `sample_rate_hz` instead comes from `pw-metadata`.
+
+---
+
+## `metrics-rigsignal.stream_client-default`
+
+Client-observer metrics for Steam Remote Play on Linux. These documents are
+emitted only while the client process is eligible. They include game/session
+context only when a local game is active; otherwise those groups are omitted.
+
+| Field | Type | Unit | Description |
+|-------|------|------|-------------|
+| `rigsignal.stream.client.video_busy_pct` | float | % | 0–100 GPU video-engine busy percentage during the monotonic sample interval. This is a saturation proxy, not a decode-drop counter. |
+| `rigsignal.stream.client.video_engine` | keyword | — | Source engine label: `dec`, `enc`, or `dec+enc`. Present only with `video_busy_pct`. |
+| `rigsignal.stream.client.gfx_busy_pct` | float | % | 0–100 DRM gfx-engine busy percentage during the monotonic sample interval. |
 
 ---
 
@@ -379,16 +391,25 @@ rather than crashing.
 
 ---
 
-## `logs-rigsignal.events-default` (planned — not yet implemented)
+## `logs-rigsignal.events-default`
 
-Intended to carry discrete events during a game session (shader compilation,
-save operations, crashes, etc.). **No collector in the current agent emits
-this stream** — there is no `rigsignal.event.*` field construction anywhere
-in `src/`. The schema below is the design target, not a live field list; do
-not build dashboards or alerts against it yet.
+Steam Remote Play connection transitions are emitted from the client log. They
+carry local game/session context only when a local game is active; otherwise
+those groups are omitted.
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `rigsignal.event.kind` | keyword | Event type: `shader_compile`, `save`, `crash`, etc. |
 | `rigsignal.event.severity` | keyword | `info` \| `warning` \| `error` |
 | `message` | text | Human-readable event description |
+| `rigsignal.stream.client.event` | keyword | Remote Play transition: `connected` or `disconnected`. |
+| `rigsignal.stream.client.transport` | keyword | Parsed connection transport: `direct`, `relay`, or `unknown`; omitted when Steam supplies no `via` phrase. |
+| `rigsignal.stream.client.peer.id` | keyword | Steam peer/device identifier. |
+| `rigsignal.stream.client.peer.name` | keyword | Peer-selected hostname. |
+
+### Privacy boundary
+
+`rigsignal.stream.client.peer.id` and `rigsignal.stream.client.peer.name` are
+privacy-sensitive, local-only fields. Do not export their raw values. They do
+not belong under `host.*` or `user.*`; a future export feature must define the
+sanitization, opt-in, and retention policy first.
