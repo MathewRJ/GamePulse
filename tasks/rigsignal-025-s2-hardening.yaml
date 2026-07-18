@@ -1,0 +1,7 @@
+goal: "Harden S2 per deep-review findings 1/2/4: streaming recovery with quarantine-by-rename + bounded incremental retention scan. FULL contract in tasks/rigsignal-025-s2-hardening.md in this worktree — read FIRST. src/shipper.rs only; no commits; no version bumps."
+files_in_scope:
+  - src/shipper.rs
+acceptance_criteria:
+  - cargo check and cargo test green with --manifest-path src/Cargo.toml
+  - git diff confined to src/shipper.rs
+  - new tests for streaming recovery and bounded retention cycle
