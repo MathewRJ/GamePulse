@@ -1,7 +1,7 @@
 # RigSignal — Project Status
 
-Last updated: 2026-06-10 by codex (Windows session parity row updated after launcher detection, manual attach, and PresentMon bundling)
-Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forked)
+Last updated: 2026-07-18 by Codex (0.2.4 release and 0.2.5 delivery status refreshed)
+Active streams: main (local ElasticHome deployment) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
 
@@ -26,7 +26,9 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 | D  Linux portable packaging | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
 | E  Windows packaging | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
 | F  Cross-platform parity verification (M2) | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
-| G  elastic/integrations PR (M4) | 🟡 In progress (repo cleanup done; audit next) | ▓░░░░░░░░░ |
+| G  elastic/integrations PR (M4) | 🟡 Deferred (maintainer architecture rework + `fields.yml` gating) | ▓░░░░░░░░░ |
+| 0.2.4 release | 🟢 Released 2026-07-18 | ▓▓▓▓▓▓▓▓▓▓ |
+| 0.2.5 release | 🟡 In flight (S1 shipped; S2 retention gate pending) | ▓▓▓▓▓▓▓░░░ |
 
 ## At a glance — offline branch (not yet forked)
 
@@ -67,51 +69,22 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 
 ## Active work package
 
-**Milestone E complete + CI-verified 2026-04-29.** Windows MSI packaging via cargo-wix 0.3.9 + WiX Toolset 3.14. Hand-authored `main.wxs` mirrors Linux package layout: install root `C:\Program Files\RigSignal\` with `bin\`, `config\`, `profiles\` subfolders; system PATH gains `bin\`; stable upgrade GUID + MajorUpgrade for in-place upgrades; `perMachine` install scope. `release.yml` Windows job rewired from zip → MSI (cargo-binstall installs cargo-wix in CI, `--force` to bypass rust-cache vs binstall metadata staleness). `Config::load()` now searches `%APPDATA%\RigSignal\rigsignal.toml` then `%PROGRAMDATA%\RigSignal\rigsignal.toml` on Windows, cfg-gated separately from the Linux chain. CLI help strings de-Linux-ified (about-string, `--config` description). Local install/uninstall round-trip on Windows 11 (UAC `/qb!`): exit 0, all 5 files present, PATH added on install + removed on uninstall, `rigsignal-agent --help` runs from PATH. CI workflow_dispatch verified on run 25129025256 — all 4 packages green (deb 2.47 MB, rpm 2.65 MB, arch 3.19 MB, msi 2.81 MB), release-publish job correctly skipped via `if: github.event_name == 'push'` guard. Two follow-up CI fixes also shipped: hyphen→underscore translation in Arch pkgver (handles semver pre-release tags), and `--force` on cargo-binstall (rust-cache caches `.crates2.json` metadata but not `~/.cargo/bin/`, leaving binstall thinking cargo-wix was installed when it wasn't).
+**0.2.4 released 2026-07-18.** It delivers the legacy `gpu_sched` port, fleet TSDS fix, client stream telemetry, and PipeWire re-source.
 
-**Post-E Windows sweep complete 2026-04-29.** While the Windows machine was set up, four bugs got fixed and one feature gap closed:
+**0.2.5 is in flight.** S1 probe-TSDS-dimension shipped and was live-attested on 2026-07-18. S2 spool durability is in progress; its gate closes after the A6-24h retention check at or after `2026-07-19T17:52:04Z`. The release bump is pre-staged in a worktree.
 
-1. **`profile_dirs()` Windows paths** (commit cf71c18) — D.7 only searched Linux paths so the MSI-installed profiles at `C:\Program Files\RigSignal\profiles\` were unreachable. Added cfg-gated chain: `%APPDATA%\RigSignal\profiles\`, `%PROGRAMDATA%\RigSignal\profiles\`, and a binary-relative one-up fallback (`<exe>/../profiles/`) that picks up the MSI install layout.
+**Deployment.** The local ElasticHome Elasticsearch stack is active (cloud migrated 2026-07-09). Agents run on GamingPC (`.254`) and StreamClient (`.162`) in spool-file output mode.
 
-2. **`host.name = "unknown"` and `host.os.type = "linux"`** (commit a6fbb1b) — caught by live ES shipping smoke test on Windows (session `a78c7eb2-...`). `hostname()` was reading `/proc/sys/kernel/hostname` unconditionally; now uses `COMPUTERNAME` env var on Windows. `os_info()` was hard-coding `type = "linux"`; now reads `std::env::consts::OS` and on Windows runs `cmd /c ver` to extract the kernel/version (e.g. `10.0.26100.8246`). Verified end-to-end in ES — every per-tick doc now has the correct `host.name`.
+**Distribution.** `rigsignal-git` is live on AUR and `install.sh` is live. Resubmit winget after the architecture rework. elastic/integrations PR #18878 remains deferred for the maintainer architecture rework and `fields.yml` gating.
 
-3. **Settings Tier 2 — Windows EnumProcessModules** (commit 59465f9) — closes the largest remaining Windows feature gap. `read_mapped_paths` is now cfg-gated between `/proc/<pid>/maps` (Linux) and `OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ) + EnumProcessModules + GetModuleFileNameExW` (Windows, via psapi). 4096-wide-char buffer avoids silent truncation on long-path installs. Detection chains in `dllscan.rs` (graphics_api, upscaler, frame_gen) were already cross-platform — they just needed a Windows module enumerator. New `rigsignal-agent dllscan <PID>` debug subcommand prints loaded modules + inferred Tier 2 detection. Smoke-tested against explorer.exe (356 modules enumerated; correctly returned `graphics_api: None` and `settings_overlay: null` since no DLSS/XeSS/FSR/DXVK/D3D12 DLLs present).
-
-**Live ES shipping verification on Windows 11 (run a78c7eb2-...).** First end-to-end proof that the Windows agent populates ES from a real desktop. Agent ran for ~2 min, shipped 164 docs/stream across 7 active streams (cpu/memory/storage/network/audio/power/gpu) + 1 session doc. `rigsignal.audio.backend = "wasapi"` ✅. `rigsignal.gpu.memory_total_mb = 15428` (DXGI working) ✅. `rigsignal.frame` correctly empty (no PresentMon, no game).
-
-**Remaining gaps (separate follow-ups, not Milestone-E blockers):**
-
-- `rigsignal.gpu.temp_source` field is in `data_stream/gpu/fields/fields.yml` (added in C.7) but not in the live ES mapping — pipeline never got redeployed. Worth closing in a Phase-4 maintenance pass.
-- `rigsignal.hardware.{cpu,gpu,ram}` is empty on Windows: `host.rs::cpu_info()/gpu_info()/ram_info()` still read `/proc` and `/sys`. Larger Windows port — could re-use the data we already collect via PDH/DXGI.
-- Linux Steam scanner runs uselessly on Windows (`No game detected — scanning /proc every 5 s` log spam). Should cfg-gate or replace with Windows game detection (Steam-on-Windows-native, Epic Games Launcher, etc.).
-- `detect_graphics_api_from_paths` doesn't match `d3d11.dll` natively — only dxvk-translated D3D11 → `dx11_via_dxvk`. Native Windows D3D11 games will return `graphics_api: None` until the schema gains non-via-DXVK enum values and the matcher chain extends.
-
-**v0.1.0 released 2026-04-29.** GitHub Release at https://github.com/MathewRJ/RigSignal/releases/tag/v0.1.0 — .deb (Debian/Ubuntu), .rpm (Fedora/RHEL), .pkg.tar.zst (Arch/CachyOS/Manjaro) all verified. Release notes + user guide (install, quick-start, config, profiles, troubleshooting, FAQ) at `.github/RELEASE_NOTES.md`.
-
-**Release workflow updated 2026-04-29.** Added `workflow_dispatch` with `version` input (no git tag needed — trigger from GitHub UI). Arch PKGVER now reads `needs.setup.outputs.version` (works for both trigger modes). Windows job upgraded from zip to MSI in Milestone E (above).
-
-**Milestone D fully complete (D.1/D.2 + Phase 7.2 + Phase 8).** All pre-Milestone-E gates passed on 2026-04-29.
-
-**Dashboard suite complete (Home → Games → Environment → Hardware → Compare → Engine).** All 6 primary dashboards deployed and verified.
-
-**Engine dashboard complete.** `dashboards/engine-dashboard.json` (ID `7ec220c4-0c7a-4538-9b86-9a664b4a7d2f`) deployed against wildcard data view `18dd83e8-6f88-474f-b434-a4b6c14a04a2`; API gate + Playwright UI gate PASS. 15 panels: 2 filter controls (Session, Game), 12 eBPF/frame metric charts (GPU sched latency, GPU fence wait, GPU cmd submissions, CPU runqueue latency, futex contention, CPU migrations, block I/O latency, memory pressure, VFS latency, frame time/variance, stutter severity, FPS percentiles), 1 session summary table. Data powered by kernel-level eBPF probes — invisible to overlay tools like MangoHud or CapFrameX. Design driven by gemini-researcher (competitive landscape + panel spec) + Explore agent (field map) + dashboard-designer agent.
-
-**Environment dashboard complete.** `dashboards/environment-dashboard.json` (ID `3a55c257-0537-42a8-94a7-24dc773a703b`) deployed against metrics-rigsignal.* wildcard data view; verify-dashboard.sh PASS. 11 panels.
-
-**Games dashboard complete.** `dashboards/games-dashboard.json` (ID `5e898d7c-8de1-45b8-ae04-4cdc745f046d`) deployed against rigsignal-game-timeline; verify-dashboard.sh PASS.
-
-**Milestone C complete (all 8 collectors).** C.8 PresentMon frame timing landed; the agent now ships an end-to-end Windows collector set. Next: Milestone E (Windows MSI packaging) or live ES shipping verification on Windows hardware.
-
-PresentMon discovery order (used by `src/collectors/windows/frame.rs::find_presentmon`):
-1. `RIGSIGNAL_PRESENTMON` env var (full path to `PresentMon.exe`)
-2. Same directory as the agent binary (`std::env::current_exe()`)
-3. PATH lookup via `where PresentMon.exe`
-
-Users who install PresentMon to a non-standard path should set `RIGSIGNAL_PRESENTMON`. If none of the three paths resolve, the agent logs a one-time warning per game-attach and `rigsignal.frame` returns no data — the other 7 collectors continue normally.
-
-See `docs/ROADMAP.md` for milestone structure and work package definitions.
+**Next.** 0.2.6 candidates: S3 `read_loss_counters` hardening, S4, and idle-doc suppression.
 
 ## Completed work
+
+### Release 0.2.4 (released, 2026-07-18)
+
+- Legacy GPU scheduler support now parses tracepoint formats at attach time and accepts the `drm_sched_job`/`drm_run_job` name variants used by Valve 6.16-era kernels.
+- Fleet TSDS fix, client stream telemetry, and PipeWire re-source shipped with the release.
 
 ### Milestone E — Windows packaging (complete, 2026-04-29)
 
@@ -283,6 +256,9 @@ Commit: 561dc78
 
 ## Blockers & decisions pending
 
+- **0.2.5 S2 gate** — do not close S2 until the A6-24h retention check is complete on or after `2026-07-19T17:52:04Z`.
+- **Distribution follow-up** — resubmit winget after the architecture rework; PR #18878 is deferred pending maintainer architecture work and `fields.yml` gating.
+
 - **Security hardening follow-up — MCP key exposure via `claude mcp list`**: During initial MCP setup attempt, the first `rigsignal-mcp` API key was printed verbatim in `claude mcp list` output and exposed to a conversation transcript. That key has been invalidated. A separate properly-scoped key now lives in env var only. `claude mcp list` displaying raw API key values in its output is a design-level issue — future setup flows should either redact or be executed in non-logged contexts. Worth surfacing to Anthropic as a product feedback item.
 
 - **Infrastructure follow-up — pre-command-check allowlist non-functional** ✅ RESOLVED 2026-04-29: removed the dead `allowed_prefixes` list (it had no blocking effect) and added `_scan_target()` which strips `-m`/`--message` content before scanning, so commit messages mentioning blocked words no longer false-positive block. Also handles compound `&&` commands correctly.
@@ -292,11 +268,14 @@ Commit: 561dc78
 ## Environment
 
 - Primary dev host: CachyOS Linux (AMD Ryzen 7 9800X3D / Radeon RX 9070 XT)
-- Secondary host: Windows 11 desktop (needs Steam + Rust + WiX setup before Phase C)
-- ES endpoint: Elastic Cloud Serverless (see your deployment)
+- Agent hosts: GamingPC (`.254`) and StreamClient (`.162`), both using spool-file output mode
+- ES endpoint: local ElasticHome Elasticsearch stack (migrated from cloud 2026-07-09)
 - Repo: github.com/MathewRJ/RigSignal
 
 ## Follow-ups and migration notes
+
+- **0.2.5 S2 spool durability**: complete the A6-24h retention check before closing the gate; the release bump is already pre-staged in a worktree.
+- **0.2.6 candidates**: S3 `read_loss_counters` hardening, S4, and idle-doc suppression.
 
 - **Linux `cargo check` verification for B.1–B.3 + B.6 (`--features ebpf`) pending**: 2026-04-24 sessions were Windows-only (gaming PC offline). Windows `cargo check`, `cargo clippy -- -D warnings`, `cargo fmt --check`, and `cargo check --all-features` (expected-fail via compile_error) all green. The B.5 CI workflow exercises both Linux and Windows on push, so this is self-healing as soon as CI runs on main — but a gaming-PC session to run `cargo check --manifest-path src/Cargo.toml --features ebpf` and confirm the cfg gate doesn't accidentally exclude required modules on Linux is still worth doing.
 - **B2.1 live verification on gaming PC**: the Windows session can only smoke-test the migration via `cargo check`/`clippy`/`test`. The behaviour claim (session-start, in-tick, and session-summary docs are byte-for-byte identical to pre-B2.1, modulo timestamps) needs a live Linux session — boot a real game, capture a session-start doc and a session-summary doc, diff field-by-field against a known-good pre-B2.1 sample from ES Discover. Same trip should also confirm the eBPF daemon still parses `/tmp/rigsignal/session.json` cleanly (format wasn't supposed to change, but verify).
@@ -304,6 +283,9 @@ Commit: 561dc78
 - **B.8 label format migration**: ES docs indexed before B.8 carry `<slug>-YYYYMMDD-HHMMSS` labels. New sessions use `<slug>-YYYYMMDD-N`. Dashboard filters on `session.label` should use `*` wildcards or filter on `session.label_source` instead. No backfill needed.
 
 ## Follow-ups to investigate
+
+- S3 `read_loss_counters` hardening, S4, and idle-doc suppression are the current 0.2.6 candidates.
+- Revisit elastic/integrations PR #18878 once the maintainer architecture rework and `fields.yml` gate are resolved.
 
 - **Dashboard integration-compliance gap (Milestone G blocker)**: ✅ RESOLVED 2026-04-29 — `data_stream.dataset: rigsignal.*` wildcard filter added at dashboard level to all 6 new-suite dashboards via `scripts/add-dataset-filter.py`. `verify-dashboard.sh --require-dataset-filter` PASS 6/6 (API + UI gate). Deployed NJDSONs saved to `dashboards/*-dashboard-deployed.ndjson`. `verify-dashboard.sh` updated to accept dashboard-level filter as satisfying the integration-compliance requirement.
 - **Dev install: systemd unit ExecStart path drop-in override** ✅ DOCUMENTED 2026-04-29: `docs/install.md` now has a callout block showing the exact `~/.config/systemd/user/rigsignal-agent.service.d/override.conf` snippet for dev builds installed to `/usr/local/bin`. PKGBUILD installs to `/usr/bin/` and is unaffected.

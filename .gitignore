@@ -1,4 +1,5 @@
 # Python (archived collector)
+__pycache__/
 archive/collector/.venv/
 archive/collector/__pycache__/
 archive/collector/**/__pycache__/

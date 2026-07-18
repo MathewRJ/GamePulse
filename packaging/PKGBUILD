@@ -11,12 +11,12 @@
 #   cargo install bpf-linker
 #
 pkgname=rigsignal
-pkgver=0.2.1
+pkgver=0.2.4
 pkgrel=1
 pkgdesc="Gaming performance telemetry agent — ships CPU/GPU/memory/frame metrics to Elasticsearch"
 arch=('x86_64')
 url="https://github.com/MathewRJ/RigSignal"
-license=('MIT')
+license=('Apache')
 depends=()
 makedepends=('rust')
 optdepends=('mangohud: frame timing data collection')

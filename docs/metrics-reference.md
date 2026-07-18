@@ -356,11 +356,10 @@ scheduling/fence/submit latency — three separate groups, not one combined
 `rigsignal.ebpf.vfs.*`, and `rigsignal.ebpf.stutter.*` (cross-probe stutter
 correlation — emitted when ≥2 subsystems spike in the same 1-second window).
 
-Caveat: `rigsignal.ebpf.gpu_sched.*` is not currently emitted on kernels
-without the `drm_sched_job_queue`/`drm_sched_job_run` tracepoints, including
-SteamOS 6.16 — the probe attaches to tracepoint names that changed upstream.
-A legacy-tracepoint compatibility port is planned for 0.2.4; until then, do
-not expect `gpu_sched` documents on affected kernels.
+`rigsignal.ebpf.gpu_sched.*` supports the legacy GPU-scheduler tracepoint
+names found on Valve 6.16-era kernels. Shipped in 0.2.4, attach-time format
+parsing selects the compatible `drm_sched_job`/`drm_run_job` name variants
+when the `drm_sched_job_queue`/`drm_sched_job_run` tracepoints are absent.
 
 The field definitions live in `ebpf/rigsignal-ebpf/src/es_model.rs`
 (`EbpfPayload` and its snapshot structs); there is no separate `fields.yml`

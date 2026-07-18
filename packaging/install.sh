@@ -5,7 +5,7 @@
 #
 # Usage:
 #   curl -sSfL https://mathewrj.github.io/RigSignal-Integration/install.sh | sh
-#   curl -sSfL https://mathewrj.github.io/RigSignal-Integration/install.sh | sh -s -- --version 0.2.0
+#   curl -sSfL https://mathewrj.github.io/RigSignal-Integration/install.sh | sh -s -- --version 0.2.4
 #
 # After install:
 #   rigsignal setup    # configure Elasticsearch endpoint + API key
