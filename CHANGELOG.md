@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- Spool output now finalizes active batches on graceful shutdown, eagerly recovers
+  stranded batches at startup, retains malformed input in quarantines, prunes old
+  delivered/quarantined files, and rejects concurrent writers for the same spool
+  directory.
+
 ## [0.2.4] — 2026-07-18
 
 0.2.4 arc: gpu_sched legacy port + fleet TSDS fix (shipped 2026-07-17), then item 5

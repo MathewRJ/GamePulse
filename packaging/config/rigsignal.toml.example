@@ -3,3 +3,13 @@
 endpoint = "https://your-deployment.es.us-central1.gcp.elastic.cloud"
 # API key with write access to metrics-rigsignal.* data streams
 api_key = "YOUR_API_KEY_HERE"
+
+# Optional local NDJSON spool output. The default mode is "elasticsearch".
+#[output]
+# mode = "spool"
+# spool_dir = "~/.local/state/rigsignal/spool"
+# max_file_bytes = 10485760
+# max_file_age_secs = 300
+# Delete delivered and quarantined spool files older than this many hours.
+# The default (72 hours) leaves ample time for Fleet to consume each batch.
+# spool_retention_hours = 72
