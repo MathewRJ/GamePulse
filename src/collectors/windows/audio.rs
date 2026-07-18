@@ -14,7 +14,7 @@ use serde_json::{json, Value};
 /// Option A — ETW provider (preferred):
 ///   Consume the Microsoft-Windows-Audio ETW provider. Glitch events
 ///   are emitted as ETW events and can be consumed out-of-process.
-///   This mirrors the Linux approach (PipeWire xruns via pw-top).
+///   This would be an independent Windows implementation.
 ///   See: Microsoft-Windows-Audio manifest in Windows SDK evntman.
 ///
 /// Option B — IAudioSessionEvents (complex):

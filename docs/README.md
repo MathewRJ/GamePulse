@@ -94,10 +94,10 @@ setups where agent output is redirected to a file and read by Elastic Agent.
 
 | Data stream | Type | Description |
 |---|---|---|
-| `audio` | metrics | Audio backend, latency, and buffer underrun (xrun) counts per session. |
+| `audio` | metrics | Audio backend, configured scheduling latency, and sink details per session. |
 | `cpu` | metrics | Per-core and total CPU utilisation, clock speeds, temperature, and power draw. |
 | `ebpf` | metrics | Kernel-level scheduler latency, block I/O tracing, GPU fence and submit latency, and memory pressure via eBPF probes. Linux only. |
-| `events` | logs | Discrete session events: shader compilation, save operations, crashes, and stutter detections. |
+| `events` | logs | Discrete session events, including Steam Remote Play connection transitions. |
 | `frame` | metrics | Instantaneous and rolling FPS, frame time percentiles (1% and 0.1% lows), stutter counts, and CPU/GPU bottleneck classification. |
 | `gpu` | metrics | GPU core utilisation, clock speed, VRAM usage, temperature (edge and hotspot), power draw, fan speed, and voltage. |
 | `memory` | metrics | System RAM usage, availability, and the game process resident set size. |

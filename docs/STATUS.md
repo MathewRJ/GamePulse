@@ -57,7 +57,7 @@ Active streams: main (cross-platform cloud) + offline (air-gapped, not yet forke
 | memory | ✅ | 🔲 | ✅ | 🔲 | ✅ |
 | storage | ✅ | 🔲 | ✅ | 🔲 | 🟡 (aggregate only; no per-disk/game IO) |
 | network | ✅ | 🔲 | ✅ | 🔲 | 🟡 (aggregate only; tunnels filtered) |
-| audio | ✅ | 🔲 | ✅ | 🔲 | 🟡 (backend=wasapi; no xruns) |
+| audio | ✅ | 🔲 | ✅ | 🔲 | 🟡 (backend=wasapi) |
 | power | ✅ | 🔲 | ✅ | 🔲 | 🟡 (AC + battery%; no rate_w) |
 | frame | ✅ (MangoHud) | 🔲 | ✅ (MangoHud) | 🔲 | 🟡 (PresentMon subprocess; external binary required) |
 | ebpf | ✅ | 🔲 | ✅ | 🔲 | n/a |
@@ -123,7 +123,7 @@ See `docs/ROADMAP.md` for milestone structure and work package definitions.
 
 - **E.4 — Windows config fallback chain**: `src/config.rs::Config::load()` now branches on `cfg(windows)`: Windows fallback chain is `%APPDATA%\RigSignal\rigsignal.toml` (per-user) then `%PROGRAMDATA%\RigSignal\rigsignal.toml` (system-wide); Linux unchanged (`~/.config/rigsignal/rigsignal.toml` then `/etc/rigsignal/rigsignal.toml`). CLI `--config` and `$RIGSIGNAL_CONFIG` env var precedence unchanged across both platforms. Doc-comment on `Config::load` lists both chains.
 
-- **E.5 — `RELEASE_NOTES.md` Windows section**: Added install via `msiexec /i ... /qb!` and uninstall via `msiexec /x` or *Settings → Apps*. Documents: PATH integration (`rigsignal-agent` from any new shell), absent `rigsignal setup` launcher (Windows-side TODO), `notepad` walkthrough for hand-authoring `%APPDATA%\RigSignal\rigsignal.toml`, env-var alternative (`ES_URL` + `ES_API_KEY`), Windows-specific PowerShell start/stop snippets (no systemd analogue yet), and a "Windows caveats" block enumerating the four fields that don't populate on Windows in this release (`cpu.game_utilisation_pct`, `storage.game_io`, `audio.xruns`, `power.battery_rate_w`) plus the PresentMon optional-dep note.
+- **E.5 — `RELEASE_NOTES.md` Windows section**: Added install via `msiexec /i ... /qb!` and uninstall via `msiexec /x` or *Settings → Apps*. Documents: PATH integration (`rigsignal-agent` from any new shell), absent `rigsignal setup` launcher (Windows-side TODO), `notepad` walkthrough for hand-authoring `%APPDATA%\RigSignal\rigsignal.toml`, env-var alternative (`ES_URL` + `ES_API_KEY`), Windows-specific PowerShell start/stop snippets (no systemd analogue yet), and a "Windows caveats" block enumerating the four fields that don't populate on Windows in this release (`cpu.game_utilisation_pct`, `storage.game_io`, `audio.quantum`, `power.battery_rate_w`) plus the PresentMon optional-dep note.
 
 - **E.6 — CLI help strings de-Linux-ified**: `src/main.rs` clap `about` changed from "RigSignal Linux telemetry agent" to "RigSignal cross-platform gaming telemetry agent". `--config` doc-comment now enumerates Linux and Windows fallback chains (clap's default-value display string was the only place that lied about Windows behaviour after E.4).
 
@@ -169,7 +169,7 @@ See `docs/ROADMAP.md` for milestone structure and work package definitions.
 | `gpu.temperature_c` | hwmon exact | wmi_acpi approx | ADLX / NvAPI |
 | `gpu.power_w` | hwmon | None | ADLX / NvAPI |
 | `storage.game_io` | procfs | None | ETW kernel IO |
-| `audio.xruns` | pw-top | None (scaffold) | ETW Microsoft-Windows-Audio |
+| `audio.quantum` | pw-metadata | None | Platform-specific audio configuration API |
 | `power.battery_rate_w` | sysfs | None | WMI Win32_Battery |
 
 ### Milestone C — Windows collectors (partial, 2026-04-25 session 2)

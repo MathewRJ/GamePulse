@@ -75,7 +75,7 @@ or use *Settings → Apps → Installed apps → RigSignal → Uninstall*.
 
 - No `rigsignal` launcher CLI — Windows has no systemd analog. Configure the agent by hand and run `rigsignal-agent` directly (or wrap it in a Steam launch option, see Quick Start §5).
 - `gpu.temperature_c` is reported via WMI ACPI thermal zones (best-effort, may be absent on some boards).
-- `cpu.game_utilisation_pct`, `storage.game_io`, `audio.xruns`, `power.battery_rate_w` are **not** populated on Windows in this release — the Linux equivalents require eBPF / hwmon / pw-top, which have no direct Windows counterpart yet.
+- `cpu.game_utilisation_pct`, `storage.game_io`, `audio.quantum`, `power.battery_rate_w` are **not** populated on Windows in this release — the Linux equivalents require eBPF / hwmon / pw-metadata, which have no direct Windows counterpart yet.
 - Frame timing requires [PresentMon](https://github.com/GameTechDev/PresentMon). Place `PresentMon.exe` on PATH or set `RIGSIGNAL_PRESENTMON=C:\path\to\PresentMon.exe`. Without it, all other 7 collectors continue normally and `rigsignal.fps.*` fields are empty.
 
 ---

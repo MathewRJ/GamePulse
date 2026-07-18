@@ -1,19 +1,18 @@
 /// Audio collector — mirrors collector/rigsignal/collectors/audio.py exactly.
 ///
 /// Detects the audio backend (PipeWire / PulseAudio / ALSA) at construction
-/// time by probing pw-cli and pactl. On each collect() tick, reads stats from
+/// time by probing pw-cli and pactl. On each collect() tick, reads settings from
 /// the running backend.
 ///
 /// Output fields (rigsignal.audio.*):
 ///   backend          str  — always present: "pipewire", "pulseaudio", "alsa", "unknown"
-///   xruns            i64  — delta xruns since last tick (PipeWire, 2nd call+)
-///   latency_ms       f64  — quantum/rate latency in ms, 2 dp (PipeWire, when parseable)
+///   latency_ms       f64  — configured scheduling latency in ms, 2 dp (PipeWire, when parseable)
 ///   sink_name        str  — default PipeWire sink name (when parseable)
 ///   card_profile     str  — default sink device profile (PipeWire, when parseable)
 ///   channels         i64  — default sink channel count (PipeWire, when parseable)
 ///   sample_format    str  — default sink sample format (PipeWire, when parseable)
-///   sample_rate_hz   i64  — server/default-sink sample rate (PulseAudio/PipeWire)
-///   quantum          i64  — PipeWire quantum (when parseable)
+///   sample_rate_hz   i64  — effective PipeWire clock or PulseAudio server rate
+///   quantum          i64  — effective PipeWire scheduling quantum (when parseable)
 ///   driver_latency_ms f64 — default sink actual driver latency, 2 dp (PipeWire, when parseable)
 ///
 /// collect() always returns Some — backend is always included even if stats fail.
@@ -23,8 +22,8 @@ use serde_json::Value;
 use std::io::Read;
 use std::time::{Duration, Instant};
 
-// pw-top -b waits for a PipeWire refresh cycle (~1-2 s) before exiting.
-// Calling it every tick blocks the entire collection loop. Cache for 5 s.
+// PipeWire settings and pactl sink details are stable between collection ticks.
+// Cache both successful reads and failures for 5 s.
 const PIPEWIRE_CACHE_TTL: Duration = Duration::from_secs(5);
 
 // ── Subprocess helper ─────────────────────────────────────────────────────────
@@ -67,44 +66,6 @@ fn run_cmd(prog: &str, args: &[&str], timeout_ms: u64) -> Option<String> {
 }
 
 // ── String parsing helpers (avoids adding regex crate) ───────────────────────
-
-/// Extract the last integer immediately before `keyword` in `line`.
-/// Matches Python: `re.search(r"\s+(\d+)\s+KEYWORD", line)`.
-fn number_before(line: &str, keyword: &str) -> Option<i64> {
-    let idx = line.find(keyword)?;
-    let before = line[..idx].trim_end();
-    let num_start = before
-        .rfind(|c: char| !c.is_ascii_digit())
-        .map(|i| i + 1)
-        .unwrap_or(0);
-    let s = &before[num_start..];
-    if s.is_empty() {
-        return None;
-    }
-    s.parse().ok()
-}
-
-/// Extract "N/M" integer pair from `line` (first occurrence).
-/// Matches Python: `re.search(r"(\d+)/(\d+)", line)`.
-fn quant_rate(line: &str) -> Option<(i64, i64)> {
-    let slash = line.find('/')?;
-    let before = &line[..slash];
-    let after = &line[slash + 1..];
-    let n1_start = before
-        .rfind(|c: char| !c.is_ascii_digit())
-        .map(|i| i + 1)
-        .unwrap_or(0);
-    let n2_end = after
-        .find(|c: char| !c.is_ascii_digit())
-        .unwrap_or(after.len());
-    let n1: i64 = before[n1_start..].parse().ok()?;
-    let n2: i64 = after[..n2_end].parse().ok()?;
-    if n1 > 0 && n2 > 0 {
-        Some((n1, n2))
-    } else {
-        None
-    }
-}
 
 /// Extract integer before "Hz" in `line`.
 /// Matches Python: `re.search(r"(\d+)\s*Hz", line)`.
@@ -151,41 +112,71 @@ fn detect_backend() -> String {
 
 // ── Per-backend stats ─────────────────────────────────────────────────────────
 
-struct PipewireStats {
-    xruns: i64,
-    latency_ms: Option<f64>,
+#[derive(Clone, Debug, Default, PartialEq)]
+struct PipewireSettings {
     quantum: Option<i64>,
+    rate: Option<i64>,
+    force_quantum: Option<i64>,
+    force_rate: Option<i64>,
 }
 
-fn pipewire_stats() -> Option<PipewireStats> {
-    let out = run_cmd("pw-top", &["-b"], 3000)?;
+impl PipewireSettings {
+    fn effective_quantum(&self) -> Option<i64> {
+        self.force_quantum
+            .filter(|value| *value > 0)
+            .or_else(|| self.quantum.filter(|value| *value > 0))
+    }
 
-    let mut total_xruns: i64 = 0;
-    let mut latency_ms: Option<f64> = None;
-    let mut quantum: Option<i64> = None;
+    fn effective_rate(&self) -> Option<i64> {
+        self.force_rate
+            .filter(|value| *value > 0)
+            .or_else(|| self.rate.filter(|value| *value > 0))
+    }
+}
+
+/// Parse the last valid integer update for each clock setting from pw-metadata.
+fn parse_pw_metadata_settings(out: &str) -> PipewireSettings {
+    let mut settings = PipewireSettings::default();
 
     for line in out.lines() {
-        // pw-top columns: ... ERRORS ... or ... ERR ... — sum all xrun counts
-        if let Some(n) = number_before(line, " ERR") {
-            total_xruns += n;
-        }
-        // Latency from quantum/rate (e.g. "1024/48000")
-        if latency_ms.is_none() {
-            if let Some((quant, rate)) = quant_rate(line) {
-                if rate > 0 {
-                    latency_ms =
-                        Some(((quant as f64 / rate as f64 * 1000.0) * 100.0).round() / 100.0);
-                    quantum = Some(quant);
-                }
+        let Some(update) = line.trim_start().strip_prefix("update:") else {
+            continue;
+        };
+        let mut key = None;
+        let mut value = None;
+        for field in update.split_whitespace() {
+            if let Some(parsed_key) = field
+                .strip_prefix("key:'")
+                .and_then(|field| field.strip_suffix('\''))
+            {
+                key = Some(parsed_key);
+            } else if let Some(parsed_value) = field
+                .strip_prefix("value:'")
+                .and_then(|field| field.strip_suffix('\''))
+            {
+                value = parsed_value.parse::<i64>().ok();
             }
+        }
+
+        match (key, value) {
+            (Some("clock.quantum"), Some(value)) => settings.quantum = Some(value),
+            (Some("clock.rate"), Some(value)) => settings.rate = Some(value),
+            (Some("clock.force-quantum"), Some(value)) => settings.force_quantum = Some(value),
+            (Some("clock.force-rate"), Some(value)) => settings.force_rate = Some(value),
+            _ => {}
         }
     }
 
-    Some(PipewireStats {
-        xruns: total_xruns,
-        latency_ms,
-        quantum,
-    })
+    settings
+}
+
+fn pipewire_settings() -> Option<PipewireSettings> {
+    let out = run_cmd("pw-metadata", &["-n", "settings", "0"], 2000)?;
+    Some(parse_pw_metadata_settings(&out))
+}
+
+fn configured_latency_ms(quantum: i64, rate: i64) -> f64 {
+    ((quantum as f64 / rate as f64 * 1000.0) * 100.0).round() / 100.0
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -322,9 +313,8 @@ fn pulseaudio_stats() -> Option<PulseaudioStats> {
 
 pub struct AudioCollector {
     backend: Option<String>,
-    prev_xruns: Option<i64>,
-    pw_cache: Option<PipewireStats>,
-    pw_cache_at: Option<Instant>,
+    settings_cache: Option<PipewireSettings>,
+    settings_cache_at: Option<Instant>,
     sink_cache: Option<PipewireSinkInfo>,
     sink_cache_at: Option<Instant>,
 }
@@ -333,24 +323,23 @@ impl AudioCollector {
     pub fn new(_game_pid: Option<u32>) -> Self {
         AudioCollector {
             backend: None,
-            prev_xruns: None,
-            pw_cache: None,
-            pw_cache_at: None,
+            settings_cache: None,
+            settings_cache_at: None,
             sink_cache: None,
             sink_cache_at: None,
         }
     }
 
-    fn pipewire_stats_cached(&mut self) -> Option<&PipewireStats> {
+    fn pipewire_settings_cached(&mut self) -> Option<&PipewireSettings> {
         let stale = self
-            .pw_cache_at
+            .settings_cache_at
             .map(|t| t.elapsed() >= PIPEWIRE_CACHE_TTL)
             .unwrap_or(true);
         if stale {
-            self.pw_cache = pipewire_stats();
-            self.pw_cache_at = Some(Instant::now());
+            self.settings_cache = pipewire_settings();
+            self.settings_cache_at = Some(Instant::now());
         }
-        self.pw_cache.as_ref()
+        self.settings_cache.as_ref()
     }
 
     fn pipewire_sink_info_cached(&mut self) -> Option<&PipewireSinkInfo> {
@@ -381,24 +370,21 @@ impl Collector for AudioCollector {
         audio.insert("backend".to_string(), Value::from(backend.to_string()));
 
         if backend == "pipewire" {
-            // Copy primitive values out immediately so the borrow on self ends
-            // before we mutate self.prev_xruns.
-            let pw = self
-                .pipewire_stats_cached()
-                .map(|s| (s.xruns, s.latency_ms, s.quantum));
-            if let Some((xruns_total, lat, quantum)) = pw {
-                if let Some(prev) = self.prev_xruns {
-                    audio.insert(
-                        "xruns".to_string(),
-                        Value::from(0i64.max(xruns_total - prev)),
-                    );
-                }
-                self.prev_xruns = Some(xruns_total);
-                if let Some(ms) = lat {
-                    audio.insert("latency_ms".to_string(), Value::from(ms));
-                }
+            let settings = self
+                .pipewire_settings_cached()
+                .map(|settings| (settings.effective_quantum(), settings.effective_rate()));
+            if let Some((quantum, rate)) = settings {
                 if let Some(quantum) = quantum {
                     audio.insert("quantum".to_string(), Value::from(quantum));
+                }
+                if let Some(rate) = rate {
+                    audio.insert("sample_rate_hz".to_string(), Value::from(rate));
+                }
+                if let (Some(quantum), Some(rate)) = (quantum, rate) {
+                    audio.insert(
+                        "latency_ms".to_string(),
+                        Value::from(configured_latency_ms(quantum, rate)),
+                    );
                 }
             }
 
@@ -414,9 +400,6 @@ impl Collector for AudioCollector {
                 }
                 if let Some(sample_format) = sink.sample_format {
                     audio.insert("sample_format".to_string(), Value::from(sample_format));
-                }
-                if let Some(sample_rate_hz) = sink.sample_rate_hz {
-                    audio.insert("sample_rate_hz".to_string(), Value::from(sample_rate_hz));
                 }
                 if let Some(driver_latency_ms) = sink.driver_latency_ms {
                     audio.insert(
@@ -456,6 +439,72 @@ Sink #43
 	Properties:
 		device.profile.name = "hdmi-stereo-extra2"
 "#;
+
+    const LIVE_METADATA: &str = "update: id:0 key:'clock.quantum' value:'512' type:''\n\
+update: id:0 key:'clock.rate' value:'48000' type:''\n\
+update: id:0 key:'clock.force-quantum' value:'0' type:''\n\
+update: id:0 key:'clock.force-rate' value:'0' type:''\n";
+
+    #[test]
+    fn parses_live_pipewire_clock_settings() {
+        let settings = parse_pw_metadata_settings(LIVE_METADATA);
+
+        assert_eq!(settings.quantum, Some(512));
+        assert_eq!(settings.rate, Some(48000));
+        assert_eq!(settings.force_quantum, Some(0));
+        assert_eq!(settings.force_rate, Some(0));
+        assert_eq!(settings.effective_quantum(), Some(512));
+        assert_eq!(settings.effective_rate(), Some(48000));
+    }
+
+    #[test]
+    fn nonzero_force_settings_override_base_clock_settings() {
+        let settings = parse_pw_metadata_settings(
+            "update: id:0 key:'clock.quantum' value:'512' type:''\n\
+update: id:0 key:'clock.rate' value:'48000' type:''\n\
+update: id:0 key:'clock.force-quantum' value:'1024' type:''\n\
+update: id:0 key:'clock.force-rate' value:'96000' type:''\n",
+        );
+
+        assert_eq!(settings.effective_quantum(), Some(1024));
+        assert_eq!(settings.effective_rate(), Some(96000));
+    }
+
+    #[test]
+    fn zero_force_settings_fall_back_to_base_clock_settings() {
+        let settings = parse_pw_metadata_settings(LIVE_METADATA);
+
+        assert_eq!(settings.effective_quantum(), Some(512));
+        assert_eq!(settings.effective_rate(), Some(48000));
+    }
+
+    #[test]
+    fn malformed_or_missing_settings_are_omitted_and_do_not_override_base() {
+        let settings = parse_pw_metadata_settings(
+            "update: id:0 key:'clock.quantum' value:'512' type:''\n\
+update: id:0 key:'clock.rate' value:'48000' type:''\n\
+update: id:0 key:'clock.force-quantum' value:'not-a-number' type:''\n\
+update: id:0 key:'clock.force-rate' value:'-1' type:''\n\
+update: id:0 key:'clock.unrelated' value:'2048' type:''\n",
+        );
+
+        assert_eq!(settings.force_quantum, None);
+        assert_eq!(settings.force_rate, Some(-1));
+        assert_eq!(settings.effective_quantum(), Some(512));
+        assert_eq!(settings.effective_rate(), Some(48000));
+
+        let missing_base = parse_pw_metadata_settings(
+            "update: id:0 key:'clock.quantum' value:'0' type:''\n\
+update: id:0 key:'clock.force-quantum' value:'broken' type:''\n",
+        );
+        assert_eq!(missing_base.effective_quantum(), None);
+        assert_eq!(missing_base.effective_rate(), None);
+    }
+
+    #[test]
+    fn calculates_configured_latency_from_effective_clock_settings() {
+        assert_eq!(configured_latency_ms(512, 48000), 10.67);
+    }
 
     #[test]
     fn parses_default_sink_fields_from_full_block() {

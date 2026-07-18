@@ -113,10 +113,9 @@ Docker containers: gpu stream expected to emit nothing (no hardware passthrough)
 | Field | Required | Notes |
 |---|---|---|
 | `rigsignal.audio.backend` | ✅ Required on bare-metal | `pipewire`, `pulseaudio`, `alsa`, or `wasapi` |
-| `rigsignal.audio.sample_rate_hz` | 🟡 Optional | Backend-dependent |
-| `rigsignal.audio.buffer_size` | 🟡 Optional | Backend-dependent |
-| `rigsignal.audio.latency_ms` | 🟡 Optional | Backend-dependent |
-| `rigsignal.audio.xruns` | 🟡 Optional | PipeWire/ALSA only |
+| `rigsignal.audio.quantum` | 🟡 Optional | Effective PipeWire scheduling quantum from `pw-metadata` |
+| `rigsignal.audio.sample_rate_hz` | 🟡 Optional | Effective PipeWire clock rate from `pw-metadata`, or PulseAudio server rate |
+| `rigsignal.audio.latency_ms` | 🟡 Optional | Configured PipeWire scheduling latency derived from effective quantum and rate |
 
 Docker containers: audio stream expected to emit nothing or `backend` only — acceptable as 🟡.
 
@@ -167,7 +166,7 @@ Docker: eBPF probe loading typically fails without `--privileged` — acceptable
 | memory | ✅ | ✅ | ✅ | ✅ | ✅ |
 | storage | ✅ | ✅ | ✅ | ✅ | 🟡 (aggregate only) |
 | network | ✅ | ✅ | ✅ | ✅ (wifi; connection_type=wifi) | 🟡 (aggregate only) |
-| audio | 🟡 (no server in Docker) | 🟡 (no server in Docker) | 🟡 (no server in Docker) | ✅ (pipewire) | 🟡 (wasapi; no xruns) |
+| audio | 🟡 (no server in Docker) | 🟡 (no server in Docker) | 🟡 (no server in Docker) | ✅ (pipewire) | 🟡 (wasapi) |
 | power | 🟡 (tdp_current_w only; desktop=no AC/BAT) | 🟡 (tdp_current_w only) | 🟡 (tdp_current_w only) | ✅ (ac_connected+battery_pct+battery_rate_w+tdp) | 🟡 (AC+battery%; no rate_w) |
 | frame | 🟡 (no MangoHud) | 🟡 (no MangoHud) | 🟡 (no MangoHud) | 🟡 (SSH session; no game running) | 🟡 (PresentMon required) |
 | ebpf | 🟡 (no --privileged) | 🟡 (no --privileged) | 🟡 (no --privileged) | 🟡 (needs CAP_BPF/root) | n/a |
@@ -188,7 +187,7 @@ Docker: eBPF probe loading typically fails without `--privileged` — acceptable
 | Windows | gpu | `temp_source = "wmi_acpi"` (not precise) | No WinRing0 / ADLX in v0.1 |
 | Windows | storage | Aggregate only; no game-process IO | No ETW disk I/O tracking |
 | Windows | network | Aggregate only; tunnels filtered | No per-process network tracking |
-| Windows | audio | No `xruns` | WASAPI has no xrun concept |
+| Windows | audio | No PipeWire clock settings | WASAPI does not expose PipeWire's `pw-metadata` settings |
 | Windows | power | No `battery_rate_w` | WMI BatteryStatus rate unreliable |
 | Windows | frame | Requires `PresentMon.exe` on PATH | External binary dependency |
 | Windows | session | Session label counter not wired | `$LOCALAPPDATA` counter path TBD |
