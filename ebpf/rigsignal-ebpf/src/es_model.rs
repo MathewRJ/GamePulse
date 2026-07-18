@@ -5,6 +5,24 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
+/// The complete eBPF probe budget for one `(host, session)` TSDS series set.
+pub const NAMED_PROBES: [&str; 10] = [
+    "schedlatency",
+    "bio",
+    "gpu_sched",
+    "mem",
+    "futex",
+    "irq",
+    "vfs",
+    "gpu_fence",
+    "gpu_submit",
+    "stutter_correlation",
+];
+
+pub fn is_named_probe(probe: &str) -> bool {
+    NAMED_PROBES.contains(&probe)
+}
+
 /// Top-level aggregate document sent to metrics-rigsignal.ebpf-default.
 #[derive(Debug, Serialize)]
 pub struct EbpfMetricDoc {
@@ -51,6 +69,17 @@ impl EbpfDocument {
             EbpfDocument::Metric(doc) => Some(doc),
             EbpfDocument::Thread(_) => None,
         }
+    }
+
+    pub fn probe(&self) -> &'static str {
+        match self {
+            EbpfDocument::Metric(doc) => doc.rigsignal.ebpf.probe,
+            EbpfDocument::Thread(doc) => doc.rigsignal.ebpf_thread.probe,
+        }
+    }
+
+    pub fn has_named_probe(&self) -> bool {
+        is_named_probe(self.probe())
     }
 }
 
@@ -123,6 +152,9 @@ pub struct SessionRef {
 }
 
 /// Probe-specific payload — only one variant is populated per document.
+///
+/// `probe` is a TSDS dimension as of integration package 0.5.0, allowing all
+/// probe snapshots from an aggregation tick to share the same timestamp.
 #[derive(Debug, Serialize)]
 pub struct EbpfPayload {
     /// Probe name discriminant (e.g. "schedlatency", "bio")

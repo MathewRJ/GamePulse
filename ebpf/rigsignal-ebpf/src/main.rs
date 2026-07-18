@@ -14,7 +14,7 @@ mod session;
 mod shipper;
 
 use anyhow::{Context, Result};
-use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use chrono::{DateTime, Utc};
 use clap::Parser;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -39,35 +39,10 @@ use probes::vfs::VfsProbe;
 use session::{session_file_path, spawn_watcher};
 use shipper::EsShipper;
 
-/// TSDB derives a metric document ID from its dimensions and @timestamp.  The
-/// eBPF stream's probe discriminator is not a TSDB dimension, so snapshots
-/// collected in the same millisecond would otherwise collide.  Keep every
-/// probe in a stable, sub-second slot within the aggregation tick.
-fn metric_timestamp_offset_ms(probe: &str) -> i64 {
-    match probe {
-        "schedlatency" => 0,
-        "bio" => 1,
-        "gpu_sched" => 2,
-        "mem" => 3,
-        "futex" => 4,
-        "irq" => 5,
-        "vfs" => 6,
-        "gpu_fence" => 7,
-        "gpu_submit" => 8,
-        "stutter_correlation" => 9,
-        // All current probes have an explicit slot. Keep an unknown future
-        // probe distinct from schedlatency rather than recreating the collision.
-        _ => 10,
-    }
-}
-
 fn assign_metric_timestamps(docs: &mut [EbpfDocument], tick_timestamp: DateTime<Utc>) {
     for doc in docs {
         if let EbpfDocument::Metric(metric) = doc {
-            metric.timestamp = tick_timestamp
-                + ChronoDuration::milliseconds(metric_timestamp_offset_ms(
-                    metric.rigsignal.ebpf.probe,
-                ));
+            metric.timestamp = tick_timestamp;
         }
     }
 }
@@ -201,8 +176,9 @@ async fn main() -> Result<()> {
         tokio::select! {
             // Aggregation tick
             _ = tick.tick() => {
-                // All snapshots below describe this aggregation tick. Do not let
-                // per-probe Utc::now() calls collapse to the same TSDB millisecond.
+                // All snapshots below describe this aggregation tick and use its
+                // timestamp. Probe is a TSDS dimension in package 0.5.0, so no
+                // per-probe timestamp slots are needed.
                 let tick_timestamp = Utc::now();
                 let session_id = {
                     let s = session_state.lock().unwrap();
@@ -304,7 +280,7 @@ mod tests {
     };
 
     #[test]
-    fn every_gpu_window_gets_a_tsdb_timestamp_distinct_from_schedlatency() {
+    fn all_metric_docs_in_a_tick_share_the_tick_timestamp() {
         let mut sched = SchedAggregator::new("host".to_string(), "kernel".to_string());
         let mut gpu = GpuAggregator::new("host".to_string(), "kernel".to_string());
         let start = Utc.with_ymd_and_hms(2026, 7, 17, 20, 33, 30).unwrap();
@@ -333,8 +309,6 @@ mod tests {
             let tick_timestamp = start + chrono::Duration::seconds(second);
             for doc in &mut docs {
                 if let EbpfDocument::Metric(metric) = doc {
-                    // This mirrors the pre-fix per-probe Utc::now() calls after
-                    // Elasticsearch rounds both calls to the same millisecond.
                     metric.timestamp = tick_timestamp;
                 }
             }
@@ -350,34 +324,22 @@ mod tests {
 
             assign_metric_timestamps(&mut docs, tick_timestamp);
 
-            let sched_timestamp = docs
+            let metric_docs: Vec<_> = docs
                 .iter()
-                .find_map(|doc| match doc {
-                    EbpfDocument::Metric(metric)
-                        if metric.rigsignal.ebpf.probe == "schedlatency" =>
-                    {
-                        Some(metric.timestamp)
-                    }
-                    _ => None,
+                .filter_map(|doc| match doc {
+                    EbpfDocument::Metric(metric) => Some(metric),
+                    EbpfDocument::Thread(_) => None,
                 })
-                .unwrap();
-            let gpu_doc = docs
-                .iter()
-                .find_map(|doc| match doc {
-                    EbpfDocument::Metric(metric) if metric.rigsignal.ebpf.probe == "gpu_sched" => {
-                        Some(metric)
-                    }
-                    _ => None,
-                })
-                .unwrap();
+                .collect();
 
-            assert_ne!(gpu_doc.timestamp, sched_timestamp);
+            assert!(metric_docs
+                .iter()
+                .all(|metric| metric.timestamp == tick_timestamp));
             assert_eq!(
-                gpu_doc.timestamp,
-                tick_timestamp + chrono::Duration::milliseconds(2)
-            );
-            assert_eq!(
-                gpu_doc
+                metric_docs
+                    .iter()
+                    .find(|metric| metric.rigsignal.ebpf.probe == "gpu_sched")
+                    .unwrap()
                     .rigsignal
                     .ebpf
                     .gpu_sched

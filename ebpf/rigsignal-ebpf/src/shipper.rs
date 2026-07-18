@@ -5,8 +5,15 @@
 use crate::es_model::EbpfDocument;
 use anyhow::{Context, Result};
 use reqwest::{Certificate, Client};
+use std::collections::HashMap;
 use std::path::Path;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 use tracing::{debug, error, warn};
+
+const UNSUPPORTED_PROBE_WARNING_INTERVAL: Duration = Duration::from_secs(5 * 60);
+static UNSUPPORTED_PROBE_WARNING_TIMES: OnceLock<Mutex<HashMap<&'static str, Instant>>> =
+    OnceLock::new();
 
 pub struct EsShipper {
     client: Client,
@@ -47,12 +54,12 @@ impl EsShipper {
     /// Queue a document for the next flush.
     #[allow(dead_code)]
     pub fn queue(&mut self, doc: EbpfDocument) {
-        self.pending.push(doc);
+        self.pending.extend(filter_supported_docs([doc]));
     }
 
     /// Queue multiple documents.
     pub fn queue_all(&mut self, docs: Vec<EbpfDocument>) {
-        self.pending.extend(docs);
+        self.pending.extend(filter_supported_docs(docs));
     }
 
     /// Flush all pending documents to Elasticsearch.
@@ -137,6 +144,47 @@ impl EsShipper {
     }
 }
 
+/// Drops documents from unsupported probes before they can create an ES series.
+/// The warning is rate-limited per unsupported probe to once every five minutes;
+/// the probe value itself is deliberately omitted from the diagnostic.
+fn filter_supported_docs(docs: impl IntoIterator<Item = EbpfDocument>) -> Vec<EbpfDocument> {
+    docs.into_iter()
+        .filter(|doc| {
+            if doc.has_named_probe() {
+                return true;
+            }
+
+            warn_unsupported_probe(doc.probe());
+            false
+        })
+        .collect()
+}
+
+fn warn_unsupported_probe(probe: &'static str) {
+    let warning_times = UNSUPPORTED_PROBE_WARNING_TIMES.get_or_init(|| Mutex::new(HashMap::new()));
+    let now = Instant::now();
+    let should_warn = warning_times
+        .lock()
+        .map(|mut times| match times.get(probe) {
+            Some(last_warning) if now.duration_since(*last_warning) < UNSUPPORTED_PROBE_WARNING_INTERVAL => {
+                false
+            }
+            _ => {
+                times.insert(probe, now);
+                true
+            }
+        })
+        .unwrap_or(false);
+
+    if should_warn {
+        warn!(
+            category = "unsupported_ebpf_probe",
+            rate_limit_minutes = 5,
+            "dropped eBPF document for unsupported probe"
+        );
+    }
+}
+
 fn build_bulk_body(docs: &[EbpfDocument]) -> Result<String> {
     let mut body = String::with_capacity(docs.len() * 256);
     for doc in docs {
@@ -152,4 +200,51 @@ fn build_bulk_body(docs: &[EbpfDocument]) -> Result<String> {
         body.push('\n');
     }
     Ok(body)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::filter_supported_docs;
+    use crate::{
+        aggregator::{RawSchedEvent, SchedAggregator, EVENT_SWITCH},
+        es_model::{EbpfDocument, NAMED_PROBES},
+    };
+
+    fn metric_doc(probe: &'static str) -> EbpfDocument {
+        let mut aggregator = SchedAggregator::new("host".to_string(), "kernel".to_string());
+        aggregator.push(RawSchedEvent {
+            event_type: EVENT_SWITCH,
+            _pad: [0; 3],
+            tid: 1,
+            wait_ns: 7_000,
+            prev_cpu: 0,
+            next_cpu: 0,
+            comm: [0; 16],
+        });
+
+        let mut doc = aggregator.flush("session").remove(0);
+        if let EbpfDocument::Metric(metric) = &mut doc {
+            metric.rigsignal.ebpf.probe = probe;
+        }
+        doc
+    }
+
+    #[test]
+    fn unsupported_probes_are_dropped_independently_in_one_tick() {
+        let docs = vec![metric_doc("unknown_probe_a"), metric_doc("unknown_probe_b")];
+
+        let shipped = filter_supported_docs(docs);
+
+        assert!(shipped.is_empty());
+    }
+
+    #[test]
+    fn every_named_probe_passes_the_ten_series_budget() {
+        let docs = NAMED_PROBES.into_iter().map(metric_doc);
+
+        let shipped = filter_supported_docs(docs);
+
+        assert_eq!(shipped.len(), 10);
+        assert!(shipped.iter().all(EbpfDocument::has_named_probe));
+    }
 }
