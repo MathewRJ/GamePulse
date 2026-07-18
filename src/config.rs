@@ -105,6 +105,10 @@ pub struct ElasticsearchConfig {
     pub api_key: Option<String>,
     pub username: Option<String>,
     pub password: Option<String>,
+    /// PEM CA bundle for a self-signed Elasticsearch TLS endpoint (same convention
+    /// as the eBPF daemon's elasticsearch.ca_cert).
+    #[serde(default)]
+    pub ca_cert: Option<PathBuf>,
     #[serde(default = "default_index_prefix")]
     pub index_prefix: String,
     #[serde(default = "default_flush_interval_secs")]
@@ -130,6 +134,7 @@ impl Default for ElasticsearchConfig {
             api_key: None,
             username: None,
             password: None,
+            ca_cert: None,
             index_prefix: default_index_prefix(),
             flush_interval_secs: default_flush_interval_secs(),
             batch_size: default_batch_size(),
@@ -302,6 +307,11 @@ impl Config {
         if let Ok(url) = std::env::var("ES_URL") {
             if !url.is_empty() {
                 self.elasticsearch.endpoint = url;
+            }
+        }
+        if let Ok(ca_cert) = std::env::var("ES_CA_CERT") {
+            if !ca_cert.is_empty() {
+                self.elasticsearch.ca_cert = Some(PathBuf::from(ca_cert));
             }
         }
     }

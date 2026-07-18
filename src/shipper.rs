@@ -222,11 +222,16 @@ fn unix_millis() -> Result<u128> {
         .as_millis())
 }
 
-fn build_client() -> Result<Client> {
-    Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .context("building HTTP client")
+fn build_client(config: &Config) -> Result<Client> {
+    let mut builder = Client::builder().timeout(std::time::Duration::from_secs(30));
+    if let Some(path) = &config.elasticsearch.ca_cert {
+        let pem = std::fs::read(path)
+            .with_context(|| format!("reading Elasticsearch CA cert: {}", path.display()))?;
+        let cert = reqwest::Certificate::from_pem(&pem)
+            .context("parsing Elasticsearch CA cert PEM")?;
+        builder = builder.add_root_certificate(cert);
+    }
+    builder.build().context("building HTTP client")
 }
 
 fn auth_header(config: &Config) -> Option<String> {
@@ -272,7 +277,7 @@ fn encode_base64(input: &[u8]) -> String {
 /// network failure. Uses the same endpoint as `rigsignal setup` so the API key
 /// privileges required are identical (cluster:monitor/health, not cluster:monitor/main).
 pub async fn ping(config: &Config) -> Result<()> {
-    let client = build_client()?;
+    let client = build_client(config)?;
     let endpoint = config.elasticsearch.endpoint.trim_end_matches('/');
     let url = format!("{}/_cluster/health", endpoint);
     let mut req = client.get(&url);
@@ -336,7 +341,7 @@ pub async fn ship_documents(config: &Config, docs: Vec<ShipDocument>) -> Result<
     }
 
     let attempted = docs.len();
-    let client = build_client()?;
+    let client = build_client(config)?;
     let endpoint = format!(
         "{}/_bulk",
         config.elasticsearch.endpoint.trim_end_matches('/')
@@ -476,7 +481,7 @@ fn bulk_item_success(id: Option<&String>, item: Option<&Value>) -> bool {
 /// sync. Failures are logged at WARN level and never propagate to the caller —
 /// this is a best-effort optimisation, not part of the critical shipping path.
 pub async fn trigger_transform_sync(config: &Config, transform_id: &str) -> Result<()> {
-    let client = build_client()?;
+    let client = build_client(config)?;
     let endpoint = format!(
         "{}/_transform/{}/_schedule_now",
         config.elasticsearch.endpoint.trim_end_matches('/'),
