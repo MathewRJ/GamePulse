@@ -1,0 +1,11 @@
+goal: "Pre-stage the 0.2.5 release bump: three Cargo.toml 0.2.4->0.2.5 (xtask stays 0.2.1), lockfile refresh via cargo, CHANGELOG [Unreleased] -> [0.2.5] entry covering S2+hardening+S1+69b838d+dashboards with NO A6-passed claims. FULL contract in tasks/rigsignal-025-version-bump.md in this worktree — read FIRST. No commits, no tags."
+files_in_scope:
+  - src/Cargo.toml
+  - ebpf/rigsignal-ebpf/Cargo.toml
+  - ebpf/rigsignal-ebpf-probes/Cargo.toml
+  - Cargo.lock
+  - CHANGELOG.md
+acceptance_criteria:
+  - cargo check green for src and ebpf manifests; release build rehearsal green; agent sha256 reported
+  - CHANGELOG 0.2.5 entry present, fresh empty Unreleased, no attestation claims
+  - git diff confined to files_in_scope (plus ebpf lockfile if the workspace has its own)
