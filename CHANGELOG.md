@@ -6,6 +6,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.2.4] — 2026-07-18
+
+0.2.4 arc: gpu_sched legacy port + fleet TSDS fix (shipped 2026-07-17), then item 5
+(client stream telemetry) + P4 (PipeWire re-source), live-validated on the StreamClient
+(spec: `RIGSIGNAL-024-ITEM5-SPEC.md` in the Workflow repo, incl. Addendum 2026-07-18).
+
+### Added
+- `gpu_sched` legacy-tracepoint port: attach-time format parsing for both
+  `drm_sched_job`/`drm_run_job` name variants (valve 6.16 era kernels), scoped-LRU
+  pairing map + per-CPU loss counters; A9.2-R validated against root-ftrace ground
+  truth (max latency identical, 198.0μs).
+- Linux `stream_client` collector (`metrics-rigsignal.stream_client`, TSDS): Steam
+  Remote Play client GPU video/gfx engine utilization from DRM fdinfo — bounded /proc
+  discovery with PID-reuse guards, FD dedup by `(drm-pdev, drm-client-id)`,
+  monotonic-interval deltas, `video_engine` = dec|enc|dec+enc. Client-only docs omit
+  session/game groups entirely (no idle association).
+- Remote Play connection events (`logs-rigsignal.events`, first producer): durable
+  `remote_connections.txt` tailer with atomic XDG checkpoint, sha256 source-line
+  identity as bulk `_id`, 409-as-success idempotent delivery, nack/replay on failure,
+  rotation/truncation handling, local→UTC (DST-earlier) timestamps. Events always ship
+  direct-ES (scoped `create_doc` key); metrics stay on the configured output mode.
+- Shipper: routes by `data_stream.type` (`metrics`/`logs`), optional keyed `_id`,
+  CA-trust support for self-signed Elasticsearch (`elasticsearch.ca_cert` /
+  `ES_CA_CERT`, mirroring the eBPF daemon convention).
+- Audio: `rigsignal.audio.quantum` + effective `sample_rate_hz` + configured
+  scheduling `latency_ms` from `pw-metadata -n settings 0` (force-key precedence).
+
+### Fixed
+- Fleet-wide TSDS identity collision: same-millisecond per-probe eBPF docs shared one
+  TSDB identity and were silently dropped as version conflicts; per-probe millisecond
+  timestamp slots recovered ~6x eBPF telemetry (seven probes at exactly 60 docs/min).
+- fdinfo engine counters parse the kernel's `<value> ns` format (live-validation catch).
+- Remote Play disconnect lines with Steam's colon-reason suffix
+  (`disconnected: disconnecting all`) parse correctly (live-validation catch).
+
+### Removed
+- PipeWire xrun telemetry (`rigsignal.audio.xruns`, `pw-top` path): structurally dead
+  under the systemd user manager — removal is truthful, not a zero-valued replacement.
+
 ## [0.2.3] — 2026-07-17
 
 Collector/daemon fix pack from the 2026-07-14 HFW live-monitored session (evidence-linked
