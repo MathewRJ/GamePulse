@@ -504,7 +504,12 @@ fn parse_fields(line: &str) -> Option<ParsedFields<'_>> {
     let (transition, via) = match rest.split_once(" via ") {
         Some((transition, via)) if !via.is_empty() => (transition, Some(via)),
         Some(_) => return None,
-        None => (rest, None),
+        // Steam appends a reason after a colon on disconnects (live-observed:
+        // "disconnected: disconnecting all"); strip it, it is not a transport.
+        None => {
+            let transition = rest.split_once(':').map(|(t, _)| t).unwrap_or(rest);
+            (transition.trim_end(), None)
+        }
     };
     if !matches!(transition, "connected" | "disconnected") {
         return None;
@@ -627,6 +632,22 @@ mod tests {
     }
     fn line() -> &'static [u8] {
         b"[2026-07-17 09:09:44] Client 10364467328988576325 (GamingPC) connected via direct connection"
+    }
+
+    #[test]
+    fn parser_accepts_live_disconnect_reason_suffix() {
+        // Exact line observed live on StreamClient 2026-07-18: Steam appends a
+        // colon-separated reason and no `via` phrase on disconnect.
+        let doc = parse_document_in_timezone(
+            b"[2026-07-18 09:08:11] Client 10364467328988576325 (GamingPC) disconnected: disconnecting all",
+            "StreamClient",
+            &session(),
+            &Utc,
+        )
+        .unwrap();
+        assert_eq!(doc["event"]["type"], json!(["connection", "end"]));
+        assert_eq!(doc["rigsignal"]["stream"]["client"]["event"], "disconnected");
+        assert!(doc["rigsignal"]["stream"]["client"].get("transport").is_none());
     }
 
     #[test]
