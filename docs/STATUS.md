@@ -1,6 +1,6 @@
 # RigSignal — Project Status
 
-Last updated: 2026-07-18 by Codex (0.2.4 release and 0.2.5 delivery status refreshed)
+Last updated: 2026-07-19 (0.2.5 released + deployed to both hosts; A6-24h gate sealed)
 Active streams: main (local ElasticHome deployment) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -28,7 +28,7 @@ Active streams: main (local ElasticHome deployment) + offline (air-gapped, not y
 | F  Cross-platform parity verification (M2) | 🟢 Done | ▓▓▓▓▓▓▓▓▓▓ |
 | G  elastic/integrations PR (M4) | 🟡 Deferred (maintainer architecture rework + `fields.yml` gating) | ▓░░░░░░░░░ |
 | 0.2.4 release | 🟢 Released 2026-07-18 | ▓▓▓▓▓▓▓▓▓▓ |
-| 0.2.5 release | 🟡 In flight (S1 shipped; S2 retention gate pending) | ▓▓▓▓▓▓▓░░░ |
+| 0.2.5 release | 🟢 Released + deployed 2026-07-19 (both hosts) | ▓▓▓▓▓▓▓▓▓▓ |
 
 ## At a glance — offline branch (not yet forked)
 
@@ -71,7 +71,12 @@ Active streams: main (local ElasticHome deployment) + offline (air-gapped, not y
 
 **0.2.4 released 2026-07-18.** It delivers the legacy `gpu_sched` port, fleet TSDS fix, client stream telemetry, and PipeWire re-source.
 
-**0.2.5 is in flight.** S1 probe-TSDS-dimension shipped and was live-attested on 2026-07-18. S2 spool durability is in progress; its gate closes after the A6-24h retention check at or after `2026-07-19T17:52:04Z`. The release bump is pre-staged in a worktree.
+**0.2.5 released + deployed 2026-07-19** (tag `v0.2.5`, RigSignal `34882fe`). Delivers S2 spool
+durability + hardening and S1 probe-as-TSDS-dimension. The A6-24h retention gate PASSED at
+2026-07-19T18:43:24Z and was sealed before release; the 0.2.5 agent (`dca30eae`) is live on both
+StreamClient `.162` and GamingPC `.254` with zero-gap continuity. eBPF daemons deferred
+(version-string-only rebuild). Next per ratified H2 strategy: dashboard core/frozen/retire
+classification, then **0.3.0 = D6 diagnostic vertical**.
 
 **Deployment.** The local ElasticHome Elasticsearch stack is active (cloud migrated 2026-07-09). Agents run on GamingPC (`.254`) and StreamClient (`.162`) in spool-file output mode.
 
