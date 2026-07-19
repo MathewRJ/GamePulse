@@ -34,7 +34,7 @@ RigSignal ships a real-time gaming performance telemetry agent that captures CPU
 
 Install the pre-built package from this release:
 ```sh
-sudo pacman -U rigsignal-0.1.0-1-x86_64.pkg.tar.zst
+sudo pacman -U rigsignal-0.2.5-1-x86_64.pkg.tar.zst
 ```
 Or install from AUR (includes eBPF probes, builds from source):
 ```sh
@@ -44,20 +44,20 @@ yay -S rigsignal-git
 ### Debian / Ubuntu (24.04+)
 
 ```sh
-sudo dpkg -i rigsignal-agent_0.1.0-1_amd64.deb
+sudo dpkg -i rigsignal-agent_0.2.5-1_amd64.deb
 ```
 
 ### Fedora / RHEL / openSUSE
 
 ```sh
-sudo rpm -i rigsignal-agent-0.1.0-1.x86_64.rpm
+sudo rpm -i rigsignal-agent-0.2.5-1.x86_64.rpm
 ```
 
 ### Windows 10 / 11
 
 Double-click the `.msi` and accept the UAC prompt, or install silently from an admin PowerShell:
 ```powershell
-msiexec /i rigsignal-agent-0.1.0-x86_64.msi /qb!
+msiexec /i rigsignal-agent-0.2.5-x86_64.msi /qb!
 ```
 
 The installer adds `C:\Program Files\RigSignal\bin\` to the system PATH. Open a **new** terminal so `rigsignal-agent` is on PATH:
@@ -67,7 +67,7 @@ rigsignal-agent --version
 
 To uninstall:
 ```powershell
-msiexec /x rigsignal-agent-0.1.0-x86_64.msi /qb!
+msiexec /x rigsignal-agent-0.2.5-x86_64.msi /qb!
 ```
 or use *Settings → Apps → Installed apps → RigSignal → Uninstall*.
 
