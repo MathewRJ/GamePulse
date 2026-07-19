@@ -106,7 +106,7 @@ eula         = false
 # Paths are relative to this file's directory (src/).
 # Run: cargo generate-rpm --manifest-path src/Cargo.toml
 [package.metadata.generate-rpm]
-license = "MIT"
+license = "Apache-2.0"
 summary = "RigSignal gaming performance telemetry agent"
 assets = [
     { source = "../target/release/rigsignal-agent", dest = "/usr/bin/rigsignal-agent", mode = "755" },
