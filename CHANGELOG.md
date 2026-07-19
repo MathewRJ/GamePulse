@@ -6,12 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.2.5] — 2026-07-19
+
 ### Added
 
-- Spool output now finalizes active batches on graceful shutdown, eagerly recovers
-  stranded batches at startup, retains malformed input in quarantines, prunes old
-  delivered/quarantined files, and rejects concurrent writers for the same spool
-  directory.
+- Spool durability (S2): the NDJSON spool now finalizes active batches on graceful
+  shutdown, eagerly recovers stranded batches at startup (quarantining malformed input),
+  prunes the old delivered/quarantined tail under a rolling retention bound, and rejects
+  concurrent writers for the same spool directory via a single-writer lock.
+- eBPF probe identity as a TSDS dimension (S1): each probe carries its name as a
+  time-series dimension, so same-millisecond per-probe documents no longer collide on
+  `_tsid` (previously dropped as version conflicts); slot-table offset encoding retired and
+  unknown probes fail closed.
+- Streaming-lab dashboard rows for `stream_client` telemetry.
+
+### Changed
+
+- Spool hardening (S2): startup recovery streams input with a 1 MiB line bound instead of
+  buffering whole files; malformed sources are disposed by rename rather than full-copy
+  quarantine (eliminates the OOM / 2×-disk crash-loop); and retention scans a bounded batch
+  per cycle via a persistent directory cursor — no full-directory sort on the tick, and
+  newly-eligible files are pruned within one cycle.
 
 ## [0.2.4] — 2026-07-18
 
