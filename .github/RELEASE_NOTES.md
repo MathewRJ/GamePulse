@@ -44,20 +44,20 @@ yay -S rigsignal-git
 ### Debian / Ubuntu (24.04+)
 
 ```sh
-sudo dpkg -i rigsignal-agent_0.2.5-1_amd64.deb
+sudo dpkg -i rigsignal_0.2.5-1_amd64.deb
 ```
 
 ### Fedora / RHEL / openSUSE
 
 ```sh
-sudo rpm -i rigsignal-agent-0.2.5-1.x86_64.rpm
+sudo rpm -i rigsignal-0.2.5-1.x86_64.rpm
 ```
 
 ### Windows 10 / 11
 
 Double-click the `.msi` and accept the UAC prompt, or install silently from an admin PowerShell:
 ```powershell
-msiexec /i rigsignal-agent-0.2.5-x86_64.msi /qb!
+msiexec /i rigsignal-0.2.5-x86_64.msi /qb!
 ```
 
 The installer adds `C:\Program Files\RigSignal\bin\` to the system PATH. Open a **new** terminal so `rigsignal-agent` is on PATH:
@@ -67,7 +67,7 @@ rigsignal-agent --version
 
 To uninstall:
 ```powershell
-msiexec /x rigsignal-agent-0.2.5-x86_64.msi /qb!
+msiexec /x rigsignal-0.2.5-x86_64.msi /qb!
 ```
 or use *Settings → Apps → Installed apps → RigSignal → Uninstall*.
 
