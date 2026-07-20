@@ -151,17 +151,15 @@ impl RemoteConnectionsTailer {
 
         // The old generation is fully drained. Change generation before reading
         // the new path, but only after its committed offset reached EOF.
-        if source.dev != current.dev || source.ino != current.ino {
-            if source.len <= state.offset {
-                self.state = Some(TailState {
-                    path: self.log_path.clone(),
-                    dev: current.dev,
-                    ino: current.ino,
-                    offset: 0,
-                });
-                self.persist()?;
-                return self.poll(session);
-            }
+        if (source.dev != current.dev || source.ino != current.ino) && source.len <= state.offset {
+            self.state = Some(TailState {
+                path: self.log_path.clone(),
+                dev: current.dev,
+                ino: current.ino,
+                offset: 0,
+            });
+            self.persist()?;
+            return self.poll(session);
         }
 
         self.read_batch(&source, &state, session)
@@ -646,8 +644,13 @@ mod tests {
         )
         .unwrap();
         assert_eq!(doc["event"]["type"], json!(["connection", "end"]));
-        assert_eq!(doc["rigsignal"]["stream"]["client"]["event"], "disconnected");
-        assert!(doc["rigsignal"]["stream"]["client"].get("transport").is_none());
+        assert_eq!(
+            doc["rigsignal"]["stream"]["client"]["event"],
+            "disconnected"
+        );
+        assert!(doc["rigsignal"]["stream"]["client"]
+            .get("transport")
+            .is_none());
     }
 
     #[test]

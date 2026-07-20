@@ -250,11 +250,8 @@ impl SpoolWriter {
         } else if let Err(error) = self.publish_closed_file(&active_path, slug, "ndjson") {
             // The file is closed but still present. Re-open it for append so a
             // failed rotation never turns a later write into a truncation.
-            let restored = DatasetSpool::reopen(
-                active_path,
-                current_file_bytes,
-                current_file_started,
-            )?;
+            let restored =
+                DatasetSpool::reopen(active_path, current_file_bytes, current_file_started)?;
             self.spools.insert(slug.to_string(), restored);
             return Err(error);
         }
@@ -266,7 +263,12 @@ impl SpoolWriter {
         Ok(())
     }
 
-    fn publish_closed_file(&mut self, source: &Path, slug: &str, extension: &str) -> Result<PathBuf> {
+    fn publish_closed_file(
+        &mut self,
+        source: &Path,
+        slug: &str,
+        extension: &str,
+    ) -> Result<PathBuf> {
         let millis = unix_millis()?;
         self.publish_closed_file_at(source, slug, extension, millis)
     }
@@ -283,7 +285,11 @@ impl SpoolWriter {
                 "rigsignal-{}-{}-{}.{}",
                 slug, millis, self.next_seq, extension
             ));
-            match OpenOptions::new().create_new(true).write(true).open(&target) {
+            match OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .open(&target)
+            {
                 Ok(reservation) => {
                     drop(reservation);
                     if let Err(error) = std::fs::rename(source, &target) {
@@ -327,10 +333,9 @@ impl SpoolWriter {
             return Ok(());
         }
         if self.retention_scan.is_none() {
-            self.retention_scan = Some(
-                std::fs::read_dir(&self.dir)
-                    .with_context(|| format!("scanning spool retention directory: {}", self.dir.display()))?,
-            );
+            self.retention_scan = Some(std::fs::read_dir(&self.dir).with_context(|| {
+                format!("scanning spool retention directory: {}", self.dir.display())
+            })?);
         }
 
         let cutoff = SystemTime::now()
@@ -395,7 +400,11 @@ impl DatasetSpool {
         })
     }
 
-    fn reopen(active_path: PathBuf, current_file_bytes: u64, current_file_started: Instant) -> Result<Self> {
+    fn reopen(
+        active_path: PathBuf,
+        current_file_bytes: u64,
+        current_file_started: Instant,
+    ) -> Result<Self> {
         let file = OpenOptions::new()
             .append(true)
             .open(&active_path)
@@ -418,8 +427,12 @@ where
     {
         let path = entry?.path();
         if is_recovery_staging_file(&path) {
-            remove_file_if_exists(&path)
-                .with_context(|| format!("removing orphaned recovery staging file: {}", path.display()))?;
+            remove_file_if_exists(&path).with_context(|| {
+                format!(
+                    "removing orphaned recovery staging file: {}",
+                    path.display()
+                )
+            })?;
         }
     }
 
@@ -476,7 +489,8 @@ where
         }
         if serde_json::from_slice::<Value>(&recovered_line.bytes).is_ok() {
             if final_writer.is_none() {
-                let (stage, writer) = create_recovery_stage(dir, slug, millis, *next_seq, "ndjson")?;
+                let (stage, writer) =
+                    create_recovery_stage(dir, slug, millis, *next_seq, "ndjson")?;
                 final_stage = Some(stage);
                 final_writer = Some(writer);
             }
@@ -486,7 +500,9 @@ where
             writer
                 .write_all(&recovered_line.bytes)
                 .context("writing recovered spool record")?;
-            writer.write_all(b"\n").context("writing recovered spool newline")?;
+            writer
+                .write_all(b"\n")
+                .context("writing recovered spool newline")?;
         } else {
             malformed = true;
         }
@@ -568,7 +584,11 @@ impl RecoveryPublisher<'_> {
                 "rigsignal-{}-{}-{}.{}",
                 slug, millis, *self.next_seq, extension
             ));
-            match OpenOptions::new().create_new(true).write(true).open(&target) {
+            match OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .open(&target)
+            {
                 Ok(reservation) => {
                     drop(reservation);
                     *self.next_seq = self.next_seq.saturating_add(1);
@@ -589,7 +609,11 @@ impl RecoveryPublisher<'_> {
                 "rigsignal-{}-{}-{}.{}",
                 slug, millis, *self.next_seq, extension
             ));
-            match OpenOptions::new().create_new(true).write(true).open(&target) {
+            match OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .open(&target)
+            {
                 Ok(reservation) => {
                     drop(reservation);
                     if let Err(error) = std::fs::rename(source, &target) {
@@ -635,7 +659,10 @@ struct RecoveryLine {
     oversize: bool,
 }
 
-fn read_recovery_line(reader: &mut BufReader<File>, line: &mut Vec<u8>) -> std::io::Result<Option<RecoveryLine>> {
+fn read_recovery_line(
+    reader: &mut BufReader<File>,
+    line: &mut Vec<u8>,
+) -> std::io::Result<Option<RecoveryLine>> {
     line.clear();
     let mut oversize = false;
     loop {
@@ -705,7 +732,10 @@ fn is_recovery_staging_file(path: &Path) -> bool {
 }
 
 fn is_retained_spool_file(path: &Path) -> bool {
-    let name = path.file_name().and_then(|name| name.to_str()).unwrap_or("");
+    let name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("");
     name.starts_with("rigsignal-") && (name.ends_with(".ndjson") || name.ends_with(".quarantine"))
 }
 
@@ -733,8 +763,8 @@ fn build_client(config: &Config) -> Result<Client> {
     if let Some(path) = &config.elasticsearch.ca_cert {
         let pem = std::fs::read(path)
             .with_context(|| format!("reading Elasticsearch CA cert: {}", path.display()))?;
-        let cert = reqwest::Certificate::from_pem(&pem)
-            .context("parsing Elasticsearch CA cert PEM")?;
+        let cert =
+            reqwest::Certificate::from_pem(&pem).context("parsing Elasticsearch CA cert PEM")?;
         builder = builder.add_root_certificate(cert);
     }
     builder.build().context("building HTTP client")
@@ -1182,8 +1212,7 @@ mod tests {
                 path.file_name()
                     .and_then(|name| name.to_str())
                     .is_some_and(|name| {
-                        name.starts_with(&format!("rigsignal-{slug}-"))
-                            && name.ends_with(".ndjson")
+                        name.starts_with(&format!("rigsignal-{slug}-")) && name.ends_with(".ndjson")
                     })
             }));
         }
@@ -1198,7 +1227,8 @@ mod tests {
         let dir = temp_spool_dir("recovery-malformed-truncated");
         fs::create_dir_all(&dir)?;
         let source = dir.join("rigsignal-frame.ndjson.tmp");
-        let mut original = b"{\"marker\":\"valid-one\"}\nnot-json\n{\"marker\":\"valid-two\"}\n".to_vec();
+        let mut original =
+            b"{\"marker\":\"valid-one\"}\nnot-json\n{\"marker\":\"valid-two\"}\n".to_vec();
         original.extend(std::iter::repeat_n(b'x', RECOVERY_MAX_LINE_BYTES + 1));
         original.extend_from_slice(b"\n{\"marker\":\"partial");
         fs::write(&source, &original)?;
@@ -1253,7 +1283,10 @@ mod tests {
         let dir = temp_spool_dir("recovery-valid");
         fs::create_dir_all(&dir)?;
         let source = dir.join("rigsignal-frame.ndjson.tmp");
-        fs::write(&source, b"{\"marker\":\"valid-one\"}\n{\"marker\":\"valid-two\"}\n")?;
+        fs::write(
+            &source,
+            b"{\"marker\":\"valid-one\"}\n{\"marker\":\"valid-two\"}\n",
+        )?;
 
         let writer = SpoolWriter::new(&dir, 0, 0, 72)?;
         let finals = published_spool_files(&dir)?;
@@ -1262,7 +1295,10 @@ mod tests {
         assert!(!source.exists());
         assert!(!fs::read_dir(&dir)?.any(|entry| {
             entry.ok().is_some_and(|entry| {
-                entry.path().extension().is_some_and(|extension| extension == "quarantine")
+                entry
+                    .path()
+                    .extension()
+                    .is_some_and(|extension| extension == "quarantine")
             })
         }));
 
@@ -1279,10 +1315,9 @@ mod tests {
         fs::write(&source, b"{\"marker\":\"retain-me\"}\n")?;
         let mut next_seq = 1;
 
-        let error = recover_stranded_files(&dir, &mut next_seq, || {
-            anyhow::bail!("simulated disk full")
-        })
-        .expect_err("simulated publication failure should fail recovery");
+        let error =
+            recover_stranded_files(&dir, &mut next_seq, || anyhow::bail!("simulated disk full"))
+                .expect_err("simulated publication failure should fail recovery");
         assert!(format!("{error:#}").contains("simulated disk full"));
         assert!(source.exists());
         assert!(published_spool_files(&dir)?.is_empty());
@@ -1319,7 +1354,10 @@ mod tests {
         let finals = final_spool_files(&dir)?;
         assert_eq!(finals.len(), 1);
         assert_eq!(count_marker(&finals, "size-marker")?, 1);
-        assert_eq!(fs::read_to_string(dir.join("rigsignal-frame.ndjson.tmp"))?, "");
+        assert_eq!(
+            fs::read_to_string(dir.join("rigsignal-frame.ndjson.tmp"))?,
+            ""
+        );
 
         drop(writer);
         fs::remove_dir_all(&dir)?;
@@ -1441,7 +1479,10 @@ mod tests {
         let mut paths = Vec::new();
         for entry in fs::read_dir(dir)? {
             let path = entry?.path();
-            let name = path.file_name().and_then(|name| name.to_str()).unwrap_or("");
+            let name = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("");
             if name.starts_with("rigsignal-") && name.ends_with(".ndjson") {
                 paths.push(path);
             }

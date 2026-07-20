@@ -223,6 +223,30 @@ pub fn profile_dirs() -> Vec<PathBuf> {
     dirs
 }
 
+fn load_all() -> Vec<GameProfile> {
+    let mut profiles: Vec<GameProfile> = Vec::new();
+    for dir in profile_dirs() {
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("toml") {
+                continue;
+            }
+            match std::fs::read_to_string(&path)
+                .map_err(|e| e.to_string())
+                .and_then(|s| toml::from_str::<GameProfile>(&s).map_err(|e| e.to_string()))
+            {
+                Ok(p) => profiles.push(p),
+                Err(e) => tracing::warn!("skipping invalid profile {:?}: {}", path, e),
+            }
+        }
+    }
+    profiles
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -254,7 +278,7 @@ mod tests {
 
     #[test]
     fn test_profile_match_by_steam_id() {
-        let profiles = vec![
+        let profiles = [
             make_profile("Cyberpunk 2077", Some(1091500), &["cp2077"]),
             make_profile("Starfield", Some(1716740), &[]),
         ];
@@ -390,28 +414,4 @@ mod tests {
         assert_eq!(p2.game.steam_app_id, Some(1091500));
         assert_eq!(p3.game.steam_app_id, Some(1086940));
     }
-}
-
-fn load_all() -> Vec<GameProfile> {
-    let mut profiles: Vec<GameProfile> = Vec::new();
-    for dir in profile_dirs() {
-        let entries = match std::fs::read_dir(&dir) {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) != Some("toml") {
-                continue;
-            }
-            match std::fs::read_to_string(&path)
-                .map_err(|e| e.to_string())
-                .and_then(|s| toml::from_str::<GameProfile>(&s).map_err(|e| e.to_string()))
-            {
-                Ok(p) => profiles.push(p),
-                Err(e) => tracing::warn!("skipping invalid profile {:?}: {}", path, e),
-            }
-        }
-    }
-    profiles
 }
