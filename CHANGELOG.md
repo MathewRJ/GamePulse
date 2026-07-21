@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-07-21
+
+### Added
+
+- **D6 display mode-override detector**: `rigsignal-agent diagnose display` compares
+  Gamescope `modes.cfg` overrides with DRM display state, supports live collection and
+  offline replay, and reports rule version `d6.1`, evidence, confidence basis,
+  falsifier, and reversible suggested fixes. Its stable exit contract is 0 for `ok` or
+  `not-applicable`, 1 for a real invalid/degraded override finding, and 2 for incomplete
+  or invalid input/collection.
+- Hardened manual post-SteamOS-OTA eBPF restore script with a self-test: validates
+  connection identity and privileges before mutation, verifies attested artifacts and
+  secure paths, installs atomically, preserves the unit disabled, checks the effective
+  unit and acceptance state, and proves the read-only filesystem transition.
+
+### Changed
+
+- `host.name` is now trimmed and canonical lowercase at every userspace and eBPF
+  emission boundary, avoiding case-split metrics, sessions, events, and correlations.
+  In-repository dashboard grouping keys and the host selector normalize host names too.
+- eBPF release builds are pinned to `nightly-2026-07-18`, `bpf-linker` 0.10.4, and a
+  commit-pinned toolchain action; `xtask` now respects the workspace toolchain pin.
+- AUR and WinGet package metadata now correctly identifies RigSignal as Apache-2.0
+  licensed.
+
 ## [0.2.5] — 2026-07-19
 
 ### Added
