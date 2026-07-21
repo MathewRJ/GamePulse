@@ -13,6 +13,7 @@ compile_error!(
 
 mod collectors;
 mod config;
+mod detectors;
 mod diagnose;
 mod dllscan;
 mod host;
@@ -32,6 +33,7 @@ use serde_json::{json, Value};
 use session::SessionEvent;
 use shipper::SpoolWriter;
 use std::path::PathBuf;
+use std::process::ExitCode;
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
 // ── CLI ───────────────────────────────────────────────────────────────────────
@@ -44,6 +46,9 @@ enum Commands {
         /// Write the report to a file instead of stdout.
         #[arg(short, long, value_name = "PATH")]
         output: Option<PathBuf>,
+
+        #[command(subcommand)]
+        action: Option<DiagnoseAction>,
     },
 
     /// Dump the loaded-module list and Tier 2 detection result for a target
@@ -54,6 +59,21 @@ enum Commands {
         /// Process ID to inspect.
         #[arg(value_name = "PID")]
         pid: u32,
+    },
+}
+
+#[derive(Subcommand)]
+enum DiagnoseAction {
+    /// Validate gamescope modes.cfg overrides against DRM display state.
+    Display {
+        #[arg(long, value_name = "PATH")]
+        modes_cfg: Option<PathBuf>,
+        #[arg(long, value_name = "PATH")]
+        drm_state: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+        #[arg(long, value_name = "NAME")]
+        host: Option<String>,
     },
 }
 
@@ -662,7 +682,11 @@ async fn write_output(
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<ExitCode> {
+    run().await
+}
+
+async fn run() -> Result<ExitCode> {
     let cli = Cli::parse();
 
     tracing_subscriber::fmt()
@@ -673,6 +697,27 @@ async fn main() -> Result<()> {
         .with_writer(std::io::stderr)
         .init();
 
+    // Display diagnosis is self-contained and must work without RigSignal's
+    // telemetry configuration. Keep this before Config::load().
+    if let Some(Commands::Diagnose {
+        action:
+            Some(DiagnoseAction::Display {
+                modes_cfg,
+                drm_state,
+                json,
+                host,
+            }),
+        ..
+    }) = &cli.command
+    {
+        return Ok(detectors::d6::run_cli(
+            modes_cfg.as_deref(),
+            drm_state.as_deref(),
+            *json,
+            host.clone(),
+        ));
+    }
+
     let cfg = config::Config::load(cli.config.as_ref())?;
 
     if cli.print_config {
@@ -681,21 +726,31 @@ async fn main() -> Result<()> {
             "{}",
             toml::to_string_pretty(&display).context("serialising config for --print-config")?
         );
-        return Ok(());
+        return Ok(ExitCode::SUCCESS);
     }
 
     match cli.command {
-        Some(Commands::Diagnose { output }) => {
-            return diagnose::run(&cfg, cli.config.as_deref(), output.as_deref()).await;
+        Some(Commands::Diagnose {
+            output,
+            action: None,
+        }) => {
+            diagnose::run(&cfg, cli.config.as_deref(), output.as_deref()).await?;
+            return Ok(ExitCode::SUCCESS);
         }
         Some(Commands::Dllscan { pid }) => {
-            return run_dllscan(pid);
+            run_dllscan(pid)?;
+            return Ok(ExitCode::SUCCESS);
         }
+        // The display arm returned above, before configuration loading.
+        Some(Commands::Diagnose {
+            action: Some(_), ..
+        }) => unreachable!("display diagnosis was dispatched before Config::load"),
         None => {}
     }
 
     if cli.dry_run {
-        return dry_run().await;
+        dry_run().await?;
+        return Ok(ExitCode::SUCCESS);
     }
 
     let mut spool_writer = match cfg.output.mode {
@@ -1125,7 +1180,7 @@ async fn main() -> Result<()> {
     }
 
     tracing::info!("RigSignal agent stopped after {} ticks", tick);
-    Ok(())
+    Ok(ExitCode::SUCCESS)
 }
 
 #[cfg(test)]
