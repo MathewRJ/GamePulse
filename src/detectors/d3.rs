@@ -895,40 +895,74 @@ fn journal_command_start(extra: &[&str]) -> Result<String, String> {
 fn journal_command_bounded(extra: &[&str], retain_start: bool) -> Result<String, String> {
     let mut args = vec!["--no-pager", "-o", "short-iso-precise"];
     args.extend_from_slice(extra);
-    let mut child = Command::new("journalctl")
-        .args(&args)
+    command_bounded("journalctl", &args, JOURNAL_TIMEOUT, retain_start)
+}
+
+#[cfg(target_os = "linux")]
+fn command_bounded(
+    command: &str,
+    args: &[&str],
+    timeout: Duration,
+    retain_start: bool,
+) -> Result<String, String> {
+    let mut child = Command::new(command)
+        .args(args)
         .env("LC_ALL", "C")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|error| format!("journalctl spawn failed: {error}"))?;
+        .map_err(|error| format!("{command} spawn failed: {error}"))?;
+    let mut stdout = child.stdout.take().expect("stdout was configured as piped");
+    let mut stderr = child.stderr.take().expect("stderr was configured as piped");
+    let stdout_reader = thread::spawn(move || {
+        let mut output = Vec::new();
+        stdout.read_to_end(&mut output).map(|_| output)
+    });
+    let stderr_reader = thread::spawn(move || {
+        let mut output = Vec::new();
+        stderr.read_to_end(&mut output).map(|_| output)
+    });
     let started = std::time::Instant::now();
-    while child
-        .try_wait()
-        .map_err(|error| format!("journalctl wait failed: {error}"))?
-        .is_none()
-    {
-        if started.elapsed() > JOURNAL_TIMEOUT {
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {}
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = stdout_reader.join();
+                let _ = stderr_reader.join();
+                return Err(format!("{command} wait failed: {error}"));
+            }
+        }
+        if started.elapsed() > timeout {
             let _ = child.kill();
-            return Err("journalctl timed out".into());
+            let _ = child.wait();
+            let _ = stdout_reader.join();
+            let _ = stderr_reader.join();
+            return Err(format!("{command} timed out"));
         }
         thread::sleep(Duration::from_millis(20));
-    }
-    let output = child
-        .wait_with_output()
-        .map_err(|error| format!("journalctl output failed: {error}"))?;
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    if !output.status.success() {
+    };
+    let stdout = stdout_reader
+        .join()
+        .map_err(|_| format!("{command} output failed: stdout reader panicked"))?
+        .map_err(|error| format!("{command} output failed: {error}"))?;
+    let stderr = stderr_reader
+        .join()
+        .map_err(|_| format!("{command} output failed: stderr reader panicked"))?
+        .map_err(|error| format!("{command} output failed: {error}"))?;
+    let stderr = String::from_utf8_lossy(&stderr);
+    if !status.success() {
         return Err(format!(
-            "journalctl failed ({}): {}",
-            output.status,
+            "{command} failed ({status}): {}",
             truncate(&stderr)
         ));
     }
     if !stderr.trim().is_empty() {
-        return Err(format!("journalctl wrote stderr: {}", truncate(&stderr)));
+        return Err(format!("{command} wrote stderr: {}", truncate(&stderr)));
     }
-    let text = String::from_utf8_lossy(&output.stdout).into_owned();
+    let text = String::from_utf8_lossy(&stdout).into_owned();
     if retain_start {
         Ok(bounded_start(&text))
     } else {
@@ -1754,6 +1788,34 @@ mod tests {
             ))
             .join("state.json")
     }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn command_bounded_drains_large_stdout_before_exit() {
+        let output = command_bounded(
+            "sh",
+            &["-c", "head -c 2000000 /dev/zero | tr '\\0' a"],
+            Duration::from_secs(2),
+            false,
+        )
+        .expect("large stdout command should complete");
+        assert_eq!(output.len(), JOURNAL_LIMIT);
+        assert!(output.bytes().all(|byte| byte == b'a'));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn command_bounded_kills_after_timeout() {
+        let error = command_bounded(
+            "sh",
+            &["-c", "exec sleep 1"],
+            Duration::from_millis(50),
+            false,
+        )
+        .expect_err("sleeping command should time out");
+        assert_eq!(error, "sh timed out");
+    }
+
     fn input(snapshot: &str, inventory: Option<&str>, tail: Option<&str>) -> D3Input {
         let snapshot = parse_pci_snapshot(snapshot).unwrap();
         D3Input {
