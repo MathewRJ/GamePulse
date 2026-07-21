@@ -670,6 +670,9 @@ pub(crate) struct EpicManifest {
 
 // ── Unit tests ─────────────────────────────────────────────────────────────────
 
+// session.rs interleaves unix/windows variants after this module; restructuring is out of
+// scope for the CI --all-targets enablement (spec d3 §5).
+#[allow(clippy::items_after_test_module)]
 #[cfg(test)]
 mod tests {
     use super::*;
