@@ -472,7 +472,7 @@ where
     Some(json!({
         "@timestamp": timestamp.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
         "data_stream": {"type": "logs", "dataset": "rigsignal.events", "namespace": "default"},
-        "host": {"name": hostname},
+        "host": {"name": crate::host::normalize_hostname(hostname)},
         "event": {"kind": "event", "category": ["network"], "type": event_type},
         "rigsignal": rigsignal,
     }))
@@ -662,6 +662,12 @@ mod tests {
         assert_eq!(doc["rigsignal"]["stream"]["client"]["transport"], "direct");
         assert!(doc["rigsignal"].get("session").is_none());
         assert!(doc["rigsignal"].get("game").is_none());
+    }
+
+    #[test]
+    fn parser_normalizes_host_name() {
+        let doc = parse_document_in_timezone(line(), "GamingPC", &session(), &Utc).unwrap();
+        assert_eq!(doc["host"]["name"], "gamingpc");
     }
 
     #[test]

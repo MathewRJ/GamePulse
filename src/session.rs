@@ -277,7 +277,7 @@ impl SessionManager {
         }
 
         json!({
-            "host": { "name": hostname },
+            "host": { "name": crate::host::normalize_hostname(hostname) },
             "rigsignal": gp,
         })
     }
@@ -288,7 +288,10 @@ impl SessionManager {
     /// only while a local game is active.
     pub fn stream_client_base_doc(&self, hostname: &str) -> Value {
         let mut root = serde_json::Map::new();
-        root.insert("host".to_string(), json!({ "name": hostname }));
+        root.insert(
+            "host".to_string(),
+            json!({ "name": crate::host::normalize_hostname(hostname) }),
+        );
 
         if let Some(target) = &self.current_game {
             root.insert(
@@ -908,10 +911,16 @@ mod tests {
     #[test]
     fn stream_client_base_omits_idle_session_and_game() {
         let session = SessionManager::new();
-        let doc = session.stream_client_base_doc("host-a");
-        assert_eq!(doc["host"]["name"], "host-a");
+        let doc = session.stream_client_base_doc("StreamClient");
+        assert_eq!(doc["host"]["name"], "streamclient");
         assert!(doc.get("rigsignal").is_none());
         assert!(!doc.to_string().contains("idle-"));
+    }
+
+    #[test]
+    fn base_doc_normalizes_host_name() {
+        let doc = SessionManager::new().base_doc("GamingPC");
+        assert_eq!(doc["host"]["name"], "gamingpc");
     }
 }
 

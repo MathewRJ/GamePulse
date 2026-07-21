@@ -3,7 +3,17 @@
 /// Aggregate probe snapshots ship to `metrics-rigsignal.ebpf-default`.
 /// Per-thread scheduler rows ship to `metrics-rigsignal.ebpf_thread-default`.
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use serde::{ser::SerializeStruct, Serialize, Serializer};
+
+/// Canonicalize a hostname for the `host.name` dimension.
+pub fn normalize_hostname(value: &str) -> String {
+    let normalized = value.trim().to_lowercase();
+    if normalized.is_empty() {
+        "unknown".to_string()
+    } else {
+        normalized
+    }
+}
 
 /// The complete eBPF probe budget for one `(host, session)` TSDS series set.
 pub const NAMED_PROBES: [&str; 10] = [
@@ -123,15 +133,44 @@ impl DataStream {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 pub struct HostFields {
     pub name: String,
     pub os: OsFields,
 }
 
+impl Serialize for HostFields {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut fields = serializer.serialize_struct("HostFields", 2)?;
+        fields.serialize_field("name", &normalize_hostname(&self.name))?;
+        fields.serialize_field("os", &self.os)?;
+        fields.end()
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub struct OsFields {
     pub kernel: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{HostFields, OsFields};
+
+    #[test]
+    fn host_fields_serialize_a_canonical_host_name() {
+        let host = HostFields {
+            name: "  GamingPC\n".to_string(),
+            os: OsFields {
+                kernel: "kernel".to_string(),
+            },
+        };
+
+        assert_eq!(serde_json::to_value(host).unwrap()["name"], "gamingpc");
+    }
 }
 
 #[derive(Debug, Serialize)]
