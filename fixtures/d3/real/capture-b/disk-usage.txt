@@ -1,0 +1,1 @@
+Archived and active journals take up 49M in the file system.

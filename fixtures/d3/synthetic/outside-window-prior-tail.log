@@ -1,0 +1,6 @@
+2026-07-21T23:30:00.000000+00:00 HOST-SYNTH kernel: amdgpu 0000:03:00.0: amdgpu: SMU: response:0xFFFFFFFF
+2026-07-21T23:30:01.000000+00:00 HOST-SYNTH kernel: amdgpu 0000:03:00.0: amdgpu: SMU: response:0xFFFFFFFF
+2026-07-21T23:30:02.000000+00:00 HOST-SYNTH kernel: amdgpu 0000:03:00.0: amdgpu: SMU: response:0xFFFFFFFF
+2026-07-21T23:30:03.000000+00:00 HOST-SYNTH kernel: amdgpu 0000:03:00.0: amdgpu: GPU reset begin
+2026-07-21T23:30:04.000000+00:00 HOST-SYNTH kernel: amdgpu 0000:03:00.0: amdgpu: GPU reset begin
+2026-07-21T23:59:30.000000+00:00 HOST-SYNTH systemd[1]: Reached target Shutdown.

@@ -1,0 +1,20 @@
+{
+  "slot": "0000:03:00.0",
+  "lspci_line": "03:00.0 VGA compatible controller [0300]: Advanced Micro Devices, Inc. [AMD/ATI] Navi 48 [Radeon RX 9070/9070 XT/9070 GRE] [1002:7550] (rev c0)",
+  "vendor": "0x1002",
+  "device": "0x7550",
+  "class": "0x030000",
+  "revision": "0xc0",
+  "driver": "amdgpu",
+  "captured": "2026-07-03T09:41:00+02:00",
+  "source": "real",
+  "context_igpu": {
+    "slot": "0000:7b:00.0",
+    "lspci_line": "7b:00.0 VGA compatible controller [0300]: Advanced Micro Devices, Inc. [AMD/ATI] Granite Ridge [Radeon Graphics] [1002:13c0] (rev cb)",
+    "vendor": "0x1002",
+    "device": "0x13c0",
+    "class": "0x030000",
+    "revision": "0xcb",
+    "driver": "amdgpu"
+  }
+}

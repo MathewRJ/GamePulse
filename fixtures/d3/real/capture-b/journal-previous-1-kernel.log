@@ -1,0 +1,1232 @@
+2026-07-21T10:57:10.452296+02:00 HOST-REDACTED-B kernel: Linux version 6.16.12-drmexec7-valve24.5-1-neptune-616-drm-exec-gf253f5da553e (linux-neptune-616-drm-exec@archlinux) (gcc (GCC) 15.1.1 20250425, GNU ld (GNU Binutils) 2.45) #1 SMP PREEMPT_DYNAMIC Wed, 15 Jul 2026 21:55:55 +0000
+2026-07-21T10:57:10.452316+02:00 HOST-REDACTED-B kernel: Command line: BOOT_IMAGE=/boot/vmlinuz-linux-neptune-616-drm-exec console=tty1 rd.luks=0 rd.lvm=0 rd.md=0 rd.dm=0 rd.systemd.gpt_auto=no log_buf_len=4M amd_iommu=off amdgpu.lockup_timeout=5000,10000,10000,5000 ttm.pages_min=2097152 amdgpu.sched_hw_submission=4 amdgpu.dcdebugmask=0x20000 audit=0 fsck.mode=auto fsck.repair=preen crashkernel=256M crash_kexec_post_notifiers loglevel=3 splash quiet plymouth.ignore-serial-consoles fbcon=vc:4-6 steamos.efi=DISK-ID-REDACTED
+2026-07-21T10:57:10.452324+02:00 HOST-REDACTED-B kernel: BIOS-provided physical RAM map:
+2026-07-21T10:57:10.452331+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x0000000000000000-0x000000000009ffff] usable
+2026-07-21T10:57:10.452336+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x00000000000a0000-0x00000000000fffff] reserved
+2026-07-21T10:57:10.452343+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x0000000000100000-0x0000000009d1efff] usable
+2026-07-21T10:57:10.452350+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x0000000009d1f000-0x0000000009ffffff] reserved
+2026-07-21T10:57:10.452355+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x000000000a000000-0x000000000a1fffff] usable
+2026-07-21T10:57:10.452361+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x000000000a200000-0x000000000a20dfff] ACPI NVS
+2026-07-21T10:57:10.452367+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x000000000a20e000-0x000000000affffff] usable
+2026-07-21T10:57:10.452374+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x000000000b000000-0x000000000b01ffff] reserved
+2026-07-21T10:57:10.452380+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x000000000b020000-0x00000000c347efff] usable
+2026-07-21T10:57:10.452387+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x00000000c347f000-0x00000000c347ffff] reserved
+2026-07-21T10:57:10.452393+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x00000000c3480000-0x00000000ca60ffff] usable
+2026-07-21T10:57:10.452399+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x00000000ca610000-0x00000000ca94bfff] reserved
+2026-07-21T10:57:10.452405+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x00000000ca94c000-0x00000000caac8fff] ACPI data
+2026-07-21T10:57:10.452411+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x00000000caac9000-0x00000000cae98fff] ACPI NVS
+2026-07-21T10:57:10.452416+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x00000000cae99000-0x00000000cbbfefff] reserved
+2026-07-21T10:57:10.452422+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x00000000cbbff000-0x00000000ccffffff] usable
+2026-07-21T10:57:10.452428+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x00000000cd000000-0x00000000cfffffff] reserved
+2026-07-21T10:57:10.452434+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x00000000f0000000-0x00000000f7ffffff] reserved
+2026-07-21T10:57:10.452440+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x00000000fd200000-0x00000000fd2fffff] reserved
+2026-07-21T10:57:10.452445+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x00000000fd600000-0x00000000fd7fffff] reserved
+2026-07-21T10:57:10.452451+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x00000000fea00000-0x00000000fea0ffff] reserved
+2026-07-21T10:57:10.452457+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x00000000feb80000-0x00000000fec01fff] reserved
+2026-07-21T10:57:10.452463+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x00000000fec10000-0x00000000fec10fff] reserved
+2026-07-21T10:57:10.452468+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x00000000fec30000-0x00000000fec30fff] reserved
+2026-07-21T10:57:10.452474+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x00000000fed00000-0x00000000fed00fff] reserved
+2026-07-21T10:57:10.452479+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x00000000fed40000-0x00000000fed44fff] reserved
+2026-07-21T10:57:10.452485+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x00000000fed80000-0x00000000fed8ffff] reserved
+2026-07-21T10:57:10.452490+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x00000000fedc2000-0x00000000fedcffff] reserved
+2026-07-21T10:57:10.452496+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x00000000fedd4000-0x00000000fedd5fff] reserved
+2026-07-21T10:57:10.452502+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x00000000ff000000-0x00000000ffffffff] reserved
+2026-07-21T10:57:10.452507+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x0000000100000000-0x000000082f37ffff] usable
+2026-07-21T10:57:10.452513+02:00 HOST-REDACTED-B kernel: BIOS-e820: [mem 0x000000082f380000-0x000000082fffffff] reserved
+2026-07-21T10:57:10.452519+02:00 HOST-REDACTED-B kernel: NX (Execute Disable) protection: active
+2026-07-21T10:57:10.452525+02:00 HOST-REDACTED-B kernel: APIC: Static calls initialized
+2026-07-21T10:57:10.452531+02:00 HOST-REDACTED-B kernel: efi: EFI v2.7 by American Megatrends
+2026-07-21T10:57:10.452537+02:00 HOST-REDACTED-B kernel: efi: ACPI=0xcaac8000 ACPI 2.0=0xcaac8014 TPMFinalLog=0xcae4e000 SMBIOS=0xcb9f0000 SMBIOS 3.0=0xcb9ef000 MEMATTR=0xc723c118 ESRT=0xc97a3898 INITRD=0xc1523c98 RNG=0xcaaa7c18 TPMEventLog=0xca992018 
+2026-07-21T10:57:10.452543+02:00 HOST-REDACTED-B kernel: random: crng init done
+2026-07-21T10:57:10.452551+02:00 HOST-REDACTED-B kernel: efi: Remove mem67: MMIO range=[0xf0000000-0xf7ffffff] (128MB) from e820 map
+2026-07-21T10:57:10.452556+02:00 HOST-REDACTED-B kernel: e820: remove [mem 0xf0000000-0xf7ffffff] reserved
+2026-07-21T10:57:10.452562+02:00 HOST-REDACTED-B kernel: efi: Remove mem68: MMIO range=[0xfd200000-0xfd2fffff] (1MB) from e820 map
+2026-07-21T10:57:10.452568+02:00 HOST-REDACTED-B kernel: e820: remove [mem 0xfd200000-0xfd2fffff] reserved
+2026-07-21T10:57:10.452574+02:00 HOST-REDACTED-B kernel: efi: Remove mem69: MMIO range=[0xfd600000-0xfd7fffff] (2MB) from e820 map
+2026-07-21T10:57:10.452579+02:00 HOST-REDACTED-B kernel: e820: remove [mem 0xfd600000-0xfd7fffff] reserved
+2026-07-21T10:57:10.452585+02:00 HOST-REDACTED-B kernel: efi: Not removing mem70: MMIO range=[0xfea00000-0xfea0ffff] (64KB) from e820 map
+2026-07-21T10:57:10.452590+02:00 HOST-REDACTED-B kernel: efi: Remove mem71: MMIO range=[0xfeb80000-0xfec01fff] (0MB) from e820 map
+2026-07-21T10:57:10.452596+02:00 HOST-REDACTED-B kernel: e820: remove [mem 0xfeb80000-0xfec01fff] reserved
+2026-07-21T10:57:10.452602+02:00 HOST-REDACTED-B kernel: efi: Not removing mem72: MMIO range=[0xfec10000-0xfec10fff] (4KB) from e820 map
+2026-07-21T10:57:10.452607+02:00 HOST-REDACTED-B kernel: efi: Not removing mem73: MMIO range=[0xfec30000-0xfec30fff] (4KB) from e820 map
+2026-07-21T10:57:10.452613+02:00 HOST-REDACTED-B kernel: efi: Not removing mem74: MMIO range=[0xfed00000-0xfed00fff] (4KB) from e820 map
+2026-07-21T10:57:10.452618+02:00 HOST-REDACTED-B kernel: efi: Not removing mem75: MMIO range=[0xfed40000-0xfed44fff] (20KB) from e820 map
+2026-07-21T10:57:10.452625+02:00 HOST-REDACTED-B kernel: efi: Not removing mem76: MMIO range=[0xfed80000-0xfed8ffff] (64KB) from e820 map
+2026-07-21T10:57:10.452631+02:00 HOST-REDACTED-B kernel: efi: Not removing mem77: MMIO range=[0xfedc2000-0xfedcffff] (56KB) from e820 map
+2026-07-21T10:57:10.452637+02:00 HOST-REDACTED-B kernel: efi: Not removing mem78: MMIO range=[0xfedd4000-0xfedd5fff] (8KB) from e820 map
+2026-07-21T10:57:10.452642+02:00 HOST-REDACTED-B kernel: efi: Remove mem79: MMIO range=[0xff000000-0xffffffff] (16MB) from e820 map
+2026-07-21T10:57:10.452648+02:00 HOST-REDACTED-B kernel: e820: remove [mem 0xff000000-0xffffffff] reserved
+2026-07-21T10:57:10.452654+02:00 HOST-REDACTED-B kernel: SMBIOS 3.3.0 present.
+2026-07-21T10:57:10.452659+02:00 HOST-REDACTED-B kernel: DMI: ASUS System Product Name/TUF GAMING B550M-PLUS WIFI II, BIOS 3636 01/04/2026
+2026-07-21T10:57:10.452665+02:00 HOST-REDACTED-B kernel: DMI: Memory slots populated: 4/4
+2026-07-21T10:57:10.452670+02:00 HOST-REDACTED-B kernel: tsc: Fast TSC calibration using PIT
+2026-07-21T10:57:10.452676+02:00 HOST-REDACTED-B kernel: tsc: Detected 3700.200 MHz processor
+2026-07-21T10:57:10.452682+02:00 HOST-REDACTED-B kernel: e820: update [mem 0x00000000-0x00000fff] usable ==> reserved
+2026-07-21T10:57:10.452688+02:00 HOST-REDACTED-B kernel: e820: remove [mem 0x000a0000-0x000fffff] usable
+2026-07-21T10:57:10.452694+02:00 HOST-REDACTED-B kernel: last_pfn = 0x82f380 max_arch_pfn = 0x400000000
+2026-07-21T10:57:10.452701+02:00 HOST-REDACTED-B kernel: total RAM covered: 3327M
+2026-07-21T10:57:10.452707+02:00 HOST-REDACTED-B kernel: Found optimal setting for mtrr clean up
+2026-07-21T10:57:10.452714+02:00 HOST-REDACTED-B kernel:  gran_size: 64K         chunk_size: 128M         num_reg: 4          lose cover RAM: 0G
+2026-07-21T10:57:10.452720+02:00 HOST-REDACTED-B kernel: MTRR map: 8 entries (4 fixed + 4 variable; max 21), built from 9 variable MTRRs
+2026-07-21T10:57:10.452726+02:00 HOST-REDACTED-B kernel: x86/PAT: Configuration [0-7]: WB  WC  UC- UC  WB  WP  UC- WT  
+2026-07-21T10:57:10.452732+02:00 HOST-REDACTED-B kernel: e820: update [mem 0xcab90000-0xcab9ffff] usable ==> reserved
+2026-07-21T10:57:10.452738+02:00 HOST-REDACTED-B kernel: e820: update [mem 0xd0000000-0xffffffff] usable ==> reserved
+2026-07-21T10:57:10.452744+02:00 HOST-REDACTED-B kernel: last_pfn = 0xcd000 max_arch_pfn = 0x400000000
+2026-07-21T10:57:10.452750+02:00 HOST-REDACTED-B kernel: esrt: Reserving ESRT space from 0x00000000c97a3898 to 0x00000000c97a38d0.
+2026-07-21T10:57:10.452757+02:00 HOST-REDACTED-B kernel: e820: update [mem 0xc97a3000-0xc97a3fff] usable ==> reserved
+2026-07-21T10:57:10.452763+02:00 HOST-REDACTED-B kernel: Using GB pages for direct mapping
+2026-07-21T10:57:10.452769+02:00 HOST-REDACTED-B kernel: printk: log buffer data + meta data: 4194304 + 14680064 = 18874368 bytes
+2026-07-21T10:57:10.452775+02:00 HOST-REDACTED-B kernel: printk: early log buf free: 124960(95%)
+2026-07-21T10:57:10.452781+02:00 HOST-REDACTED-B kernel: Secure boot disabled
+2026-07-21T10:57:10.452787+02:00 HOST-REDACTED-B kernel: RAMDISK: [mem 0xba1cc000-0xbb532fff]
+2026-07-21T10:57:10.452793+02:00 HOST-REDACTED-B kernel: ACPI: Early table checksum verification disabled
+2026-07-21T10:57:10.452800+02:00 HOST-REDACTED-B kernel: ACPI: RSDP 0x00000000CAAC8014 000024 (v02 ALASKA)
+2026-07-21T10:57:10.452806+02:00 HOST-REDACTED-B kernel: ACPI: XSDT 0x00000000CAAC7728 0000EC (v01 ALASKA A M I    01072009 AMI  01000013)
+2026-07-21T10:57:10.452812+02:00 HOST-REDACTED-B kernel: ACPI: FACP 0x00000000CAAB8000 000114 (v06 ALASKA A M I    01072009 AMI  00010013)
+2026-07-21T10:57:10.452819+02:00 HOST-REDACTED-B kernel: ACPI: DSDT 0x00000000CAAAC000 00B767 (v02 ALASKA A M I    01072009 INTL 20120913)
+2026-07-21T10:57:10.452825+02:00 HOST-REDACTED-B kernel: ACPI: FACS 0x00000000CAE7E000 000040
+2026-07-21T10:57:10.452831+02:00 HOST-REDACTED-B kernel: ACPI: SSDT 0x00000000CAABE000 008CE9 (v02 AMD    AmdTable 00000002 MSFT 04000000)
+2026-07-21T10:57:10.452837+02:00 HOST-REDACTED-B kernel: ACPI: SSDT 0x00000000CAABA000 003B8E (v02 AMD    AMD AOD  00000001 INTL 20120913)
+2026-07-21T10:57:10.452848+02:00 HOST-REDACTED-B kernel: ACPI: SSDT 0x00000000CAAB9000 0001AD (v02 ALASKA CPUSSDT  01072009 AMI  01072009)
+2026-07-21T10:57:10.452855+02:00 HOST-REDACTED-B kernel: ACPI: FIDT 0x00000000CAAAB000 00009C (v01 ALASKA A M I    01072009 AMI  00010013)
+2026-07-21T10:57:10.452861+02:00 HOST-REDACTED-B kernel: ACPI: MCFG 0x00000000CAAA9000 00003C (v01 ALASKA A M I    01072009 MSFT 00010013)
+2026-07-21T10:57:10.452867+02:00 HOST-REDACTED-B kernel: ACPI: HPET 0x00000000CAAA8000 000038 (v01 ALASKA A M I    01072009 AMI  00000005)
+2026-07-21T10:57:10.452875+02:00 HOST-REDACTED-B kernel: ACPI: IVRS 0x00000000CAAA6000 0000D0 (v02 AMD    AmdTable 00000001 AMD  00000001)
+2026-07-21T10:57:10.452881+02:00 HOST-REDACTED-B kernel: ACPI: VFCT 0x00000000CAA97000 00E684 (v01 ALASKA A M I    00000001 AMD  33504F47)
+2026-07-21T10:57:10.452887+02:00 HOST-REDACTED-B kernel: ACPI: BGRT 0x00000000CAA96000 000038 (v01 ALASKA A M I    01072009 AMI  00010013)
+2026-07-21T10:57:10.452893+02:00 HOST-REDACTED-B kernel: ACPI: WPBT 0x00000000CA9AD000 00003C (v01 ALASKA A M I    00000001 ASUS 00000001)
+2026-07-21T10:57:10.452901+02:00 HOST-REDACTED-B kernel: ACPI: TPM2 0x00000000CA9AC000 00004C (v04 ALASKA A M I    00000001 AMI  00000000)
+2026-07-21T10:57:10.452907+02:00 HOST-REDACTED-B kernel: ACPI: PCCT 0x00000000CA9AB000 00006E (v02 AMD    AmdTable 00000001 AMD  00000001)
+2026-07-21T10:57:10.452913+02:00 HOST-REDACTED-B kernel: ACPI: SSDT 0x00000000CA9A7000 0030FB (v02 AMD    AmdTable 00000001 AMD  00000001)
+2026-07-21T10:57:10.452919+02:00 HOST-REDACTED-B kernel: ACPI: CRAT 0x00000000CA9A6000 000B90 (v01 AMD    AmdTable 00000001 AMD  00000001)
+2026-07-21T10:57:10.452926+02:00 HOST-REDACTED-B kernel: ACPI: CDIT 0x00000000CA9A5000 000029 (v01 AMD    AmdTable 00000001 AMD  00000001)
+2026-07-21T10:57:10.452933+02:00 HOST-REDACTED-B kernel: ACPI: SSDT 0x00000000CA9A4000 0002C2 (v02 AMD    ArticDGP 00000001 INTL 20120913)
+2026-07-21T10:57:10.452939+02:00 HOST-REDACTED-B kernel: ACPI: SSDT 0x00000000CA9A2000 0010C9 (v02 AMD    ArticTPX 00000001 INTL 20120913)
+2026-07-21T10:57:10.452945+02:00 HOST-REDACTED-B kernel: ACPI: SSDT 0x00000000CA9A1000 00052C (v02 AMD    ArticNOI 00000001 INTL 20120913)
+2026-07-21T10:57:10.452951+02:00 HOST-REDACTED-B kernel: ACPI: SSDT 0x00000000CA99D000 003E6E (v02 AMD    ArticN   00000001 INTL 20120913)
+2026-07-21T10:57:10.452957+02:00 HOST-REDACTED-B kernel: ACPI: WSMT 0x00000000CA99C000 000028 (v01 ALASKA A M I    01072009 AMI  00010013)
+2026-07-21T10:57:10.452963+02:00 HOST-REDACTED-B kernel: ACPI: APIC 0x00000000CA99B000 00015E (v04 ALASKA A M I    01072009 AMI  00010013)
+2026-07-21T10:57:10.452969+02:00 HOST-REDACTED-B kernel: ACPI: SSDT 0x00000000CA99A000 00007D (v02 AMD    ArticDIS 00000001 INTL 20120913)
+2026-07-21T10:57:10.452975+02:00 HOST-REDACTED-B kernel: ACPI: SSDT 0x00000000CA999000 0000BF (v01 AMD    AmdTable 00001000 INTL 20120913)
+2026-07-21T10:57:10.452982+02:00 HOST-REDACTED-B kernel: ACPI: FPDT 0x00000000CA998000 000044 (v01 ALASKA A M I    01072009 AMI  01000013)
+2026-07-21T10:57:10.452988+02:00 HOST-REDACTED-B kernel: ACPI: Reserving FACP table memory at [mem 0xcaab8000-0xcaab8113]
+2026-07-21T10:57:10.452994+02:00 HOST-REDACTED-B kernel: ACPI: Reserving DSDT table memory at [mem 0xcaaac000-0xcaab7766]
+2026-07-21T10:57:10.453000+02:00 HOST-REDACTED-B kernel: ACPI: Reserving FACS table memory at [mem 0xcae7e000-0xcae7e03f]
+2026-07-21T10:57:10.453006+02:00 HOST-REDACTED-B kernel: ACPI: Reserving SSDT table memory at [mem 0xcaabe000-0xcaac6ce8]
+2026-07-21T10:57:10.453012+02:00 HOST-REDACTED-B kernel: ACPI: Reserving SSDT table memory at [mem 0xcaaba000-0xcaabdb8d]
+2026-07-21T10:57:10.453018+02:00 HOST-REDACTED-B kernel: ACPI: Reserving SSDT table memory at [mem 0xcaab9000-0xcaab91ac]
+2026-07-21T10:57:10.453025+02:00 HOST-REDACTED-B kernel: ACPI: Reserving FIDT table memory at [mem 0xcaaab000-0xcaaab09b]
+2026-07-21T10:57:10.453035+02:00 HOST-REDACTED-B kernel: ACPI: Reserving MCFG table memory at [mem 0xcaaa9000-0xcaaa903b]
+2026-07-21T10:57:10.453041+02:00 HOST-REDACTED-B kernel: ACPI: Reserving HPET table memory at [mem 0xcaaa8000-0xcaaa8037]
+2026-07-21T10:57:10.453047+02:00 HOST-REDACTED-B kernel: ACPI: Reserving IVRS table memory at [mem 0xcaaa6000-0xcaaa60cf]
+2026-07-21T10:57:10.453053+02:00 HOST-REDACTED-B kernel: ACPI: Reserving VFCT table memory at [mem 0xcaa97000-0xcaaa5683]
+2026-07-21T10:57:10.453060+02:00 HOST-REDACTED-B kernel: ACPI: Reserving BGRT table memory at [mem 0xcaa96000-0xcaa96037]
+2026-07-21T10:57:10.453066+02:00 HOST-REDACTED-B kernel: ACPI: Reserving WPBT table memory at [mem 0xca9ad000-0xca9ad03b]
+2026-07-21T10:57:10.453072+02:00 HOST-REDACTED-B kernel: ACPI: Reserving TPM2 table memory at [mem 0xca9ac000-0xca9ac04b]
+2026-07-21T10:57:10.453078+02:00 HOST-REDACTED-B kernel: ACPI: Reserving PCCT table memory at [mem 0xca9ab000-0xca9ab06d]
+2026-07-21T10:57:10.453084+02:00 HOST-REDACTED-B kernel: ACPI: Reserving SSDT table memory at [mem 0xca9a7000-0xca9aa0fa]
+2026-07-21T10:57:10.453089+02:00 HOST-REDACTED-B kernel: ACPI: Reserving CRAT table memory at [mem 0xca9a6000-0xca9a6b8f]
+2026-07-21T10:57:10.453095+02:00 HOST-REDACTED-B kernel: ACPI: Reserving CDIT table memory at [mem 0xca9a5000-0xca9a5028]
+2026-07-21T10:57:10.453101+02:00 HOST-REDACTED-B kernel: ACPI: Reserving SSDT table memory at [mem 0xca9a4000-0xca9a42c1]
+2026-07-21T10:57:10.453107+02:00 HOST-REDACTED-B kernel: ACPI: Reserving SSDT table memory at [mem 0xca9a2000-0xca9a30c8]
+2026-07-21T10:57:10.453114+02:00 HOST-REDACTED-B kernel: ACPI: Reserving SSDT table memory at [mem 0xca9a1000-0xca9a152b]
+2026-07-21T10:57:10.453119+02:00 HOST-REDACTED-B kernel: ACPI: Reserving SSDT table memory at [mem 0xca99d000-0xca9a0e6d]
+2026-07-21T10:57:10.453125+02:00 HOST-REDACTED-B kernel: ACPI: Reserving WSMT table memory at [mem 0xca99c000-0xca99c027]
+2026-07-21T10:57:10.453131+02:00 HOST-REDACTED-B kernel: ACPI: Reserving APIC table memory at [mem 0xca99b000-0xca99b15d]
+2026-07-21T10:57:10.453137+02:00 HOST-REDACTED-B kernel: ACPI: Reserving SSDT table memory at [mem 0xca99a000-0xca99a07c]
+2026-07-21T10:57:10.453143+02:00 HOST-REDACTED-B kernel: ACPI: Reserving SSDT table memory at [mem 0xca999000-0xca9990be]
+2026-07-21T10:57:10.453149+02:00 HOST-REDACTED-B kernel: ACPI: Reserving FPDT table memory at [mem 0xca998000-0xca998043]
+2026-07-21T10:57:10.453155+02:00 HOST-REDACTED-B kernel: No NUMA configuration found
+2026-07-21T10:57:10.453163+02:00 HOST-REDACTED-B kernel: Faking a node at [mem 0x0000000000000000-0x000000082f37ffff]
+2026-07-21T10:57:10.453169+02:00 HOST-REDACTED-B kernel: NODE_DATA(0) allocated [mem 0x82e155280-0x82e17ffff]
+2026-07-21T10:57:10.453176+02:00 HOST-REDACTED-B kernel: crashkernel reserved: 0x00000000aa000000 - 0x00000000ba000000 (256 MB)
+2026-07-21T10:57:10.453183+02:00 HOST-REDACTED-B kernel: Zone ranges:
+2026-07-21T10:57:10.453189+02:00 HOST-REDACTED-B kernel:   DMA      [mem 0x0000000000001000-0x0000000000ffffff]
+2026-07-21T10:57:10.453195+02:00 HOST-REDACTED-B kernel:   DMA32    [mem 0x0000000001000000-0x00000000ffffffff]
+2026-07-21T10:57:10.453201+02:00 HOST-REDACTED-B kernel:   Normal   [mem 0x0000000100000000-0x000000082f37ffff]
+2026-07-21T10:57:10.453207+02:00 HOST-REDACTED-B kernel:   Device   empty
+2026-07-21T10:57:10.453213+02:00 HOST-REDACTED-B kernel: Movable zone start for each node
+2026-07-21T10:57:10.453219+02:00 HOST-REDACTED-B kernel: Early memory node ranges
+2026-07-21T10:57:10.453225+02:00 HOST-REDACTED-B kernel:   node   0: [mem 0x0000000000001000-0x000000000009ffff]
+2026-07-21T10:57:10.453231+02:00 HOST-REDACTED-B kernel:   node   0: [mem 0x0000000000100000-0x0000000009d1efff]
+2026-07-21T10:57:10.453237+02:00 HOST-REDACTED-B kernel:   node   0: [mem 0x000000000a000000-0x000000000a1fffff]
+2026-07-21T10:57:10.453244+02:00 HOST-REDACTED-B kernel:   node   0: [mem 0x000000000a20e000-0x000000000affffff]
+2026-07-21T10:57:10.453249+02:00 HOST-REDACTED-B kernel:   node   0: [mem 0x000000000b020000-0x00000000c347efff]
+2026-07-21T10:57:10.453255+02:00 HOST-REDACTED-B kernel:   node   0: [mem 0x00000000c3480000-0x00000000ca60ffff]
+2026-07-21T10:57:10.453261+02:00 HOST-REDACTED-B kernel:   node   0: [mem 0x00000000cbbff000-0x00000000ccffffff]
+2026-07-21T10:57:10.453267+02:00 HOST-REDACTED-B kernel:   node   0: [mem 0x0000000100000000-0x000000082f37ffff]
+2026-07-21T10:57:10.453273+02:00 HOST-REDACTED-B kernel: Initmem setup node 0 [mem 0x0000000000001000-0x000000082f37ffff]
+2026-07-21T10:57:10.453279+02:00 HOST-REDACTED-B kernel: On node 0, zone DMA: 1 pages in unavailable ranges
+2026-07-21T10:57:10.453285+02:00 HOST-REDACTED-B kernel: On node 0, zone DMA: 96 pages in unavailable ranges
+2026-07-21T10:57:10.453291+02:00 HOST-REDACTED-B kernel: On node 0, zone DMA32: 737 pages in unavailable ranges
+2026-07-21T10:57:10.453297+02:00 HOST-REDACTED-B kernel: On node 0, zone DMA32: 14 pages in unavailable ranges
+2026-07-21T10:57:10.453305+02:00 HOST-REDACTED-B kernel: On node 0, zone DMA32: 32 pages in unavailable ranges
+2026-07-21T10:57:10.453311+02:00 HOST-REDACTED-B kernel: On node 0, zone DMA32: 1 pages in unavailable ranges
+2026-07-21T10:57:10.453317+02:00 HOST-REDACTED-B kernel: On node 0, zone DMA32: 5615 pages in unavailable ranges
+2026-07-21T10:57:10.453323+02:00 HOST-REDACTED-B kernel: On node 0, zone Normal: 12288 pages in unavailable ranges
+2026-07-21T10:57:10.453329+02:00 HOST-REDACTED-B kernel: On node 0, zone Normal: 3200 pages in unavailable ranges
+2026-07-21T10:57:10.453335+02:00 HOST-REDACTED-B kernel: ACPI: PM-Timer IO Port: 0x808
+2026-07-21T10:57:10.453341+02:00 HOST-REDACTED-B kernel: CPU topo: Ignoring hot-pluggable APIC ID 0 in present package.
+2026-07-21T10:57:10.453347+02:00 HOST-REDACTED-B kernel: ACPI: LAPIC_NMI (acpi_id[0xff] high edge lint[0x1])
+2026-07-21T10:57:10.453353+02:00 HOST-REDACTED-B kernel: IOAPIC[0]: apic_id 13, version 33, address 0xfec00000, GSI 0-23
+2026-07-21T10:57:10.453360+02:00 HOST-REDACTED-B kernel: IOAPIC[1]: apic_id 14, version 33, address 0xfec01000, GSI 24-55
+2026-07-21T10:57:10.453366+02:00 HOST-REDACTED-B kernel: ACPI: INT_SRC_OVR (bus 0 bus_irq 0 global_irq 2 dfl dfl)
+2026-07-21T10:57:10.453372+02:00 HOST-REDACTED-B kernel: ACPI: INT_SRC_OVR (bus 0 bus_irq 9 global_irq 9 low level)
+2026-07-21T10:57:10.453378+02:00 HOST-REDACTED-B kernel: ACPI: Using ACPI (MADT) for SMP configuration information
+2026-07-21T10:57:10.453384+02:00 HOST-REDACTED-B kernel: ACPI: HPET id: 0x10228201 base: 0xfed00000
+2026-07-21T10:57:10.453390+02:00 HOST-REDACTED-B kernel: e820: update [mem 0xc67da000-0xc6ba6fff] usable ==> reserved
+2026-07-21T10:57:10.453396+02:00 HOST-REDACTED-B kernel: CPU topo: Max. logical packages:   1
+2026-07-21T10:57:10.453403+02:00 HOST-REDACTED-B kernel: CPU topo: Max. logical dies:       1
+2026-07-21T10:57:10.453409+02:00 HOST-REDACTED-B kernel: CPU topo: Max. dies per package:   1
+2026-07-21T10:57:10.453417+02:00 HOST-REDACTED-B kernel: CPU topo: Max. threads per core:   2
+2026-07-21T10:57:10.453423+02:00 HOST-REDACTED-B kernel: CPU topo: Num. cores per package:     6
+2026-07-21T10:57:10.453429+02:00 HOST-REDACTED-B kernel: CPU topo: Num. threads per package:  12
+2026-07-21T10:57:10.453435+02:00 HOST-REDACTED-B kernel: CPU topo: Allowing 12 present CPUs plus 0 hotplug CPUs
+2026-07-21T10:57:10.453441+02:00 HOST-REDACTED-B kernel: CPU topo: Rejected CPUs 20
+2026-07-21T10:57:10.453447+02:00 HOST-REDACTED-B kernel: PM: hibernation: Registered nosave memory: [mem 0x00000000-0x00000fff]
+2026-07-21T10:57:10.453453+02:00 HOST-REDACTED-B kernel: PM: hibernation: Registered nosave memory: [mem 0x000a0000-0x000fffff]
+2026-07-21T10:57:10.453459+02:00 HOST-REDACTED-B kernel: PM: hibernation: Registered nosave memory: [mem 0x09d1f000-0x09ffffff]
+2026-07-21T10:57:10.453465+02:00 HOST-REDACTED-B kernel: PM: hibernation: Registered nosave memory: [mem 0x0a200000-0x0a20dfff]
+2026-07-21T10:57:10.453471+02:00 HOST-REDACTED-B kernel: PM: hibernation: Registered nosave memory: [mem 0x0b000000-0x0b01ffff]
+2026-07-21T10:57:10.453478+02:00 HOST-REDACTED-B kernel: PM: hibernation: Registered nosave memory: [mem 0xc347f000-0xc347ffff]
+2026-07-21T10:57:10.453484+02:00 HOST-REDACTED-B kernel: PM: hibernation: Registered nosave memory: [mem 0xc67da000-0xc6ba6fff]
+2026-07-21T10:57:10.453490+02:00 HOST-REDACTED-B kernel: PM: hibernation: Registered nosave memory: [mem 0xc97a3000-0xc97a3fff]
+2026-07-21T10:57:10.453496+02:00 HOST-REDACTED-B kernel: PM: hibernation: Registered nosave memory: [mem 0xca610000-0xcbbfefff]
+2026-07-21T10:57:10.453502+02:00 HOST-REDACTED-B kernel: PM: hibernation: Registered nosave memory: [mem 0xcd000000-0xffffffff]
+2026-07-21T10:57:10.453508+02:00 HOST-REDACTED-B kernel: [mem 0xd0000000-0xfe9fffff] available for PCI devices
+2026-07-21T10:57:10.453514+02:00 HOST-REDACTED-B kernel: clocksource: refined-jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 1910969940391419 ns
+2026-07-21T10:57:10.453520+02:00 HOST-REDACTED-B kernel: setup_percpu: NR_CPUS:8192 nr_cpumask_bits:12 nr_cpu_ids:12 nr_node_ids:1
+2026-07-21T10:57:10.453526+02:00 HOST-REDACTED-B kernel: percpu: Embedded 60 pages/cpu s208896 r8192 d28672 u262144
+2026-07-21T10:57:10.453533+02:00 HOST-REDACTED-B kernel: pcpu-alloc: s208896 r8192 d28672 u262144 alloc=1*2097152
+2026-07-21T10:57:10.453539+02:00 HOST-REDACTED-B kernel: pcpu-alloc: [0] 00 01 02 03 04 05 06 07 [0] 08 09 10 11 -- -- -- -- 
+2026-07-21T10:57:10.453546+02:00 HOST-REDACTED-B kernel: Kernel command line: BOOT_IMAGE=/boot/vmlinuz-linux-neptune-616-drm-exec console=tty1 rd.luks=0 rd.lvm=0 rd.md=0 rd.dm=0 rd.systemd.gpt_auto=no log_buf_len=4M amd_iommu=off amdgpu.lockup_timeout=5000,10000,10000,5000 ttm.pages_min=2097152 amdgpu.sched_hw_submission=4 amdgpu.dcdebugmask=0x20000 audit=0 fsck.mode=auto fsck.repair=preen crashkernel=256M crash_kexec_post_notifiers loglevel=3 splash quiet plymouth.ignore-serial-consoles fbcon=vc:4-6 steamos.efi=DISK-ID-REDACTED
+2026-07-21T10:57:10.453714+02:00 HOST-REDACTED-B kernel: audit: disabled (until reboot)
+2026-07-21T10:57:10.453722+02:00 HOST-REDACTED-B kernel: Unknown kernel command line parameters "splash BOOT_IMAGE=/boot/vmlinuz-linux-neptune-616-drm-exec", will be passed to user space.
+2026-07-21T10:57:10.453729+02:00 HOST-REDACTED-B kernel: Dentry cache hash table entries: 4194304 (order: 13, 33554432 bytes, linear)
+2026-07-21T10:57:10.453735+02:00 HOST-REDACTED-B kernel: Inode-cache hash table entries: 2097152 (order: 12, 16777216 bytes, linear)
+2026-07-21T10:57:10.453741+02:00 HOST-REDACTED-B kernel: software IO TLB: area num 16.
+2026-07-21T10:57:10.453749+02:00 HOST-REDACTED-B kernel: Fallback order for Node 0: 0 
+2026-07-21T10:57:10.453755+02:00 HOST-REDACTED-B kernel: Built 1 zonelists, mobility grouping on.  Total pages: 8366624
+2026-07-21T10:57:10.453761+02:00 HOST-REDACTED-B kernel: Policy zone: Normal
+2026-07-21T10:57:10.453767+02:00 HOST-REDACTED-B kernel: mem auto-init: stack:all(zero), heap alloc:on, heap free:off
+2026-07-21T10:57:10.453773+02:00 HOST-REDACTED-B kernel: SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=12, Nodes=1
+2026-07-21T10:57:10.453779+02:00 HOST-REDACTED-B kernel: ftrace: allocating 54471 entries in 216 pages
+2026-07-21T10:57:10.453785+02:00 HOST-REDACTED-B kernel: ftrace: allocated 216 pages with 4 groups
+2026-07-21T10:57:10.453791+02:00 HOST-REDACTED-B kernel: Dynamic Preempt: full
+2026-07-21T10:57:10.453797+02:00 HOST-REDACTED-B kernel: rcu: Preemptible hierarchical RCU implementation.
+2026-07-21T10:57:10.453805+02:00 HOST-REDACTED-B kernel: rcu:         RCU restricting CPUs from NR_CPUS=8192 to nr_cpu_ids=12.
+2026-07-21T10:57:10.453811+02:00 HOST-REDACTED-B kernel: rcu:         RCU priority boosting: priority 1 delay 500 ms.
+2026-07-21T10:57:10.453817+02:00 HOST-REDACTED-B kernel:         Trampoline variant of Tasks RCU enabled.
+2026-07-21T10:57:10.453823+02:00 HOST-REDACTED-B kernel:         Rude variant of Tasks RCU enabled.
+2026-07-21T10:57:10.453829+02:00 HOST-REDACTED-B kernel:         Tracing variant of Tasks RCU enabled.
+2026-07-21T10:57:10.453835+02:00 HOST-REDACTED-B kernel: rcu: RCU calculated value of scheduler-enlistment delay is 100 jiffies.
+2026-07-21T10:57:10.453841+02:00 HOST-REDACTED-B kernel: rcu: Adjusting geometry for rcu_fanout_leaf=16, nr_cpu_ids=12
+2026-07-21T10:57:10.453853+02:00 HOST-REDACTED-B kernel: RCU Tasks: Setting shift to 4 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=12.
+2026-07-21T10:57:10.453859+02:00 HOST-REDACTED-B kernel: RCU Tasks Rude: Setting shift to 4 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=12.
+2026-07-21T10:57:10.453865+02:00 HOST-REDACTED-B kernel: RCU Tasks Trace: Setting shift to 4 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=12.
+2026-07-21T10:57:10.453872+02:00 HOST-REDACTED-B kernel: NR_IRQS: 524544, nr_irqs: 1064, preallocated irqs: 16
+2026-07-21T10:57:10.453878+02:00 HOST-REDACTED-B kernel: rcu: srcu_init: Setting srcu_struct sizes based on contention.
+2026-07-21T10:57:10.453884+02:00 HOST-REDACTED-B kernel: kfence: initialized - using 2097152 bytes for 255 objects at 0x(____ptrval____)-0x(____ptrval____)
+2026-07-21T10:57:10.453891+02:00 HOST-REDACTED-B kernel: Console: colour dummy device 80x25
+2026-07-21T10:57:10.453897+02:00 HOST-REDACTED-B kernel: printk: legacy console [tty1] enabled
+2026-07-21T10:57:10.453903+02:00 HOST-REDACTED-B kernel: ACPI: Core revision 20250404
+2026-07-21T10:57:10.453909+02:00 HOST-REDACTED-B kernel: clocksource: hpet: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 133484873504 ns
+2026-07-21T10:57:10.453915+02:00 HOST-REDACTED-B kernel: APIC: Switch to symmetric I/O mode setup
+2026-07-21T10:57:10.453922+02:00 HOST-REDACTED-B kernel: x2apic: IRQ remapping doesn't support X2APIC mode
+2026-07-21T10:57:10.453928+02:00 HOST-REDACTED-B kernel: ..TIMER: vector=0x30 apic1=0 pin1=2 apic2=-1 pin2=-1
+2026-07-21T10:57:10.453934+02:00 HOST-REDACTED-B kernel: clocksource: tsc-early: mask: 0xffffffffffffffff max_cycles: 0x6aac25937ac, max_idle_ns: 881590868737 ns
+2026-07-21T10:57:10.453940+02:00 HOST-REDACTED-B kernel: Calibrating delay loop (skipped), value calculated using timer frequency.. 7400.40 BogoMIPS (lpj=3700200)
+2026-07-21T10:57:10.453946+02:00 HOST-REDACTED-B kernel: SVM disabled (by BIOS) in MSR_VM_CR
+2026-07-21T10:57:10.453952+02:00 HOST-REDACTED-B kernel: x86/cpu: User Mode Instruction Prevention (UMIP) activated
+2026-07-21T10:57:10.453958+02:00 HOST-REDACTED-B kernel: LVT offset 1 assigned for vector 0xf9
+2026-07-21T10:57:10.453964+02:00 HOST-REDACTED-B kernel: LVT offset 2 assigned for vector 0xf4
+2026-07-21T10:57:10.453970+02:00 HOST-REDACTED-B kernel: Last level iTLB entries: 4KB 512, 2MB 512, 4MB 256
+2026-07-21T10:57:10.453977+02:00 HOST-REDACTED-B kernel: Last level dTLB entries: 4KB 2048, 2MB 2048, 4MB 1024, 1GB 0
+2026-07-21T10:57:10.453984+02:00 HOST-REDACTED-B kernel: process: using mwait in idle threads
+2026-07-21T10:57:10.453990+02:00 HOST-REDACTED-B kernel: Speculative Store Bypass: Mitigation: Speculative Store Bypass disabled via prctl
+2026-07-21T10:57:10.453996+02:00 HOST-REDACTED-B kernel: Transient Scheduler Attacks: Mitigation: Clear CPU buffers
+2026-07-21T10:57:10.454002+02:00 HOST-REDACTED-B kernel: Spectre V2 : Mitigation: Retpolines
+2026-07-21T10:57:10.454008+02:00 HOST-REDACTED-B kernel: Spectre V2 : User space: Mitigation: STIBP always-on protection
+2026-07-21T10:57:10.454014+02:00 HOST-REDACTED-B kernel: Speculative Return Stack Overflow: Mitigation: Safe RET
+2026-07-21T10:57:10.454020+02:00 HOST-REDACTED-B kernel: VMSCAPE: Mitigation: IBPB before exit to userspace
+2026-07-21T10:57:10.454026+02:00 HOST-REDACTED-B kernel: Spectre V1 : Mitigation: usercopy/swapgs barriers and __user pointer sanitization
+2026-07-21T10:57:10.454032+02:00 HOST-REDACTED-B kernel: Spectre V2 : Spectre v2 / SpectreRSB: Filling RSB on context switch and VMEXIT
+2026-07-21T10:57:10.454039+02:00 HOST-REDACTED-B kernel: Spectre V2 : Enabling Restricted Speculation for firmware calls
+2026-07-21T10:57:10.454045+02:00 HOST-REDACTED-B kernel: Spectre V2 : mitigation: Enabling conditional Indirect Branch Prediction Barrier
+2026-07-21T10:57:10.454051+02:00 HOST-REDACTED-B kernel: active return thunk: srso_alias_return_thunk
+2026-07-21T10:57:10.454057+02:00 HOST-REDACTED-B kernel: x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
+2026-07-21T10:57:10.454063+02:00 HOST-REDACTED-B kernel: x86/fpu: Supporting XSAVE feature 0x002: 'SSE registers'
+2026-07-21T10:57:10.454069+02:00 HOST-REDACTED-B kernel: x86/fpu: Supporting XSAVE feature 0x004: 'AVX registers'
+2026-07-21T10:57:10.454075+02:00 HOST-REDACTED-B kernel: x86/fpu: Supporting XSAVE feature 0x200: 'Protection Keys User registers'
+2026-07-21T10:57:10.454081+02:00 HOST-REDACTED-B kernel: x86/fpu: Supporting XSAVE feature 0x800: 'Control-flow User registers'
+2026-07-21T10:57:10.454087+02:00 HOST-REDACTED-B kernel: x86/fpu: xstate_offset[2]:  576, xstate_sizes[2]:  256
+2026-07-21T10:57:10.454094+02:00 HOST-REDACTED-B kernel: x86/fpu: xstate_offset[9]:  832, xstate_sizes[9]:    8
+2026-07-21T10:57:10.454100+02:00 HOST-REDACTED-B kernel: x86/fpu: xstate_offset[11]:  840, xstate_sizes[11]:   16
+2026-07-21T10:57:10.454106+02:00 HOST-REDACTED-B kernel: x86/fpu: Enabled xstate features 0xa07, context size is 856 bytes, using 'compacted' format.
+2026-07-21T10:57:10.454113+02:00 HOST-REDACTED-B kernel: Freeing SMP alternatives memory: 52K
+2026-07-21T10:57:10.454119+02:00 HOST-REDACTED-B kernel: pid_max: default: 32768 minimum: 301
+2026-07-21T10:57:10.454125+02:00 HOST-REDACTED-B kernel: LSM: initializing lsm=capability,landlock,lockdown,yama,bpf
+2026-07-21T10:57:10.454131+02:00 HOST-REDACTED-B kernel: landlock: Up and running.
+2026-07-21T10:57:10.454137+02:00 HOST-REDACTED-B kernel: Yama: becoming mindful.
+2026-07-21T10:57:10.454143+02:00 HOST-REDACTED-B kernel: LSM support for eBPF active
+2026-07-21T10:57:10.454149+02:00 HOST-REDACTED-B kernel: Mount-cache hash table entries: 65536 (order: 7, 524288 bytes, linear)
+2026-07-21T10:57:10.454156+02:00 HOST-REDACTED-B kernel: Mountpoint-cache hash table entries: 65536 (order: 7, 524288 bytes, linear)
+2026-07-21T10:57:10.454162+02:00 HOST-REDACTED-B kernel: smpboot: CPU0: AMD Ryzen 5 5600X 6-Core Processor (family: 0x19, model: 0x21, stepping: 0x2)
+2026-07-21T10:57:10.454168+02:00 HOST-REDACTED-B kernel: Performance Events: Fam17h+ core perfctr, AMD PMU driver.
+2026-07-21T10:57:10.454174+02:00 HOST-REDACTED-B kernel: ... version:                0
+2026-07-21T10:57:10.454180+02:00 HOST-REDACTED-B kernel: ... bit width:              48
+2026-07-21T10:57:10.454185+02:00 HOST-REDACTED-B kernel: ... generic registers:      6
+2026-07-21T10:57:10.454191+02:00 HOST-REDACTED-B kernel: ... value mask:             0000ffffffffffff
+2026-07-21T10:57:10.454197+02:00 HOST-REDACTED-B kernel: ... max period:             00007fffffffffff
+2026-07-21T10:57:10.454203+02:00 HOST-REDACTED-B kernel: ... fixed-purpose events:   0
+2026-07-21T10:57:10.454208+02:00 HOST-REDACTED-B kernel: ... event mask:             000000000000003f
+2026-07-21T10:57:10.454214+02:00 HOST-REDACTED-B kernel: signal: max sigframe size: 3376
+2026-07-21T10:57:10.454219+02:00 HOST-REDACTED-B kernel: rcu: Hierarchical SRCU implementation.
+2026-07-21T10:57:10.454226+02:00 HOST-REDACTED-B kernel: rcu:         Max phase no-delay instances is 400.
+2026-07-21T10:57:10.454232+02:00 HOST-REDACTED-B kernel: Timer migration: 2 hierarchy levels; 8 children per group; 2 crossnode level
+2026-07-21T10:57:10.454238+02:00 HOST-REDACTED-B kernel: MCE: In-kernel MCE decoding enabled.
+2026-07-21T10:57:10.454244+02:00 HOST-REDACTED-B kernel: NMI watchdog: Enabled. Permanently consumes one hw-PMU counter.
+2026-07-21T10:57:10.454250+02:00 HOST-REDACTED-B kernel: smp: Bringing up secondary CPUs ...
+2026-07-21T10:57:10.454256+02:00 HOST-REDACTED-B kernel: smpboot: x86: Booting SMP configuration:
+2026-07-21T10:57:10.454262+02:00 HOST-REDACTED-B kernel: .... node  #0, CPUs:        #1  #2  #3  #4  #5  #6  #7  #8  #9 #10 #11
+2026-07-21T10:57:10.454268+02:00 HOST-REDACTED-B kernel: Spectre V2 : Update user space SMT mitigation: STIBP always-on
+2026-07-21T10:57:10.454274+02:00 HOST-REDACTED-B kernel: smp: Brought up 1 node, 12 CPUs
+2026-07-21T10:57:10.454280+02:00 HOST-REDACTED-B kernel: smpboot: Total of 12 processors activated (88804.80 BogoMIPS)
+2026-07-21T10:57:10.454287+02:00 HOST-REDACTED-B kernel: Memory: 32445392K/33466496K available (19398K kernel code, 2880K rwdata, 15504K rodata, 4272K init, 5592K bss, 1005776K reserved, 0K cma-reserved)
+2026-07-21T10:57:10.454293+02:00 HOST-REDACTED-B kernel: devtmpfs: initialized
+2026-07-21T10:57:10.454299+02:00 HOST-REDACTED-B kernel: x86/mm: Memory block size: 128MB
+2026-07-21T10:57:10.454305+02:00 HOST-REDACTED-B kernel: ACPI: PM: Registering ACPI NVS region [mem 0x0a200000-0x0a20dfff] (57344 bytes)
+2026-07-21T10:57:10.454311+02:00 HOST-REDACTED-B kernel: ACPI: PM: Registering ACPI NVS region [mem 0xcaac9000-0xcae98fff] (3997696 bytes)
+2026-07-21T10:57:10.454317+02:00 HOST-REDACTED-B kernel: clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 1911260446275000 ns
+2026-07-21T10:57:10.454323+02:00 HOST-REDACTED-B kernel: posixtimers hash table entries: 8192 (order: 5, 131072 bytes, linear)
+2026-07-21T10:57:10.454329+02:00 HOST-REDACTED-B kernel: futex hash table entries: 4096 (262144 bytes on 1 NUMA nodes, total 256 KiB, linear).
+2026-07-21T10:57:10.454335+02:00 HOST-REDACTED-B kernel: pinctrl core: initialized pinctrl subsystem
+2026-07-21T10:57:10.454340+02:00 HOST-REDACTED-B kernel: PM: RTC time: 08:57:07, date: 2026-07-21
+2026-07-21T10:57:10.454346+02:00 HOST-REDACTED-B kernel: NET: Registered PF_NETLINK/PF_ROUTE protocol family
+2026-07-21T10:57:10.454354+02:00 HOST-REDACTED-B kernel: DMA: preallocated 4096 KiB GFP_KERNEL pool for atomic allocations
+2026-07-21T10:57:10.454360+02:00 HOST-REDACTED-B kernel: DMA: preallocated 4096 KiB GFP_KERNEL|GFP_DMA pool for atomic allocations
+2026-07-21T10:57:10.454366+02:00 HOST-REDACTED-B kernel: DMA: preallocated 4096 KiB GFP_KERNEL|GFP_DMA32 pool for atomic allocations
+2026-07-21T10:57:10.454372+02:00 HOST-REDACTED-B kernel: thermal_sys: Registered thermal governor 'fair_share'
+2026-07-21T10:57:10.454378+02:00 HOST-REDACTED-B kernel: thermal_sys: Registered thermal governor 'bang_bang'
+2026-07-21T10:57:10.454384+02:00 HOST-REDACTED-B kernel: thermal_sys: Registered thermal governor 'step_wise'
+2026-07-21T10:57:10.454390+02:00 HOST-REDACTED-B kernel: thermal_sys: Registered thermal governor 'user_space'
+2026-07-21T10:57:10.454400+02:00 HOST-REDACTED-B kernel: thermal_sys: Registered thermal governor 'power_allocator'
+2026-07-21T10:57:10.454411+02:00 HOST-REDACTED-B kernel: cpuidle: using governor ladder
+2026-07-21T10:57:10.454418+02:00 HOST-REDACTED-B kernel: cpuidle: using governor menu
+2026-07-21T10:57:10.454424+02:00 HOST-REDACTED-B kernel: Detected 1 PCC Subspaces
+2026-07-21T10:57:10.454430+02:00 HOST-REDACTED-B kernel: Registering PCC driver as Mailbox controller
+2026-07-21T10:57:10.454436+02:00 HOST-REDACTED-B kernel: acpiphp: ACPI Hot Plug PCI Controller Driver version: 0.5
+2026-07-21T10:57:10.454442+02:00 HOST-REDACTED-B kernel: PCI: ECAM [mem 0xf0000000-0xf7ffffff] (base 0xf0000000) for domain 0000 [bus 00-7f]
+2026-07-21T10:57:10.454448+02:00 HOST-REDACTED-B kernel: PCI: Using configuration type 1 for base access
+2026-07-21T10:57:10.454454+02:00 HOST-REDACTED-B kernel: kprobes: kprobe jump-optimization is enabled. All kprobes are optimized if possible.
+2026-07-21T10:57:10.454460+02:00 HOST-REDACTED-B kernel: HugeTLB: allocation took 0ms with hugepage_allocation_threads=3
+2026-07-21T10:57:10.454467+02:00 HOST-REDACTED-B kernel: HugeTLB: registered 1.00 GiB page size, pre-allocated 0 pages
+2026-07-21T10:57:10.454473+02:00 HOST-REDACTED-B kernel: HugeTLB: 16380 KiB vmemmap can be freed for a 1.00 GiB page
+2026-07-21T10:57:10.454479+02:00 HOST-REDACTED-B kernel: HugeTLB: registered 2.00 MiB page size, pre-allocated 0 pages
+2026-07-21T10:57:10.454485+02:00 HOST-REDACTED-B kernel: HugeTLB: 28 KiB vmemmap can be freed for a 2.00 MiB page
+2026-07-21T10:57:10.454493+02:00 HOST-REDACTED-B kernel: raid6: skipped pq benchmark and selected avx2x4
+2026-07-21T10:57:10.454500+02:00 HOST-REDACTED-B kernel: raid6: using avx2x2 recovery algorithm
+2026-07-21T10:57:10.454506+02:00 HOST-REDACTED-B kernel: ACPI: Added _OSI(Module Device)
+2026-07-21T10:57:10.454512+02:00 HOST-REDACTED-B kernel: ACPI: Added _OSI(Processor Device)
+2026-07-21T10:57:10.454521+02:00 HOST-REDACTED-B kernel: ACPI: Added _OSI(Processor Aggregator Device)
+2026-07-21T10:57:10.454527+02:00 HOST-REDACTED-B kernel: ACPI: 11 ACPI AML tables successfully acquired and loaded
+2026-07-21T10:57:10.454534+02:00 HOST-REDACTED-B kernel: ACPI: [Firmware Bug]: BIOS _OSI(Linux) query ignored
+2026-07-21T10:57:10.454540+02:00 HOST-REDACTED-B kernel: ACPI: Interpreter enabled
+2026-07-21T10:57:10.454547+02:00 HOST-REDACTED-B kernel: ACPI: PM: (supports S0 S3 S4 S5)
+2026-07-21T10:57:10.454553+02:00 HOST-REDACTED-B kernel: ACPI: Using IOAPIC for interrupt routing
+2026-07-21T10:57:10.454559+02:00 HOST-REDACTED-B kernel: PCI: Using host bridge windows from ACPI; if necessary, use "pci=nocrs" and report a bug
+2026-07-21T10:57:10.454566+02:00 HOST-REDACTED-B kernel: PCI: Ignoring E820 reservations for host bridge windows
+2026-07-21T10:57:10.454573+02:00 HOST-REDACTED-B kernel: ACPI: Enabled 5 GPEs in block 00 to 1F
+2026-07-21T10:57:10.454581+02:00 HOST-REDACTED-B kernel: ACPI: PCI Root Bridge [PCI0] (domain 0000 [bus 00-ff])
+2026-07-21T10:57:10.454731+02:00 HOST-REDACTED-B kernel: acpi PNP0A08:00: _OSC: OS supports [ExtendedConfig ASPM ClockPM Segments MSI EDR HPX-Type3]
+2026-07-21T10:57:10.454862+02:00 HOST-REDACTED-B kernel: acpi PNP0A08:00: _OSC: platform does not support [PCIeHotplug SHPCHotplug PME LTR DPC]
+2026-07-21T10:57:10.454990+02:00 HOST-REDACTED-B kernel: acpi PNP0A08:00: _OSC: OS now controls [AER PCIeCapability]
+2026-07-21T10:57:10.455110+02:00 HOST-REDACTED-B kernel: acpi PNP0A08:00: [Firmware Info]: ECAM [mem 0xf0000000-0xf7ffffff] for domain 0000 [bus 00-7f] only partially covers this bridge
+2026-07-21T10:57:10.455118+02:00 HOST-REDACTED-B kernel: PCI host bridge to bus 0000:00
+2026-07-21T10:57:10.455230+02:00 HOST-REDACTED-B kernel: pci_bus 0000:00: root bus resource [io  0x0000-0x03af window]
+2026-07-21T10:57:10.455337+02:00 HOST-REDACTED-B kernel: pci_bus 0000:00: root bus resource [io  0x03e0-0x0cf7 window]
+2026-07-21T10:57:10.455443+02:00 HOST-REDACTED-B kernel: pci_bus 0000:00: root bus resource [io  0x03b0-0x03df window]
+2026-07-21T10:57:10.455548+02:00 HOST-REDACTED-B kernel: pci_bus 0000:00: root bus resource [io  0x0d00-0xffff window]
+2026-07-21T10:57:10.455656+02:00 HOST-REDACTED-B kernel: pci_bus 0000:00: root bus resource [mem 0x000a0000-0x000dffff window]
+2026-07-21T10:57:10.455761+02:00 HOST-REDACTED-B kernel: pci_bus 0000:00: root bus resource [mem 0xd0000000-0xfcffffff window]
+2026-07-21T10:57:10.455885+02:00 HOST-REDACTED-B kernel: pci_bus 0000:00: root bus resource [mem 0x830000000-0x7fffffffff window]
+2026-07-21T10:57:10.456008+02:00 HOST-REDACTED-B kernel: pci_bus 0000:00: root bus resource [bus 00-ff]
+2026-07-21T10:57:10.456133+02:00 HOST-REDACTED-B kernel: pci 0000:00:00.0: [1022:1480] type 00 class 0x060000 conventional PCI endpoint
+2026-07-21T10:57:10.456249+02:00 HOST-REDACTED-B kernel: pci 0000:00:00.2: [1022:1481] type 00 class 0x080600 conventional PCI endpoint
+2026-07-21T10:57:10.456364+02:00 HOST-REDACTED-B kernel: pci 0000:00:01.0: [1022:1482] type 00 class 0x060000 conventional PCI endpoint
+2026-07-21T10:57:10.456488+02:00 HOST-REDACTED-B kernel: pci 0000:00:01.1: [1022:1483] type 01 class 0x060400 PCIe Root Port
+2026-07-21T10:57:10.456607+02:00 HOST-REDACTED-B kernel: pci 0000:00:01.1: PCI bridge to [bus 01]
+2026-07-21T10:57:10.456720+02:00 HOST-REDACTED-B kernel: pci 0000:00:01.1:   bridge window [mem 0xfcf00000-0xfcffffff]
+2026-07-21T10:57:10.456837+02:00 HOST-REDACTED-B kernel: pci 0000:00:01.1: enabling Extended Tags
+2026-07-21T10:57:10.456959+02:00 HOST-REDACTED-B kernel: pci 0000:00:01.1: PME# supported from D0 D3hot D3cold
+2026-07-21T10:57:10.457074+02:00 HOST-REDACTED-B kernel: pci 0000:00:01.2: [1022:1483] type 01 class 0x060400 PCIe Root Port
+2026-07-21T10:57:10.457188+02:00 HOST-REDACTED-B kernel: pci 0000:00:01.2: PCI bridge to [bus 02-06]
+2026-07-21T10:57:10.457303+02:00 HOST-REDACTED-B kernel: pci 0000:00:01.2:   bridge window [io  0xd000-0xefff]
+2026-07-21T10:57:10.457428+02:00 HOST-REDACTED-B kernel: pci 0000:00:01.2:   bridge window [mem 0xfca00000-0xfccfffff]
+2026-07-21T10:57:10.457542+02:00 HOST-REDACTED-B kernel: pci 0000:00:01.2: enabling Extended Tags
+2026-07-21T10:57:10.457671+02:00 HOST-REDACTED-B kernel: pci 0000:00:01.2: PME# supported from D0 D3hot D3cold
+2026-07-21T10:57:10.457817+02:00 HOST-REDACTED-B kernel: pci 0000:00:02.0: [1022:1482] type 00 class 0x060000 conventional PCI endpoint
+2026-07-21T10:57:10.457949+02:00 HOST-REDACTED-B kernel: pci 0000:00:03.0: [1022:1482] type 00 class 0x060000 conventional PCI endpoint
+2026-07-21T10:57:10.458067+02:00 HOST-REDACTED-B kernel: pci 0000:00:03.1: [1022:1483] type 01 class 0x060400 PCIe Root Port
+2026-07-21T10:57:10.458181+02:00 HOST-REDACTED-B kernel: pci 0000:00:03.1: PCI bridge to [bus 07-09]
+2026-07-21T10:57:10.458298+02:00 HOST-REDACTED-B kernel: pci 0000:00:03.1:   bridge window [io  0xf000-0xffff]
+2026-07-21T10:57:10.458412+02:00 HOST-REDACTED-B kernel: pci 0000:00:03.1:   bridge window [mem 0xfcd00000-0xfcefffff]
+2026-07-21T10:57:10.458526+02:00 HOST-REDACTED-B kernel: pci 0000:00:03.1:   bridge window [mem 0x7800000000-0x7c0fffffff 64bit pref]
+2026-07-21T10:57:10.458640+02:00 HOST-REDACTED-B kernel: pci 0000:00:03.1: PME# supported from D0 D3hot D3cold
+2026-07-21T10:57:10.458753+02:00 HOST-REDACTED-B kernel: pci 0000:00:04.0: [1022:1482] type 00 class 0x060000 conventional PCI endpoint
+2026-07-21T10:57:10.458884+02:00 HOST-REDACTED-B kernel: pci 0000:00:05.0: [1022:1482] type 00 class 0x060000 conventional PCI endpoint
+2026-07-21T10:57:10.459002+02:00 HOST-REDACTED-B kernel: pci 0000:00:07.0: [1022:1482] type 00 class 0x060000 conventional PCI endpoint
+2026-07-21T10:57:10.459116+02:00 HOST-REDACTED-B kernel: pci 0000:00:07.1: [1022:1484] type 01 class 0x060400 PCIe Root Port
+2026-07-21T10:57:10.459229+02:00 HOST-REDACTED-B kernel: pci 0000:00:07.1: PCI bridge to [bus 0a]
+2026-07-21T10:57:10.459343+02:00 HOST-REDACTED-B kernel: pci 0000:00:07.1: enabling Extended Tags
+2026-07-21T10:57:10.459455+02:00 HOST-REDACTED-B kernel: pci 0000:00:07.1: PME# supported from D0 D3hot D3cold
+2026-07-21T10:57:10.459574+02:00 HOST-REDACTED-B kernel: pci 0000:00:08.0: [1022:1482] type 00 class 0x060000 conventional PCI endpoint
+2026-07-21T10:57:10.459691+02:00 HOST-REDACTED-B kernel: pci 0000:00:08.1: [1022:1484] type 01 class 0x060400 PCIe Root Port
+2026-07-21T10:57:10.459804+02:00 HOST-REDACTED-B kernel: pci 0000:00:08.1: PCI bridge to [bus 0b]
+2026-07-21T10:57:10.459927+02:00 HOST-REDACTED-B kernel: pci 0000:00:08.1:   bridge window [mem 0xfc700000-0xfc9fffff]
+2026-07-21T10:57:10.460040+02:00 HOST-REDACTED-B kernel: pci 0000:00:08.1: enabling Extended Tags
+2026-07-21T10:57:10.460153+02:00 HOST-REDACTED-B kernel: pci 0000:00:08.1: PME# supported from D0 D3hot D3cold
+2026-07-21T10:57:10.460265+02:00 HOST-REDACTED-B kernel: pci 0000:00:14.0: [1022:790b] type 00 class 0x0c0500 conventional PCI endpoint
+2026-07-21T10:57:10.460382+02:00 HOST-REDACTED-B kernel: pci 0000:00:14.3: [1022:790e] type 00 class 0x060100 conventional PCI endpoint
+2026-07-21T10:57:10.460495+02:00 HOST-REDACTED-B kernel: pci 0000:00:18.0: [1022:1440] type 00 class 0x060000 conventional PCI endpoint
+2026-07-21T10:57:10.460607+02:00 HOST-REDACTED-B kernel: pci 0000:00:18.1: [1022:1441] type 00 class 0x060000 conventional PCI endpoint
+2026-07-21T10:57:10.460723+02:00 HOST-REDACTED-B kernel: pci 0000:00:18.2: [1022:1442] type 00 class 0x060000 conventional PCI endpoint
+2026-07-21T10:57:10.460838+02:00 HOST-REDACTED-B kernel: pci 0000:00:18.3: [1022:1443] type 00 class 0x060000 conventional PCI endpoint
+2026-07-21T10:57:10.460963+02:00 HOST-REDACTED-B kernel: pci 0000:00:18.4: [1022:1444] type 00 class 0x060000 conventional PCI endpoint
+2026-07-21T10:57:10.461086+02:00 HOST-REDACTED-B kernel: pci 0000:00:18.5: [1022:1445] type 00 class 0x060000 conventional PCI endpoint
+2026-07-21T10:57:10.461210+02:00 HOST-REDACTED-B kernel: pci 0000:00:18.6: [1022:1446] type 00 class 0x060000 conventional PCI endpoint
+2026-07-21T10:57:10.461324+02:00 HOST-REDACTED-B kernel: pci 0000:00:18.7: [1022:1447] type 00 class 0x060000 conventional PCI endpoint
+2026-07-21T10:57:10.461442+02:00 HOST-REDACTED-B kernel: pci 0000:01:00.0: [15b7:5017] type 00 class 0x010802 PCIe Endpoint
+2026-07-21T10:57:10.461560+02:00 HOST-REDACTED-B kernel: pci 0000:01:00.0: BAR 0 [mem 0xfcf00000-0xfcf03fff 64bit]
+2026-07-21T10:57:10.461677+02:00 HOST-REDACTED-B kernel: pci 0000:00:01.1: PCI bridge to [bus 01]
+2026-07-21T10:57:10.461795+02:00 HOST-REDACTED-B kernel: pci 0000:02:00.0: [1022:43ee] type 00 class 0x0c0330 PCIe Legacy Endpoint
+2026-07-21T10:57:10.461918+02:00 HOST-REDACTED-B kernel: pci 0000:02:00.0: BAR 0 [mem 0xfcca0000-0xfcca7fff 64bit]
+2026-07-21T10:57:10.462036+02:00 HOST-REDACTED-B kernel: pci 0000:02:00.0: enabling Extended Tags
+2026-07-21T10:57:10.462153+02:00 HOST-REDACTED-B kernel: pci 0000:02:00.0: PME# supported from D3hot D3cold
+2026-07-21T10:57:10.462269+02:00 HOST-REDACTED-B kernel: pci 0000:02:00.1: [1022:43eb] type 00 class 0x010601 PCIe Legacy Endpoint
+2026-07-21T10:57:10.462385+02:00 HOST-REDACTED-B kernel: pci 0000:02:00.1: BAR 5 [mem 0xfcc80000-0xfcc9ffff]
+2026-07-21T10:57:10.462500+02:00 HOST-REDACTED-B kernel: pci 0000:02:00.1: ROM [mem 0xfcc00000-0xfcc7ffff pref]
+2026-07-21T10:57:10.462619+02:00 HOST-REDACTED-B kernel: pci 0000:02:00.1: enabling Extended Tags
+2026-07-21T10:57:10.462735+02:00 HOST-REDACTED-B kernel: pci 0000:02:00.1: PME# supported from D3hot D3cold
+2026-07-21T10:57:10.462861+02:00 HOST-REDACTED-B kernel: pci 0000:02:00.2: [1022:43e9] type 01 class 0x060400 PCIe Switch Upstream Port
+2026-07-21T10:57:10.462983+02:00 HOST-REDACTED-B kernel: pci 0000:02:00.2: PCI bridge to [bus 03-06]
+2026-07-21T10:57:10.463099+02:00 HOST-REDACTED-B kernel: pci 0000:02:00.2:   bridge window [io  0xd000-0xefff]
+2026-07-21T10:57:10.463216+02:00 HOST-REDACTED-B kernel: pci 0000:02:00.2:   bridge window [mem 0xfca00000-0xfcbfffff]
+2026-07-21T10:57:10.463332+02:00 HOST-REDACTED-B kernel: pci 0000:02:00.2: enabling Extended Tags
+2026-07-21T10:57:10.463448+02:00 HOST-REDACTED-B kernel: pci 0000:02:00.2: PME# supported from D3hot D3cold
+2026-07-21T10:57:10.463566+02:00 HOST-REDACTED-B kernel: pci 0000:00:01.2: PCI bridge to [bus 02-06]
+2026-07-21T10:57:10.463687+02:00 HOST-REDACTED-B kernel: pci 0000:03:00.0: [1022:43ea] type 01 class 0x060400 PCIe Switch Downstream Port
+2026-07-21T10:57:10.463807+02:00 HOST-REDACTED-B kernel: pci 0000:03:00.0: PCI bridge to [bus 04]
+2026-07-21T10:57:10.464003+02:00 HOST-REDACTED-B kernel: pci 0000:03:00.0: enabling Extended Tags
+2026-07-21T10:57:10.464131+02:00 HOST-REDACTED-B kernel: pci 0000:03:00.0: PME# supported from D3hot D3cold
+2026-07-21T10:57:10.464256+02:00 HOST-REDACTED-B kernel: pci 0000:03:08.0: [1022:43ea] type 01 class 0x060400 PCIe Switch Downstream Port
+2026-07-21T10:57:10.464388+02:00 HOST-REDACTED-B kernel: pci 0000:03:08.0: PCI bridge to [bus 05]
+2026-07-21T10:57:10.464527+02:00 HOST-REDACTED-B kernel: pci 0000:03:08.0:   bridge window [io  0xe000-0xefff]
+2026-07-21T10:57:10.464649+02:00 HOST-REDACTED-B kernel: pci 0000:03:08.0:   bridge window [mem 0xfcb00000-0xfcbfffff]
+2026-07-21T10:57:10.464768+02:00 HOST-REDACTED-B kernel: pci 0000:03:08.0: enabling Extended Tags
+2026-07-21T10:57:10.464897+02:00 HOST-REDACTED-B kernel: pci 0000:03:08.0: PME# supported from D3hot D3cold
+2026-07-21T10:57:10.465019+02:00 HOST-REDACTED-B kernel: pci 0000:03:09.0: [1022:43ea] type 01 class 0x060400 PCIe Switch Downstream Port
+2026-07-21T10:57:10.465139+02:00 HOST-REDACTED-B kernel: pci 0000:03:09.0: PCI bridge to [bus 06]
+2026-07-21T10:57:10.465262+02:00 HOST-REDACTED-B kernel: pci 0000:03:09.0:   bridge window [io  0xd000-0xdfff]
+2026-07-21T10:57:10.465383+02:00 HOST-REDACTED-B kernel: pci 0000:03:09.0:   bridge window [mem 0xfca00000-0xfcafffff]
+2026-07-21T10:57:10.465505+02:00 HOST-REDACTED-B kernel: pci 0000:03:09.0: enabling Extended Tags
+2026-07-21T10:57:10.465628+02:00 HOST-REDACTED-B kernel: pci 0000:03:09.0: PME# supported from D3hot D3cold
+2026-07-21T10:57:10.465747+02:00 HOST-REDACTED-B kernel: pci 0000:02:00.2: PCI bridge to [bus 03-06]
+2026-07-21T10:57:10.465871+02:00 HOST-REDACTED-B kernel: pci 0000:03:00.0: PCI bridge to [bus 04]
+2026-07-21T10:57:10.465996+02:00 HOST-REDACTED-B kernel: pci 0000:05:00.0: [10ec:b852] type 00 class 0x028000 PCIe Endpoint
+2026-07-21T10:57:10.466120+02:00 HOST-REDACTED-B kernel: pci 0000:05:00.0: BAR 0 [io  0xe000-0xe0ff]
+2026-07-21T10:57:10.466242+02:00 HOST-REDACTED-B kernel: pci 0000:05:00.0: BAR 2 [mem 0xfcb00000-0xfcbfffff 64bit]
+2026-07-21T10:57:10.466364+02:00 HOST-REDACTED-B kernel: pci 0000:05:00.0: PME# supported from D0 D3hot D3cold
+2026-07-21T10:57:10.466489+02:00 HOST-REDACTED-B kernel: pci 0000:03:08.0: PCI bridge to [bus 05]
+2026-07-21T10:57:10.466614+02:00 HOST-REDACTED-B kernel: pci 0000:06:00.0: [10ec:8125] type 00 class 0x020000 PCIe Endpoint
+2026-07-21T10:57:10.466740+02:00 HOST-REDACTED-B kernel: pci 0000:06:00.0: BAR 0 [io  0xd000-0xd0ff]
+2026-07-21T10:57:10.466871+02:00 HOST-REDACTED-B kernel: pci 0000:06:00.0: BAR 2 [mem 0xfca00000-0xfca0ffff 64bit]
+2026-07-21T10:57:10.466994+02:00 HOST-REDACTED-B kernel: pci 0000:06:00.0: BAR 4 [mem 0xfca10000-0xfca13fff 64bit]
+2026-07-21T10:57:10.467116+02:00 HOST-REDACTED-B kernel: pci 0000:06:00.0: supports D1 D2
+2026-07-21T10:57:10.467238+02:00 HOST-REDACTED-B kernel: pci 0000:06:00.0: PME# supported from D0 D1 D2 D3hot D3cold
+2026-07-21T10:57:10.467358+02:00 HOST-REDACTED-B kernel: pci 0000:03:09.0: PCI bridge to [bus 06]
+2026-07-21T10:57:10.467476+02:00 HOST-REDACTED-B kernel: pci 0000:07:00.0: [1002:1478] type 01 class 0x060400 PCIe Switch Upstream Port
+2026-07-21T10:57:10.467593+02:00 HOST-REDACTED-B kernel: pci 0000:07:00.0: BAR 0 [mem 0xfce00000-0xfce03fff]
+2026-07-21T10:57:10.467709+02:00 HOST-REDACTED-B kernel: pci 0000:07:00.0: PCI bridge to [bus 08-09]
+2026-07-21T10:57:10.467837+02:00 HOST-REDACTED-B kernel: pci 0000:07:00.0:   bridge window [io  0xf000-0xffff]
+2026-07-21T10:57:10.467973+02:00 HOST-REDACTED-B kernel: pci 0000:07:00.0:   bridge window [mem 0xfcd00000-0xfcdfffff]
+2026-07-21T10:57:10.468109+02:00 HOST-REDACTED-B kernel: pci 0000:07:00.0:   bridge window [mem 0x7800000000-0x7c0fffffff 64bit pref]
+2026-07-21T10:57:10.468234+02:00 HOST-REDACTED-B kernel: pci 0000:07:00.0: PME# supported from D0 D3hot D3cold
+2026-07-21T10:57:10.468354+02:00 HOST-REDACTED-B kernel: pci 0000:07:00.0: 252.048 Gb/s available PCIe bandwidth, limited by 16.0 GT/s PCIe x16 link at 0000:00:03.1 (capable of 504.112 Gb/s with 32.0 GT/s PCIe x16 link)
+2026-07-21T10:57:10.468468+02:00 HOST-REDACTED-B kernel: pci 0000:00:03.1: PCI bridge to [bus 07-09]
+2026-07-21T10:57:10.468588+02:00 HOST-REDACTED-B kernel: pci 0000:08:00.0: [1002:1479] type 01 class 0x060400 PCIe Switch Downstream Port
+2026-07-21T10:57:10.468707+02:00 HOST-REDACTED-B kernel: pci 0000:08:00.0: PCI bridge to [bus 09]
+2026-07-21T10:57:10.468828+02:00 HOST-REDACTED-B kernel: pci 0000:08:00.0:   bridge window [io  0xf000-0xffff]
+2026-07-21T10:57:10.468975+02:00 HOST-REDACTED-B kernel: pci 0000:08:00.0:   bridge window [mem 0xfcd00000-0xfcdfffff]
+2026-07-21T10:57:10.469097+02:00 HOST-REDACTED-B kernel: pci 0000:08:00.0:   bridge window [mem 0x7800000000-0x7c0fffffff 64bit pref]
+2026-07-21T10:57:10.469216+02:00 HOST-REDACTED-B kernel: pci 0000:08:00.0: PME# supported from D0 D3hot D3cold
+2026-07-21T10:57:10.469335+02:00 HOST-REDACTED-B kernel: pci 0000:07:00.0: PCI bridge to [bus 08-09]
+2026-07-21T10:57:10.469457+02:00 HOST-REDACTED-B kernel: pci 0000:09:00.0: [1002:7590] type 00 class 0x030000 PCIe Legacy Endpoint
+2026-07-21T10:57:10.469580+02:00 HOST-REDACTED-B kernel: pci 0000:09:00.0: BAR 0 [mem 0x7800000000-0x7bffffffff 64bit pref]
+2026-07-21T10:57:10.469703+02:00 HOST-REDACTED-B kernel: pci 0000:09:00.0: BAR 2 [mem 0x7c00000000-0x7c0fffffff 64bit pref]
+2026-07-21T10:57:10.469825+02:00 HOST-REDACTED-B kernel: pci 0000:09:00.0: BAR 4 [io  0xf000-0xf0ff]
+2026-07-21T10:57:10.469968+02:00 HOST-REDACTED-B kernel: pci 0000:09:00.0: BAR 5 [mem 0xfcd00000-0xfcd7ffff]
+2026-07-21T10:57:10.470092+02:00 HOST-REDACTED-B kernel: pci 0000:09:00.0: ROM [mem 0xfcd80000-0xfcd9ffff pref]
+2026-07-21T10:57:10.470214+02:00 HOST-REDACTED-B kernel: pci 0000:09:00.0: PME# supported from D1 D2 D3hot D3cold
+2026-07-21T10:57:10.470340+02:00 HOST-REDACTED-B kernel: pci 0000:09:00.0: 252.048 Gb/s available PCIe bandwidth, limited by 16.0 GT/s PCIe x16 link at 0000:00:03.1 (capable of 504.112 Gb/s with 32.0 GT/s PCIe x16 link)
+2026-07-21T10:57:10.470481+02:00 HOST-REDACTED-B kernel: pci 0000:09:00.1: [1002:ab40] type 00 class 0x040300 PCIe Legacy Endpoint
+2026-07-21T10:57:10.470614+02:00 HOST-REDACTED-B kernel: pci 0000:09:00.1: BAR 0 [mem 0xfcda0000-0xfcda3fff]
+2026-07-21T10:57:10.470739+02:00 HOST-REDACTED-B kernel: pci 0000:09:00.1: PME# supported from D1 D2 D3hot D3cold
+2026-07-21T10:57:10.470864+02:00 HOST-REDACTED-B kernel: pci 0000:08:00.0: PCI bridge to [bus 09]
+2026-07-21T10:57:10.470982+02:00 HOST-REDACTED-B kernel: pci 0000:0a:00.0: [1022:148a] type 00 class 0x130000 PCIe Endpoint
+2026-07-21T10:57:10.471108+02:00 HOST-REDACTED-B kernel: pci 0000:0a:00.0: enabling Extended Tags
+2026-07-21T10:57:10.471223+02:00 HOST-REDACTED-B kernel: pci 0000:00:07.1: PCI bridge to [bus 0a]
+2026-07-21T10:57:10.471339+02:00 HOST-REDACTED-B kernel: pci 0000:0b:00.0: [1022:1485] type 00 class 0x130000 PCIe Endpoint
+2026-07-21T10:57:10.471459+02:00 HOST-REDACTED-B kernel: pci 0000:0b:00.0: enabling Extended Tags
+2026-07-21T10:57:10.471576+02:00 HOST-REDACTED-B kernel: pci 0000:0b:00.1: [1022:1486] type 00 class 0x108000 PCIe Endpoint
+2026-07-21T10:57:10.471691+02:00 HOST-REDACTED-B kernel: pci 0000:0b:00.1: BAR 2 [mem 0xfc800000-0xfc8fffff]
+2026-07-21T10:57:10.471816+02:00 HOST-REDACTED-B kernel: pci 0000:0b:00.1: BAR 5 [mem 0xfc908000-0xfc909fff]
+2026-07-21T10:57:10.471941+02:00 HOST-REDACTED-B kernel: pci 0000:0b:00.1: enabling Extended Tags
+2026-07-21T10:57:10.472059+02:00 HOST-REDACTED-B kernel: pci 0000:0b:00.3: [1022:149c] type 00 class 0x0c0330 PCIe Endpoint
+2026-07-21T10:57:10.472175+02:00 HOST-REDACTED-B kernel: pci 0000:0b:00.3: BAR 0 [mem 0xfc700000-0xfc7fffff 64bit]
+2026-07-21T10:57:10.472291+02:00 HOST-REDACTED-B kernel: pci 0000:0b:00.3: enabling Extended Tags
+2026-07-21T10:57:10.472407+02:00 HOST-REDACTED-B kernel: pci 0000:0b:00.3: PME# supported from D0 D3hot D3cold
+2026-07-21T10:57:10.472522+02:00 HOST-REDACTED-B kernel: pci 0000:0b:00.4: [1022:1487] type 00 class 0x040300 PCIe Endpoint
+2026-07-21T10:57:10.472641+02:00 HOST-REDACTED-B kernel: pci 0000:0b:00.4: BAR 0 [mem 0xfc900000-0xfc907fff]
+2026-07-21T10:57:10.472761+02:00 HOST-REDACTED-B kernel: pci 0000:0b:00.4: enabling Extended Tags
+2026-07-21T10:57:10.472895+02:00 HOST-REDACTED-B kernel: pci 0000:0b:00.4: PME# supported from D0 D3hot D3cold
+2026-07-21T10:57:10.473053+02:00 HOST-REDACTED-B kernel: pci 0000:00:08.1: PCI bridge to [bus 0b]
+2026-07-21T10:57:10.473066+02:00 HOST-REDACTED-B kernel: ACPI: PCI: Interrupt link LNKA configured for IRQ 0
+2026-07-21T10:57:10.473075+02:00 HOST-REDACTED-B kernel: ACPI: PCI: Interrupt link LNKB configured for IRQ 0
+2026-07-21T10:57:10.473084+02:00 HOST-REDACTED-B kernel: ACPI: PCI: Interrupt link LNKC configured for IRQ 0
+2026-07-21T10:57:10.473093+02:00 HOST-REDACTED-B kernel: ACPI: PCI: Interrupt link LNKD configured for IRQ 0
+2026-07-21T10:57:10.473101+02:00 HOST-REDACTED-B kernel: ACPI: PCI: Interrupt link LNKE configured for IRQ 0
+2026-07-21T10:57:10.473112+02:00 HOST-REDACTED-B kernel: ACPI: PCI: Interrupt link LNKF configured for IRQ 0
+2026-07-21T10:57:10.473121+02:00 HOST-REDACTED-B kernel: ACPI: PCI: Interrupt link LNKG configured for IRQ 0
+2026-07-21T10:57:10.473130+02:00 HOST-REDACTED-B kernel: ACPI: PCI: Interrupt link LNKH configured for IRQ 0
+2026-07-21T10:57:10.473139+02:00 HOST-REDACTED-B kernel: iommu: Default domain type: Translated
+2026-07-21T10:57:10.473148+02:00 HOST-REDACTED-B kernel: iommu: DMA domain TLB invalidation policy: lazy mode
+2026-07-21T10:57:10.473156+02:00 HOST-REDACTED-B kernel: SCSI subsystem initialized
+2026-07-21T10:57:10.473165+02:00 HOST-REDACTED-B kernel: libata version 3.00 loaded.
+2026-07-21T10:57:10.473174+02:00 HOST-REDACTED-B kernel: ACPI: bus type USB registered
+2026-07-21T10:57:10.473183+02:00 HOST-REDACTED-B kernel: usbcore: registered new interface driver usbfs
+2026-07-21T10:57:10.473194+02:00 HOST-REDACTED-B kernel: usbcore: registered new interface driver hub
+2026-07-21T10:57:10.473202+02:00 HOST-REDACTED-B kernel: usbcore: registered new device driver usb
+2026-07-21T10:57:10.473211+02:00 HOST-REDACTED-B kernel: EDAC MC: Ver: 3.0.0
+2026-07-21T10:57:10.473220+02:00 HOST-REDACTED-B kernel: efivars: Registered efivars operations
+2026-07-21T10:57:10.473229+02:00 HOST-REDACTED-B kernel: NetLabel: Initializing
+2026-07-21T10:57:10.473238+02:00 HOST-REDACTED-B kernel: NetLabel:  domain hash size = 128
+2026-07-21T10:57:10.473246+02:00 HOST-REDACTED-B kernel: NetLabel:  protocols = UNLABELED CIPSOv4 CALIPSO
+2026-07-21T10:57:10.473255+02:00 HOST-REDACTED-B kernel: NetLabel:  unlabeled traffic allowed by default
+2026-07-21T10:57:10.473264+02:00 HOST-REDACTED-B kernel: mctp: management component transport protocol core
+2026-07-21T10:57:10.473274+02:00 HOST-REDACTED-B kernel: NET: Registered PF_MCTP protocol family
+2026-07-21T10:57:10.473283+02:00 HOST-REDACTED-B kernel: PCI: Using ACPI for IRQ routing
+2026-07-21T10:57:10.473292+02:00 HOST-REDACTED-B kernel: PCI: pci_cache_line_size set to 64 bytes
+2026-07-21T10:57:10.473300+02:00 HOST-REDACTED-B kernel: e820: reserve RAM buffer [mem 0x09d1f000-0x0bffffff]
+2026-07-21T10:57:10.473309+02:00 HOST-REDACTED-B kernel: e820: reserve RAM buffer [mem 0x0a200000-0x0bffffff]
+2026-07-21T10:57:10.473318+02:00 HOST-REDACTED-B kernel: e820: reserve RAM buffer [mem 0x0b000000-0x0bffffff]
+2026-07-21T10:57:10.473327+02:00 HOST-REDACTED-B kernel: e820: reserve RAM buffer [mem 0xc347f000-0xc3ffffff]
+2026-07-21T10:57:10.473336+02:00 HOST-REDACTED-B kernel: e820: reserve RAM buffer [mem 0xc67da000-0xc7ffffff]
+2026-07-21T10:57:10.473345+02:00 HOST-REDACTED-B kernel: e820: reserve RAM buffer [mem 0xc97a3000-0xcbffffff]
+2026-07-21T10:57:10.473355+02:00 HOST-REDACTED-B kernel: e820: reserve RAM buffer [mem 0xca610000-0xcbffffff]
+2026-07-21T10:57:10.473364+02:00 HOST-REDACTED-B kernel: e820: reserve RAM buffer [mem 0xcd000000-0xcfffffff]
+2026-07-21T10:57:10.473372+02:00 HOST-REDACTED-B kernel: e820: reserve RAM buffer [mem 0x82f380000-0x82fffffff]
+2026-07-21T10:57:10.473513+02:00 HOST-REDACTED-B kernel: pci 0000:09:00.0: vgaarb: setting as boot VGA device
+2026-07-21T10:57:10.473643+02:00 HOST-REDACTED-B kernel: pci 0000:09:00.0: vgaarb: bridge control possible
+2026-07-21T10:57:10.473769+02:00 HOST-REDACTED-B kernel: pci 0000:09:00.0: vgaarb: VGA device added: decodes=io+mem,owns=none,locks=none
+2026-07-21T10:57:10.473777+02:00 HOST-REDACTED-B kernel: vgaarb: loaded
+2026-07-21T10:57:10.473783+02:00 HOST-REDACTED-B kernel: hpet0: at MMIO 0xfed00000, IRQs 2, 8, 0
+2026-07-21T10:57:10.473790+02:00 HOST-REDACTED-B kernel: hpet0: 3 comparators, 32-bit 14.318180 MHz counter
+2026-07-21T10:57:10.473795+02:00 HOST-REDACTED-B kernel: clocksource: Switched to clocksource tsc-early
+2026-07-21T10:57:10.473804+02:00 HOST-REDACTED-B kernel: VFS: Disk quotas dquot_6.6.0
+2026-07-21T10:57:10.473810+02:00 HOST-REDACTED-B kernel: VFS: Dquot-cache hash table entries: 512 (order 0, 4096 bytes)
+2026-07-21T10:57:10.473816+02:00 HOST-REDACTED-B kernel: pnp: PnP ACPI init
+2026-07-21T10:57:10.473938+02:00 HOST-REDACTED-B kernel: system 00:00: [mem 0xf0000000-0xf7ffffff] has been reserved
+2026-07-21T10:57:10.474050+02:00 HOST-REDACTED-B kernel: system 00:01: [mem 0xfd200000-0xfd2fffff] has been reserved
+2026-07-21T10:57:10.474168+02:00 HOST-REDACTED-B kernel: system 00:03: [io  0x0290-0x029f] has been reserved
+2026-07-21T10:57:10.474280+02:00 HOST-REDACTED-B kernel: system 00:03: [io  0x0200-0x021f] has been reserved
+2026-07-21T10:57:10.474399+02:00 HOST-REDACTED-B kernel: pnp 00:04: [dma 0 disabled]
+2026-07-21T10:57:10.474510+02:00 HOST-REDACTED-B kernel: system 00:05: [io  0x04d0-0x04d1] has been reserved
+2026-07-21T10:57:10.474621+02:00 HOST-REDACTED-B kernel: system 00:05: [io  0x040b] has been reserved
+2026-07-21T10:57:10.474730+02:00 HOST-REDACTED-B kernel: system 00:05: [io  0x04d6] has been reserved
+2026-07-21T10:57:10.474839+02:00 HOST-REDACTED-B kernel: system 00:05: [io  0x0c00-0x0c01] has been reserved
+2026-07-21T10:57:10.474958+02:00 HOST-REDACTED-B kernel: system 00:05: [io  0x0c14] has been reserved
+2026-07-21T10:57:10.475067+02:00 HOST-REDACTED-B kernel: system 00:05: [io  0x0c50-0x0c51] has been reserved
+2026-07-21T10:57:10.475179+02:00 HOST-REDACTED-B kernel: system 00:05: [io  0x0c52] has been reserved
+2026-07-21T10:57:10.475292+02:00 HOST-REDACTED-B kernel: system 00:05: [io  0x0c6c] has been reserved
+2026-07-21T10:57:10.475401+02:00 HOST-REDACTED-B kernel: system 00:05: [io  0x0c6f] has been reserved
+2026-07-21T10:57:10.475509+02:00 HOST-REDACTED-B kernel: system 00:05: [io  0x0cd8-0x0cdf] has been reserved
+2026-07-21T10:57:10.475618+02:00 HOST-REDACTED-B kernel: system 00:05: [io  0x0800-0x089f] has been reserved
+2026-07-21T10:57:10.475727+02:00 HOST-REDACTED-B kernel: system 00:05: [io  0x0b00-0x0b0f] has been reserved
+2026-07-21T10:57:10.475836+02:00 HOST-REDACTED-B kernel: system 00:05: [io  0x0b20-0x0b3f] has been reserved
+2026-07-21T10:57:10.475955+02:00 HOST-REDACTED-B kernel: system 00:05: [io  0x0900-0x090f] has been reserved
+2026-07-21T10:57:10.476065+02:00 HOST-REDACTED-B kernel: system 00:05: [io  0x0910-0x091f] has been reserved
+2026-07-21T10:57:10.476177+02:00 HOST-REDACTED-B kernel: system 00:05: [mem 0xfec00000-0xfec00fff] could not be reserved
+2026-07-21T10:57:10.476290+02:00 HOST-REDACTED-B kernel: system 00:05: [mem 0xfec01000-0xfec01fff] could not be reserved
+2026-07-21T10:57:10.476400+02:00 HOST-REDACTED-B kernel: system 00:05: [mem 0xfedc0000-0xfedc0fff] has been reserved
+2026-07-21T10:57:10.476509+02:00 HOST-REDACTED-B kernel: system 00:05: [mem 0xfee00000-0xfee00fff] has been reserved
+2026-07-21T10:57:10.476618+02:00 HOST-REDACTED-B kernel: system 00:05: [mem 0xfed80000-0xfed8ffff] could not be reserved
+2026-07-21T10:57:10.476727+02:00 HOST-REDACTED-B kernel: system 00:05: [mem 0xfec10000-0xfec10fff] has been reserved
+2026-07-21T10:57:10.476835+02:00 HOST-REDACTED-B kernel: system 00:05: [mem 0xff000000-0xffffffff] has been reserved
+2026-07-21T10:57:10.476842+02:00 HOST-REDACTED-B kernel: pnp: PnP ACPI: found 6 devices
+2026-07-21T10:57:10.476859+02:00 HOST-REDACTED-B kernel: clocksource: acpi_pm: mask: 0xffffff max_cycles: 0xffffff, max_idle_ns: 2085701024 ns
+2026-07-21T10:57:10.476868+02:00 HOST-REDACTED-B kernel: NET: Registered PF_INET protocol family
+2026-07-21T10:57:10.476875+02:00 HOST-REDACTED-B kernel: IP idents hash table entries: 262144 (order: 9, 2097152 bytes, linear)
+2026-07-21T10:57:10.476883+02:00 HOST-REDACTED-B kernel: tcp_listen_portaddr_hash hash table entries: 16384 (order: 6, 262144 bytes, linear)
+2026-07-21T10:57:10.476891+02:00 HOST-REDACTED-B kernel: Table-perturb hash table entries: 65536 (order: 6, 262144 bytes, linear)
+2026-07-21T10:57:10.476898+02:00 HOST-REDACTED-B kernel: TCP established hash table entries: 262144 (order: 9, 2097152 bytes, linear)
+2026-07-21T10:57:10.476904+02:00 HOST-REDACTED-B kernel: TCP bind hash table entries: 65536 (order: 9, 2097152 bytes, linear)
+2026-07-21T10:57:10.476911+02:00 HOST-REDACTED-B kernel: TCP: Hash tables configured (established 262144 bind 65536)
+2026-07-21T10:57:10.476918+02:00 HOST-REDACTED-B kernel: MPTCP token hash table entries: 32768 (order: 7, 786432 bytes, linear)
+2026-07-21T10:57:10.476924+02:00 HOST-REDACTED-B kernel: UDP hash table entries: 16384 (order: 8, 1048576 bytes, linear)
+2026-07-21T10:57:10.476931+02:00 HOST-REDACTED-B kernel: UDP-Lite hash table entries: 16384 (order: 8, 1048576 bytes, linear)
+2026-07-21T10:57:10.476937+02:00 HOST-REDACTED-B kernel: NET: Registered PF_UNIX/PF_LOCAL protocol family
+2026-07-21T10:57:10.476943+02:00 HOST-REDACTED-B kernel: NET: Registered PF_XDP protocol family
+2026-07-21T10:57:10.477063+02:00 HOST-REDACTED-B kernel: pci 0000:00:01.1: PCI bridge to [bus 01]
+2026-07-21T10:57:10.477177+02:00 HOST-REDACTED-B kernel: pci 0000:00:01.1:   bridge window [mem 0xfcf00000-0xfcffffff]
+2026-07-21T10:57:10.477297+02:00 HOST-REDACTED-B kernel: pci 0000:03:00.0: PCI bridge to [bus 04]
+2026-07-21T10:57:10.477418+02:00 HOST-REDACTED-B kernel: pci 0000:03:08.0: PCI bridge to [bus 05]
+2026-07-21T10:57:10.477537+02:00 HOST-REDACTED-B kernel: pci 0000:03:08.0:   bridge window [io  0xe000-0xefff]
+2026-07-21T10:57:10.477659+02:00 HOST-REDACTED-B kernel: pci 0000:03:08.0:   bridge window [mem 0xfcb00000-0xfcbfffff]
+2026-07-21T10:57:10.477778+02:00 HOST-REDACTED-B kernel: pci 0000:03:09.0: PCI bridge to [bus 06]
+2026-07-21T10:57:10.477915+02:00 HOST-REDACTED-B kernel: pci 0000:03:09.0:   bridge window [io  0xd000-0xdfff]
+2026-07-21T10:57:10.478035+02:00 HOST-REDACTED-B kernel: pci 0000:03:09.0:   bridge window [mem 0xfca00000-0xfcafffff]
+2026-07-21T10:57:10.478159+02:00 HOST-REDACTED-B kernel: pci 0000:02:00.2: PCI bridge to [bus 03-06]
+2026-07-21T10:57:10.478277+02:00 HOST-REDACTED-B kernel: pci 0000:02:00.2:   bridge window [io  0xd000-0xefff]
+2026-07-21T10:57:10.478393+02:00 HOST-REDACTED-B kernel: pci 0000:02:00.2:   bridge window [mem 0xfca00000-0xfcbfffff]
+2026-07-21T10:57:10.478505+02:00 HOST-REDACTED-B kernel: pci 0000:00:01.2: PCI bridge to [bus 02-06]
+2026-07-21T10:57:10.478617+02:00 HOST-REDACTED-B kernel: pci 0000:00:01.2:   bridge window [io  0xd000-0xefff]
+2026-07-21T10:57:10.478729+02:00 HOST-REDACTED-B kernel: pci 0000:00:01.2:   bridge window [mem 0xfca00000-0xfccfffff]
+2026-07-21T10:57:10.478858+02:00 HOST-REDACTED-B kernel: pci 0000:08:00.0: PCI bridge to [bus 09]
+2026-07-21T10:57:10.478987+02:00 HOST-REDACTED-B kernel: pci 0000:08:00.0:   bridge window [io  0xf000-0xffff]
+2026-07-21T10:57:10.479107+02:00 HOST-REDACTED-B kernel: pci 0000:08:00.0:   bridge window [mem 0xfcd00000-0xfcdfffff]
+2026-07-21T10:57:10.479227+02:00 HOST-REDACTED-B kernel: pci 0000:08:00.0:   bridge window [mem 0x7800000000-0x7c0fffffff 64bit pref]
+2026-07-21T10:57:10.479345+02:00 HOST-REDACTED-B kernel: pci 0000:07:00.0: PCI bridge to [bus 08-09]
+2026-07-21T10:57:10.479460+02:00 HOST-REDACTED-B kernel: pci 0000:07:00.0:   bridge window [io  0xf000-0xffff]
+2026-07-21T10:57:10.479576+02:00 HOST-REDACTED-B kernel: pci 0000:07:00.0:   bridge window [mem 0xfcd00000-0xfcdfffff]
+2026-07-21T10:57:10.479691+02:00 HOST-REDACTED-B kernel: pci 0000:07:00.0:   bridge window [mem 0x7800000000-0x7c0fffffff 64bit pref]
+2026-07-21T10:57:10.479803+02:00 HOST-REDACTED-B kernel: pci 0000:00:03.1: PCI bridge to [bus 07-09]
+2026-07-21T10:57:10.479924+02:00 HOST-REDACTED-B kernel: pci 0000:00:03.1:   bridge window [io  0xf000-0xffff]
+2026-07-21T10:57:10.480041+02:00 HOST-REDACTED-B kernel: pci 0000:00:03.1:   bridge window [mem 0xfcd00000-0xfcefffff]
+2026-07-21T10:57:10.480155+02:00 HOST-REDACTED-B kernel: pci 0000:00:03.1:   bridge window [mem 0x7800000000-0x7c0fffffff 64bit pref]
+2026-07-21T10:57:10.480271+02:00 HOST-REDACTED-B kernel: pci 0000:00:07.1: PCI bridge to [bus 0a]
+2026-07-21T10:57:10.480383+02:00 HOST-REDACTED-B kernel: pci 0000:00:08.1: PCI bridge to [bus 0b]
+2026-07-21T10:57:10.480494+02:00 HOST-REDACTED-B kernel: pci 0000:00:08.1:   bridge window [mem 0xfc700000-0xfc9fffff]
+2026-07-21T10:57:10.480602+02:00 HOST-REDACTED-B kernel: pci_bus 0000:00: resource 4 [io  0x0000-0x03af window]
+2026-07-21T10:57:10.480708+02:00 HOST-REDACTED-B kernel: pci_bus 0000:00: resource 5 [io  0x03e0-0x0cf7 window]
+2026-07-21T10:57:10.480812+02:00 HOST-REDACTED-B kernel: pci_bus 0000:00: resource 6 [io  0x03b0-0x03df window]
+2026-07-21T10:57:10.480931+02:00 HOST-REDACTED-B kernel: pci_bus 0000:00: resource 7 [io  0x0d00-0xffff window]
+2026-07-21T10:57:10.481039+02:00 HOST-REDACTED-B kernel: pci_bus 0000:00: resource 8 [mem 0x000a0000-0x000dffff window]
+2026-07-21T10:57:10.481147+02:00 HOST-REDACTED-B kernel: pci_bus 0000:00: resource 9 [mem 0xd0000000-0xfcffffff window]
+2026-07-21T10:57:10.481257+02:00 HOST-REDACTED-B kernel: pci_bus 0000:00: resource 10 [mem 0x830000000-0x7fffffffff window]
+2026-07-21T10:57:10.481366+02:00 HOST-REDACTED-B kernel: pci_bus 0000:01: resource 1 [mem 0xfcf00000-0xfcffffff]
+2026-07-21T10:57:10.481476+02:00 HOST-REDACTED-B kernel: pci_bus 0000:02: resource 0 [io  0xd000-0xefff]
+2026-07-21T10:57:10.481585+02:00 HOST-REDACTED-B kernel: pci_bus 0000:02: resource 1 [mem 0xfca00000-0xfccfffff]
+2026-07-21T10:57:10.481698+02:00 HOST-REDACTED-B kernel: pci_bus 0000:03: resource 0 [io  0xd000-0xefff]
+2026-07-21T10:57:10.481811+02:00 HOST-REDACTED-B kernel: pci_bus 0000:03: resource 1 [mem 0xfca00000-0xfcbfffff]
+2026-07-21T10:57:10.481944+02:00 HOST-REDACTED-B kernel: pci_bus 0000:05: resource 0 [io  0xe000-0xefff]
+2026-07-21T10:57:10.482063+02:00 HOST-REDACTED-B kernel: pci_bus 0000:05: resource 1 [mem 0xfcb00000-0xfcbfffff]
+2026-07-21T10:57:10.482179+02:00 HOST-REDACTED-B kernel: pci_bus 0000:06: resource 0 [io  0xd000-0xdfff]
+2026-07-21T10:57:10.482295+02:00 HOST-REDACTED-B kernel: pci_bus 0000:06: resource 1 [mem 0xfca00000-0xfcafffff]
+2026-07-21T10:57:10.482406+02:00 HOST-REDACTED-B kernel: pci_bus 0000:07: resource 0 [io  0xf000-0xffff]
+2026-07-21T10:57:10.482515+02:00 HOST-REDACTED-B kernel: pci_bus 0000:07: resource 1 [mem 0xfcd00000-0xfcefffff]
+2026-07-21T10:57:10.482624+02:00 HOST-REDACTED-B kernel: pci_bus 0000:07: resource 2 [mem 0x7800000000-0x7c0fffffff 64bit pref]
+2026-07-21T10:57:10.482741+02:00 HOST-REDACTED-B kernel: pci_bus 0000:08: resource 0 [io  0xf000-0xffff]
+2026-07-21T10:57:10.482880+02:00 HOST-REDACTED-B kernel: pci_bus 0000:08: resource 1 [mem 0xfcd00000-0xfcdfffff]
+2026-07-21T10:57:10.482996+02:00 HOST-REDACTED-B kernel: pci_bus 0000:08: resource 2 [mem 0x7800000000-0x7c0fffffff 64bit pref]
+2026-07-21T10:57:10.483116+02:00 HOST-REDACTED-B kernel: pci_bus 0000:09: resource 0 [io  0xf000-0xffff]
+2026-07-21T10:57:10.483234+02:00 HOST-REDACTED-B kernel: pci_bus 0000:09: resource 1 [mem 0xfcd00000-0xfcdfffff]
+2026-07-21T10:57:10.483349+02:00 HOST-REDACTED-B kernel: pci_bus 0000:09: resource 2 [mem 0x7800000000-0x7c0fffffff 64bit pref]
+2026-07-21T10:57:10.483459+02:00 HOST-REDACTED-B kernel: pci_bus 0000:0b: resource 1 [mem 0xfc700000-0xfc9fffff]
+2026-07-21T10:57:10.483587+02:00 HOST-REDACTED-B kernel: pci 0000:09:00.1: D0 power state depends on 0000:09:00.0
+2026-07-21T10:57:10.483595+02:00 HOST-REDACTED-B kernel: PCI: CLS 64 bytes, default 64
+2026-07-21T10:57:10.483601+02:00 HOST-REDACTED-B kernel: PCI-DMA: Using software bounce buffering for IO (SWIOTLB)
+2026-07-21T10:57:10.483607+02:00 HOST-REDACTED-B kernel: software IO TLB: mapped [mem 0x00000000bd351000-0x00000000c1351000] (64MB)
+2026-07-21T10:57:10.483613+02:00 HOST-REDACTED-B kernel: Trying to unpack rootfs image as initramfs...
+2026-07-21T10:57:10.483619+02:00 HOST-REDACTED-B kernel: LVT offset 0 assigned for vector 0x400
+2026-07-21T10:57:10.483626+02:00 HOST-REDACTED-B kernel: perf: AMD IBS detected (0x000003ff)
+2026-07-21T10:57:10.483632+02:00 HOST-REDACTED-B kernel: Initialise system trusted keyrings
+2026-07-21T10:57:10.483640+02:00 HOST-REDACTED-B kernel: Key type blacklist registered
+2026-07-21T10:57:10.483646+02:00 HOST-REDACTED-B kernel: workingset: timestamp_bits=36 max_order=23 bucket_order=0
+2026-07-21T10:57:10.483652+02:00 HOST-REDACTED-B kernel: fuse: init (API version 7.44)
+2026-07-21T10:57:10.483658+02:00 HOST-REDACTED-B kernel: integrity: Platform Keyring initialized
+2026-07-21T10:57:10.483664+02:00 HOST-REDACTED-B kernel: integrity: Machine keyring initialized
+2026-07-21T10:57:10.483670+02:00 HOST-REDACTED-B kernel: xor: automatically using best checksumming function   avx       
+2026-07-21T10:57:10.483677+02:00 HOST-REDACTED-B kernel: Key type asymmetric registered
+2026-07-21T10:57:10.483683+02:00 HOST-REDACTED-B kernel: Asymmetric key parser 'x509' registered
+2026-07-21T10:57:10.483689+02:00 HOST-REDACTED-B kernel: Block layer SCSI generic (bsg) driver version 0.4 loaded (major 247)
+2026-07-21T10:57:10.483697+02:00 HOST-REDACTED-B kernel: io scheduler mq-deadline registered
+2026-07-21T10:57:10.483703+02:00 HOST-REDACTED-B kernel: io scheduler kyber registered
+2026-07-21T10:57:10.483709+02:00 HOST-REDACTED-B kernel: io scheduler bfq registered
+2026-07-21T10:57:10.483715+02:00 HOST-REDACTED-B kernel: ledtrig-cpu: registered to indicate activity on CPUs
+2026-07-21T10:57:10.483829+02:00 HOST-REDACTED-B kernel: pcieport 0000:00:07.1: AER: enabled with IRQ 29
+2026-07-21T10:57:10.483948+02:00 HOST-REDACTED-B kernel: pcieport 0000:00:08.1: AER: enabled with IRQ 30
+2026-07-21T10:57:10.483956+02:00 HOST-REDACTED-B kernel: input: Power Button as /devices/LNXSYSTM:00/LNXSYBUS:00/PNP0C0C:00/input/input0
+2026-07-21T10:57:10.483963+02:00 HOST-REDACTED-B kernel: ACPI: button: Power Button [PWRB]
+2026-07-21T10:57:10.483969+02:00 HOST-REDACTED-B kernel: input: Power Button as /devices/LNXSYSTM:00/LNXPWRBN:00/input/input1
+2026-07-21T10:57:10.483977+02:00 HOST-REDACTED-B kernel: ACPI: button: Power Button [PWRF]
+2026-07-21T10:57:10.483984+02:00 HOST-REDACTED-B kernel: Monitor-Mwait will be used to enter C-1 state
+2026-07-21T10:57:10.483990+02:00 HOST-REDACTED-B kernel: Estimated ratio of average max frequency by base frequency (times 1024): 1155
+2026-07-21T10:57:10.483996+02:00 HOST-REDACTED-B kernel: Serial: 8250/16550 driver, 32 ports, IRQ sharing enabled
+2026-07-21T10:57:10.484002+02:00 HOST-REDACTED-B kernel: 00:04: ttyS0 at I/O 0x3f8 (irq = 4, base_baud = 115200) is a 16550A
+2026-07-21T10:57:10.484009+02:00 HOST-REDACTED-B kernel: Non-volatile memory driver v1.3
+2026-07-21T10:57:10.484015+02:00 HOST-REDACTED-B kernel: Linux agpgart interface v0.103
+2026-07-21T10:57:10.484021+02:00 HOST-REDACTED-B kernel: ACPI: bus type drm_connector registered
+2026-07-21T10:57:10.484137+02:00 HOST-REDACTED-B kernel: ahci 0000:02:00.1: SSS flag set, parallel bus scan disabled
+2026-07-21T10:57:10.484256+02:00 HOST-REDACTED-B kernel: ahci 0000:02:00.1: AHCI vers 0001.0301, 32 command slots, 6 Gbps, SATA mode
+2026-07-21T10:57:10.484373+02:00 HOST-REDACTED-B kernel: ahci 0000:02:00.1: 6/6 ports implemented (port mask 0x3f)
+2026-07-21T10:57:10.484490+02:00 HOST-REDACTED-B kernel: ahci 0000:02:00.1: flags: 64bit ncq sntf stag pm led clo only pmp pio slum part sxs deso sadm sds apst 
+2026-07-21T10:57:10.484615+02:00 HOST-REDACTED-B kernel: scsi host0: ahci
+2026-07-21T10:57:10.484737+02:00 HOST-REDACTED-B kernel: scsi host1: ahci
+2026-07-21T10:57:10.484866+02:00 HOST-REDACTED-B kernel: scsi host2: ahci
+2026-07-21T10:57:10.485000+02:00 HOST-REDACTED-B kernel: scsi host3: ahci
+2026-07-21T10:57:10.485122+02:00 HOST-REDACTED-B kernel: scsi host4: ahci
+2026-07-21T10:57:10.485242+02:00 HOST-REDACTED-B kernel: scsi host5: ahci
+2026-07-21T10:57:10.485251+02:00 HOST-REDACTED-B kernel: ata1: SATA max UDMA/133 abar m131072@0xfcc80000 port 0xfcc80100 irq 39 lpm-pol 3
+2026-07-21T10:57:10.485257+02:00 HOST-REDACTED-B kernel: ata2: SATA max UDMA/133 abar m131072@0xfcc80000 port 0xfcc80180 irq 39 lpm-pol 3
+2026-07-21T10:57:10.485263+02:00 HOST-REDACTED-B kernel: ata3: SATA max UDMA/133 abar m131072@0xfcc80000 port 0xfcc80200 irq 39 lpm-pol 3
+2026-07-21T10:57:10.485270+02:00 HOST-REDACTED-B kernel: ata4: SATA max UDMA/133 abar m131072@0xfcc80000 port 0xfcc80280 irq 39 lpm-pol 3
+2026-07-21T10:57:10.485276+02:00 HOST-REDACTED-B kernel: ata5: SATA max UDMA/133 abar m131072@0xfcc80000 port 0xfcc80300 irq 39 lpm-pol 3
+2026-07-21T10:57:10.485284+02:00 HOST-REDACTED-B kernel: ata6: SATA max UDMA/133 abar m131072@0xfcc80000 port 0xfcc80380 irq 39 lpm-pol 3
+2026-07-21T10:57:10.485400+02:00 HOST-REDACTED-B kernel: xhci_hcd 0000:02:00.0: xHCI Host Controller
+2026-07-21T10:57:10.485517+02:00 HOST-REDACTED-B kernel: xhci_hcd 0000:02:00.0: new USB bus registered, assigned bus number 1
+2026-07-21T10:57:10.485525+02:00 HOST-REDACTED-B kernel: Freeing initrd memory: 19868K
+2026-07-21T10:57:10.485640+02:00 HOST-REDACTED-B kernel: xhci_hcd 0000:02:00.0: hcc params 0x0200ef81 hci version 0x110 quirks 0x0000000000000010
+2026-07-21T10:57:10.485755+02:00 HOST-REDACTED-B kernel: xhci_hcd 0000:02:00.0: xHCI Host Controller
+2026-07-21T10:57:10.485884+02:00 HOST-REDACTED-B kernel: xhci_hcd 0000:02:00.0: new USB bus registered, assigned bus number 2
+2026-07-21T10:57:10.486005+02:00 HOST-REDACTED-B kernel: xhci_hcd 0000:02:00.0: Host supports USB 3.1 Enhanced SuperSpeed
+2026-07-21T10:57:10.486098+02:00 HOST-REDACTED-B kernel: usb usb1: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.16
+2026-07-21T10:57:10.486183+02:00 HOST-REDACTED-B kernel: usb usb1: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+2026-07-21T10:57:10.486266+02:00 HOST-REDACTED-B kernel: usb usb1: Product: xHCI Host Controller
+2026-07-21T10:57:10.486347+02:00 HOST-REDACTED-B kernel: usb usb1: Manufacturer: Linux 6.16.12-drmexec7-valve24.5-1-neptune-616-drm-exec-gf253f5da553e xhci-hcd
+2026-07-21T10:57:10.486428+02:00 HOST-REDACTED-B kernel: usb usb1: device_identifier: SERIAL-REDACTED-USB
+2026-07-21T10:57:10.486556+02:00 HOST-REDACTED-B kernel: hub 1-0:1.0: USB hub found
+2026-07-21T10:57:10.486683+02:00 HOST-REDACTED-B kernel: hub 1-0:1.0: 10 ports detected
+2026-07-21T10:57:10.486810+02:00 HOST-REDACTED-B kernel: usb usb2: We don't know the algorithms for LPM for this host, disabling LPM.
+2026-07-21T10:57:10.486913+02:00 HOST-REDACTED-B kernel: usb usb2: New USB device found, idVendor=1d6b, idProduct=0003, bcdDevice= 6.16
+2026-07-21T10:57:10.486997+02:00 HOST-REDACTED-B kernel: usb usb2: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+2026-07-21T10:57:10.487079+02:00 HOST-REDACTED-B kernel: usb usb2: Product: xHCI Host Controller
+2026-07-21T10:57:10.487160+02:00 HOST-REDACTED-B kernel: usb usb2: Manufacturer: Linux 6.16.12-drmexec7-valve24.5-1-neptune-616-drm-exec-gf253f5da553e xhci-hcd
+2026-07-21T10:57:10.487241+02:00 HOST-REDACTED-B kernel: usb usb2: device_identifier: SERIAL-REDACTED-USB
+2026-07-21T10:57:10.487370+02:00 HOST-REDACTED-B kernel: hub 2-0:1.0: USB hub found
+2026-07-21T10:57:10.487495+02:00 HOST-REDACTED-B kernel: hub 2-0:1.0: 4 ports detected
+2026-07-21T10:57:10.487613+02:00 HOST-REDACTED-B kernel: xhci_hcd 0000:0b:00.3: xHCI Host Controller
+2026-07-21T10:57:10.487730+02:00 HOST-REDACTED-B kernel: xhci_hcd 0000:0b:00.3: new USB bus registered, assigned bus number 3
+2026-07-21T10:57:10.487850+02:00 HOST-REDACTED-B kernel: xhci_hcd 0000:0b:00.3: hcc params 0x0278ffe5 hci version 0x110 quirks 0x0000000000000010
+2026-07-21T10:57:10.487969+02:00 HOST-REDACTED-B kernel: xhci_hcd 0000:0b:00.3: xHCI Host Controller
+2026-07-21T10:57:10.488086+02:00 HOST-REDACTED-B kernel: xhci_hcd 0000:0b:00.3: new USB bus registered, assigned bus number 4
+2026-07-21T10:57:10.488202+02:00 HOST-REDACTED-B kernel: xhci_hcd 0000:0b:00.3: Host supports USB 3.1 Enhanced SuperSpeed
+2026-07-21T10:57:10.488290+02:00 HOST-REDACTED-B kernel: usb usb3: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.16
+2026-07-21T10:57:10.488373+02:00 HOST-REDACTED-B kernel: usb usb3: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+2026-07-21T10:57:10.488456+02:00 HOST-REDACTED-B kernel: usb usb3: Product: xHCI Host Controller
+2026-07-21T10:57:10.488537+02:00 HOST-REDACTED-B kernel: usb usb3: Manufacturer: Linux 6.16.12-drmexec7-valve24.5-1-neptune-616-drm-exec-gf253f5da553e xhci-hcd
+2026-07-21T10:57:10.488617+02:00 HOST-REDACTED-B kernel: usb usb3: device_identifier: SERIAL-REDACTED-USB
+2026-07-21T10:57:10.488742+02:00 HOST-REDACTED-B kernel: hub 3-0:1.0: USB hub found
+2026-07-21T10:57:10.488875+02:00 HOST-REDACTED-B kernel: hub 3-0:1.0: 4 ports detected
+2026-07-21T10:57:10.489005+02:00 HOST-REDACTED-B kernel: usb usb4: We don't know the algorithms for LPM for this host, disabling LPM.
+2026-07-21T10:57:10.489090+02:00 HOST-REDACTED-B kernel: usb usb4: New USB device found, idVendor=1d6b, idProduct=0003, bcdDevice= 6.16
+2026-07-21T10:57:10.489173+02:00 HOST-REDACTED-B kernel: usb usb4: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+2026-07-21T10:57:10.489254+02:00 HOST-REDACTED-B kernel: usb usb4: Product: xHCI Host Controller
+2026-07-21T10:57:10.489335+02:00 HOST-REDACTED-B kernel: usb usb4: Manufacturer: Linux 6.16.12-drmexec7-valve24.5-1-neptune-616-drm-exec-gf253f5da553e xhci-hcd
+2026-07-21T10:57:10.489415+02:00 HOST-REDACTED-B kernel: usb usb4: device_identifier: SERIAL-REDACTED-USB
+2026-07-21T10:57:10.489541+02:00 HOST-REDACTED-B kernel: hub 4-0:1.0: USB hub found
+2026-07-21T10:57:10.489667+02:00 HOST-REDACTED-B kernel: hub 4-0:1.0: 4 ports detected
+2026-07-21T10:57:10.489676+02:00 HOST-REDACTED-B kernel: usbcore: registered new interface driver usbserial_generic
+2026-07-21T10:57:10.489683+02:00 HOST-REDACTED-B kernel: usbserial: USB Serial support registered for generic
+2026-07-21T10:57:10.489689+02:00 HOST-REDACTED-B kernel: i8042: PNP: No PS/2 controller found.
+2026-07-21T10:57:10.489798+02:00 HOST-REDACTED-B kernel: rtc_cmos 00:02: RTC can wake from S4
+2026-07-21T10:57:10.489920+02:00 HOST-REDACTED-B kernel: rtc_cmos 00:02: registered as rtc0
+2026-07-21T10:57:10.490032+02:00 HOST-REDACTED-B kernel: rtc_cmos 00:02: setting system clock to 2026-07-21T08:57:07 UTC (1784624227)
+2026-07-21T10:57:10.490141+02:00 HOST-REDACTED-B kernel: rtc_cmos 00:02: alarms up to one month, y3k, 114 bytes nvram
+2026-07-21T10:57:10.490151+02:00 HOST-REDACTED-B kernel: efifb: probing for efifb
+2026-07-21T10:57:10.490157+02:00 HOST-REDACTED-B kernel: efifb: showing boot graphics
+2026-07-21T10:57:10.490164+02:00 HOST-REDACTED-B kernel: efifb: framebuffer at 0x7800000000, using 32400k, total 32400k
+2026-07-21T10:57:10.490170+02:00 HOST-REDACTED-B kernel: efifb: mode is 3840x2160x32, linelength=15360, pages=1
+2026-07-21T10:57:10.490176+02:00 HOST-REDACTED-B kernel: efifb: scrolling: redraw
+2026-07-21T10:57:10.490183+02:00 HOST-REDACTED-B kernel: efifb: Truecolor: size=8:8:8:8, shift=24:16:8:0
+2026-07-21T10:57:10.490189+02:00 HOST-REDACTED-B kernel: fbcon: Deferring console take-over
+2026-07-21T10:57:10.490195+02:00 HOST-REDACTED-B kernel: fb0: EFI VGA frame buffer device
+2026-07-21T10:57:10.490203+02:00 HOST-REDACTED-B kernel: hid: raw HID events driver (C) Jiri Kosina
+2026-07-21T10:57:10.490209+02:00 HOST-REDACTED-B kernel: usbcore: registered new interface driver usbhid
+2026-07-21T10:57:10.490215+02:00 HOST-REDACTED-B kernel: usbhid: USB HID core driver
+2026-07-21T10:57:10.490222+02:00 HOST-REDACTED-B kernel: drop_monitor: Initializing network drop monitor service
+2026-07-21T10:57:10.490228+02:00 HOST-REDACTED-B kernel: NET: Registered PF_INET6 protocol family
+2026-07-21T10:57:10.490234+02:00 HOST-REDACTED-B kernel: Segment Routing with IPv6
+2026-07-21T10:57:10.490240+02:00 HOST-REDACTED-B kernel: RPL Segment Routing with IPv6
+2026-07-21T10:57:10.490246+02:00 HOST-REDACTED-B kernel: In-situ OAM (IOAM) with IPv6
+2026-07-21T10:57:10.490253+02:00 HOST-REDACTED-B kernel: NET: Registered PF_PACKET protocol family
+2026-07-21T10:57:10.490260+02:00 HOST-REDACTED-B kernel: x86/amd: Previous system reset reason [0x00080800]: software wrote 0x6 to reset control register 0xCF9
+2026-07-21T10:57:10.490266+02:00 HOST-REDACTED-B kernel: microcode: Current revision: 0x0a201213
+2026-07-21T10:57:10.490272+02:00 HOST-REDACTED-B kernel: resctrl: L3 allocation detected
+2026-07-21T10:57:10.490279+02:00 HOST-REDACTED-B kernel: resctrl: MB allocation detected
+2026-07-21T10:57:10.490285+02:00 HOST-REDACTED-B kernel: resctrl: L3 monitoring detected
+2026-07-21T10:57:10.490291+02:00 HOST-REDACTED-B kernel: IPI shorthand broadcast: enabled
+2026-07-21T10:57:10.490297+02:00 HOST-REDACTED-B kernel: sched_clock: Marking stable (556769902, 222187)->(664119711, -107127622)
+2026-07-21T10:57:10.490304+02:00 HOST-REDACTED-B kernel: registered taskstats version 1
+2026-07-21T10:57:10.490310+02:00 HOST-REDACTED-B kernel: Loading compiled-in X.509 certificates
+2026-07-21T10:57:10.490317+02:00 HOST-REDACTED-B kernel: Loaded X.509 cert 'Build time autogenerated kernel key: cfbf924b7f259208b3259564cf7f1ce9ffe84d4a'
+2026-07-21T10:57:10.490323+02:00 HOST-REDACTED-B kernel: zswap: loaded using pool zstd/zsmalloc
+2026-07-21T10:57:10.490330+02:00 HOST-REDACTED-B kernel: Demotion targets for Node 0: null
+2026-07-21T10:57:10.490336+02:00 HOST-REDACTED-B kernel: Key type .fscrypt registered
+2026-07-21T10:57:10.490342+02:00 HOST-REDACTED-B kernel: Key type fscrypt-provisioning registered
+2026-07-21T10:57:10.490348+02:00 HOST-REDACTED-B kernel: Btrfs loaded, zoned=yes, fsverity=yes
+2026-07-21T10:57:10.490355+02:00 HOST-REDACTED-B kernel: Key type big_key registered
+2026-07-21T10:57:10.490361+02:00 HOST-REDACTED-B kernel: integrity: Loading X.509 certificate: UEFI:db
+2026-07-21T10:57:10.490367+02:00 HOST-REDACTED-B kernel: integrity: Loaded X.509 cert 'ASUSTeK MotherBoard SW Key Certificate: CERTIFICATE-FINGERPRINT-REDACTED'
+2026-07-21T10:57:10.490374+02:00 HOST-REDACTED-B kernel: integrity: Loading X.509 certificate: UEFI:db
+2026-07-21T10:57:10.490380+02:00 HOST-REDACTED-B kernel: integrity: Loaded X.509 cert 'ASUSTeK Notebook SW Key Certificate: CERTIFICATE-FINGERPRINT-REDACTED'
+2026-07-21T10:57:10.490387+02:00 HOST-REDACTED-B kernel: integrity: Loading X.509 certificate: UEFI:db
+2026-07-21T10:57:10.490393+02:00 HOST-REDACTED-B kernel: integrity: Loaded X.509 cert 'Microsoft Corporation UEFI CA 2011: 13adbf4309bd82709c8cd54f316ed522988a1bd4'
+2026-07-21T10:57:10.490399+02:00 HOST-REDACTED-B kernel: integrity: Loading X.509 certificate: UEFI:db
+2026-07-21T10:57:10.490405+02:00 HOST-REDACTED-B kernel: integrity: Loaded X.509 cert 'Microsoft Windows Production PCA 2011: a92902398e16c49778cd90f99e4f9ae17c55af53'
+2026-07-21T10:57:10.490411+02:00 HOST-REDACTED-B kernel: integrity: Loading X.509 certificate: UEFI:db
+2026-07-21T10:57:10.490417+02:00 HOST-REDACTED-B kernel: integrity: Loaded X.509 cert 'Microsoft UEFI CA 2023: 81aa6b3244c935bce0d6628af39827421e32497d'
+2026-07-21T10:57:10.490424+02:00 HOST-REDACTED-B kernel: integrity: Loading X.509 certificate: UEFI:db
+2026-07-21T10:57:10.490430+02:00 HOST-REDACTED-B kernel: integrity: Loaded X.509 cert 'Microsoft Corporation: Windows UEFI CA 2023: aefc5fbbbe055d8f8daa585473499417ab5a5272'
+2026-07-21T10:57:10.490437+02:00 HOST-REDACTED-B kernel: PM:   Magic number: 2:873:978
+2026-07-21T10:57:10.490553+02:00 HOST-REDACTED-B kernel: memory memory25: hash matches
+2026-07-21T10:57:10.490562+02:00 HOST-REDACTED-B kernel: RAS: Correctable Errors collector initialized.
+2026-07-21T10:57:10.490569+02:00 HOST-REDACTED-B kernel: clk: Disabling unused clocks
+2026-07-21T10:57:10.490575+02:00 HOST-REDACTED-B kernel: PM: genpd: Disabling unused power domains
+2026-07-21T10:57:10.490581+02:00 HOST-REDACTED-B kernel: ata1: SATA link down (SStatus 0 SControl 330)
+2026-07-21T10:57:10.490709+02:00 HOST-REDACTED-B kernel: usb 1-5: new full-speed USB device number 2 using xhci_hcd
+2026-07-21T10:57:10.490720+02:00 HOST-REDACTED-B kernel: ata2: SATA link down (SStatus 0 SControl 330)
+2026-07-21T10:57:10.490807+02:00 HOST-REDACTED-B kernel: usb 1-5: New USB device found, idVendor=13d3, idProduct=3571, bcdDevice= 0.00
+2026-07-21T10:57:10.490908+02:00 HOST-REDACTED-B kernel: usb 1-5: New USB device strings: Mfr=1, Product=2, SerialNumber=3
+2026-07-21T10:57:10.490995+02:00 HOST-REDACTED-B kernel: usb 1-5: Product: Bluetooth Radio
+2026-07-21T10:57:10.491080+02:00 HOST-REDACTED-B kernel: usb 1-5: Manufacturer: Realtek
+2026-07-21T10:57:10.491164+02:00 HOST-REDACTED-B kernel: usb 1-5: device_identifier: SERIAL-REDACTED-USB
+2026-07-21T10:57:10.491292+02:00 HOST-REDACTED-B kernel: usb 1-6: new full-speed USB device number 3 using xhci_hcd
+2026-07-21T10:57:10.491303+02:00 HOST-REDACTED-B kernel: ata3: SATA link down (SStatus 0 SControl 330)
+2026-07-21T10:57:10.491309+02:00 HOST-REDACTED-B kernel: tsc: Refined TSC clocksource calibration: 3699.999 MHz
+2026-07-21T10:57:10.491316+02:00 HOST-REDACTED-B kernel: clocksource: tsc: mask: 0xffffffffffffffff max_cycles: 0x6aaaa900000, max_idle_ns: 881590498719 ns
+2026-07-21T10:57:10.491322+02:00 HOST-REDACTED-B kernel: clocksource: Switched to clocksource tsc
+2026-07-21T10:57:10.491448+02:00 HOST-REDACTED-B kernel: usb 1-6: config 1 has an invalid interface number: 2 but max is 1
+2026-07-21T10:57:10.491575+02:00 HOST-REDACTED-B kernel: usb 1-6: config 1 has no interface number 1
+2026-07-21T10:57:10.491662+02:00 HOST-REDACTED-B kernel: usb 1-6: New USB device found, idVendor=0b05, idProduct=1939, bcdDevice= 1.00
+2026-07-21T10:57:10.491747+02:00 HOST-REDACTED-B kernel: usb 1-6: New USB device strings: Mfr=1, Product=2, SerialNumber=3
+2026-07-21T10:57:10.491834+02:00 HOST-REDACTED-B kernel: usb 1-6: Product: AURA LED Controller
+2026-07-21T10:57:10.491927+02:00 HOST-REDACTED-B kernel: usb 1-6: Manufacturer: AsusTek Computer Inc.
+2026-07-21T10:57:10.492013+02:00 HOST-REDACTED-B kernel: usb 1-6: device_identifier: SERIAL-REDACTED-USB
+2026-07-21T10:57:10.492149+02:00 HOST-REDACTED-B kernel: hid-generic 0003:0B05:1939.0001: hiddev96,hidraw0: USB HID v1.11 Device [AsusTek Computer Inc. AURA LED Controller] on usb-0000:02:00.0-6/input2
+2026-07-21T10:57:10.492158+02:00 HOST-REDACTED-B kernel: ata4: SATA link down (SStatus 0 SControl 330)
+2026-07-21T10:57:10.492285+02:00 HOST-REDACTED-B kernel: usb 1-7: new high-speed USB device number 4 using xhci_hcd
+2026-07-21T10:57:10.492295+02:00 HOST-REDACTED-B kernel: ata5: SATA link down (SStatus 0 SControl 330)
+2026-07-21T10:57:10.492381+02:00 HOST-REDACTED-B kernel: usb 1-7: New USB device found, idVendor=05e3, idProduct=0608, bcdDevice=60.70
+2026-07-21T10:57:10.492467+02:00 HOST-REDACTED-B kernel: usb 1-7: New USB device strings: Mfr=0, Product=1, SerialNumber=0
+2026-07-21T10:57:10.492551+02:00 HOST-REDACTED-B kernel: usb 1-7: Product: USB2.0 Hub
+2026-07-21T10:57:10.492679+02:00 HOST-REDACTED-B kernel: hub 1-7:1.0: USB hub found
+2026-07-21T10:57:10.492807+02:00 HOST-REDACTED-B kernel: hub 1-7:1.0: 4 ports detected
+2026-07-21T10:57:10.492944+02:00 HOST-REDACTED-B kernel: usb 1-8: new full-speed USB device number 5 using xhci_hcd
+2026-07-21T10:57:10.492956+02:00 HOST-REDACTED-B kernel: ata6: SATA link down (SStatus 0 SControl 330)
+2026-07-21T10:57:10.492963+02:00 HOST-REDACTED-B kernel: Freeing unused decrypted memory: 2044K
+2026-07-21T10:57:10.492969+02:00 HOST-REDACTED-B kernel: Freeing unused kernel image (initmem) memory: 4272K
+2026-07-21T10:57:10.492975+02:00 HOST-REDACTED-B kernel: Write protecting the kernel read-only data: 36864k
+2026-07-21T10:57:10.492981+02:00 HOST-REDACTED-B kernel: Freeing unused kernel image (text/rodata gap) memory: 1080K
+2026-07-21T10:57:10.492988+02:00 HOST-REDACTED-B kernel: Freeing unused kernel image (rodata/data gap) memory: 880K
+2026-07-21T10:57:10.492994+02:00 HOST-REDACTED-B kernel: x86/mm: Checked W+X mappings: passed, no W+X pages found.
+2026-07-21T10:57:10.493000+02:00 HOST-REDACTED-B kernel: rodata_test: all tests were successful
+2026-07-21T10:57:10.493006+02:00 HOST-REDACTED-B kernel: Run /init as init process
+2026-07-21T10:57:10.493013+02:00 HOST-REDACTED-B kernel:   with arguments:
+2026-07-21T10:57:10.493020+02:00 HOST-REDACTED-B kernel:     /init
+2026-07-21T10:57:10.493026+02:00 HOST-REDACTED-B kernel:     splash
+2026-07-21T10:57:10.493032+02:00 HOST-REDACTED-B kernel:   with environment:
+2026-07-21T10:57:10.493038+02:00 HOST-REDACTED-B kernel:     HOME=/
+2026-07-21T10:57:10.493044+02:00 HOST-REDACTED-B kernel:     TERM=linux
+2026-07-21T10:57:10.493050+02:00 HOST-REDACTED-B kernel:     BOOT_IMAGE=/boot/vmlinuz-linux-neptune-616-drm-exec
+2026-07-21T10:57:10.493056+02:00 HOST-REDACTED-B kernel: fbcon: Taking over console
+2026-07-21T10:57:10.493062+02:00 HOST-REDACTED-B kernel: Console: switching consoles 4-6 to frame buffer device
+2026-07-21T10:57:10.493070+02:00 HOST-REDACTED-B kernel: Key type psk registered
+2026-07-21T10:57:10.493158+02:00 HOST-REDACTED-B kernel: nvme nvme0: pci function 0000:01:00.0
+2026-07-21T10:57:10.493240+02:00 HOST-REDACTED-B kernel: nvme nvme0: allocated 32 MiB host memory buffer (8 segments).
+2026-07-21T10:57:10.493321+02:00 HOST-REDACTED-B kernel: nvme nvme0: 12/0/0 default/read/poll queues
+2026-07-21T10:57:10.493329+02:00 HOST-REDACTED-B kernel:  nvme0n1: p1 p2 p3 p4 p5 p6 p7 p8
+2026-07-21T10:57:10.493415+02:00 HOST-REDACTED-B kernel: usb 1-8: New USB device found, idVendor=046d, idProduct=c52b, bcdDevice=12.10
+2026-07-21T10:57:10.493501+02:00 HOST-REDACTED-B kernel: usb 1-8: New USB device strings: Mfr=1, Product=2, SerialNumber=0
+2026-07-21T10:57:10.493588+02:00 HOST-REDACTED-B kernel: usb 1-8: Product: USB Receiver
+2026-07-21T10:57:10.493675+02:00 HOST-REDACTED-B kernel: usb 1-8: Manufacturer: Logitech
+2026-07-21T10:57:10.493683+02:00 HOST-REDACTED-B kernel: input: Logitech USB Receiver as /devices/pci0000:00/0000:00:01.2/0000:02:00.0/usb1/1-8/1-8:1.0/0003:046D:C52B.0002/input/input2
+2026-07-21T10:57:10.493818+02:00 HOST-REDACTED-B kernel: hid-generic 0003:046D:C52B.0002: input,hidraw1: USB HID v1.11 Keyboard [Logitech USB Receiver] on usb-0000:02:00.0-8/input0
+2026-07-21T10:57:10.493826+02:00 HOST-REDACTED-B kernel: input: Logitech USB Receiver Mouse as /devices/pci0000:00/0000:00:01.2/0000:02:00.0/usb1/1-8/1-8:1.1/0003:046D:C52B.0003/input/input3
+2026-07-21T10:57:10.493833+02:00 HOST-REDACTED-B kernel: input: Logitech USB Receiver Consumer Control as /devices/pci0000:00/0000:00:01.2/0000:02:00.0/usb1/1-8/1-8:1.1/0003:046D:C52B.0003/input/input4
+2026-07-21T10:57:10.493839+02:00 HOST-REDACTED-B kernel: input: Logitech USB Receiver System Control as /devices/pci0000:00/0000:00:01.2/0000:02:00.0/usb1/1-8/1-8:1.1/0003:046D:C52B.0003/input/input5
+2026-07-21T10:57:10.493991+02:00 HOST-REDACTED-B kernel: hid-generic 0003:046D:C52B.0003: input,hiddev97,hidraw2: USB HID v1.11 Mouse [Logitech USB Receiver] on usb-0000:02:00.0-8/input1
+2026-07-21T10:57:10.494127+02:00 HOST-REDACTED-B kernel: hid-generic 0003:046D:C52B.0004: hiddev98,hidraw3: USB HID v1.11 Device [Logitech USB Receiver] on usb-0000:02:00.0-8/input2
+2026-07-21T10:57:10.494136+02:00 HOST-REDACTED-B kernel: BTRFS: device label rootfs devid 1 transid 73 /dev/nvme0n1p5 (259:5) scanned by mount (415)
+2026-07-21T10:57:10.494142+02:00 HOST-REDACTED-B kernel: BTRFS info (device nvme0n1p5): first mount of filesystem UUID-REDACTED
+2026-07-21T10:57:10.494149+02:00 HOST-REDACTED-B kernel: BTRFS info (device nvme0n1p5): using crc32c (crc32c-x86) checksum algorithm
+2026-07-21T10:57:10.494155+02:00 HOST-REDACTED-B kernel: BTRFS info (device nvme0n1p5): enabling ssd optimizations
+2026-07-21T10:57:10.494161+02:00 HOST-REDACTED-B kernel: BTRFS info (device nvme0n1p5): turning on async discard
+2026-07-21T10:57:10.494170+02:00 HOST-REDACTED-B kernel: BTRFS info (device nvme0n1p5): enabling free space tree
+2026-07-21T10:57:10.494176+02:00 HOST-REDACTED-B kernel: EXT4-fs (nvme0n1p7): mounted filesystem UUID-REDACTED r/w with ordered data mode. Quota mode: none.
+2026-07-21T10:57:10.494183+02:00 HOST-REDACTED-B kernel: overlayfs: "xino" feature enabled using 2 upper inode bits.
+2026-07-21T10:57:10.494190+02:00 HOST-REDACTED-B systemd[1]: systemd 257.7-2.5-arch running in system mode (+PAM +AUDIT -SELINUX -APPARMOR -IMA +IPE +SMACK +SECCOMP +GCRYPT +GNUTLS +OPENSSL +ACL +BLKID +CURL +ELFUTILS +FIDO2 +IDN2 -IDN +IPTC +KMOD +LIBCRYPTSETUP +LIBCRYPTSETUP_PLUGINS +LIBFDISK +PCRE2 +PWQUALITY +P11KIT +QRENCODE +TPM2 +BZIP2 +LZ4 +XZ +ZLIB +ZSTD +BPF_FRAMEWORK +BTF +XKBCOMMON +UTMP -SYSVINIT +LIBARCHIVE)
+2026-07-21T10:57:10.494198+02:00 HOST-REDACTED-B systemd[1]: Detected architecture x86-64.
+2026-07-21T10:57:10.494205+02:00 HOST-REDACTED-B systemd[1]: Hostname set to <HOST-REDACTED-B>.
+2026-07-21T10:57:10.494211+02:00 HOST-REDACTED-B systemd[1]: bpf-restrict-fs: LSM BPF program attached
+2026-07-21T10:57:10.494219+02:00 HOST-REDACTED-B kernel: zram: Added device: zram0
+2026-07-21T10:57:10.494225+02:00 HOST-REDACTED-B systemd[1]: Condition check resulted in System Slice being skipped.
+2026-07-21T10:57:10.494232+02:00 HOST-REDACTED-B systemd[1]: Condition check resulted in Root Slice being skipped.
+2026-07-21T10:57:10.494239+02:00 HOST-REDACTED-B systemd[1]: Queued start job for default target Graphical Interface.
+2026-07-21T10:57:10.494246+02:00 HOST-REDACTED-B systemd[1]: Created slice Slice /system/dirmngr.
+2026-07-21T10:57:10.494252+02:00 HOST-REDACTED-B systemd[1]: Created slice Slice /system/getty.
+2026-07-21T10:57:10.494259+02:00 HOST-REDACTED-B systemd[1]: Created slice Slice /system/gpg-agent.
+2026-07-21T10:57:10.494265+02:00 HOST-REDACTED-B systemd[1]: Created slice Slice /system/gpg-agent-browser.
+2026-07-21T10:57:10.494272+02:00 HOST-REDACTED-B systemd[1]: Created slice Slice /system/gpg-agent-extra.
+2026-07-21T10:57:10.494280+02:00 HOST-REDACTED-B systemd[1]: Created slice Slice /system/gpg-agent-ssh.
+2026-07-21T10:57:10.494286+02:00 HOST-REDACTED-B systemd[1]: Created slice Slice /system/keyboxd.
+2026-07-21T10:57:10.494294+02:00 HOST-REDACTED-B systemd[1]: Created slice Slice /system/modprobe.
+2026-07-21T10:57:10.494300+02:00 HOST-REDACTED-B systemd[1]: Created slice Slice /system/systemd-fsck.
+2026-07-21T10:57:10.494307+02:00 HOST-REDACTED-B systemd[1]: Created slice Slice /system/systemd-growfs.
+2026-07-21T10:57:10.494314+02:00 HOST-REDACTED-B systemd[1]: Created slice Slice /system/systemd-zram-setup.
+2026-07-21T10:57:10.494320+02:00 HOST-REDACTED-B systemd[1]: Created slice User and Session Slice.
+2026-07-21T10:57:10.494327+02:00 HOST-REDACTED-B systemd[1]: Dispatch Password Requests to Console Directory Watch was skipped because of an unmet condition check (ConditionPathExists=!/run/plymouth/pid).
+2026-07-21T10:57:10.494335+02:00 HOST-REDACTED-B systemd[1]: Started Forward Password Requests to Wall Directory Watch.
+2026-07-21T10:57:10.494341+02:00 HOST-REDACTED-B systemd[1]: Set up automount Arbitrary Executable File Formats File System Automount Point.
+2026-07-21T10:57:10.494348+02:00 HOST-REDACTED-B systemd[1]: Expecting device /dev/disk/by-partsets/self/efi...
+2026-07-21T10:57:10.494354+02:00 HOST-REDACTED-B systemd[1]: Expecting device /dev/disk/by-partsets/shared/esp...
+2026-07-21T10:57:10.494361+02:00 HOST-REDACTED-B systemd[1]: Expecting device /dev/disk/by-partsets/shared/home...
+2026-07-21T10:57:10.494368+02:00 HOST-REDACTED-B systemd[1]: Expecting device /dev/tpmrm0...
+2026-07-21T10:57:10.494374+02:00 HOST-REDACTED-B systemd[1]: Expecting device /dev/zram0...
+2026-07-21T10:57:10.494381+02:00 HOST-REDACTED-B systemd[1]: Reached target Local Encrypted Volumes.
+2026-07-21T10:57:10.494389+02:00 HOST-REDACTED-B systemd[1]: Reached target Login Prompts.
+2026-07-21T10:57:10.494395+02:00 HOST-REDACTED-B systemd[1]: Reached target Local Integrity Protected Volumes.
+2026-07-21T10:57:10.494401+02:00 HOST-REDACTED-B systemd[1]: Reached target Path Units.
+2026-07-21T10:57:10.494408+02:00 HOST-REDACTED-B systemd[1]: Reached target Remote File Systems.
+2026-07-21T10:57:10.494414+02:00 HOST-REDACTED-B systemd[1]: Reached target Slice Units.
+2026-07-21T10:57:10.494421+02:00 HOST-REDACTED-B systemd[1]: Reached target Local Verity Protected Volumes.
+2026-07-21T10:57:10.494427+02:00 HOST-REDACTED-B systemd[1]: Listening on Device-mapper event daemon FIFOs.
+2026-07-21T10:57:10.494434+02:00 HOST-REDACTED-B systemd[1]: Listening on LVM2 poll daemon socket.
+2026-07-21T10:57:10.494440+02:00 HOST-REDACTED-B systemd[1]: Listening on Process Core Dump Socket.
+2026-07-21T10:57:10.494448+02:00 HOST-REDACTED-B systemd[1]: Listening on Credential Encryption/Decryption.
+2026-07-21T10:57:10.494454+02:00 HOST-REDACTED-B systemd[1]: Listening on Journal Socket (/dev/log).
+2026-07-21T10:57:10.494461+02:00 HOST-REDACTED-B systemd[1]: Listening on Journal Sockets.
+2026-07-21T10:57:10.494467+02:00 HOST-REDACTED-B systemd[1]: Listening on udev Control Socket.
+2026-07-21T10:57:10.494474+02:00 HOST-REDACTED-B systemd[1]: Listening on udev Kernel Socket.
+2026-07-21T10:57:10.494480+02:00 HOST-REDACTED-B systemd[1]: Listening on User Database Manager Socket.
+2026-07-21T10:57:10.494487+02:00 HOST-REDACTED-B systemd[1]: Mounting Huge Pages File System...
+2026-07-21T10:57:10.494495+02:00 HOST-REDACTED-B systemd[1]: Mounting POSIX Message Queue File System...
+2026-07-21T10:57:10.494501+02:00 HOST-REDACTED-B systemd[1]: Mounting Kernel Debug File System...
+2026-07-21T10:57:10.494508+02:00 HOST-REDACTED-B systemd[1]: Mounting Kernel Trace File System...
+2026-07-21T10:57:10.494514+02:00 HOST-REDACTED-B systemd[1]: Starting Create List of Static Device Nodes...
+2026-07-21T10:57:10.494521+02:00 HOST-REDACTED-B systemd[1]: Starting Monitoring of LVM2 mirrors, snapshots etc. using dmeventd or progress polling...
+2026-07-21T10:57:10.494527+02:00 HOST-REDACTED-B systemd[1]: Starting Load Kernel Module configfs...
+2026-07-21T10:57:10.494534+02:00 HOST-REDACTED-B systemd[1]: Starting Load Kernel Module dm_mod...
+2026-07-21T10:57:10.494540+02:00 HOST-REDACTED-B systemd[1]: Starting Load Kernel Module drm...
+2026-07-21T10:57:10.494546+02:00 HOST-REDACTED-B systemd[1]: Starting Load Kernel Module fuse...
+2026-07-21T10:57:10.494554+02:00 HOST-REDACTED-B systemd[1]: Starting Load Kernel Module loop...
+2026-07-21T10:57:10.494561+02:00 HOST-REDACTED-B systemd[1]: Starting File System Check on Root Device...
+2026-07-21T10:57:10.494568+02:00 HOST-REDACTED-B systemd[1]: Clear Stale Hibernate Storage Info was skipped because of an unmet condition check (ConditionPathExists=/sys/firmware/efi/efivars/HibernateLocation-UUID-REDACTED).
+2026-07-21T10:57:10.494574+02:00 HOST-REDACTED-B systemd[1]: Starting Journal Service...
+2026-07-21T10:57:10.494580+02:00 HOST-REDACTED-B systemd[1]: Starting Load Kernel Modules...
+2026-07-21T10:57:10.494587+02:00 HOST-REDACTED-B systemd[1]: Starting Load udev Rules from Credentials...
+2026-07-21T10:57:10.494593+02:00 HOST-REDACTED-B systemd[1]: Starting Coldplug All udev Devices...
+2026-07-21T10:57:10.494600+02:00 HOST-REDACTED-B systemd[1]: Mounted Huge Pages File System.
+2026-07-21T10:57:10.494606+02:00 HOST-REDACTED-B systemd[1]: Mounted POSIX Message Queue File System.
+2026-07-21T10:57:10.494614+02:00 HOST-REDACTED-B systemd[1]: Mounted Kernel Debug File System.
+2026-07-21T10:57:10.494621+02:00 HOST-REDACTED-B systemd[1]: Mounted Kernel Trace File System.
+2026-07-21T10:57:10.494627+02:00 HOST-REDACTED-B systemd[1]: Finished Create List of Static Device Nodes.
+2026-07-21T10:57:10.494634+02:00 HOST-REDACTED-B systemd[1]: modprobe@configfs.service: Deactivated successfully.
+2026-07-21T10:57:10.494640+02:00 HOST-REDACTED-B systemd[1]: Finished Load Kernel Module configfs.
+2026-07-21T10:57:10.494647+02:00 HOST-REDACTED-B systemd[1]: modprobe@drm.service: Deactivated successfully.
+2026-07-21T10:57:10.494653+02:00 HOST-REDACTED-B systemd[1]: Finished Load Kernel Module drm.
+2026-07-21T10:57:10.494659+02:00 HOST-REDACTED-B systemd[1]: modprobe@fuse.service: Deactivated successfully.
+2026-07-21T10:57:10.494667+02:00 HOST-REDACTED-B systemd[1]: Finished Load Kernel Module fuse.
+2026-07-21T10:57:10.494674+02:00 HOST-REDACTED-B kernel: loop: module loaded
+2026-07-21T10:57:10.494680+02:00 HOST-REDACTED-B systemd[1]: Finished File System Check on Root Device.
+2026-07-21T10:57:10.494686+02:00 HOST-REDACTED-B kernel: device-mapper: uevent: version 1.0.3
+2026-07-21T10:57:10.494693+02:00 HOST-REDACTED-B kernel: device-mapper: ioctl: 4.50.0-ioctl (2025-04-28) initialised: dm-devel@lists.linux.dev
+2026-07-21T10:57:10.494699+02:00 HOST-REDACTED-B systemd[1]: modprobe@loop.service: Deactivated successfully.
+2026-07-21T10:57:10.494705+02:00 HOST-REDACTED-B systemd[1]: Finished Load Kernel Module loop.
+2026-07-21T10:57:10.494712+02:00 HOST-REDACTED-B systemd[1]: Finished Load udev Rules from Credentials.
+2026-07-21T10:57:10.494718+02:00 HOST-REDACTED-B systemd[1]: modprobe@dm_mod.service: Deactivated successfully.
+2026-07-21T10:57:10.494726+02:00 HOST-REDACTED-B systemd[1]: Finished Load Kernel Module dm_mod.
+2026-07-21T10:57:10.494732+02:00 HOST-REDACTED-B systemd[1]: Mounting FUSE Control File System...
+2026-07-21T10:57:10.494739+02:00 HOST-REDACTED-B systemd[1]: Mounting Kernel Configuration File System...
+2026-07-21T10:57:10.494760+02:00 HOST-REDACTED-B systemd-journald[556]: Collecting audit messages is disabled.
+2026-07-21T10:57:10.494774+02:00 HOST-REDACTED-B systemd[1]: Starting Remount Root and Kernel File Systems...
+2026-07-21T10:57:10.494783+02:00 HOST-REDACTED-B systemd[1]: Starting Create Static Device Nodes in /dev gracefully...
+2026-07-21T10:57:10.494790+02:00 HOST-REDACTED-B kernel: i2c_dev: i2c /dev entries driver
+2026-07-21T10:57:10.494797+02:00 HOST-REDACTED-B systemd[1]: Mounted FUSE Control File System.
+2026-07-21T10:57:10.494803+02:00 HOST-REDACTED-B systemd[1]: Mounted Kernel Configuration File System.
+2026-07-21T10:57:10.494810+02:00 HOST-REDACTED-B systemd[1]: Finished Remount Root and Kernel File Systems.
+2026-07-21T10:57:10.494816+02:00 HOST-REDACTED-B systemd[1]: Rebuild Hardware Database was skipped because of an unmet condition check (ConditionNeedsUpdate=/etc).
+2026-07-21T10:57:10.494823+02:00 HOST-REDACTED-B systemd[1]: Starting Load/Save OS Random Seed...
+2026-07-21T10:57:10.494829+02:00 HOST-REDACTED-B systemd[1]: Starting User Database Manager...
+2026-07-21T10:57:10.494836+02:00 HOST-REDACTED-B systemd[1]: Finished Load/Save OS Random Seed.
+2026-07-21T10:57:10.494847+02:00 HOST-REDACTED-B kernel: Asymmetric key parser 'pkcs8' registered
+2026-07-21T10:57:10.494854+02:00 HOST-REDACTED-B systemd[1]: Finished Load Kernel Modules.
+2026-07-21T10:57:10.494861+02:00 HOST-REDACTED-B systemd[1]: Starting Apply Kernel Variables...
+2026-07-21T10:57:10.494868+02:00 HOST-REDACTED-B systemd[1]: Finished Monitoring of LVM2 mirrors, snapshots etc. using dmeventd or progress polling.
+2026-07-21T10:57:10.494874+02:00 HOST-REDACTED-B systemd[1]: Finished Apply Kernel Variables.
+2026-07-21T10:57:10.494881+02:00 HOST-REDACTED-B systemd[1]: Started User Database Manager.
+2026-07-21T10:57:10.494887+02:00 HOST-REDACTED-B systemd[1]: Finished Create Static Device Nodes in /dev gracefully.
+2026-07-21T10:57:10.494895+02:00 HOST-REDACTED-B systemd[1]: Create System Users was skipped because no trigger condition checks were met.
+2026-07-21T10:57:10.495865+02:00 HOST-REDACTED-B systemd[1]: Starting Network Name Resolution...
+2026-07-21T10:57:10.495880+02:00 HOST-REDACTED-B systemd[1]: Starting Network Time Synchronization...
+2026-07-21T10:57:10.496854+02:00 HOST-REDACTED-B systemd[1]: Starting Create Static Device Nodes in /dev...
+2026-07-21T10:57:10.496883+02:00 HOST-REDACTED-B systemd[1]: Started Journal Service.
+2026-07-21T10:57:10.602858+02:00 HOST-REDACTED-B kernel: zram0: detected capacity change from 0 to 32488448
+2026-07-21T10:57:10.676861+02:00 HOST-REDACTED-B kernel: piix4_smbus 0000:00:14.0: SMBus Host Controller at 0xb00, revision 0
+2026-07-21T10:57:10.678915+02:00 HOST-REDACTED-B kernel: piix4_smbus 0000:00:14.0: Using register 0x02 for SMBus port selection
+2026-07-21T10:57:10.681856+02:00 HOST-REDACTED-B kernel: i2c i2c-0: Successfully instantiated SPD at 0x50
+2026-07-21T10:57:10.682855+02:00 HOST-REDACTED-B kernel: i2c i2c-0: Successfully instantiated SPD at 0x51
+2026-07-21T10:57:10.683035+02:00 HOST-REDACTED-B kernel: i2c i2c-0: Successfully instantiated SPD at 0x52
+2026-07-21T10:57:10.683854+02:00 HOST-REDACTED-B kernel: i2c i2c-0: Successfully instantiated SPD at 0x53
+2026-07-21T10:57:10.684017+02:00 HOST-REDACTED-B kernel: piix4_smbus 0000:00:14.0: Auxiliary SMBus Host Controller at 0xb20
+2026-07-21T10:57:10.687959+02:00 HOST-REDACTED-B kernel: input: PC Speaker as /devices/platform/pcspkr/input/input7
+2026-07-21T10:57:10.689876+02:00 HOST-REDACTED-B kernel: ccp 0000:0b:00.1: enabling device (0000 -> 0002)
+2026-07-21T10:57:10.690415+02:00 HOST-REDACTED-B kernel: RAPL PMU: API unit is 2^-32 Joules, 2 fixed counters, 163840 ms ovfl timer
+2026-07-21T10:57:10.690429+02:00 HOST-REDACTED-B kernel: RAPL PMU: hw unit of domain package 2^-16 Joules
+2026-07-21T10:57:10.690441+02:00 HOST-REDACTED-B kernel: RAPL PMU: hw unit of domain core 2^-16 Joules
+2026-07-21T10:57:10.690453+02:00 HOST-REDACTED-B kernel: ccp 0000:0b:00.1: ccp: unable to access the device: you might be running a broken BIOS.
+2026-07-21T10:57:10.695562+02:00 HOST-REDACTED-B kernel: ccp 0000:0b:00.1: psp enabled
+2026-07-21T10:57:10.695765+02:00 HOST-REDACTED-B kernel: sp5100_tco: SP5100/SB800 TCO WatchDog Timer Driver
+2026-07-21T10:57:10.695780+02:00 HOST-REDACTED-B kernel: sp5100-tco sp5100-tco: Using 0xfeb00000 for watchdog MMIO address
+2026-07-21T10:57:10.695976+02:00 HOST-REDACTED-B kernel: sp5100-tco sp5100-tco: initialized. heartbeat=60 sec (nowayout=0)
+2026-07-21T10:57:10.721871+02:00 HOST-REDACTED-B kernel: tpm_crb MSFT0101:00: Disabling hwrng
+2026-07-21T10:57:10.729855+02:00 HOST-REDACTED-B kernel: r8169 0000:06:00.0 eth0: RTL8125B, MAC-REDACTED, XID 641, IRQ 74
+2026-07-21T10:57:10.730073+02:00 HOST-REDACTED-B kernel: r8169 0000:06:00.0 eth0: jumbo features [frames: 16362 bytes, tx checksumming: ko]
+2026-07-21T10:57:10.768855+02:00 HOST-REDACTED-B kernel: cfg80211: Loading compiled-in X.509 certificates for regulatory database
+2026-07-21T10:57:10.768927+02:00 HOST-REDACTED-B kernel: Loaded X.509 cert 'sforshee: 00b28ddf47aef9cea7'
+2026-07-21T10:57:10.768940+02:00 HOST-REDACTED-B kernel: Loaded X.509 cert 'wens: 61c038651aabdcf94bd0ac7ff06c7248db18c600'
+2026-07-21T10:57:10.770852+02:00 HOST-REDACTED-B kernel: Adding 16244220k swap on /dev/zram0.  Priority:100 extents:1 across:16244220k SSDsc
+2026-07-21T10:57:10.787859+02:00 HOST-REDACTED-B kernel: r8169 0000:06:00.0 enp6s0: renamed from eth0
+2026-07-21T10:57:10.805868+02:00 HOST-REDACTED-B kernel: Bluetooth: Core ver 2.22
+2026-07-21T10:57:10.807907+02:00 HOST-REDACTED-B kernel: NET: Registered PF_BLUETOOTH protocol family
+2026-07-21T10:57:10.807929+02:00 HOST-REDACTED-B kernel: Bluetooth: HCI device and connection manager initialized
+2026-07-21T10:57:10.807944+02:00 HOST-REDACTED-B kernel: Bluetooth: HCI socket layer initialized
+2026-07-21T10:57:10.807962+02:00 HOST-REDACTED-B kernel: Bluetooth: L2CAP socket layer initialized
+2026-07-21T10:57:10.807975+02:00 HOST-REDACTED-B kernel: Bluetooth: SCO socket layer initialized
+2026-07-21T10:57:10.811852+02:00 HOST-REDACTED-B kernel: ee1004 0-0050: 512 byte EE1004-compliant SPD EEPROM, read-only
+2026-07-21T10:57:10.813888+02:00 HOST-REDACTED-B kernel: ee1004 0-0051: 512 byte EE1004-compliant SPD EEPROM, read-only
+2026-07-21T10:57:10.815873+02:00 HOST-REDACTED-B kernel: ee1004 0-0052: 512 byte EE1004-compliant SPD EEPROM, read-only
+2026-07-21T10:57:10.816980+02:00 HOST-REDACTED-B kernel: intel_rapl_common: Found RAPL domain package
+2026-07-21T10:57:10.817001+02:00 HOST-REDACTED-B kernel: intel_rapl_common: Found RAPL domain core
+2026-07-21T10:57:10.817853+02:00 HOST-REDACTED-B kernel: ee1004 0-0053: 512 byte EE1004-compliant SPD EEPROM, read-only
+2026-07-21T10:57:10.818096+02:00 HOST-REDACTED-B kernel: amd_atl: AMD Address Translation Library initialized
+2026-07-21T10:57:10.823864+02:00 HOST-REDACTED-B kernel: asus_wmi: ASUS WMI generic driver loaded
+2026-07-21T10:57:10.838957+02:00 HOST-REDACTED-B kernel: asus_wmi: failed to register LPS0 sleep handler in asus-wmi
+2026-07-21T10:57:10.838976+02:00 HOST-REDACTED-B kernel: asus_wmi: SFUN value: 0x1
+2026-07-21T10:57:10.838986+02:00 HOST-REDACTED-B kernel: eeepc-wmi eeepc-wmi: Detected ATK, not ASUSWMI, use DSTS
+2026-07-21T10:57:10.841854+02:00 HOST-REDACTED-B kernel: input: Eee PC WMI hotkeys as /devices/platform/eeepc-wmi/input/input8
+2026-07-21T10:57:10.886855+02:00 HOST-REDACTED-B kernel: asus_armoury: No matching power limits found for this system
+2026-07-21T10:57:10.886880+02:00 HOST-REDACTED-B kernel: usbcore: registered new interface driver btusb
+2026-07-21T10:57:10.886894+02:00 HOST-REDACTED-B kernel: snd_hda_intel 0000:09:00.1: enabling device (0000 -> 0002)
+2026-07-21T10:57:10.887112+02:00 HOST-REDACTED-B kernel: snd_hda_intel 0000:09:00.1: Handle vga_switcheroo audio client
+2026-07-21T10:57:10.887295+02:00 HOST-REDACTED-B kernel: snd_hda_intel 0000:09:00.1: Force to non-snoop mode
+2026-07-21T10:57:10.887515+02:00 HOST-REDACTED-B kernel: snd_hda_intel 0000:0b:00.4: enabling device (0000 -> 0002)
+2026-07-21T10:57:10.897856+02:00 HOST-REDACTED-B kernel: input: HDA ATI HDMI HDMI/DP,pcm=3 as /devices/pci0000:00/0000:00:03.1/0000:07:00.0/0000:08:00.0/0000:09:00.1/sound/card0/input9
+2026-07-21T10:57:10.913852+02:00 HOST-REDACTED-B kernel: input: HDA ATI HDMI HDMI/DP,pcm=7 as /devices/pci0000:00/0000:00:03.1/0000:07:00.0/0000:08:00.0/0000:09:00.1/sound/card0/input10
+2026-07-21T10:57:10.918851+02:00 HOST-REDACTED-B kernel: snd_hda_codec_realtek hdaudioC1D0: ALCS1200A: picked fixup  for PCI SSID 1043:8797
+2026-07-21T10:57:10.919074+02:00 HOST-REDACTED-B kernel: snd_hda_codec_realtek hdaudioC1D0: ALCS1200A: SKU not ready 0x00000000
+2026-07-21T10:57:10.919217+02:00 HOST-REDACTED-B kernel: snd_hda_codec_realtek hdaudioC1D0: autoconfig for ALCS1200A: line_outs=3 (0x14/0x15/0x16/0x0/0x0) type:line
+2026-07-21T10:57:10.919345+02:00 HOST-REDACTED-B kernel: snd_hda_codec_realtek hdaudioC1D0:    speaker_outs=0 (0x0/0x0/0x0/0x0/0x0)
+2026-07-21T10:57:10.919468+02:00 HOST-REDACTED-B kernel: snd_hda_codec_realtek hdaudioC1D0:    hp_outs=1 (0x1b/0x0/0x0/0x0/0x0)
+2026-07-21T10:57:10.919589+02:00 HOST-REDACTED-B kernel: snd_hda_codec_realtek hdaudioC1D0:    mono: mono_out=0x0
+2026-07-21T10:57:10.919709+02:00 HOST-REDACTED-B kernel: snd_hda_codec_realtek hdaudioC1D0:    dig-out=0x1e/0x0
+2026-07-21T10:57:10.919832+02:00 HOST-REDACTED-B kernel: snd_hda_codec_realtek hdaudioC1D0:    inputs:
+2026-07-21T10:57:10.919966+02:00 HOST-REDACTED-B kernel: snd_hda_codec_realtek hdaudioC1D0:      Rear Mic=0x18
+2026-07-21T10:57:10.920089+02:00 HOST-REDACTED-B kernel: snd_hda_codec_realtek hdaudioC1D0:      Front Mic=0x19
+2026-07-21T10:57:10.920210+02:00 HOST-REDACTED-B kernel: snd_hda_codec_realtek hdaudioC1D0:      Line=0x1a
+2026-07-21T10:57:10.955853+02:00 HOST-REDACTED-B kernel: input: HD-Audio Generic Rear Mic as /devices/pci0000:00/0000:00:08.1/0000:0b:00.4/sound/card1/input13
+2026-07-21T10:57:10.966853+02:00 HOST-REDACTED-B kernel: rtw89_8852be 0000:05:00.0: loaded firmware rtw89/rtw8852b_fw-1.bin
+2026-07-21T10:57:10.967074+02:00 HOST-REDACTED-B kernel: rtw89_8852be 0000:05:00.0: enabling device (0000 -> 0003)
+2026-07-21T10:57:10.973858+02:00 HOST-REDACTED-B kernel: input: HDA ATI HDMI HDMI/DP,pcm=8 as /devices/pci0000:00/0000:00:03.1/0000:07:00.0/0000:08:00.0/0000:09:00.1/sound/card0/input11
+2026-07-21T10:57:10.973884+02:00 HOST-REDACTED-B kernel: input: HDA ATI HDMI HDMI/DP,pcm=9 as /devices/pci0000:00/0000:00:03.1/0000:07:00.0/0000:08:00.0/0000:09:00.1/sound/card0/input12
+2026-07-21T10:57:10.973901+02:00 HOST-REDACTED-B kernel: input: HD-Audio Generic Front Mic as /devices/pci0000:00/0000:00:08.1/0000:0b:00.4/sound/card1/input14
+2026-07-21T10:57:10.973916+02:00 HOST-REDACTED-B kernel: input: HD-Audio Generic Line as /devices/pci0000:00/0000:00:08.1/0000:0b:00.4/sound/card1/input15
+2026-07-21T10:57:10.973938+02:00 HOST-REDACTED-B kernel: input: HD-Audio Generic Line Out Front as /devices/pci0000:00/0000:00:08.1/0000:0b:00.4/sound/card1/input16
+2026-07-21T10:57:10.973953+02:00 HOST-REDACTED-B kernel: input: HD-Audio Generic Line Out Surround as /devices/pci0000:00/0000:00:08.1/0000:0b:00.4/sound/card1/input17
+2026-07-21T10:57:10.973967+02:00 HOST-REDACTED-B kernel: logitech-djreceiver 0003:046D:C52B.0004: hiddev97,hidraw1: USB HID v1.11 Device [Logitech USB Receiver] on usb-0000:02:00.0-8/input2
+2026-07-21T10:57:10.974856+02:00 HOST-REDACTED-B kernel: rtw89_8852be 0000:05:00.0: Firmware version 0.29.29.15 (6fb3ec41), cmd version 0, type 5
+2026-07-21T10:57:10.975122+02:00 HOST-REDACTED-B kernel: rtw89_8852be 0000:05:00.0: Firmware version 0.29.29.15 (6fb3ec41), cmd version 0, type 3
+2026-07-21T10:57:10.975368+02:00 HOST-REDACTED-B kernel: input: HD-Audio Generic Line Out CLFE as /devices/pci0000:00/0000:00:08.1/0000:0b:00.4/sound/card1/input18
+2026-07-21T10:57:10.975385+02:00 HOST-REDACTED-B kernel: input: HD-Audio Generic Front Headphone as /devices/pci0000:00/0000:00:08.1/0000:0b:00.4/sound/card1/input19
+2026-07-21T10:57:11.078856+02:00 HOST-REDACTED-B kernel: input: Logitech Wireless Device PID:4032 Keyboard as /devices/pci0000:00/0000:00:01.2/0000:02:00.0/usb1/1-8/1-8:1.2/0003:046D:C52B.0004/0003:046D:4032.0005/input/input20
+2026-07-21T10:57:11.100852+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: RTL: examining hci_ver=0b hci_rev=000b lmp_ver=0b lmp_subver=8852
+2026-07-21T10:57:11.103855+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: RTL: rom_version status=0 version=1
+2026-07-21T10:57:11.103872+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: RTL: loading rtl_bt/rtl8852bu_fw.bin
+2026-07-21T10:57:11.104851+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: RTL: loading rtl_bt/rtl8852bu_config.bin
+2026-07-21T10:57:11.107852+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: RTL: cfg_sz 6, total sz 54947
+2026-07-21T10:57:11.260850+02:00 HOST-REDACTED-B kernel: rtw89_8852be 0000:05:00.0: chip rfe_type is 1
+2026-07-21T10:57:11.502857+02:00 HOST-REDACTED-B kernel: input: Logitech Wireless Device PID:4032 Mouse as /devices/pci0000:00/0000:00:01.2/0000:02:00.0/usb1/1-8/1-8:1.2/0003:046D:C52B.0004/0003:046D:4032.0005/input/input21
+2026-07-21T10:57:11.502887+02:00 HOST-REDACTED-B kernel: hid-generic 0003:046D:4032.0005: input,hidraw2: USB HID v1.11 Keyboard [Logitech Wireless Device PID:4032] on usb-0000:02:00.0-8/input2:1
+2026-07-21T10:57:11.503125+02:00 HOST-REDACTED-B kernel: rtw89_8852be 0000:05:00.0: rfkill hardware state changed to enable
+2026-07-21T10:57:11.647852+02:00 HOST-REDACTED-B kernel: EXT4-fs (nvme0n1p8): Using encoding defined by superblock: utf8-12.1.0 with flags 0x0
+2026-07-21T10:57:11.657855+02:00 HOST-REDACTED-B kernel: EXT4-fs (nvme0n1p8): mounted filesystem UUID-REDACTED r/w with ordered data mode. Quota mode: none.
+2026-07-21T10:57:11.667851+02:00 HOST-REDACTED-B kernel: EXT4-fs (nvme0n1p8): resizing filesystem from 241339569 to 241339569 blocks
+2026-07-21T10:57:11.679851+02:00 HOST-REDACTED-B kernel: Adding 1048572k swap on /home/swapfile.  Priority:-2 extents:5 across:1081340k SS
+2026-07-21T10:57:12.419854+02:00 HOST-REDACTED-B kernel: mousedev: PS/2 mouse device common for all mice
+2026-07-21T10:57:12.420854+02:00 HOST-REDACTED-B kernel: [drm] amdgpu kernel modesetting enabled.
+2026-07-21T10:57:12.433917+02:00 HOST-REDACTED-B kernel: amdgpu: Virtual CRAT table created for CPU
+2026-07-21T10:57:12.433942+02:00 HOST-REDACTED-B kernel: amdgpu: Topology: Add CPU node
+2026-07-21T10:57:12.433960+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: enabling device (0006 -> 0007)
+2026-07-21T10:57:12.434195+02:00 HOST-REDACTED-B kernel: [drm] initializing kernel modesetting (IP DISCOVERY 0x1002:0x7590 0x1DA2:0xA493 0xC0).
+2026-07-21T10:57:12.434209+02:00 HOST-REDACTED-B kernel: [drm] register mmio base: 0xFCD00000
+2026-07-21T10:57:12.434221+02:00 HOST-REDACTED-B kernel: [drm] register mmio size: 524288
+2026-07-21T10:57:12.437885+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: detected ip block number 0 <soc24_common>
+2026-07-21T10:57:12.438079+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: detected ip block number 1 <gmc_v12_0>
+2026-07-21T10:57:12.438253+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: detected ip block number 2 <ih_v7_0>
+2026-07-21T10:57:12.438401+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: detected ip block number 3 <psp>
+2026-07-21T10:57:12.438544+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: detected ip block number 4 <smu>
+2026-07-21T10:57:12.438683+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: detected ip block number 5 <dm>
+2026-07-21T10:57:12.438841+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: detected ip block number 6 <gfx_v12_0>
+2026-07-21T10:57:12.439004+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: detected ip block number 7 <sdma_v7_0>
+2026-07-21T10:57:12.439145+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: detected ip block number 8 <vcn_v5_0_0>
+2026-07-21T10:57:12.439284+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: detected ip block number 9 <jpeg_v5_0_0>
+2026-07-21T10:57:12.439421+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: detected ip block number 10 <mes_v12_0>
+2026-07-21T10:57:12.439601+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: Fetched VBIOS from VFCT
+2026-07-21T10:57:12.439793+02:00 HOST-REDACTED-B kernel: amdgpu: ATOM BIOS: 113-P816G493-S06
+2026-07-21T10:57:12.448859+02:00 HOST-REDACTED-B kernel: Console: switching consoles 4-6 to dummy device
+2026-07-21T10:57:12.448923+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: vgaarb: deactivate vga console
+2026-07-21T10:57:12.449140+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: Trusted Memory Zone (TMZ) feature not supported
+2026-07-21T10:57:12.449356+02:00 HOST-REDACTED-B kernel: [drm] vm size is 262144 GB, 4 levels, block size is 9-bit, fragment size is 9-bit
+2026-07-21T10:57:12.449368+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: VRAM: 16304M 0x0000008000000000 - 0x00000083FAFFFFFF (16304M used)
+2026-07-21T10:57:12.449547+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: GART: 512M 0x0000000000000000 - 0x000000001FFFFFFF
+2026-07-21T10:57:12.449721+02:00 HOST-REDACTED-B kernel: [drm] Detected VRAM RAM=16304M, BAR=16384M
+2026-07-21T10:57:12.449735+02:00 HOST-REDACTED-B kernel: [drm] RAM width 128bits GDDR6
+2026-07-21T10:57:12.449745+02:00 HOST-REDACTED-B kernel: [drm] amdgpu: 16304M of VRAM memory ready
+2026-07-21T10:57:12.449755+02:00 HOST-REDACTED-B kernel: [drm] amdgpu: 15863M of GTT memory ready.
+2026-07-21T10:57:12.449764+02:00 HOST-REDACTED-B kernel: [drm] GART: num cpu pages 131072, num gpu pages 131072
+2026-07-21T10:57:12.449774+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: PCIE GART of 512M enabled (table at 0x00000083DAB00000).
+2026-07-21T10:57:12.449973+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: [drm] Loading DMUB firmware via PSP: version=0x0A000601
+2026-07-21T10:57:12.450161+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: Found VCN firmware Version ENC: 1.11 DEC: 9 VEP: 0 Revision: 1
+2026-07-21T10:57:12.481856+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: RTL: fw version 0x0474842d
+2026-07-21T10:57:12.504004+02:00 HOST-REDACTED-B systemd-journald[556]: Received client request to flush runtime journal.
+2026-07-21T10:57:12.548854+02:00 HOST-REDACTED-B kernel: input: Logitech K830 as /devices/pci0000:00/0000:00:01.2/0000:02:00.0/usb1/1-8/1-8:1.2/0003:046D:C52B.0004/0003:046D:4032.0005/input/input25
+2026-07-21T10:57:12.584853+02:00 HOST-REDACTED-B kernel: logitech-hidpp-device 0003:046D:4032.0005: input,hidraw2: USB HID v1.11 Keyboard [Logitech K830] on usb-0000:02:00.0-8/input2:1
+2026-07-21T10:57:12.662861+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: AOSP extensions version v1.00
+2026-07-21T10:57:12.673852+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: RAS: optional ras ta ucode is not available
+2026-07-21T10:57:12.677857+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: RAP: optional rap ta ucode is not available
+2026-07-21T10:57:12.678107+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: SECUREDISPLAY: optional securedisplay ta ucode is not available
+2026-07-21T10:57:12.678324+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: smu driver if version = 0x0000002e, smu fw if version = 0x00000032, smu fw program = 0, smu fw version = 0x00664500 (102.69.0)
+2026-07-21T10:57:12.678540+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: SMU driver if version not matched
+2026-07-21T10:57:12.679894+02:00 HOST-REDACTED-B unknown: SteamOS System Info: SteamOS
+2026-07-21T10:57:12.685853+02:00 HOST-REDACTED-B unknown: SteamOS System Info: Partition:
+2026-07-21T10:57:12.685875+02:00 HOST-REDACTED-B unknown: B
+2026-07-21T10:57:12.685899+02:00 HOST-REDACTED-B unknown: SteamOS System Info: Hardware identifiers:
+2026-07-21T10:57:12.687906+02:00 HOST-REDACTED-B unknown: SteamOS System Info:        board_identifier: SERIAL-REDACTED-1
+2026-07-21T10:57:12.693856+02:00 HOST-REDACTED-B unknown: SteamOS System Info:        product_identifier: SERIAL-REDACTED-2
+2026-07-21T10:57:12.695908+02:00 HOST-REDACTED-B unknown: SteamOS System Info: Battery:
+2026-07-21T10:57:12.695925+02:00 HOST-REDACTED-B unknown: SteamOS System Info:        No battery found!
+2026-07-21T10:57:12.695937+02:00 HOST-REDACTED-B unknown: SteamOS System Info: Boot Config:
+2026-07-21T10:57:12.708858+02:00 HOST-REDACTED-B kernel: Bluetooth: BNEP (Ethernet Emulation) ver 1.3
+2026-07-21T10:57:12.708901+02:00 HOST-REDACTED-B kernel: Bluetooth: BNEP filters: protocol multicast
+2026-07-21T10:57:12.708924+02:00 HOST-REDACTED-B kernel: Bluetooth: BNEP socket layer initialized
+2026-07-21T10:57:12.710855+02:00 HOST-REDACTED-B kernel: Bluetooth: MGMT ver 1.23
+2026-07-21T10:57:12.710887+02:00 HOST-REDACTED-B unknown: SteamOS System Info:        A       boot-attempts        0
+2026-07-21T10:57:12.716888+02:00 HOST-REDACTED-B unknown: SteamOS System Info:        A          boot-count        3
+2026-07-21T10:57:12.718855+02:00 HOST-REDACTED-B kernel: NET: Registered PF_ALG protocol family
+2026-07-21T10:57:12.719856+02:00 HOST-REDACTED-B unknown: SteamOS System Info:        A   boot-requested-at        20260720152911
+2026-07-21T10:57:12.723957+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: SMU is initialized successfully!
+2026-07-21T10:57:12.724303+02:00 HOST-REDACTED-B unknown: SteamOS System Info:        A           boot-time        20260720153020
+2026-07-21T10:57:12.725913+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: [drm] Display Core v3.2.334 initialized on DCN 4.0.1
+2026-07-21T10:57:12.726159+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: [drm] DP-HDMI FRL PCON supported
+2026-07-21T10:57:12.731241+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: [drm] DMUB hardware initialized: version=0x0A000601
+2026-07-21T10:57:12.731463+02:00 HOST-REDACTED-B unknown: SteamOS System Info:        A             comment        [2026-07-20 17:30:20 +0200] bootconf mode: boot-ok
+2026-07-21T10:57:12.735266+02:00 HOST-REDACTED-B unknown: SteamOS System Info:        A       image-invalid        0
+2026-07-21T10:57:12.743856+02:00 HOST-REDACTED-B unknown: SteamOS System Info:        B       boot-attempts        1
+2026-07-21T10:57:12.747855+02:00 HOST-REDACTED-B kernel: PEFILE: Unsigned PE binary
+2026-07-21T10:57:12.749873+02:00 HOST-REDACTED-B unknown: SteamOS System Info:        B          boot-count        17
+2026-07-21T10:57:12.753852+02:00 HOST-REDACTED-B unknown: SteamOS System Info:        B   boot-requested-at        20260720174117
+2026-07-21T10:57:12.759855+02:00 HOST-REDACTED-B unknown: SteamOS System Info:        B           boot-time        20260721064918
+2026-07-21T10:57:12.763859+02:00 HOST-REDACTED-B unknown: SteamOS System Info:        B             comment        [2026-07-21 08:49:18 +0200] bootconf mode: boot-ok
+2026-07-21T10:57:12.767892+02:00 HOST-REDACTED-B unknown: SteamOS System Info:        B       image-invalid        0
+2026-07-21T10:57:13.117857+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: [drm] REG_WAIT timeout 1us * 150000 tries - optc401_disable_crtc line:230
+2026-07-21T10:57:13.119850+02:00 HOST-REDACTED-B kernel: snd_hda_intel 0000:09:00.1: bound 0000:09:00.0 (ops amdgpu_dm_audio_component_bind_ops [amdgpu])
+2026-07-21T10:57:13.120852+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: [drm] PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+2026-07-21T10:57:13.121046+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: [drm] PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+2026-07-21T10:57:13.172853+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: [drm] PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+2026-07-21T10:57:13.173065+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: program CP_MES_CNTL : 0x4000000
+2026-07-21T10:57:13.173260+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: program CP_MES_CNTL : 0xc000000
+2026-07-21T10:57:13.173442+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: MES FW version must be >= 0x82 to enable LR compute workaround.
+2026-07-21T10:57:13.249858+02:00 HOST-REDACTED-B kernel: amdgpu: HMM registered 16304MB device memory
+2026-07-21T10:57:13.250876+02:00 HOST-REDACTED-B kernel: kfd kfd: amdgpu: Allocated 3969056 bytes on gart
+2026-07-21T10:57:13.251059+02:00 HOST-REDACTED-B kernel: kfd kfd: amdgpu: Total number of KFD nodes to be created: 1
+2026-07-21T10:57:13.251167+02:00 HOST-REDACTED-B kernel: amdgpu: Virtual CRAT table created for GPU
+2026-07-21T10:57:13.251188+02:00 HOST-REDACTED-B kernel: amdgpu: Topology: Add dGPU node [0x7590:0x1002]
+2026-07-21T10:57:13.251197+02:00 HOST-REDACTED-B kernel: kfd kfd: amdgpu: added device 1002:7590
+2026-07-21T10:57:13.251301+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: SE 2, SH per SE 2, CU per SH 8, active_cu_number 32
+2026-07-21T10:57:13.251490+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: ring gfx_0.0.0 uses VM inv eng 0 on hub 0
+2026-07-21T10:57:13.251668+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: ring comp_1.0.0 uses VM inv eng 1 on hub 0
+2026-07-21T10:57:13.251851+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: ring comp_1.1.0 uses VM inv eng 4 on hub 0
+2026-07-21T10:57:13.252036+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: ring comp_1.0.1 uses VM inv eng 6 on hub 0
+2026-07-21T10:57:13.252263+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: ring comp_1.1.1 uses VM inv eng 7 on hub 0
+2026-07-21T10:57:13.252450+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: ring sdma0 uses VM inv eng 8 on hub 0
+2026-07-21T10:57:13.252626+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: ring sdma1 uses VM inv eng 9 on hub 0
+2026-07-21T10:57:13.252802+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: ring vcn_unified_0 uses VM inv eng 0 on hub 8
+2026-07-21T10:57:13.252986+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: ring jpeg_dec uses VM inv eng 1 on hub 8
+2026-07-21T10:57:13.253160+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: amdgpu: Using BACO for runtime pm
+2026-07-21T10:57:13.253852+02:00 HOST-REDACTED-B kernel: [drm] Initialized amdgpu 3.64.0 for 0000:09:00.0 on minor 0
+2026-07-21T10:57:13.295860+02:00 HOST-REDACTED-B kernel: fbcon: amdgpudrmfb (fb0) is primary device
+2026-07-21T10:57:13.295896+02:00 HOST-REDACTED-B kernel: Console: switching consoles 4-6 to colour frame buffer device 240x67
+2026-07-21T10:57:13.295907+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: [drm] fb0: amdgpudrmfb frame buffer device
+2026-07-21T10:57:13.347852+02:00 HOST-REDACTED-B kernel: Realtek Internal NBASE-T PHY r8169-0-600:00: attached PHY driver (mii_bus:phy_addr=r8169-0-600:00, irq=MAC)
+2026-07-21T10:57:13.390858+02:00 HOST-REDACTED-B kernel: [drm] pre_validate_dsc:1628 MST_DSC dsc precompute is not needed
+2026-07-21T10:57:13.504853+02:00 HOST-REDACTED-B kernel: r8169 0000:06:00.0 enp6s0: Link is Down
+2026-07-21T10:57:13.745857+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: [drm] REG_WAIT timeout 1us * 150000 tries - optc401_disable_crtc line:230
+2026-07-21T10:57:13.859853+02:00 HOST-REDACTED-B kernel: hid-generic 0005:045E:02FD.0006: unknown main item tag 0x0
+2026-07-21T10:57:13.860061+02:00 HOST-REDACTED-B kernel: input: Xbox Wireless Controller as /devices/virtual/misc/uhid/0005:045E:02FD.0006/input/input26
+2026-07-21T10:57:13.860073+02:00 HOST-REDACTED-B kernel: input: Xbox Wireless Controller Consumer Control as /devices/virtual/misc/uhid/0005:045E:02FD.0006/input/input27
+2026-07-21T10:57:13.860083+02:00 HOST-REDACTED-B kernel: hid-generic 0005:045E:02FD.0006: input,hidraw3: BLUETOOTH HID v9.03 Gamepad [Xbox Wireless Controller] on MAC-REDACTED
+2026-07-21T10:57:13.911854+02:00 HOST-REDACTED-B kernel: microsoft 0005:045E:02FD.0006: unknown main item tag 0x0
+2026-07-21T10:57:13.912085+02:00 HOST-REDACTED-B kernel: input: Xbox Wireless Controller as /devices/virtual/misc/uhid/0005:045E:02FD.0006/input/input28
+2026-07-21T10:57:13.912111+02:00 HOST-REDACTED-B kernel: microsoft 0005:045E:02FD.0006: input,hidraw3: BLUETOOTH HID v9.03 Gamepad [Xbox Wireless Controller] on MAC-REDACTED
+2026-07-21T10:57:14.095853+02:00 HOST-REDACTED-B kernel: input: steamos-manager as /devices/virtual/input/input29
+2026-07-21T10:57:14.197853+02:00 HOST-REDACTED-B kernel: Bluetooth: RFCOMM TTY layer initialized
+2026-07-21T10:57:14.197884+02:00 HOST-REDACTED-B kernel: Bluetooth: RFCOMM socket layer initialized
+2026-07-21T10:57:14.197910+02:00 HOST-REDACTED-B kernel: Bluetooth: RFCOMM ver 1.11
+2026-07-21T10:57:14.297865+02:00 HOST-REDACTED-B kernel: /proc/cgroups lists only v1 controllers, use cgroup.controllers of root cgroup for v2 info
+2026-07-21T10:57:16.705933+02:00 HOST-REDACTED-B kernel: r8169 0000:06:00.0 enp6s0: Link is Up - 2.5Gbps/Full - flow control rx/tx
+2026-07-21T10:57:29.994282+02:00 HOST-REDACTED-B kernel: nvme nvme0: using unchecked data buffer
+2026-07-21T10:57:29.997860+02:00 HOST-REDACTED-B kernel: block nvme0n1: No UUID available providing old NGUID
+2026-07-21T10:57:31.220866+02:00 HOST-REDACTED-B kernel: HDR SB:eb 02 00 60 88 08 39 c8 31 91 88 fe 1c df 0a 09
+2026-07-21T10:57:31.220970+02:00 HOST-REDACTED-B kernel: HDR SB:3d 47 40 1f 03 00 00 1f 03 1f 03 00 00 00 00 00
+2026-07-21T10:57:31.222864+02:00 HOST-REDACTED-B kernel: HDR SB:eb 02 00 60 88 08 39 c8 31 91 88 fe 1c df 0a 09
+2026-07-21T10:57:31.222897+02:00 HOST-REDACTED-B kernel: HDR SB:3d 47 40 1f 03 00 00 1f 03 1f 03 00 00 00 00 00
+2026-07-21T10:57:31.222934+02:00 HOST-REDACTED-B kernel: HDR SB:eb 02 00 60 88 08 39 c8 31 91 88 fe 1c df 0a 09
+2026-07-21T10:57:31.222950+02:00 HOST-REDACTED-B kernel: HDR SB:3d 47 40 1f 03 00 00 1f 03 1f 03 00 00 00 00 00
+2026-07-21T10:57:31.224891+02:00 HOST-REDACTED-B kernel: HDR SB:eb 02 00 60 88 08 39 c8 31 91 88 fe 1c df 0a 09
+2026-07-21T10:57:31.224923+02:00 HOST-REDACTED-B kernel: HDR SB:3d 47 40 1f 03 00 00 1f 03 1f 03 00 00 00 00 00
+2026-07-21T10:57:31.224963+02:00 HOST-REDACTED-B kernel: HDR SB:eb 02 00 60 88 08 39 c8 31 91 88 fe 1c df 0a 09
+2026-07-21T10:57:31.224979+02:00 HOST-REDACTED-B kernel: HDR SB:3d 47 40 1f 03 00 00 1f 03 1f 03 00 00 00 00 00
+2026-07-21T10:57:31.226868+02:00 HOST-REDACTED-B kernel: HDR SB:eb 02 00 60 88 08 39 c8 31 91 88 fe 1c df 0a 09
+2026-07-21T10:57:31.226922+02:00 HOST-REDACTED-B kernel: HDR SB:3d 47 40 1f 03 00 00 1f 03 1f 03 00 00 00 00 00
+2026-07-21T10:57:31.226935+02:00 HOST-REDACTED-B kernel: HDR SB:eb 02 00 60 88 08 39 c8 31 91 88 fe 1c df 0a 09
+2026-07-21T10:57:31.226944+02:00 HOST-REDACTED-B kernel: HDR SB:3d 47 40 1f 03 00 00 1f 03 1f 03 00 00 00 00 00
+2026-07-21T10:57:31.228857+02:00 HOST-REDACTED-B kernel: HDR SB:eb 02 00 60 88 08 39 c8 31 91 88 fe 1c df 0a 09
+2026-07-21T10:57:31.228884+02:00 HOST-REDACTED-B kernel: HDR SB:3d 47 40 1f 03 00 00 1f 03 1f 03 00 00 00 00 00
+2026-07-21T10:57:31.491863+02:00 HOST-REDACTED-B kernel: input: Microsoft X-Box 360 pad 0 as /devices/virtual/input/input30
+2026-07-21T10:58:20.833529+02:00 HOST-REDACTED-B kernel: logitech-hidpp-device 0003:046D:4032.0005: HID++ 4.1 device connected.
+2026-07-21T10:58:51.155531+02:00 HOST-REDACTED-B kernel: HDR SB:eb 02 00 60 88 08 39 c8 31 91 88 fe 1c df 0a 09
+2026-07-21T10:58:51.155611+02:00 HOST-REDACTED-B kernel: HDR SB:3d 47 40 1f 03 00 00 1f 03 1f 03 00 00 00 00 00
+2026-07-21T10:58:51.356532+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: [drm] CRB Config Warning: DET size (3,14,8,0) + Compbuf size (1) >  CRB segments (21)
+2026-07-21T11:15:01.370536+02:00 HOST-REDACTED-B kernel: microsoft 0005:045E:02FD.0007: unknown main item tag 0x0
+2026-07-21T11:15:01.371870+02:00 HOST-REDACTED-B kernel: input: Xbox Wireless Controller as /devices/virtual/misc/uhid/0005:045E:02FD.0007/input/input31
+2026-07-21T11:15:01.371902+02:00 HOST-REDACTED-B kernel: microsoft 0005:045E:02FD.0007: input,hidraw3: BLUETOOTH HID v9.03 Gamepad [Xbox Wireless Controller] on MAC-REDACTED
+2026-07-21T11:15:02.676535+02:00 HOST-REDACTED-B kernel: input: Microsoft X-Box 360 pad 0 as /devices/virtual/input/input32
+2026-07-21T11:47:30.122530+02:00 HOST-REDACTED-B kernel: HDR SB:eb 02 00 60 88 08 39 c8 31 91 88 fe 1c df 0a 09
+2026-07-21T11:47:30.123585+02:00 HOST-REDACTED-B kernel: HDR SB:3d 47 40 1f 03 00 00 1f 03 1f 03 00 00 00 00 00
+2026-07-21T11:47:30.382531+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: [drm] CRB Config Warning: DET size (8,3,14,0) + Compbuf size (1) >  CRB segments (21)
+2026-07-21T11:47:30.384528+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: [drm] CRB Config Warning: DET size (8,2,14,0) + Compbuf size (1) >  CRB segments (21)
+2026-07-21T12:24:51.232533+02:00 HOST-REDACTED-B kernel: amdgpu 0000:09:00.0: [drm] CRB Config Warning: DET size (11,2,8,0) + Compbuf size (1) >  CRB segments (21)
+2026-07-21T12:27:33.662529+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: ACL packet for unknown connection handle 2
+2026-07-21T12:27:33.662549+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: ACL packet for unknown connection handle 2
+2026-07-21T12:27:33.662561+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: ACL packet for unknown connection handle 2
+2026-07-21T12:27:33.670529+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: ACL packet for unknown connection handle 2
+2026-07-21T12:27:33.678589+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: ACL packet for unknown connection handle 2
+2026-07-21T12:27:33.685548+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: ACL packet for unknown connection handle 2
+2026-07-21T12:27:33.694531+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: ACL packet for unknown connection handle 2
+2026-07-21T12:27:33.701559+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: ACL packet for unknown connection handle 2
+2026-07-21T12:27:33.708529+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: ACL packet for unknown connection handle 2
+2026-07-21T12:27:33.716530+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: ACL packet for unknown connection handle 2
+2026-07-21T12:27:33.724527+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: ACL packet for unknown connection handle 2
+2026-07-21T12:27:33.730528+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: ACL packet for unknown connection handle 2
+2026-07-21T12:27:33.739533+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: ACL packet for unknown connection handle 2
+2026-07-21T12:27:33.745528+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: ACL packet for unknown connection handle 2
+2026-07-21T12:27:33.753529+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: ACL packet for unknown connection handle 2
+2026-07-21T12:27:33.761528+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: ACL packet for unknown connection handle 2
+2026-07-21T12:27:33.770531+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: ACL packet for unknown connection handle 2
+2026-07-21T12:27:33.776527+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: ACL packet for unknown connection handle 2
+2026-07-21T12:27:33.784525+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: ACL packet for unknown connection handle 2
+2026-07-21T12:27:33.784548+02:00 HOST-REDACTED-B kernel: HDR SB:eb 02 00 60 88 08 39 c8 31 91 88 fe 1c df 0a 09
+2026-07-21T12:27:33.784560+02:00 HOST-REDACTED-B kernel: HDR SB:3d 47 40 1f 03 00 00 1f 03 1f 03 00 00 00 00 00
+2026-07-21T12:27:33.791527+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: ACL packet for unknown connection handle 2
+2026-07-21T12:27:33.799526+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: ACL packet for unknown connection handle 2
+2026-07-21T12:27:33.805526+02:00 HOST-REDACTED-B kernel: Bluetooth: hci0: ACL packet for unknown connection handle 2

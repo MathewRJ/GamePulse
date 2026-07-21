@@ -1,0 +1,92 @@
+2026-07-21T09:13:13.248797+02:00 HOST-REDACTED-A systemd-journald[635]: Received client request to flush runtime journal.
+2026-07-21T09:13:13.338531+02:00 HOST-REDACTED-A unknown: SteamOS System Info: SteamOS
+2026-07-21T09:13:13.342470+02:00 HOST-REDACTED-A unknown: SteamOS System Info: Partition:
+2026-07-21T09:13:13.342485+02:00 HOST-REDACTED-A unknown: B
+2026-07-21T09:13:13.342490+02:00 HOST-REDACTED-A unknown: SteamOS System Info: Hardware identifiers:
+2026-07-21T09:13:13.345481+02:00 HOST-REDACTED-A unknown: SteamOS System Info:        board_identifier: SERIAL-REDACTED-1
+2026-07-21T09:13:13.346530+02:00 HOST-REDACTED-A unknown: SteamOS System Info:        product_identifier: SERIAL-REDACTED-2
+2026-07-21T09:13:13.348478+02:00 HOST-REDACTED-A unknown: SteamOS System Info: Battery:
+2026-07-21T09:13:13.348486+02:00 HOST-REDACTED-A unknown: SteamOS System Info:        No battery found!
+2026-07-21T09:13:13.348492+02:00 HOST-REDACTED-A unknown: SteamOS System Info: Boot Config:
+2026-07-21T09:13:13.352477+02:00 HOST-REDACTED-A unknown: SteamOS System Info:        A       boot-attempts        0
+2026-07-21T09:13:13.354523+02:00 HOST-REDACTED-A kernel: Bluetooth: BNEP (Ethernet Emulation) ver 1.3
+2026-07-21T09:13:13.354532+02:00 HOST-REDACTED-A kernel: Bluetooth: BNEP filters: protocol multicast
+2026-07-21T09:13:13.354538+02:00 HOST-REDACTED-A kernel: Bluetooth: BNEP socket layer initialized
+2026-07-21T09:13:13.354544+02:00 HOST-REDACTED-A unknown: SteamOS System Info:        A          boot-count        54
+2026-07-21T09:13:13.354550+02:00 HOST-REDACTED-A kernel: ramoops: using module parameters
+2026-07-21T09:13:13.355466+02:00 HOST-REDACTED-A kernel: pstore: Using crash dump compression: deflate
+2026-07-21T09:13:13.355481+02:00 HOST-REDACTED-A kernel: pstore: Registered ramoops as persistent store backend
+2026-07-21T09:13:13.355487+02:00 HOST-REDACTED-A kernel: ramoops: using 0x500000@0xffde80000, ecc: 0
+2026-07-21T09:13:13.355493+02:00 HOST-REDACTED-A unknown: SteamOS System Info:        A   boot-requested-at        20260713080309
+2026-07-21T09:13:13.357476+02:00 HOST-REDACTED-A unknown: SteamOS System Info:        A           boot-time        20260720065901
+2026-07-21T09:13:13.358465+02:00 HOST-REDACTED-A unknown: SteamOS System Info:        A             comment        [2026-07-20 08:59:01 +0200] bootconf mode: boot-ok
+2026-07-21T09:13:13.360473+02:00 HOST-REDACTED-A unknown: SteamOS System Info:        A       image-invalid        0
+2026-07-21T09:13:13.362510+02:00 HOST-REDACTED-A unknown: SteamOS System Info:        B       boot-attempts        1
+2026-07-21T09:13:13.364469+02:00 HOST-REDACTED-A unknown: SteamOS System Info:        B          boot-count        53
+2026-07-21T09:13:13.365478+02:00 HOST-REDACTED-A unknown: SteamOS System Info:        B   boot-requested-at        20260720083427
+2026-07-21T09:13:13.370475+02:00 HOST-REDACTED-A unknown: SteamOS System Info:        B           boot-time        20260720083552
+2026-07-21T09:13:13.371494+02:00 HOST-REDACTED-A unknown: SteamOS System Info:        B             comment        [2026-07-20 10:35:52 +0200] bootconf mode: boot-ok
+2026-07-21T09:13:13.373468+02:00 HOST-REDACTED-A unknown: SteamOS System Info:        B       image-invalid        0
+2026-07-21T09:13:13.772467+02:00 HOST-REDACTED-A kernel: Realtek Internal NBASE-T PHY r8169-0-c00:00: attached PHY driver (mii_bus:phy_addr=r8169-0-c00:00, irq=MAC)
+2026-07-21T09:13:14.142467+02:00 HOST-REDACTED-A kernel: r8169 0000:0c:00.0 enp12s0: Link is Down
+2026-07-21T09:13:14.200465+02:00 HOST-REDACTED-A kernel: cfg80211: Loading compiled-in X.509 certificates for regulatory database
+2026-07-21T09:13:14.200489+02:00 HOST-REDACTED-A kernel: Loaded X.509 cert 'sforshee: 00b28ddf47aef9cea7'
+2026-07-21T09:13:14.200500+02:00 HOST-REDACTED-A kernel: Loaded X.509 cert 'wens: 61c038651aabdcf94bd0ac7ff06c7248db18c600'
+2026-07-21T09:13:14.397475+02:00 HOST-REDACTED-A kernel: input: steamos-manager as /devices/virtual/input/input30
+2026-07-21T09:13:14.654464+02:00 HOST-REDACTED-A kernel: /proc/cgroups lists only v1 controllers, use cgroup.controllers of root cgroup for v2 info
+2026-07-21T09:13:16.343813+02:00 HOST-REDACTED-A kernel: xhci_hcd 0000:79:00.0: WARN: xHC CMD_RUN timeout
+2026-07-21T09:13:16.343924+02:00 HOST-REDACTED-A kernel: xhci_hcd 0000:79:00.0: PM: suspend_common(): xhci_pci_suspend returns -110
+2026-07-21T09:13:16.343976+02:00 HOST-REDACTED-A kernel: xhci_hcd 0000:79:00.0: can't suspend (hcd_pci_runtime_suspend returned -110)
+2026-07-21T09:13:18.280473+02:00 HOST-REDACTED-A kernel: usbcore: registered new interface driver snd-usb-audio
+2026-07-21T09:13:18.882739+02:00 HOST-REDACTED-A kernel: mlx4_core 0000:0e:00.0: DMFS high rate steer mode is: disabled performance optimized steering
+2026-07-21T09:13:18.882948+02:00 HOST-REDACTED-A kernel: mlx4_core 0000:0e:00.0: 31.504 Gb/s available PCIe bandwidth (8.0 GT/s PCIe x4 link)
+2026-07-21T09:13:18.952466+02:00 HOST-REDACTED-A kernel: pps_core: LinuxPPS API ver. 1 registered
+2026-07-21T09:13:18.952480+02:00 HOST-REDACTED-A kernel: pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+2026-07-21T09:13:18.954478+02:00 HOST-REDACTED-A kernel: PTP clock support registered
+2026-07-21T09:13:18.959477+02:00 HOST-REDACTED-A kernel: mlx4_en: Mellanox ConnectX HCA Ethernet driver v4.0-0
+2026-07-21T09:13:18.959493+02:00 HOST-REDACTED-A kernel: mlx4_en 0000:0e:00.0: Activating port:1
+2026-07-21T09:13:18.961473+02:00 HOST-REDACTED-A kernel: mlx4_en: 0000:0e:00.0: Port 1: Using 16 TX rings
+2026-07-21T09:13:18.961480+02:00 HOST-REDACTED-A kernel: mlx4_en: 0000:0e:00.0: Port 1: Using 16 RX rings
+2026-07-21T09:13:18.962474+02:00 HOST-REDACTED-A kernel: mlx4_en: 0000:0e:00.0: Port 1: Initializing port
+2026-07-21T09:13:18.962478+02:00 HOST-REDACTED-A kernel: mlx4_en 0000:0e:00.0: registered PHC clock
+2026-07-21T09:13:18.967481+02:00 HOST-REDACTED-A kernel: <mlx4_ib> mlx4_ib_probe: mlx4_ib: Mellanox ConnectX InfiniBand driver v4.0-0
+2026-07-21T09:13:18.968463+02:00 HOST-REDACTED-A kernel: <mlx4_ib> mlx4_ib_probe: counter index 1 for port 1 allocated 1
+2026-07-21T09:13:18.974467+02:00 HOST-REDACTED-A kernel: mlx4_core 0000:0e:00.0 enp14s0: renamed from eth0
+2026-07-21T09:13:18.988467+02:00 HOST-REDACTED-A kernel: mlx4_en: enp14s0: Steering Mode 1
+2026-07-21T09:13:19.008468+02:00 HOST-REDACTED-A kernel: mlx4_en: enp14s0: Link Down
+2026-07-21T09:13:21.455466+02:00 HOST-REDACTED-A kernel: mlx4_en: enp14s0: Link Up
+2026-07-21T09:13:21.456472+02:00 HOST-REDACTED-A kernel: mlx4_core 0000:0e:00.0 mlx4_0: Port: 1 Link ACTIVE
+2026-07-21T09:13:21.514471+02:00 HOST-REDACTED-A kernel: mlx4_en: enp14s0: Steering Mode 1
+2026-07-21T09:13:21.544465+02:00 HOST-REDACTED-A kernel: mlx4_en: enp14s0: Link Down
+2026-07-21T09:13:21.610465+02:00 HOST-REDACTED-A kernel: mlx4_core 0000:0e:00.0 mlx4_0: Port: 1 Link DOWN
+2026-07-21T09:13:21.610612+02:00 HOST-REDACTED-A kernel: mlx4_en: enp14s0: Link Up
+2026-07-21T09:13:21.705469+02:00 HOST-REDACTED-A kernel: nvme nvme0: using unchecked data buffer
+2026-07-21T09:13:42.776948+02:00 HOST-REDACTED-A systemd-journald[635]: Time jumped backwards, rotating.
+2026-07-21T10:02:30.732796+02:00 HOST-REDACTED-A kernel: BTRFS: device label rootfs devid 1 transid 99 /dev/nvme2n1p4 (259:11) scanned by mount (8299)
+2026-07-21T10:02:30.739044+02:00 HOST-REDACTED-A kernel: BTRFS info (device nvme2n1p4): first mount of filesystem UUID-REDACTED
+2026-07-21T10:02:30.739058+02:00 HOST-REDACTED-A kernel: BTRFS info (device nvme2n1p4): using crc32c (crc32c-x86) checksum algorithm
+2026-07-21T10:02:30.739066+02:00 HOST-REDACTED-A kernel: BTRFS info (device nvme2n1p4): enabling ssd optimizations
+2026-07-21T10:02:30.739072+02:00 HOST-REDACTED-A kernel: BTRFS info (device nvme2n1p4): turning on async discard
+2026-07-21T10:02:30.739079+02:00 HOST-REDACTED-A kernel: BTRFS info (device nvme2n1p4): enabling free space tree
+2026-07-21T10:02:30.752806+02:00 HOST-REDACTED-A kernel: BTRFS info (device nvme2n1p4): last unmount of filesystem UUID-REDACTED
+2026-07-21T10:11:11.966809+02:00 HOST-REDACTED-A kernel: amdgpu 0000:03:00.0: [drm] *ERROR* dpcd_set_link_settings:1117: core_link_write_dpcd (DP_DOWNSPREAD_CTRL) failed
+2026-07-21T10:11:12.008809+02:00 HOST-REDACTED-A kernel: amdgpu 0000:03:00.0: [drm] *ERROR* dpcd_set_link_settings:1122: core_link_write_dpcd (DP_LANE_COUNT_SET) failed
+2026-07-21T10:11:12.050806+02:00 HOST-REDACTED-A kernel: amdgpu 0000:03:00.0: [drm] *ERROR* dpcd_set_link_settings:1150: core_link_write_dpcd (DP_LINK_BW_SET) failed
+2026-07-21T10:11:12.974808+02:00 HOST-REDACTED-A kernel: amdgpu 0000:03:00.0: [drm] *ERROR* dpcd_set_link_settings:1117: core_link_write_dpcd (DP_DOWNSPREAD_CTRL) failed
+2026-07-21T10:11:13.016808+02:00 HOST-REDACTED-A kernel: amdgpu 0000:03:00.0: [drm] *ERROR* dpcd_set_link_settings:1122: core_link_write_dpcd (DP_LANE_COUNT_SET) failed
+2026-07-21T10:11:13.058837+02:00 HOST-REDACTED-A kernel: amdgpu 0000:03:00.0: [drm] *ERROR* dpcd_set_link_settings:1150: core_link_write_dpcd (DP_LINK_BW_SET) failed
+2026-07-21T10:11:14.030807+02:00 HOST-REDACTED-A kernel: amdgpu 0000:03:00.0: [drm] *ERROR* dpcd_set_link_settings:1117: core_link_write_dpcd (DP_DOWNSPREAD_CTRL) failed
+2026-07-21T10:11:14.072796+02:00 HOST-REDACTED-A kernel: amdgpu 0000:03:00.0: [drm] *ERROR* dpcd_set_link_settings:1122: core_link_write_dpcd (DP_LANE_COUNT_SET) failed
+2026-07-21T10:11:14.114818+02:00 HOST-REDACTED-A kernel: amdgpu 0000:03:00.0: [drm] *ERROR* dpcd_set_link_settings:1150: core_link_write_dpcd (DP_LINK_BW_SET) failed
+2026-07-21T10:11:14.220797+02:00 HOST-REDACTED-A kernel: CHTTPClientThre[4709]: segfault at d76b3084 ip 00000000d76b3084 sp 00000000a3cfc890 error 14 likely on CPU 13 (core 5, socket 0)
+2026-07-21T10:11:14.220809+02:00 HOST-REDACTED-A kernel: Code: Unable to access opcode bytes at 0xd76b305a.
+2026-07-21T10:11:14.259805+02:00 HOST-REDACTED-A kernel: CHTTPClientThre[4610]: segfault at d76b3084 ip 00000000d76b3084 sp 00000000c12f8890 error 14 likely on CPU 0 (core 0, socket 0)
+2026-07-21T10:11:14.259812+02:00 HOST-REDACTED-A kernel: Code: Unable to access opcode bytes at 0xd76b305a.
+2026-07-21T10:11:14.298796+02:00 HOST-REDACTED-A kernel: CHTTPClientThre[4610]: segfault at d76b3084 ip 00000000d76b3084 sp 00000000c12f8890 error 14 likely on CPU 6 (core 6, socket 0)
+2026-07-21T10:11:14.298806+02:00 HOST-REDACTED-A kernel: Code: Unable to access opcode bytes at 0xd76b305a.
+2026-07-21T10:11:14.347798+02:00 HOST-REDACTED-A kernel: CHTTPClientThre[4662]: segfault at d76b3084 ip 00000000d76b3084 sp 00000000a51fd890 error 14 likely on CPU 12 (core 4, socket 0)
+2026-07-21T10:11:14.347820+02:00 HOST-REDACTED-A kernel: Code: Unable to access opcode bytes at 0xd76b305a.
+2026-07-21T10:11:15.134825+02:00 HOST-REDACTED-A kernel: amdgpu 0000:03:00.0: [drm] *ERROR* dpcd_set_link_settings:1117: core_link_write_dpcd (DP_DOWNSPREAD_CTRL) failed
+2026-07-21T10:11:15.175819+02:00 HOST-REDACTED-A kernel: amdgpu 0000:03:00.0: [drm] *ERROR* dpcd_set_link_settings:1122: core_link_write_dpcd (DP_LANE_COUNT_SET) failed
+2026-07-21T10:11:15.217835+02:00 HOST-REDACTED-A kernel: amdgpu 0000:03:00.0: [drm] *ERROR* dpcd_set_link_settings:1150: core_link_write_dpcd (DP_LINK_BW_SET) failed
+2026-07-21T10:11:15.683813+02:00 HOST-REDACTED-A kernel: amdgpu 0000:03:00.0: [drm] enabling link 1 failed: 15

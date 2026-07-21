@@ -1,0 +1,4 @@
+2026-07-21T23:59:00.000000+00:00 HOST-SYNTH kernel: pcieport 0000:00:03.1: Data Link Layer Link Active not set in 1000 msec
+2026-07-21T23:59:01.000000+00:00 HOST-SYNTH kernel: pcieport 0000:00:03.1: pciehp: Slot(0): Card not present
+2026-07-21T23:59:02.000000+00:00 HOST-SYNTH kernel: pcieport 0000:00:03.1: pciehp: Slot(0): Link Down
+2026-07-21T23:59:03.000000+00:00 HOST-SYNTH kernel: pci_bus 0000:03: busn_res: [bus 03] is empty

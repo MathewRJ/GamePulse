@@ -1,0 +1,2 @@
+# SYNTHETIC deliberately malformed authoritative PCI input for preflight.
+0000:03:00.0 vendor=0x1002 class=0x030000
