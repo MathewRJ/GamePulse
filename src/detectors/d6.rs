@@ -2,7 +2,9 @@
 //!
 //! The decision logic is deliberately independent of the filesystem so captured
 //! DRM state can be replayed exactly as it was collected.
-use super::contract::{self, DetectorContract, Diagnosis, Disposition, NotApplicable, Outcome};
+use super::contract::{
+    self, DetectorContract, Diagnosis, DiagnosisFields, Disposition, NotApplicable, Outcome,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::io::{self, Read};
@@ -83,7 +85,7 @@ struct GamescopeControl {
     valid_refresh_rates: Vec<f64>,
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)] // D6's private adapter preserves frozen caller behavior.
 fn diagnosis(
     disposition: Disposition,
     verdict: &str,
@@ -95,20 +97,22 @@ fn diagnosis(
     falsifier: impl Into<String>,
     host: Option<String>,
 ) -> Result<Diagnosis, String> {
-    Diagnosis::new(
+    Diagnosis::build(
         CONTRACT,
-        disposition,
-        verdict,
-        confidence,
-        confidence_basis,
-        evidence,
-        plain_language,
-        suggested_fixes,
-        falsifier,
-        vec![SUPPORTED_SCOPE.into()],
-        vec![],
-        NEAREST_ALTERNATIVE,
-        host,
+        DiagnosisFields {
+            disposition,
+            verdict: verdict.into(),
+            confidence,
+            confidence_basis: confidence_basis.into(),
+            evidence,
+            plain_language: plain_language.into(),
+            suggested_fixes,
+            falsifier: falsifier.into(),
+            supported_scope: vec![SUPPORTED_SCOPE.into()],
+            missing_evidence: vec![],
+            nearest_alternative: NEAREST_ALTERNATIVE.into(),
+            host,
+        },
     )
 }
 

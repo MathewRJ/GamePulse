@@ -41,38 +41,23 @@ pub struct Diagnosis {
 }
 
 impl Diagnosis {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        contract: DetectorContract,
-        disposition: Disposition,
-        verdict: &str,
-        confidence: f64,
-        confidence_basis: impl Into<String>,
-        evidence: Vec<String>,
-        plain_language: impl Into<String>,
-        suggested_fixes: Vec<String>,
-        falsifier: impl Into<String>,
-        supported_scope: Vec<String>,
-        missing_evidence: Vec<String>,
-        nearest_alternative: impl Into<String>,
-        host: Option<String>,
-    ) -> Result<Self, String> {
+    pub fn build(contract: DetectorContract, fields: DiagnosisFields) -> Result<Self, String> {
         let result = Self {
             timestamp: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, true),
             detector_id: contract.detector_id.into(),
             rule_version: contract.rule_version.into(),
-            verdict: verdict.into(),
-            confidence,
-            confidence_basis: confidence_basis.into(),
-            evidence,
-            plain_language: plain_language.into(),
-            suggested_fixes,
-            falsifier: falsifier.into(),
-            host,
-            supported_scope,
-            missing_evidence,
-            nearest_alternative: nearest_alternative.into(),
-            disposition,
+            verdict: fields.verdict,
+            confidence: fields.confidence,
+            confidence_basis: fields.confidence_basis,
+            evidence: fields.evidence,
+            plain_language: fields.plain_language,
+            suggested_fixes: fields.suggested_fixes,
+            falsifier: fields.falsifier,
+            host: fields.host,
+            supported_scope: fields.supported_scope,
+            missing_evidence: fields.missing_evidence,
+            nearest_alternative: fields.nearest_alternative,
+            disposition: fields.disposition,
         };
         result.validate(contract)?;
         Ok(result)
@@ -105,6 +90,23 @@ impl Diagnosis {
         }
         Ok(())
     }
+}
+
+/// Named construction fields keep detector contracts reviewable as they grow.
+#[derive(Clone, Debug)]
+pub struct DiagnosisFields {
+    pub disposition: Disposition,
+    pub verdict: String,
+    pub confidence: f64,
+    pub confidence_basis: String,
+    pub evidence: Vec<String>,
+    pub plain_language: String,
+    pub suggested_fixes: Vec<String>,
+    pub falsifier: String,
+    pub supported_scope: Vec<String>,
+    pub missing_evidence: Vec<String>,
+    pub nearest_alternative: String,
+    pub host: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]

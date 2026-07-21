@@ -49,7 +49,7 @@ and boot IDs. Every normalized file was UTF-8 validated.
 | `synthetic/clean-tail-prior-tail.log` | SYNTHETIC | `SYNTHETIC` | `576ae5af1ccd9519adc2839834e960656d673808dccc99706eed89f62fa59a5f` | SYNTHETIC; authored in normalized UTF-8 format. |
 | `synthetic/cross-slot-prior-tail.log` | SYNTHETIC | `SYNTHETIC` | `bfe2ed2066bc56f09b217c0a09de8389ac902a5a81ede667c61fda49183d61f0` | SYNTHETIC; authored in normalized UTF-8 format. |
 | `synthetic/different-device-at-bdf-pci-topology.txt` | SYNTHETIC | `SYNTHETIC` | `5b1da1284e6e5948f9c708df3920f52855cd7d2ea1daee35e0ce3d3e72cb9d7d` | SYNTHETIC; authored in normalized UTF-8 format. |
-| `synthetic/duplicate-id-ambiguity-pci-topology.txt` | SYNTHETIC | `SYNTHETIC` | `27259bddf8a70c197b72b4228b42cf0d865036f6e94235f1a49583e697596725` | SYNTHETIC; authored in normalized UTF-8 format. |
+| `synthetic/duplicate-id-ambiguity-pci-topology.txt` | SYNTHETIC | `SYNTHETIC` | `b40d1c4bb890eb61d4059571fc8cb32f5fc92a682bb767690118aa750608fbe6` | SYNTHETIC; authored in normalized UTF-8 format; path convention fix, 2026-07-21f rework. |
 | `synthetic/malformed-pci-topology.txt` | SYNTHETIC | `SYNTHETIC` | `d1f8c428cdcc548bb81c9c51a7b0386f5723e4380caf95f5f4b852778627e808` | SYNTHETIC; deliberately malformed preflight-negative input. |
 | `synthetic/multi-gpu-learn-pci-topology.txt` | SYNTHETIC | `SYNTHETIC` | `f182091a74b64857e74ade6d0667e825f5375ce2c44efc2cde2e218b26ef756d` | SYNTHETIC; authored in normalized UTF-8 format. |
 | `synthetic/outside-window-prior-tail.log` | SYNTHETIC | `SYNTHETIC` | `a293140b783db75ead7cdca3c2b0ba3116b899672e1137b7ba1e64bae458ed21` | SYNTHETIC; authored in normalized UTF-8 format. |
@@ -60,7 +60,7 @@ and boot IDs. Every normalized file was UTF-8 validated.
 | `synthetic/recovery-healthy-pci-topology.txt` | SYNTHETIC | `SYNTHETIC` | `55e9619ec2f24b550c63616ac122fd0be7c25e28793775bc063120c6d07a1e6f` | SYNTHETIC; authored in normalized UTF-8 format. |
 | `synthetic/threshold-minus-one-prior-tail.log` | SYNTHETIC | `SYNTHETIC` | `39b9f9fc164f93432d47d779f1b0ec734bc2b2a4c7894d737257214156358343` | SYNTHETIC; authored in normalized UTF-8 format. |
 | `synthetic/truncated-tail-prior-tail.log` | SYNTHETIC | `SYNTHETIC` | `edfbc9867f4cce9a97d89553e233ecdd30139f643bf3b748850c26c69ec90109` | SYNTHETIC; authored in normalized UTF-8 format. |
-| `synthetic/unique-relocation-pci-topology.txt` | SYNTHETIC | `SYNTHETIC` | `caecf98f273619ba24e784cd4134071f97ed9b12c6495f6051d4474445e55406` | SYNTHETIC; authored in normalized UTF-8 format. |
+| `synthetic/unique-relocation-pci-topology.txt` | SYNTHETIC | `SYNTHETIC` | `b716abd4e8e5ba8c1a53ea9b71d55cd7de15a3bc88fe75e91640e2330aa21334` | SYNTHETIC; authored in normalized UTF-8 format; path convention fix, 2026-07-21f rework. |
 | `synthetic/unpairable-boot-inventory.txt` | SYNTHETIC | `SYNTHETIC` | `dc61a0d2c5ced5d82cf8ab447755b830216b585bc90c52035160d4d120b034d1` | SYNTHETIC; deliberately unpairable boot-ID preflight input. |
 | `EXPECTED.md` | SYNTHETIC | `SYNTHETIC` | `a624c5baa3a5f433469c507afdea0f5f9dc614b2293c906e2ee767f393980136` | authored frozen oracle in normalized UTF-8 Markdown. |
 | `MANIFEST.md` | SYNTHETIC | `SYNTHETIC` | self-referential; verified by repository content review | authored provenance index. A literal SHA-256 cannot include itself; all other rows are hash-verifiable. |
