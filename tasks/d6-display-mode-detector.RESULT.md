@@ -15,7 +15,10 @@
 
 Fixture replay/manual CLI checks covered degraded (0.9, exit 1), healthy `ok`
 (exit 0), invalid (exit 1), one offline flag (exit 2), explicitly missing fixture
-(exit 2), and JSON `not-applicable` (exit 0). The Rust suite has 110 passing tests.
+(exit 2), and JSON `not-applicable` (exit 0). Six dependency-free CLI integration
+tests now cover Clap nesting, every required exit-code class, one-line diagnosis
+and typed-not-applicable JSON, human contract fields, and legacy `diagnose --output`
+behavior. The Rust suite has 116 passing tests.
 
 ## Live-replay verification (orchestrator-owned)
 
@@ -28,7 +31,7 @@ healthy (ok/exit 0) commands, EXIT-trap restoration proof, and before/after SHA-
 - `cargo fmt --check`: PASS
 - `cargo clippy --locked --all-targets -- -D warnings`: PASS
 - `cargo check --locked`: PASS
-- `cargo test --locked`: PASS (110 passed, 0 failed)
+- `cargo test --locked`: PASS (116 passed, 0 failed)
 - Linux CI feature gates (`cargo check` and clippy with `--features ebpf`): PASS
 - `bash scripts/smoke-test.sh ./target/debug/rigsignal-agent`: FAIL in this sandbox:
   the pre-existing smoke check could not observe the three required live network
@@ -36,5 +39,14 @@ healthy (ok/exit 0) commands, EXIT-trap restoration proof, and before/after SHA-
   because only the Linux Rust target is installed; it remains for CI.
 - STM recall/save: skipped because `stm.sh` cannot open its network socket in this
   sandbox.
-- Commit: blocked by the sandbox's read-only linked-worktree Git metadata
-  (`RigSignal/.git/worktrees/codex-d6-detector/index.lock` could not be created).
+- Commit: `b76ad2e` (`feat(d6): display mode-override detector — Rust port +
+  diagnose display CLI`) was created by the orchestrator.
+
+## Changed files
+
+- `src/detectors/mod.rs`
+- `src/detectors/d6.rs`
+- `src/main.rs`
+- `fixtures/d6/**`
+- `src/tests/d6_display_cli.rs`
+- `tasks/d6-display-mode-detector.RESULT.md`

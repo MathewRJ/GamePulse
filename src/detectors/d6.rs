@@ -331,6 +331,7 @@ fn degraded_mode(
     if branches.is_empty() {
         return None;
     }
+    let branch_count = branches.len();
     let mut evidence = vec![
         format!(
             "modes.cfg line {}: {}",
@@ -371,19 +372,7 @@ fn degraded_mode(
             state.gamescope_control.valid_refresh_rates, override_.hz
         ));
     }
-    Some((
-        if evidence
-            .iter()
-            .filter(|item| item.contains("degraded branch"))
-            .count()
-            >= 2
-        {
-            0.9
-        } else {
-            0.85
-        },
-        evidence,
-    ))
+    Some((if branch_count >= 2 { 0.9 } else { 0.85 }, evidence))
 }
 
 fn plain_bad(override_: &ModeOverride, connector: &Connector) -> String {
