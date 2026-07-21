@@ -11,8 +11,8 @@ are both supported; eBPF is Linux-only.
 0.3.0 adds RigSignal's first built-in diagnostic: `rigsignal-agent diagnose
 display` (D6) — a CLI check that compares a Gamescope `modes.cfg` override
 against the display state Gamescope is actually driving, and reports a
-verdict, cited evidence, a confidence score, and a falsifier, not just a
-frame-time graph.
+verdict, cited evidence, a confidence score, falsifier, supported scope,
+missing evidence, and nearest alternative — not just a frame-time graph.
 
 ---
 
@@ -109,7 +109,13 @@ rigsignal-agent diagnose display
 Exit codes are scriptable: `0` for `ok`/`not-applicable`, `1` for a real
 finding, `2` for an incomplete or invalid invocation. See
 [`docs/diagnose-display.md`](docs/diagnose-display.md) for the full
-verdict/evidence/confidence/falsifier contract and a real incident replay.
+verdict/evidence/confidence/falsifier/scope/missing-evidence/alternative
+contract and a real incident replay.
+
+RigSignal also includes D3, `rigsignal-agent diagnose gpu-boot`, for a GPU
+that disappears after a warm boot. It compares authoritative PCI sysfs state
+with retained boot journals and uses an explicit per-slot baseline. See
+[`docs/diagnose-gpu-boot.md`](docs/diagnose-gpu-boot.md).
 
 ---
 
@@ -168,6 +174,7 @@ See [`docs/STATUS.md`](docs/STATUS.md) for current release state and
 | Getting started | [`docs/getting-started.md`](docs/getting-started.md) | First install + first session |
 | Installation | [`docs/install.md`](docs/install.md) | Full install guide: Elastic Cloud, self-hosted, AUR, packages, systemd |
 | `diagnose display` (D6) | [`docs/diagnose-display.md`](docs/diagnose-display.md) | Display mode-override diagnostic — usage, verdicts, exit codes |
+| `diagnose gpu-boot` (D3) | [`docs/diagnose-gpu-boot.md`](docs/diagnose-gpu-boot.md) | PCI/journal GPU boot-enumeration diagnostic — explicit slot baseline, findings, and recovery |
 | Metrics reference | [`docs/metrics-reference.md`](docs/metrics-reference.md) | Field-by-field reference for every data stream |
 | Configuration reference | [`docs/configuration.md`](docs/configuration.md) | All config options |
 | eBPF kernel telemetry | [`docs/ebpf.md`](docs/ebpf.md) | eBPF daemon setup and probe reference |

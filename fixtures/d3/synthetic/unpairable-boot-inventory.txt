@@ -1,0 +1,2 @@
+IDX BOOT ID                          FIRST ENTRY                  LAST ENTRY
+  0 eeeeeeeeeeee4eee8eeeeeeeeeeeeeee Wed 2026-07-22 08:00:00 CEST Wed 2026-07-22 08:30:00 CEST

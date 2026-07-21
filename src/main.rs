@@ -39,6 +39,7 @@ use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 // ── CLI ───────────────────────────────────────────────────────────────────────
 
 #[derive(Subcommand)]
+#[allow(clippy::large_enum_variant)] // Diagnose owns its Clap action payload.
 enum Commands {
     /// Collect a bug-report snapshot: kernel, GPU driver, ES reachability, and
     /// a log of every probe step. Prints to stdout; use --output for a file.
@@ -74,6 +75,35 @@ enum DiagnoseAction {
         json: bool,
         #[arg(long, value_name = "NAME")]
         host: Option<String>,
+    },
+    /// Diagnose GPU enumeration across boots using PCI sysfs and journald.
+    GpuBoot {
+        #[arg(long)]
+        offline: bool,
+        #[arg(long, value_name = "PATH")]
+        journal_current: Option<PathBuf>,
+        #[arg(long, value_name = "PATH")]
+        journal_prior_kernel: Option<PathBuf>,
+        #[arg(long, value_name = "PATH")]
+        journal_prior_tail: Option<PathBuf>,
+        #[arg(long, value_name = "PATH")]
+        pci_snapshot: Option<PathBuf>,
+        #[arg(long, value_name = "PATH")]
+        boot_list: Option<PathBuf>,
+        #[arg(long, value_name = "ID")]
+        current_boot_id: Option<String>,
+        #[arg(long, value_name = "PATH")]
+        state_file: Option<PathBuf>,
+        #[arg(long, value_name = "BDF")]
+        slot: Option<String>,
+        #[arg(long)]
+        json: bool,
+        #[arg(long, value_name = "NAME")]
+        host: Option<String>,
+        #[arg(long)]
+        learn_baseline: bool,
+        #[arg(long)]
+        reset_baseline: bool,
     },
 }
 
@@ -697,25 +727,55 @@ async fn run() -> Result<ExitCode> {
         .with_writer(std::io::stderr)
         .init();
 
-    // Display diagnosis is self-contained and must work without RigSignal's
+    // Detector diagnoses are self-contained and must work without RigSignal's
     // telemetry configuration. Keep this before Config::load().
     if let Some(Commands::Diagnose {
-        action:
-            Some(DiagnoseAction::Display {
+        action: Some(action),
+        ..
+    }) = &cli.command
+    {
+        return Ok(match action {
+            DiagnoseAction::Display {
                 modes_cfg,
                 drm_state,
                 json,
                 host,
+            } => detectors::d6::run_cli(
+                modes_cfg.as_deref(),
+                drm_state.as_deref(),
+                *json,
+                host.clone(),
+            ),
+            DiagnoseAction::GpuBoot {
+                offline,
+                journal_current,
+                journal_prior_kernel,
+                journal_prior_tail,
+                pci_snapshot,
+                boot_list,
+                current_boot_id,
+                state_file,
+                slot,
+                json,
+                host,
+                learn_baseline,
+                reset_baseline,
+            } => detectors::d3::run_cli(detectors::d3::CliOptions {
+                offline: *offline,
+                journal_current: journal_current.clone(),
+                journal_prior_kernel: journal_prior_kernel.clone(),
+                journal_prior_tail: journal_prior_tail.clone(),
+                pci_snapshot: pci_snapshot.clone(),
+                boot_list: boot_list.clone(),
+                current_boot_id: current_boot_id.clone(),
+                state_file: state_file.clone(),
+                slot: slot.clone(),
+                json: *json,
+                host: host.clone(),
+                learn_baseline: *learn_baseline,
+                reset_baseline: *reset_baseline,
             }),
-        ..
-    }) = &cli.command
-    {
-        return Ok(detectors::d6::run_cli(
-            modes_cfg.as_deref(),
-            drm_state.as_deref(),
-            *json,
-            host.clone(),
-        ));
+        });
     }
 
     let cfg = config::Config::load(cli.config.as_ref())?;
@@ -741,7 +801,7 @@ async fn run() -> Result<ExitCode> {
             run_dllscan(pid)?;
             return Ok(ExitCode::SUCCESS);
         }
-        // The display arm returned above, before configuration loading.
+        // Detector arms returned above, before configuration loading.
         Some(Commands::Diagnose {
             action: Some(_), ..
         }) => unreachable!("display diagnosis was dispatched before Config::load"),

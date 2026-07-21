@@ -1,0 +1,3 @@
+IDX BOOT ID                          FIRST ENTRY                  LAST ENTRY
+ -1 cccccccccccc4ccc8ccccccccccccccc Tue 2026-07-21 23:00:00 CEST Tue 2026-07-21 23:59:30 CEST
+  0 dddddddddddd4ddd8ddddddddddddddd Wed 2026-07-22 08:00:00 CEST Wed 2026-07-22 08:30:00 CEST

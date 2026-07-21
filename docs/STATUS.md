@@ -1,6 +1,6 @@
 # RigSignal — Project Status
 
-Last updated: 2026-07-21 (0.3.0 released — D6 display detector shipped end-to-end)
+Last updated: 2026-07-21 (D3 GPU-boot detector implemented; pending orchestration gate)
 Active streams: main (local ElasticHome deployment) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -95,7 +95,10 @@ eBPF). There is no winget package — it remains unavailable/closed pending the 
 architecture rework. elastic/integrations PR #18878 remains deferred for the maintainer
 architecture rework and `fields.yml` gating.
 
-**Next.** Per the ratified H2 strategy, next up is D3 detector scoping (the next diagnostic-evidence-engine vertical after D6).
+**D3 GPU-boot detector.** `rigsignal-agent diagnose gpu-boot` is implemented with explicit-slot
+baselines, authoritative PCI sysfs collection, bounded boot-ID-addressed journald collection,
+offline replay, and stateful one-time recovery reporting. It remains pending the orchestration
+gate; see `docs/diagnose-gpu-boot.md`.
 
 ## Completed work
 
@@ -103,11 +106,12 @@ architecture rework and `fields.yml` gating.
 
 - **D6 display mode-override detector**: `rigsignal-agent diagnose display` compares Gamescope
   `modes.cfg` overrides against DRM display state (from a live Gamescope session, or offline via
-  `--modes-cfg` + `--drm-state` replay). Reports `detector_id`, `rule_version` (`d6.1`), a
+  `--modes-cfg` + `--drm-state` replay). Reports `detector_id`, `rule_version` (`d6.2`), a
   `verdict` (`ok` | `mode-override-invalid` | `mode-override-degraded` | `not-applicable`),
   `confidence`, `confidence_basis`, cited `evidence`, `plain_language` summary, reversible
-  `suggested_fix`(es), and a `falsifier`. Exit contract: `0` for `ok`/`not-applicable`, `1` for a
-  real finding, `2` for incomplete/invalid invocation. `--json` and `--host` flags supported.
+  `suggested_fix`(es), a `falsifier`, `supported_scope`, `missing_evidence`, and a
+  `nearest_alternative`. Exit contract: `0` for `ok`/`not-applicable`, `1` for a real finding,
+  `2` for incomplete/invalid invocation. `--json` and `--host` flags supported.
   Shipped through a 5-stage QC chain (Codex-sparred spec, reviewer approval, adversarial
   hardening, and a live `.254` replay that caught 2 live-path bugs invisible to tests/review); see
   `docs/diagnose-display.md` for the full field reference and a real replay transcript.

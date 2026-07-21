@@ -59,7 +59,7 @@ The configuration was restored afterwards and its SHA-256 matched the original.
 
 ```text
 detector_id: D6
-rule_version: d6.1
+rule_version: d6.2
 verdict: mode-override-degraded
 confidence: 0.85
 confidence_basis: One or more D6 degraded-mode branches matched the pinned mode against preferred and internal-panel evidence.
@@ -71,6 +71,9 @@ plain_language: Your display is being driven at 1280x800@60 while card0-DP-2 pre
 suggested_fix: Correct or delete the offending line in ~/.config/gamescope/modes.cfg.
 suggested_fix: Run: systemctl --user restart gamescope-session.target
 falsifier: The finding is falsified if a fresh DRM snapshot shows the pinned/active resolution valid and neither degraded branch matches.
+supported_scope: Gamescope modes.cfg overrides mapped to connected external DRM connectors.
+missing_evidence: []
+nearest_alternative: A display-side issue unrelated to a Gamescope mode override.
 ```
 
 The area/aspect line identifies the rule branch; the refresh line is supporting
@@ -82,12 +85,15 @@ suggested fixes, then run D6 again to verify the healthy state.
 | Field | Purpose |
 |---|---|
 | `@timestamp`, `host` | When and, if supplied, where the result was produced. |
-| `detector_id`, `rule_version` | The detector (`D6`) and exact rule pack (`d6.1`) used for the decision. |
+| `detector_id`, `rule_version` | The detector (`D6`) and exact rule pack (`d6.2`) used for the decision. |
 | `verdict`, `confidence` | The outcome and its bounded numeric confidence. |
 | `confidence_basis` | The evidence branch that justifies that confidence, rather than a restatement of the verdict. |
 | `evidence` | One or more cited observations used by the rule. |
 | `plain_language`, `suggested_fixes` | Operator summary and reversible remediation for findings. |
 | `falsifier` | The observation that would overturn the result. Falsifiers keep the rule testable and distinguish a supported diagnosis from an assertion. |
+| `supported_scope` | The hardware/configuration boundary the detector actually evaluated. |
+| `missing_evidence` | Evidence that was unavailable; this is always an array and may be empty. |
+| `nearest_alternative` | The closest distinct explanation that the reported evidence did not establish. |
 
 `not-applicable` is intentionally a smaller outcome with an explanation and
 evidence, not a fabricated diagnosis. It means D6 had no valid display state to
