@@ -1,0 +1,60 @@
+{
+  "captured": "2026-07-03T09:45:00+02:00",
+  "source": "real:.26",
+  "connectors": [
+    {
+      "name": "card0-DP-1",
+      "status": "connected",
+      "enabled": "enabled",
+      "dpms": "On",
+      "edid_bytes": 256,
+      "active_mode": "3840x2160@120",
+      "modes": [
+        "3840x2160", "4096x2160", "4096x2160", "4096x2160", "4096x2160", "4096x2160",
+        "4096x2160", "4096x2160", "4096x2160", "4096x2160", "4096x2160",
+        "3840x2160", "3840x2160", "3840x2160", "3840x2160", "3840x2160", "3840x2160",
+        "3840x2160", "3840x2160", "3840x2160", "3840x2160", "3840x2160",
+        "2560x1440",
+        "1920x1080", "1920x1080", "1920x1080", "1920x1080", "1920x1080", "1920x1080",
+        "1920x1080", "1920x1080", "1920x1080", "1920x1080", "1920x1080",
+        "1680x1050", "1600x900",
+        "1280x1024", "1280x1024",
+        "1440x900",
+        "1280x800",
+        "1152x864",
+        "1280x720", "1280x720", "1280x720", "1280x720",
+        "1024x768", "1024x768", "1024x768",
+        "832x624",
+        "800x600", "800x600", "800x600",
+        "720x576",
+        "720x480", "720x480",
+        "640x480", "640x480", "640x480", "640x480", "640x480",
+        "720x400"
+      ],
+      "note": "real UGREEN-dock TV (Samsung QCQ95S) connector. edid-decode confirms VIC 118: 3840x2160 120Hz IS present (true 4K120 over the dock) AND DMT 0x1c: 1280x800 59.81Hz 16:10 is ALSO a valid EDID-declared fallback timing -- the raw /sys modes file (resolution-only, no Hz) cannot distinguish these. IMPORTANT: this means the D6 incident mode (1280x800@60) is NOT absent from the EDID mode list -- it is a standard VESA/DMT compatibility timing the TV declares but cannot usefully display at its native 4K panel; the black-screen root cause is a valid-per-EDID-but-wrong-for-this-sink mode, not a nonexistent one. See edid-card0-DP-1.decoded.txt."
+    },
+    {
+      "name": "card0-Writeback-1",
+      "status": "unknown",
+      "enabled": "disabled",
+      "dpms": "On",
+      "edid_bytes": 0,
+      "modes": []
+    },
+    {
+      "name": "card0-eDP-1",
+      "status": "connected",
+      "enabled": "disabled",
+      "dpms": "Off",
+      "edid_bytes": 128,
+      "modes": ["800x1280", "256x160"],
+      "note": "Deck's internal panel, disabled while docked to external TV"
+    }
+  ],
+  "gamescope_control": {
+    "connector_name": "DP-1",
+    "display_make": "Samsung Electric Company",
+    "display_model": "QCQ95S",
+    "valid_refresh_rates": [120]
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "captured": "2026-07-03T12:00:00+00:00",
+  "source": "synthetic:test fixture for D6 legitimate downscale and invalid absent mode",
+  "connectors": [
+    {
+      "name": "card0-DP-1",
+      "status": "connected",
+      "enabled": "enabled",
+      "dpms": "On",
+      "edid_bytes": 256,
+      "active_mode": "1920x1080@60",
+      "modes": [
+        "3840x2160",
+        "3840x2160",
+        "2560x1440",
+        "1920x1080",
+        "1280x720"
+      ],
+      "note": "Synthetic 4K connector: 1920x1080 is a valid same-aspect performance downscale; 2000x2000 is absent."
+    },
+    {
+      "name": "card0-eDP-1",
+      "status": "connected",
+      "enabled": "disabled",
+      "dpms": "Off",
+      "edid_bytes": 128,
+      "modes": [
+        "800x1280"
+      ]
+    }
+  ],
+  "gamescope_control": {
+    "connector_name": "DP-1",
+    "display_make": "Samsung Electric Company",
+    "display_model": "QCQ95S",
+    "valid_refresh_rates": [
+      60,
+      120
+    ]
+  }
+}

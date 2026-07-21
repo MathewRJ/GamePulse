@@ -1,0 +1,17 @@
+gamescopectl version 3.16.23.2 (gcc 15.1.1)
+gamescope_control info:
+  - Connector Name: DP-2
+  - Display Make: AOC
+  - Display Model: AG352UCG6
+  - Display Flags: 0x0
+  - ValidRefreshRates: 120
+  Features:
+  - Reshade Shaders (1) - Version: 1 - Flags: 0x0
+  - Display Info (2) - Version: 1 - Flags: 0x0
+  - Pixel Filter (3) - Version: 1 - Flags: 0x0
+  - Refresh Cycle Only Change Refresh Rate (4) - Version: 1 - Flags: 0x0
+  - Mura Correction (5) - Version: 1 - Flags: 0x0
+  - Unknown (6) - Version: 1 - Flags: 0x0
+  - Unknown (7) - Version: 1 - Flags: 0x0
+You can execute any debug command in Gamescope using this tool.
+For a list of commands and convars, use 'gamescopectl help'
