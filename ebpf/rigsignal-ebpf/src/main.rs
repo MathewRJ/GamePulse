@@ -25,7 +25,7 @@ use tracing_subscriber::EnvFilter;
 
 use aggregator::correlate;
 use config::Config;
-use es_model::EbpfDocument;
+use es_model::{normalize_hostname, EbpfDocument};
 use loader::load_probes;
 use probes::bio::BioProbe;
 use probes::futex::FutexProbe;
@@ -93,10 +93,9 @@ async fn main() -> Result<()> {
     info!("ES endpoint: {}", config.elasticsearch.endpoint);
 
     // Host metadata (filled once at startup)
-    let host_name = std::fs::read_to_string("/etc/hostname")
-        .unwrap_or_else(|_| "unknown".to_string())
-        .trim()
-        .to_string();
+    let host_name = normalize_hostname(
+        &std::fs::read_to_string("/etc/hostname").unwrap_or_else(|_| "unknown".to_string()),
+    );
     let kernel_version = std::fs::read_to_string("/proc/sys/kernel/osrelease")
         .unwrap_or_else(|_| "unknown".to_string())
         .trim()
@@ -274,7 +273,8 @@ mod tests {
     use super::{assign_metric_timestamps, Utc};
     use crate::{
         aggregator::{
-            GpuAggregator, RawGpuSchedEvent, RawSchedEvent, SchedAggregator, EVENT_SWITCH,
+            correlate, GpuAggregator, RawGpuSchedEvent, RawSchedEvent, SchedAggregator,
+            EVENT_SWITCH,
         },
         es_model::EbpfDocument,
     };
@@ -348,6 +348,51 @@ mod tests {
                     .event_count,
                 1_000
             );
+        }
+    }
+
+    #[test]
+    fn raw_ebpf_documents_normalize_host_name() {
+        let mut sched = SchedAggregator::new("GamingPC".to_string(), "kernel".to_string());
+        sched.push(RawSchedEvent {
+            event_type: EVENT_SWITCH,
+            _pad: [0; 3],
+            tid: 1,
+            wait_ns: 20_000_000,
+            prev_cpu: 0,
+            next_cpu: 0,
+            comm: [0; 16],
+        });
+        let sched_docs = sched.flush("session");
+        let sched_metric = sched_docs.iter().find_map(EbpfDocument::as_metric).unwrap();
+        let sched_thread = sched_docs
+            .iter()
+            .find_map(|doc| match doc {
+                EbpfDocument::Thread(thread) => Some(thread),
+                EbpfDocument::Metric(_) => None,
+            })
+            .unwrap();
+
+        let mut gpu = GpuAggregator::new("GamingPC".to_string(), "kernel".to_string());
+        gpu.push(RawGpuSchedEvent {
+            latency_ns: 20_000_000,
+            _pad: 0,
+        });
+        let gpu_metric = gpu.flush("session").unwrap();
+        let correlation = correlate(
+            &[sched_metric, &gpu_metric],
+            "GamingPC",
+            "kernel",
+            "session",
+        )
+        .unwrap();
+
+        for document in [
+            serde_json::to_value(sched_metric).unwrap(),
+            serde_json::to_value(sched_thread).unwrap(),
+            serde_json::to_value(correlation).unwrap(),
+        ] {
+            assert_eq!(document["host"]["name"], "gamingpc");
         }
     }
 }

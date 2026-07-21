@@ -62,15 +62,27 @@ fn read_int(path: &str) -> Option<i64> {
 
 // ── Hostname ──────────────────────────────────────────────────────────────────
 
-/// Return the machine hostname.
+/// Canonicalize a hostname for the `host.name` dimension.
+pub(crate) fn normalize_hostname(value: &str) -> String {
+    let normalized = value.trim().to_lowercase();
+    if normalized.is_empty() {
+        "unknown".to_string()
+    } else {
+        normalized
+    }
+}
+
+/// Return the canonical machine hostname.
 pub fn hostname() -> String {
     #[cfg(unix)]
     {
-        read_str("/proc/sys/kernel/hostname").unwrap_or_else(|| "unknown".to_string())
+        normalize_hostname(
+            &read_str("/proc/sys/kernel/hostname").unwrap_or_else(|| "unknown".to_string()),
+        )
     }
     #[cfg(windows)]
     {
-        std::env::var("COMPUTERNAME").unwrap_or_else(|_| "unknown".to_string())
+        normalize_hostname(&std::env::var("COMPUTERNAME").unwrap_or_else(|_| "unknown".to_string()))
     }
 }
 
@@ -596,4 +608,15 @@ pub fn collect_snapshot() -> Value {
             .insert("rigsignal".to_string(), json!({ "hardware": hardware }));
     }
     doc
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_hostname;
+
+    #[test]
+    fn hostname_normalization_trims_and_lowercases_mixed_and_windows_style_inputs() {
+        assert_eq!(normalize_hostname("  GamingPC\n"), "gamingpc");
+        assert_eq!(normalize_hostname("WORKSTATION-01"), "workstation-01");
+    }
 }

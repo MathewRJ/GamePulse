@@ -1189,4 +1189,26 @@ mod tests {
 
         assert_eq!(summary["fps_coverage_s"], summary["duration_s"]);
     }
+
+    #[test]
+    fn metrics_and_session_documents_normalize_host_name() {
+        let session = session::SessionManager::new();
+        let hostname = "GamingPC";
+
+        let metric = session.base_doc(hostname);
+        let stream_client = session.stream_client_base_doc(hostname);
+        let start = build_session_start_doc(&session, &json!({}), hostname);
+        let end = build_summary_doc(
+            &session,
+            &json!({}),
+            hostname,
+            0,
+            &SessionAccumulators::new(),
+            None,
+        );
+
+        for doc in [metric, stream_client, start, end] {
+            assert_eq!(doc["host"]["name"], "gamingpc");
+        }
+    }
 }
