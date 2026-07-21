@@ -15,10 +15,12 @@
 
 Fixture replay/manual CLI checks covered degraded (0.9, exit 1), healthy `ok`
 (exit 0), invalid (exit 1), one offline flag (exit 2), explicitly missing fixture
-(exit 2), and JSON `not-applicable` (exit 0). Six dependency-free CLI integration
+(exit 2), and JSON `not-applicable` (exit 0). Nine dependency-free CLI integration
 tests now cover Clap nesting, every required exit-code class, one-line diagnosis
 and typed-not-applicable JSON, human contract fields, and legacy `diagnose --output`
-behavior. The Rust suite has 116 passing tests.
+behavior. The Rust suite has 119 passing tests, including hardening regressions
+for malformed DRM with an empty modes file, oversized fixtures, and non-regular
+fixture paths.
 
 ## Live-replay verification (orchestrator-owned)
 
@@ -31,7 +33,7 @@ healthy (ok/exit 0) commands, EXIT-trap restoration proof, and before/after SHA-
 - `cargo fmt --check`: PASS
 - `cargo clippy --locked --all-targets -- -D warnings`: PASS
 - `cargo check --locked`: PASS
-- `cargo test --locked`: PASS (116 passed, 0 failed)
+- `cargo test --locked`: PASS (119 passed, 0 failed)
 - Linux CI feature gates (`cargo check` and clippy with `--features ebpf`): PASS
 - `bash scripts/smoke-test.sh ./target/debug/rigsignal-agent`: FAIL in this sandbox:
   the pre-existing smoke check could not observe the three required live network
@@ -41,6 +43,12 @@ healthy (ok/exit 0) commands, EXIT-trap restoration proof, and before/after SHA-
   sandbox.
 - Commit: `b76ad2e` (`feat(d6): display mode-override detector — Rust port +
   diagnose display CLI`) was created by the orchestrator.
+
+## Threat model / accepted risk
+
+The D6 CLI runs with the invoking user's privileges and intentionally trusts that
+user's session environment (`PATH` and `HOME`). A hostile inherited environment is
+out of scope for this user-invoked diagnostic.
 
 ## Changed files
 

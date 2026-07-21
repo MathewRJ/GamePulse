@@ -4,11 +4,16 @@
 //! DRM state can be replayed exactly as it was collected.
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use std::io::Read;
 use std::path::Path;
 use std::process::ExitCode;
 
 const AREA_RATIO_MAX: f64 = 0.5;
 const ASPECT_TOLERANCE: f64 = 0.05;
+const FIXTURE_FILE_LIMIT: u64 = 1024 * 1024;
+const LIVE_FILE_LIMIT: u64 = 64 * 1024;
+const EXTERNAL_EVIDENCE_LIMIT: usize = 1024;
+const EXTERNAL_LINE_LIMIT: usize = 4096;
 
 #[derive(Clone, Debug, PartialEq)]
 struct ModeOverride {
@@ -163,7 +168,16 @@ fn parse_resolution(value: &str) -> Option<(u32, u32)> {
     let value = &value[start..];
     let (width, rest) = value.split_once('x')?;
     let height: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
-    Some((width.parse().ok()?, height.parse().ok()?))
+    let resolution = (width.parse().ok()?, height.parse().ok()?);
+    (resolution.0 > 0 && resolution.1 > 0).then_some(resolution)
+}
+
+fn sanitize_external(value: &str) -> String {
+    value
+        .chars()
+        .filter(|character| !character.is_control())
+        .take(EXTERNAL_EVIDENCE_LIMIT)
+        .collect()
 }
 
 fn orientation_normalize(resolution: (u32, u32)) -> (u32, u32) {
@@ -234,25 +248,33 @@ fn parse_modes_cfg(contents: &str) -> Result<(Vec<ModeOverride>, Vec<String>), S
             continue;
         }
         nonblank += 1;
+        if raw.len() > EXTERNAL_LINE_LIMIT {
+            evidence.push(format!(
+                "modes.cfg line {}: ignored oversized line",
+                index + 1
+            ));
+            continue;
+        }
         let parsed = line.rsplit_once(':').and_then(|(key, mode)| {
             let (resolution, hz_text) = mode.split_once('@')?;
             let (width, height) = parse_resolution(resolution)?;
             let hz = hz_text.split_whitespace().next()?.parse::<f64>().ok()?;
-            (!key.is_empty()).then_some((key, width, height, hz))
+            (hz.is_finite() && hz > 0.0 && !key.is_empty()).then_some((key, width, height, hz))
         });
         if let Some((key, width, height, hz)) = parsed {
             entries.push(ModeOverride {
                 line_number: index + 1,
-                raw_line: raw.into(),
-                key: key.into(),
+                raw_line: sanitize_external(raw),
+                key: sanitize_external(key),
                 width,
                 height,
                 hz,
             });
         } else {
             evidence.push(format!(
-                "modes.cfg line {}: ignored unparsable line: {raw}",
-                index + 1
+                "modes.cfg line {}: ignored unparsable line: {}",
+                index + 1,
+                sanitize_external(raw)
             ));
         }
     }
@@ -382,6 +404,19 @@ fn plain_bad(override_: &ModeOverride, connector: &Connector) -> String {
     format!("Your display is being driven at {}@{} while {} prefers {native}. This driven-vs-native mismatch points to a stale gamescope mode override in modes.cfg. A reboot won't help because this is a home-dir config, not an EDID cache.", override_.resolution_text(), override_.hz, connector.name)
 }
 
+fn no_override_outcome(evidence: Vec<String>, host: Option<String>) -> Result<Outcome, String> {
+    Ok(Outcome::Diagnosis(Diagnosis::new(
+        "ok",
+        0.7,
+        "No modes.cfg override was present, so D6 has no mode pin to validate.",
+        evidence,
+        "No gamescope display mode override is present.",
+        vec![],
+        "A parsed gamescope mode override would cause D6 to validate it against DRM state.",
+        host,
+    )?))
+}
+
 /// Diagnose captured text. An empty modes source has no override; malformed JSON and
 /// all-unparsable nonblank mode files are detector-completion errors.
 pub fn diagnose_inputs(
@@ -390,20 +425,11 @@ pub fn diagnose_inputs(
     host: Option<String>,
 ) -> Result<Outcome, String> {
     let (overrides, mut evidence) = parse_modes_cfg(modes_cfg)?;
-    if overrides.is_empty() {
-        return Ok(Outcome::Diagnosis(Diagnosis::new(
-            "ok",
-            0.7,
-            "No modes.cfg override was present, so D6 has no mode pin to validate.",
-            evidence,
-            "No gamescope display mode override is present.",
-            vec![],
-            "A parsed gamescope mode override would cause D6 to validate it against DRM state.",
-            host,
-        )?));
-    }
     let state: DrmState = serde_json::from_str(drm_state)
         .map_err(|error| format!("malformed DRM-state JSON: {error}"))?;
+    if overrides.is_empty() {
+        return no_override_outcome(evidence, host);
+    }
     evidence.extend(state.collection_notes.iter().cloned());
     let mut best: Option<(&ModeOverride, &Connector, String, f64, Vec<String>)> = None;
     let mut mapped = false;
@@ -474,6 +500,52 @@ pub fn diagnose_inputs(
     Ok(Outcome::Diagnosis(Diagnosis::new("ok", 0.75, "All mapped overrides validated against the current connector modes and D6 degraded-mode checks.", evidence, "Mapped gamescope display overrides validate against the current DRM snapshot.", vec![], "A connector snapshot that makes an override absent or triggers a D6 degraded branch would falsify this validation.", host)?))
 }
 
+fn open_regular_file(path: &Path) -> Result<std::fs::File, String> {
+    let pre_open_metadata = std::fs::metadata(path).map_err(|error| error.to_string())?;
+    if !pre_open_metadata.file_type().is_file() {
+        return Err("not a regular file".into());
+    }
+    #[cfg(target_os = "linux")]
+    let file = {
+        use std::os::unix::fs::OpenOptionsExt;
+
+        std::fs::OpenOptions::new()
+            .read(true)
+            // O_NONBLOCK prevents a replacement FIFO from hanging this diagnostic.
+            .custom_flags(0o4000)
+            .open(path)
+            .map_err(|error| error.to_string())?
+    };
+    #[cfg(not(target_os = "linux"))]
+    let file = std::fs::File::open(path).map_err(|error| error.to_string())?;
+    let metadata = file.metadata().map_err(|error| error.to_string())?;
+    if !metadata.file_type().is_file() {
+        return Err("not a regular file".into());
+    }
+    Ok(file)
+}
+
+fn read_regular_text(path: &Path, limit: u64) -> Result<String, String> {
+    let file = open_regular_file(path)?;
+    let mut bytes = Vec::new();
+    file.take(limit + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| error.to_string())?;
+    if bytes.len() as u64 > limit {
+        return Err(format!("file exceeds {limit}-byte limit"));
+    }
+    String::from_utf8(bytes).map_err(|_| "file was not UTF-8".into())
+}
+
+fn regular_file_len(path: &Path, limit: u64) -> Result<u64, String> {
+    let file = open_regular_file(path)?;
+    let length = file.metadata().map_err(|error| error.to_string())?.len();
+    if length > limit {
+        return Err(format!("file exceeds {limit}-byte limit"));
+    }
+    Ok(length)
+}
+
 /// File wrapper. `None` is intentionally an absent optional source, not a read
 /// attempt; it therefore returns the no-override `ok` outcome.
 pub fn diagnose(
@@ -482,14 +554,17 @@ pub fn diagnose(
     host: Option<String>,
 ) -> Result<Outcome, String> {
     if modes_cfg.is_none() {
-        return diagnose_inputs("", "", host);
+        return no_override_outcome(
+            vec!["modes.cfg: no override present (file empty)".into()],
+            host,
+        );
     }
     let modes = match modes_cfg {
-        Some(path) => std::fs::read_to_string(path)
+        Some(path) => read_regular_text(path, FIXTURE_FILE_LIMIT)
             .map_err(|error| format!("cannot read modes.cfg {}: {error}", path.display()))?,
         None => unreachable!("handled above"),
     };
-    let drm = std::fs::read_to_string(drm_state)
+    let drm = read_regular_text(drm_state, FIXTURE_FILE_LIMIT)
         .map_err(|error| format!("cannot read DRM-state {}: {error}", drm_state.display()))?;
     diagnose_inputs(&modes, &drm, host)
 }
@@ -509,20 +584,24 @@ fn parse_gamescopectl(stdout: &str) -> Result<ParsedGamescope, String> {
     let mut valid_refresh_rates = None;
     for line in stdout.lines() {
         let line = line.trim();
+        if line.len() > EXTERNAL_LINE_LIMIT {
+            continue;
+        }
         if let Some(value) = line.strip_prefix("- Connector Name:") {
-            connector_name = Some(value.trim().to_string());
+            connector_name = Some(sanitize_external(value.trim()));
         }
         if let Some(value) = line.strip_prefix("- Display Make:") {
-            display_make = Some(value.trim().to_string());
+            display_make = Some(sanitize_external(value.trim()));
         }
         if let Some(value) = line.strip_prefix("- Display Model:") {
-            display_model = Some(value.trim().to_string());
+            display_model = Some(sanitize_external(value.trim()));
         }
         if let Some(value) = line.strip_prefix("- ValidRefreshRates:") {
             valid_refresh_rates = Some(
                 value
                     .split_whitespace()
-                    .filter_map(|rate| rate.trim_matches(',').parse().ok())
+                    .filter_map(|rate| rate.trim_matches(',').parse::<f64>().ok())
+                    .filter(|rate| rate.is_finite() && *rate > 0.0)
                     .collect::<Vec<f64>>(),
             );
         }
@@ -545,17 +624,136 @@ fn parse_gamescopectl(stdout: &str) -> Result<ParsedGamescope, String> {
 }
 
 #[cfg(target_os = "linux")]
+enum GamescopeRunError {
+    NotFound,
+    Failed(String),
+}
+
+#[cfg(target_os = "linux")]
+fn run_gamescopectl() -> Result<std::process::Output, GamescopeRunError> {
+    use std::process::{Command, Stdio};
+    use std::sync::mpsc;
+    use std::thread;
+    use std::time::{Duration, Instant};
+
+    const OUTPUT_LIMIT: u64 = 256 * 1024;
+    const TIMEOUT: Duration = Duration::from_secs(5);
+
+    fn spawn_reader<R: Read + Send + 'static>(
+        name: &'static str,
+        pipe: R,
+        sender: mpsc::Sender<(&'static str, Result<Vec<u8>, String>)>,
+    ) {
+        thread::spawn(move || {
+            let mut bytes = Vec::new();
+            let result = pipe
+                .take(OUTPUT_LIMIT + 1)
+                .read_to_end(&mut bytes)
+                .map_err(|error| format!("cannot read gamescopectl {name}: {error}"))
+                .and_then(|_| {
+                    (bytes.len() as u64 <= OUTPUT_LIMIT)
+                        .then_some(bytes)
+                        .ok_or_else(|| {
+                            format!("gamescopectl {name} exceeds {OUTPUT_LIMIT}-byte limit")
+                        })
+                });
+            let _ = sender.send((name, result));
+        });
+    }
+
+    let mut child = Command::new("gamescopectl")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                GamescopeRunError::NotFound
+            } else {
+                GamescopeRunError::Failed(format!("cannot execute gamescopectl: {error}"))
+            }
+        })?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| GamescopeRunError::Failed("cannot capture gamescopectl stdout".into()))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| GamescopeRunError::Failed("cannot capture gamescopectl stderr".into()))?;
+    let (sender, receiver) = mpsc::channel();
+    spawn_reader("stdout", stdout, sender.clone());
+    spawn_reader("stderr", stderr, sender.clone());
+    drop(sender);
+
+    let started = Instant::now();
+    let mut stdout = None;
+    let mut stderr = None;
+    let mut received = 0;
+    loop {
+        while let Ok((name, result)) = receiver.try_recv() {
+            received += 1;
+            match result {
+                Ok(bytes) if name == "stdout" => stdout = Some(bytes),
+                Ok(bytes) => stderr = Some(bytes),
+                Err(error) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    while received < 2 {
+                        let _ = receiver.recv();
+                        received += 1;
+                    }
+                    return Err(GamescopeRunError::Failed(error));
+                }
+            }
+        }
+        if let Some(status) = child.try_wait().map_err(|error| {
+            GamescopeRunError::Failed(format!("cannot wait for gamescopectl: {error}"))
+        })? {
+            while received < 2 {
+                let (name, result) = receiver.recv().map_err(|_| {
+                    GamescopeRunError::Failed(
+                        "gamescopectl output reader stopped unexpectedly".into(),
+                    )
+                })?;
+                received += 1;
+                match result {
+                    Ok(bytes) if name == "stdout" => stdout = Some(bytes),
+                    Ok(bytes) => stderr = Some(bytes),
+                    Err(error) => return Err(GamescopeRunError::Failed(error)),
+                }
+            }
+            return Ok(std::process::Output {
+                status,
+                stdout: stdout.unwrap_or_default(),
+                stderr: stderr.unwrap_or_default(),
+            });
+        }
+        if started.elapsed() >= TIMEOUT {
+            let _ = child.kill();
+            let _ = child.wait();
+            while received < 2 {
+                let _ = receiver.recv();
+                received += 1;
+            }
+            return Err(GamescopeRunError::Failed(
+                "gamescopectl timed out after 5 seconds".into(),
+            ));
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+}
+
+#[cfg(target_os = "linux")]
 fn live_outcome(host: Option<String>) -> Result<Outcome, String> {
-    use std::process::Command;
-    let output = match Command::new("gamescopectl").output() {
+    let output = match run_gamescopectl() {
         Ok(output) => output,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+        Err(GamescopeRunError::NotFound) => {
             return Ok(Outcome::NotApplicable(NotApplicable::new(
                 "gamescopectl is not installed; no Gamescope display session is available.",
                 vec!["gamescopectl executable not found".into()],
             )))
         }
-        Err(error) => return Err(format!("cannot execute gamescopectl: {error}")),
+        Err(GamescopeRunError::Failed(error)) => return Err(error),
     };
     let text = String::from_utf8(output.stdout).map_err(|_| "gamescopectl stdout was not UTF-8")?;
     if !output.status.success() {
@@ -564,7 +762,7 @@ fn live_outcome(host: Option<String>) -> Result<Outcome, String> {
         {
             return Ok(Outcome::NotApplicable(NotApplicable::new(
                 "Gamescope reports no active display session.",
-                vec![text],
+                vec![sanitize_external(&text)],
             )));
         }
         return Err(format!("gamescopectl exited with {}", output.status));
@@ -585,51 +783,48 @@ fn live_outcome(host: Option<String>) -> Result<Outcome, String> {
         if !path.is_dir() {
             continue;
         }
-        let status = std::fs::read_to_string(path.join("status"))
-            .map_err(|error| format!("cannot read mandatory status for {name}: {error}"))?
-            .trim()
-            .to_string();
+        let status = read_regular_text(&path.join("status"), LIVE_FILE_LIMIT)
+            .map_err(|error| format!("cannot read mandatory status for {name}: {error}"))?;
+        let status = sanitize_external(status.trim());
         let selected = name
             .strip_prefix(|c: char| c != '-')
             .and_then(|rest| rest.strip_prefix('-'))
             == Some(control.connector_name.as_str())
             && status == "connected";
         let edid_bytes = if selected {
-            let metadata = std::fs::metadata(path.join("edid"))
+            let edid_bytes = regular_file_len(&path.join("edid"), LIVE_FILE_LIMIT)
                 .map_err(|error| format!("cannot read mandatory edid for {name}: {error}"))?;
-            if metadata.len() == 0 {
+            if edid_bytes == 0 {
                 return Err(format!(
                     "selected connector {name} has empty mandatory edid"
                 ));
             }
-            metadata.len()
+            edid_bytes
         } else {
-            std::fs::metadata(path.join("edid"))
-                .map(|m| m.len())
-                .unwrap_or(0)
+            regular_file_len(&path.join("edid"), LIVE_FILE_LIMIT).unwrap_or(0)
         };
         let modes = if selected {
-            std::fs::read_to_string(path.join("modes"))
+            read_regular_text(&path.join("modes"), LIVE_FILE_LIMIT)
                 .map_err(|error| format!("cannot read mandatory modes for {name}: {error}"))?
                 .lines()
-                .map(str::to_owned)
+                .map(sanitize_external)
                 .collect()
         } else {
-            std::fs::read_to_string(path.join("modes"))
+            read_regular_text(&path.join("modes"), LIVE_FILE_LIMIT)
                 .unwrap_or_default()
                 .lines()
-                .map(str::to_owned)
+                .map(sanitize_external)
                 .collect()
         };
-        let enabled = match std::fs::read_to_string(path.join("enabled")) {
-            Ok(value) => Some(value.trim().into()),
+        let enabled = match read_regular_text(&path.join("enabled"), LIVE_FILE_LIMIT) {
+            Ok(value) => Some(sanitize_external(value.trim())),
             Err(error) => {
                 collection_notes.push(format!("{name}: enabled metadata unavailable: {error}"));
                 None
             }
         };
-        let dpms = match std::fs::read_to_string(path.join("dpms")) {
-            Ok(value) => Some(value.trim().into()),
+        let dpms = match read_regular_text(&path.join("dpms"), LIVE_FILE_LIMIT) {
+            Ok(value) => Some(sanitize_external(value.trim())),
             Err(error) => {
                 collection_notes.push(format!("{name}: dpms metadata unavailable: {error}"));
                 None
@@ -664,6 +859,20 @@ fn live_outcome(host: Option<String>) -> Result<Outcome, String> {
             control.connector_name
         ));
     }
+    let modes = std::env::var_os("HOME")
+        .map(std::path::PathBuf::from)
+        .map(|home| home.join(".config/gamescope/modes.cfg"))
+        .map(|path| match read_regular_text(&path, LIVE_FILE_LIMIT) {
+            Ok(modes) => modes,
+            Err(error) => {
+                collection_notes.push(format!(
+                    "modes.cfg unavailable at {}: {error}",
+                    path.display()
+                ));
+                String::new()
+            }
+        })
+        .unwrap_or_default();
     let state = DrmState {
         connectors,
         gamescope_control: GamescopeControl {
@@ -674,11 +883,6 @@ fn live_outcome(host: Option<String>) -> Result<Outcome, String> {
         },
         collection_notes,
     };
-    let modes = std::env::var_os("HOME")
-        .map(std::path::PathBuf::from)
-        .map(|home| home.join(".config/gamescope/modes.cfg"))
-        .and_then(|path| std::fs::read_to_string(path).ok())
-        .unwrap_or_default();
     diagnose_inputs(
         &modes,
         &serde_json::to_string(&state).map_err(|error| error.to_string())?,

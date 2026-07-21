@@ -33,6 +33,28 @@ impl Drop for TempFixture {
     }
 }
 
+struct TempDirectory {
+    path: PathBuf,
+}
+
+impl TempDirectory {
+    fn new(label: &str) -> Self {
+        let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "rigsignal-d6-cli-{label}-{}-{sequence}.tmp",
+            std::process::id()
+        ));
+        fs::create_dir(&path).expect("create temporary directory");
+        Self { path }
+    }
+}
+
+impl Drop for TempDirectory {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir(&self.path);
+    }
+}
+
 fn repository_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -149,6 +171,33 @@ fn display_exit_codes_cover_ok_not_applicable_finding_and_incomplete() {
     let output = run(&mut offline_display(&missing_modes, &synthetic_drm));
     assert_eq!(status(&output), 2);
     assert!(stderr(&output).contains("cannot read modes.cfg"));
+}
+
+#[test]
+fn display_empty_modes_still_validates_explicit_drm_json() {
+    let empty_modes = TempFixture::new("empty-modes", "");
+    let malformed_drm = TempFixture::new("malformed-drm", "not JSON");
+    let output = run(&mut offline_display(&empty_modes.path, &malformed_drm.path));
+    assert_eq!(status(&output), 2);
+    assert!(stderr(&output).contains("malformed DRM-state JSON"));
+}
+
+#[test]
+fn display_oversized_fixture_is_incomplete() {
+    let oversized_modes = TempFixture::new("oversized-modes", &"x".repeat(1024 * 1024 + 1));
+    let drm = fixture("synthetic-4k-drm-state.json");
+    let output = run(&mut offline_display(&oversized_modes.path, &drm));
+    assert_eq!(status(&output), 2);
+    assert!(stderr(&output).contains("exceeds 1048576-byte limit"));
+}
+
+#[test]
+fn display_non_regular_fixture_is_incomplete() {
+    let directory = TempDirectory::new("directory-modes");
+    let drm = fixture("synthetic-4k-drm-state.json");
+    let output = run(&mut offline_display(&directory.path, &drm));
+    assert_eq!(status(&output), 2);
+    assert!(stderr(&output).contains("not a regular file"));
 }
 
 #[test]
