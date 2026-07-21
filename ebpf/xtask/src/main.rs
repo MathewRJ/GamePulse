@@ -5,8 +5,7 @@
 ///   cargo xtask build-ebpf --release — compile BPF programs (release/optimised)
 ///
 /// Prerequisites:
-///   rustup toolchain add nightly
-///   rustup component add rust-src --toolchain nightly
+///   (toolchain + rust-src come from ebpf/rust-toolchain.toml automatically)
 ///   cargo install bpf-linker
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
@@ -62,8 +61,10 @@ fn build_ebpf(workspace: &Path, release: bool) -> Result<()> {
     //   [target.bpfel-unknown-none]
     //   linker = "bpf-linker"
     //   rustflags = ["-C", "link-arg=--target=bpf", ...]
+    // No explicit +toolchain: ebpf/rust-toolchain.toml pins the nightly (with
+    // rust-src) for every cargo invocation in this workspace — a hardcoded
+    // "+nightly" here would bypass that pin (floating nightly lacks rust-src on CI).
     let mut args = vec![
-        "+nightly",
         "build",
         "-p", "rigsignal-ebpf-probes",
         "--target", "bpfel-unknown-none",
