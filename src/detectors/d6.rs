@@ -4,7 +4,7 @@
 //! DRM state can be replayed exactly as it was collected.
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use std::io::Read;
+use std::io::{self, Read};
 use std::path::Path;
 use std::process::ExitCode;
 
@@ -192,18 +192,23 @@ fn area(resolution: (u32, u32)) -> f64 {
 fn aspect(resolution: (u32, u32)) -> f64 {
     f64::from(resolution.0) / f64::from(resolution.1)
 }
-fn connector_short_name(connector: &Connector) -> &str {
-    connector
-        .name
-        .split_once('-')
+fn card_connector_short_name(name: &str) -> &str {
+    name.split_once('-')
         .and_then(|(card, rest)| {
-            if card.starts_with("card") && card[4..].chars().all(|c| c.is_ascii_digit()) {
+            if card
+                .strip_prefix("card")
+                .is_some_and(|index| !index.is_empty() && index.chars().all(|c| c.is_ascii_digit()))
+            {
                 Some(rest)
             } else {
                 None
             }
         })
-        .unwrap_or(&connector.name)
+        .unwrap_or(name)
+}
+
+fn connector_short_name(connector: &Connector) -> &str {
+    card_connector_short_name(&connector.name)
 }
 fn is_connected_external(connector: &Connector) -> bool {
     connector.status == "connected"
@@ -538,8 +543,9 @@ fn read_regular_text(path: &Path, limit: u64) -> Result<String, String> {
 }
 
 fn regular_file_len(path: &Path, limit: u64) -> Result<u64, String> {
-    let file = open_regular_file(path)?;
-    let length = file.metadata().map_err(|error| error.to_string())?.len();
+    let mut file = open_regular_file(path)?;
+    let length = io::copy(&mut file.by_ref().take(limit + 1), &mut io::sink())
+        .map_err(|error| error.to_string())?;
     if length > limit {
         return Err(format!("file exceeds {limit}-byte limit"));
     }
@@ -786,11 +792,8 @@ fn live_outcome(host: Option<String>) -> Result<Outcome, String> {
         let status = read_regular_text(&path.join("status"), LIVE_FILE_LIMIT)
             .map_err(|error| format!("cannot read mandatory status for {name}: {error}"))?;
         let status = sanitize_external(status.trim());
-        let selected = name
-            .strip_prefix(|c: char| c != '-')
-            .and_then(|rest| rest.strip_prefix('-'))
-            == Some(control.connector_name.as_str())
-            && status == "connected";
+        let selected =
+            card_connector_short_name(&name) == control.connector_name && status == "connected";
         let edid_bytes = if selected {
             let edid_bytes = regular_file_len(&path.join("edid"), LIVE_FILE_LIMIT)
                 .map_err(|error| format!("cannot read mandatory edid for {name}: {error}"))?;
@@ -1090,6 +1093,34 @@ mod tests {
                     && !p.valid_refresh_rates.is_empty()
             );
         }
+    }
+    #[test]
+    fn card_connector_short_name_only_strips_valid_card_prefixes() {
+        let control = "DP-2";
+        assert_eq!(card_connector_short_name("card0-DP-2"), control);
+        assert_ne!(card_connector_short_name("card1-DP-3"), control);
+        for name in ["cardX-DP-2", "card-DP-2", "card0DP-2"] {
+            assert_eq!(card_connector_short_name(name), name);
+        }
+    }
+    #[test]
+    fn regular_file_len_counts_content_and_enforces_limit() {
+        let path = std::env::temp_dir().join(format!(
+            "rigsignal-d6-{}-{}.edid",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::write(&path, b"EDID bytes").unwrap();
+
+        assert_eq!(regular_file_len(&path, 64).unwrap(), 10);
+        assert!(regular_file_len(&path, 9)
+            .unwrap_err()
+            .contains("file exceeds 9-byte limit"));
+
+        std::fs::remove_file(path).unwrap();
     }
     fn contract(d: &Diagnosis) {
         assert_eq!(d.rule_version, "d6.1");
