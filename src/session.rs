@@ -733,6 +733,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn test_lutris_slug_to_title() {
         assert_eq!(
             lutris_slug_to_title("cyberpunk-2077-1683316261"),
@@ -769,6 +770,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn test_enrich_from_proton_env() {
         let mut env = std::collections::HashMap::new();
         env.insert("PROTON_VERSION".to_string(), "GE-Proton9-20".to_string());
