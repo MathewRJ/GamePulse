@@ -697,25 +697,26 @@ async fn run() -> Result<ExitCode> {
         .with_writer(std::io::stderr)
         .init();
 
-    // Display diagnosis is self-contained and must work without RigSignal's
+    // Detector diagnoses are self-contained and must work without RigSignal's
     // telemetry configuration. Keep this before Config::load().
     if let Some(Commands::Diagnose {
-        action:
-            Some(DiagnoseAction::Display {
+        action: Some(action),
+        ..
+    }) = &cli.command
+    {
+        return Ok(match action {
+            DiagnoseAction::Display {
                 modes_cfg,
                 drm_state,
                 json,
                 host,
-            }),
-        ..
-    }) = &cli.command
-    {
-        return Ok(detectors::d6::run_cli(
-            modes_cfg.as_deref(),
-            drm_state.as_deref(),
-            *json,
-            host.clone(),
-        ));
+            } => detectors::d6::run_cli(
+                modes_cfg.as_deref(),
+                drm_state.as_deref(),
+                *json,
+                host.clone(),
+            ),
+        });
     }
 
     let cfg = config::Config::load(cli.config.as_ref())?;

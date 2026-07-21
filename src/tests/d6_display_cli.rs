@@ -156,6 +156,10 @@ fn display_exit_codes_cover_ok_not_applicable_finding_and_incomplete() {
     let output = run(&mut offline_display(&unparsable.path, &synthetic_drm));
     assert_eq!(status(&output), 2);
     assert!(stderr(&output).contains("D6 incomplete"));
+    assert!(
+        stdout(&output).is_empty(),
+        "errors must not emit stdout JSON"
+    );
 
     let mut command = agent();
     command
@@ -201,7 +205,7 @@ fn display_non_regular_fixture_is_incomplete() {
 }
 
 #[test]
-fn display_diagnosis_json_is_one_line_and_has_contract_shape() {
+fn display_diagnosis_json_is_wire_compatible_except_d6_2_contract_additions() {
     let modes = fixture("deck-incident-bad/modes.cfg");
     let drm = fixture("deck-incident-bad/drm-state.json");
     let mut command = offline_display(&modes, &drm);
@@ -212,7 +216,7 @@ fn display_diagnosis_json_is_one_line_and_has_contract_shape() {
     let text = stdout(&output);
     assert_eq!(text.lines().count(), 1, "JSON must occupy one line: {text}");
     let value: Value = serde_json::from_str(&text).expect("valid diagnosis JSON");
-    for field in [
+    let expected_fields = [
         "@timestamp",
         "detector_id",
         "rule_version",
@@ -223,11 +227,39 @@ fn display_diagnosis_json_is_one_line_and_has_contract_shape() {
         "plain_language",
         "suggested_fixes",
         "falsifier",
-    ] {
+        "supported_scope",
+        "missing_evidence",
+        "nearest_alternative",
+    ];
+    assert_eq!(
+        value
+            .as_object()
+            .expect("diagnosis is an object")
+            .keys()
+            .map(String::as_str)
+            .collect::<std::collections::BTreeSet<_>>(),
+        expected_fields.into_iter().collect(),
+        "only the d6.2 contract fields may differ from the frozen d6.1 shape"
+    );
+    for field in expected_fields {
         assert!(value.get(field).is_some(), "missing {field}");
     }
     assert_eq!(value["detector_id"], "D6");
+    assert_eq!(value["rule_version"], "d6.2");
     assert_eq!(value["verdict"], "mode-override-degraded");
+    assert!(value["@timestamp"].is_string());
+    assert!(value["detector_id"].is_string());
+    assert!(value["rule_version"].is_string());
+    assert!(value["verdict"].is_string());
+    assert!(value["confidence"].is_number());
+    assert!(value["confidence_basis"].is_string());
+    assert!(value["evidence"].is_array());
+    assert!(value["plain_language"].is_string());
+    assert!(value["suggested_fixes"].is_array());
+    assert!(value["falsifier"].is_string());
+    assert!(value["supported_scope"].is_array());
+    assert!(value["missing_evidence"].is_array());
+    assert!(value["nearest_alternative"].is_string());
     assert!(value.get("outcome").is_none(), "diagnosis is not a wrapper");
 }
 
@@ -243,6 +275,18 @@ fn display_not_applicable_json_is_one_line_and_typed() {
     let text = stdout(&output);
     assert_eq!(text.lines().count(), 1, "JSON must occupy one line: {text}");
     let value: Value = serde_json::from_str(&text).expect("valid not-applicable JSON");
+    assert_eq!(
+        value
+            .as_object()
+            .expect("not-applicable is an object")
+            .keys()
+            .map(String::as_str)
+            .collect::<std::collections::BTreeSet<_>>(),
+        ["outcome", "verdict", "explanation", "evidence"]
+            .into_iter()
+            .collect(),
+        "not-applicable must retain its smaller untagged wire shape"
+    );
     assert_eq!(value["outcome"], "not-applicable");
     assert_eq!(value["verdict"], "not-applicable");
     assert!(value["explanation"].is_string());
@@ -260,7 +304,7 @@ fn display_human_output_includes_the_diagnosis_contract_fields() {
     let text = stdout(&output);
     for field in [
         "detector_id: D6",
-        "rule_version: d6.1",
+        "rule_version: d6.2",
         "verdict: mode-override-degraded",
         "confidence:",
         "confidence_basis:",
@@ -268,6 +312,9 @@ fn display_human_output_includes_the_diagnosis_contract_fields() {
         "plain_language:",
         "suggested_fix:",
         "falsifier:",
+        "supported_scope:",
+        "missing_evidence: []",
+        "nearest_alternative:",
     ] {
         assert!(text.contains(field), "human output missing {field}: {text}");
     }

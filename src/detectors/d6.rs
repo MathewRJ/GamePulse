@@ -2,11 +2,21 @@
 //!
 //! The decision logic is deliberately independent of the filesystem so captured
 //! DRM state can be replayed exactly as it was collected.
+use super::contract::{self, DetectorContract, Diagnosis, Disposition, NotApplicable, Outcome};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::io::{self, Read};
 use std::path::Path;
 use std::process::ExitCode;
+
+const CONTRACT: DetectorContract = DetectorContract {
+    detector_id: "D6",
+    rule_version: "d6.2",
+    error_prefix: "D6",
+};
+const SUPPORTED_SCOPE: &str =
+    "Gamescope modes.cfg overrides mapped to connected external DRM connectors.";
+const NEAREST_ALTERNATIVE: &str = "A display-side issue unrelated to a Gamescope mode override.";
 
 const AREA_RATIO_MAX: f64 = 0.5;
 const ASPECT_TOLERANCE: f64 = 0.05;
@@ -73,94 +83,33 @@ struct GamescopeControl {
     valid_refresh_rates: Vec<f64>,
 }
 
-#[derive(Clone, Debug, Serialize)]
-pub struct Diagnosis {
-    #[serde(rename = "@timestamp")]
-    pub timestamp: String,
-    pub detector_id: String,
-    pub rule_version: String,
-    pub verdict: String,
-    pub confidence: f64,
-    pub confidence_basis: String,
-    pub evidence: Vec<String>,
-    pub plain_language: String,
-    pub suggested_fixes: Vec<String>,
-    pub falsifier: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub host: Option<String>,
-}
-
-impl Diagnosis {
-    #[allow(clippy::too_many_arguments)]
-    fn new(
-        verdict: &str,
-        confidence: f64,
-        confidence_basis: impl Into<String>,
-        evidence: Vec<String>,
-        plain_language: impl Into<String>,
-        suggested_fixes: Vec<String>,
-        falsifier: impl Into<String>,
-        host: Option<String>,
-    ) -> Result<Self, String> {
-        let result = Self {
-            timestamp: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, true),
-            detector_id: "D6".into(),
-            rule_version: "d6.1".into(),
-            verdict: verdict.into(),
-            confidence,
-            confidence_basis: confidence_basis.into(),
-            evidence,
-            plain_language: plain_language.into(),
-            suggested_fixes,
-            falsifier: falsifier.into(),
-            host,
-        };
-        result.validate()?;
-        Ok(result)
-    }
-
-    fn validate(&self) -> Result<(), String> {
-        if !(0.0..=1.0).contains(&self.confidence) {
-            return Err("D6 diagnosis confidence must be in [0,1]".into());
-        }
-        if self.evidence.is_empty()
-            || self.plain_language.is_empty()
-            || self.falsifier.is_empty()
-            || self.confidence_basis.is_empty()
-        {
-            return Err("D6 diagnosis contract requires evidence, plain language, confidence basis, and falsifier".into());
-        }
-        if self.verdict != "ok" && self.suggested_fixes.is_empty() {
-            return Err("D6 real findings require suggested fixes".into());
-        }
-        Ok(())
-    }
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct NotApplicable {
-    pub outcome: &'static str,
-    pub verdict: &'static str,
-    pub explanation: String,
-    pub evidence: Vec<String>,
-}
-
-impl NotApplicable {
-    fn new(explanation: impl Into<String>, evidence: Vec<String>) -> Self {
-        Self {
-            outcome: "not-applicable",
-            verdict: "not-applicable",
-            explanation: explanation.into(),
-            evidence,
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-#[serde(untagged)]
-pub enum Outcome {
-    Diagnosis(Diagnosis),
-    NotApplicable(NotApplicable),
+#[allow(clippy::too_many_arguments)]
+fn diagnosis(
+    disposition: Disposition,
+    verdict: &str,
+    confidence: f64,
+    confidence_basis: impl Into<String>,
+    evidence: Vec<String>,
+    plain_language: impl Into<String>,
+    suggested_fixes: Vec<String>,
+    falsifier: impl Into<String>,
+    host: Option<String>,
+) -> Result<Diagnosis, String> {
+    Diagnosis::new(
+        CONTRACT,
+        disposition,
+        verdict,
+        confidence,
+        confidence_basis,
+        evidence,
+        plain_language,
+        suggested_fixes,
+        falsifier,
+        vec![SUPPORTED_SCOPE.into()],
+        vec![],
+        NEAREST_ALTERNATIVE,
+        host,
+    )
 }
 
 fn parse_resolution(value: &str) -> Option<(u32, u32)> {
@@ -410,7 +359,8 @@ fn plain_bad(override_: &ModeOverride, connector: &Connector) -> String {
 }
 
 fn no_override_outcome(evidence: Vec<String>, host: Option<String>) -> Result<Outcome, String> {
-    Ok(Outcome::Diagnosis(Diagnosis::new(
+    Ok(Outcome::Diagnosis(Box::new(diagnosis(
+        Disposition::NonFinding,
         "ok",
         0.7,
         "No modes.cfg override was present, so D6 has no mode pin to validate.",
@@ -419,7 +369,7 @@ fn no_override_outcome(evidence: Vec<String>, host: Option<String>) -> Result<Ou
         vec![],
         "A parsed gamescope mode override would cause D6 to validate it against DRM state.",
         host,
-    )?))
+    )?)))
 }
 
 /// Diagnose captured text. An empty modes source has no override; malformed JSON and
@@ -499,10 +449,10 @@ pub fn diagnose_inputs(
     }
     if let Some((override_, connector, verdict, confidence, bad_evidence)) = best {
         evidence.extend(bad_evidence);
-        return Ok(Outcome::Diagnosis(Diagnosis::new(&verdict, confidence, if verdict == "mode-override-invalid" { "Pinned or active resolution is absent from the selected connector's resolution-only sysfs modes." } else { "One or more D6 degraded-mode branches matched the pinned mode against preferred and internal-panel evidence." }, evidence, plain_bad(override_, connector), vec!["Correct or delete the offending line in ~/.config/gamescope/modes.cfg.".into(), "Run: systemctl --user restart gamescope-session.target".into()], "The finding is falsified if a fresh DRM snapshot shows the pinned/active resolution valid and neither degraded branch matches.", host)?));
+        return Ok(Outcome::Diagnosis(Box::new(diagnosis(Disposition::Finding, &verdict, confidence, if verdict == "mode-override-invalid" { "Pinned or active resolution is absent from the selected connector's resolution-only sysfs modes." } else { "One or more D6 degraded-mode branches matched the pinned mode against preferred and internal-panel evidence." }, evidence, plain_bad(override_, connector), vec!["Correct or delete the offending line in ~/.config/gamescope/modes.cfg.".into(), "Run: systemctl --user restart gamescope-session.target".into()], "The finding is falsified if a fresh DRM snapshot shows the pinned/active resolution valid and neither degraded branch matches.", host)?)));
     }
     evidence.extend(ok_notes);
-    Ok(Outcome::Diagnosis(Diagnosis::new("ok", 0.75, "All mapped overrides validated against the current connector modes and D6 degraded-mode checks.", evidence, "Mapped gamescope display overrides validate against the current DRM snapshot.", vec![], "A connector snapshot that makes an override absent or triggers a D6 degraded branch would falsify this validation.", host)?))
+    Ok(Outcome::Diagnosis(Box::new(diagnosis(Disposition::NonFinding, "ok", 0.75, "All mapped overrides validated against the current connector modes and D6 degraded-mode checks.", evidence, "Mapped gamescope display overrides validate against the current DRM snapshot.", vec![], "A connector snapshot that makes an override absent or triggers a D6 degraded branch would falsify this validation.", host)?)))
 }
 
 fn open_regular_file(path: &Path) -> Result<std::fs::File, String> {
@@ -901,31 +851,6 @@ fn live_outcome(_host: Option<String>) -> Result<Outcome, String> {
     )))
 }
 
-fn print_human(outcome: &Outcome) {
-    match outcome {
-        Outcome::Diagnosis(d) => {
-            println!("detector_id: {}\nrule_version: {}\nverdict: {}\nconfidence: {}\nconfidence_basis: {}", d.detector_id, d.rule_version, d.verdict, d.confidence, d.confidence_basis);
-            for item in &d.evidence {
-                println!("evidence: {item}");
-            }
-            println!("plain_language: {}", d.plain_language);
-            for fix in &d.suggested_fixes {
-                println!("suggested_fix: {fix}");
-            }
-            println!("falsifier: {}", d.falsifier);
-        }
-        Outcome::NotApplicable(na) => {
-            println!(
-                "outcome: not-applicable\nverdict: not-applicable\nexplanation: {}",
-                na.explanation
-            );
-            for item in &na.evidence {
-                println!("evidence: {item}");
-            }
-        }
-    }
-}
-
 pub fn run_cli(
     modes_cfg: Option<&Path>,
     drm_state: Option<&Path>,
@@ -937,29 +862,7 @@ pub fn run_cli(
         (None, None) => live_outcome(host),
         _ => Err("offline display diagnosis requires both --modes-cfg and --drm-state".into()),
     };
-    match result {
-        Ok(outcome) => {
-            if json {
-                match serde_json::to_string(&outcome) {
-                    Ok(line) => println!("{line}"),
-                    Err(error) => {
-                        eprintln!("D6 incomplete: cannot serialize outcome: {error}");
-                        return ExitCode::from(2);
-                    }
-                }
-            } else {
-                print_human(&outcome);
-            }
-            match outcome {
-                Outcome::Diagnosis(d) if d.verdict != "ok" => ExitCode::from(1),
-                _ => ExitCode::SUCCESS,
-            }
-        }
-        Err(error) => {
-            eprintln!("D6 incomplete: {error}");
-            ExitCode::from(2)
-        }
-    }
+    contract::emit(CONTRACT, result, json)
 }
 
 #[cfg(test)]
@@ -975,7 +878,7 @@ mod tests {
 
     fn diagnosis(modes: &str, drm: &str) -> Diagnosis {
         match diagnose_inputs(modes, drm, None).unwrap() {
-            Outcome::Diagnosis(d) => d,
+            Outcome::Diagnosis(d) => *d,
             _ => panic!("expected diagnosis"),
         }
     }
@@ -1123,7 +1026,7 @@ mod tests {
         std::fs::remove_file(path).unwrap();
     }
     fn contract(d: &Diagnosis) {
-        assert_eq!(d.rule_version, "d6.1");
+        assert_eq!(d.rule_version, "d6.2");
         assert!((0.0..=1.0).contains(&d.confidence));
         assert!(
             !d.evidence.is_empty()

@@ -103,11 +103,12 @@ architecture rework and `fields.yml` gating.
 
 - **D6 display mode-override detector**: `rigsignal-agent diagnose display` compares Gamescope
   `modes.cfg` overrides against DRM display state (from a live Gamescope session, or offline via
-  `--modes-cfg` + `--drm-state` replay). Reports `detector_id`, `rule_version` (`d6.1`), a
+  `--modes-cfg` + `--drm-state` replay). Reports `detector_id`, `rule_version` (`d6.2`), a
   `verdict` (`ok` | `mode-override-invalid` | `mode-override-degraded` | `not-applicable`),
   `confidence`, `confidence_basis`, cited `evidence`, `plain_language` summary, reversible
-  `suggested_fix`(es), and a `falsifier`. Exit contract: `0` for `ok`/`not-applicable`, `1` for a
-  real finding, `2` for incomplete/invalid invocation. `--json` and `--host` flags supported.
+  `suggested_fix`(es), a `falsifier`, `supported_scope`, `missing_evidence`, and a
+  `nearest_alternative`. Exit contract: `0` for `ok`/`not-applicable`, `1` for a real finding,
+  `2` for incomplete/invalid invocation. `--json` and `--host` flags supported.
   Shipped through a 5-stage QC chain (Codex-sparred spec, reviewer approval, adversarial
   hardening, and a live `.254` replay that caught 2 live-path bugs invisible to tests/review); see
   `docs/diagnose-display.md` for the full field reference and a real replay transcript.
