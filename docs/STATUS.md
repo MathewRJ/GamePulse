@@ -1,6 +1,6 @@
 # RigSignal — Project Status
 
-Last updated: 2026-07-19 (0.2.5 released + deployed to both hosts; A6-24h gate sealed)
+Last updated: 2026-07-21 (0.3.0 released — D6 display detector shipped end-to-end)
 Active streams: main (local ElasticHome deployment) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -29,6 +29,7 @@ Active streams: main (local ElasticHome deployment) + offline (air-gapped, not y
 | G  elastic/integrations PR (M4) | 🟡 Deferred (maintainer architecture rework + `fields.yml` gating) | ▓░░░░░░░░░ |
 | 0.2.4 release | 🟢 Released 2026-07-18 | ▓▓▓▓▓▓▓▓▓▓ |
 | 0.2.5 release | 🟢 Released + deployed 2026-07-19 (both hosts) | ▓▓▓▓▓▓▓▓▓▓ |
+| 0.3.0 release — D6 display detector | 🟢 Released 2026-07-21 (tag `v0.3.0`) | ▓▓▓▓▓▓▓▓▓▓ |
 
 ## At a glance — offline branch (not yet forked)
 
@@ -75,16 +76,55 @@ Active streams: main (local ElasticHome deployment) + offline (air-gapped, not y
 durability + hardening and S1 probe-as-TSDS-dimension. The A6-24h retention gate PASSED at
 2026-07-19T18:43:24Z and was sealed before release; the 0.2.5 agent (`dca30eae`) is live on both
 StreamClient `.162` and GamingPC `.254` with zero-gap continuity. eBPF daemons deferred
-(version-string-only rebuild). Next per ratified H2 strategy: dashboard core/frozen/retire
-classification, then **0.3.0 = D6 diagnostic vertical**.
+(version-string-only rebuild).
+
+**0.3.0 released 2026-07-21** (tag `v0.3.0`). Ships D6, RigSignal's first diagnostic-evidence-engine
+detector: `rigsignal-agent diagnose display` compares a Gamescope `modes.cfg` override against
+DRM display state and reports a verdict, cited evidence, confidence, and a falsifier (exit
+contract 0/1/2). D6 shipped end-to-end through a 5-stage QC chain (Codex-sparred spec, reviewer
+approval, adversarial hardening, and a live `.254` replay that caught 2 live-path bugs invisible
+to tests/review). Also in this release: `host.name` canonical-lowercase normalization at every
+emission boundary, and pinned/hardened eBPF release-build toolchain. See `CHANGELOG.md` and
+`.github/RELEASE_NOTES.md` for the full release notes.
 
 **Deployment.** The local ElasticHome Elasticsearch stack is active (cloud migrated 2026-07-09). Agents run on GamingPC (`.254`) and StreamClient (`.162`) in spool-file output mode.
 
-**Distribution.** `rigsignal-git` is live on AUR and `install.sh` is live. Resubmit winget after the architecture rework. elastic/integrations PR #18878 remains deferred for the maintainer architecture rework and `fields.yml` gating.
+**Distribution.** `rigsignal-git` is live on AUR and `install.sh` is live (now installing pre-built
+eBPF from the Linux tarball as of 0.3.0). `.deb`/`.rpm`/`.pkg.tar.zst` packages are agent-only (no
+eBPF). There is no winget package — it remains unavailable/closed pending the elastic/integrations
+architecture rework. elastic/integrations PR #18878 remains deferred for the maintainer
+architecture rework and `fields.yml` gating.
 
-**Next.** 0.2.6 candidates: S3 `read_loss_counters` hardening, S4, and idle-doc suppression.
+**Next.** Per the ratified H2 strategy, next up is D3 detector scoping (the next diagnostic-evidence-engine vertical after D6).
 
 ## Completed work
+
+### Release 0.3.0 (released, 2026-07-21, tag `v0.3.0`)
+
+- **D6 display mode-override detector**: `rigsignal-agent diagnose display` compares Gamescope
+  `modes.cfg` overrides against DRM display state (from a live Gamescope session, or offline via
+  `--modes-cfg` + `--drm-state` replay). Reports `detector_id`, `rule_version` (`d6.1`), a
+  `verdict` (`ok` | `mode-override-invalid` | `mode-override-degraded` | `not-applicable`),
+  `confidence`, `confidence_basis`, cited `evidence`, `plain_language` summary, reversible
+  `suggested_fix`(es), and a `falsifier`. Exit contract: `0` for `ok`/`not-applicable`, `1` for a
+  real finding, `2` for incomplete/invalid invocation. `--json` and `--host` flags supported.
+  Shipped through a 5-stage QC chain (Codex-sparred spec, reviewer approval, adversarial
+  hardening, and a live `.254` replay that caught 2 live-path bugs invisible to tests/review); see
+  `docs/diagnose-display.md` for the full field reference and a real replay transcript.
+- **`host.name` normalization**: all emission boundaries (agent, eBPF daemon, events tailer) now
+  trim and lowercase `host.name` consistently, fixing dashboards that were splitting one physical
+  host into multiple case-variant buckets.
+- **Hardened SteamOS post-OTA eBPF restore script**: self-tests connection identity and
+  privileges before mutation, verifies attested artifacts and secure paths, installs atomically,
+  and scopes its acceptance check to the current boot's journal cursor (previously a fixed line
+  count, which false-aborted on multi-boot machines).
+- **Toolchain pinning**: eBPF release builds pin `nightly-2026-07-18` + `bpf-linker` 0.10.4 with a
+  commit-pinned toolchain action, so release eBPF artefacts are reproducible.
+- **Distribution**: the Linux tarball (`rigsignal-0.3.0-linux-x86_64.tar.gz`) now ships the
+  pre-built eBPF daemon and probes alongside the agent; `install.sh` installs and starts eBPF
+  automatically (one sudo prompt, `--no-ebpf` to skip). `.deb`/`.rpm`/`.pkg.tar.zst` packages
+  remain agent-only. AUR/WinGet package metadata corrected to Apache-2.0 licensing; winget itself
+  remains unavailable.
 
 ### Release 0.2.4 (released, 2026-07-18)
 
@@ -261,8 +301,9 @@ Commit: 561dc78
 
 ## Blockers & decisions pending
 
-- **0.2.5 S2 gate** — do not close S2 until the A6-24h retention check is complete on or after `2026-07-19T17:52:04Z`.
-- **Distribution follow-up** — resubmit winget after the architecture rework; PR #18878 is deferred pending maintainer architecture work and `fields.yml` gating.
+- **0.2.5 S2 gate** ✅ RESOLVED 2026-07-19 — A6-24h retention check PASSED, sealed before the 0.2.5 release.
+- **Distribution follow-up** — winget is unavailable/closed; do not resubmit until the elastic/integrations architecture rework lands. PR #18878 is deferred pending maintainer architecture work and `fields.yml` gating.
+- **D3 detector scoping** — next diagnostic-evidence-engine vertical after D6 (0.3.0), per the ratified H2 strategy. Not yet started.
 
 - **Security hardening follow-up — MCP key exposure via `claude mcp list`**: During initial MCP setup attempt, the first `rigsignal-mcp` API key was printed verbatim in `claude mcp list` output and exposed to a conversation transcript. That key has been invalidated. A separate properly-scoped key now lives in env var only. `claude mcp list` displaying raw API key values in its output is a design-level issue — future setup flows should either redact or be executed in non-logged contexts. Worth surfacing to Anthropic as a product feedback item.
 
@@ -279,8 +320,8 @@ Commit: 561dc78
 
 ## Follow-ups and migration notes
 
-- **0.2.5 S2 spool durability**: complete the A6-24h retention check before closing the gate; the release bump is already pre-staged in a worktree.
-- **0.2.6 candidates**: S3 `read_loss_counters` hardening, S4, and idle-doc suppression.
+- **0.2.5 S2 spool durability**: ✅ complete — A6-24h retention check passed, sealed before the 0.2.5 release.
+- **Backlog (not yet scheduled)**: S3 `read_loss_counters` hardening, S4, and idle-doc suppression remain open items but were not part of 0.3.0, which shipped D6 instead per the ratified H2 strategy.
 
 - **Linux `cargo check` verification for B.1–B.3 + B.6 (`--features ebpf`) pending**: 2026-04-24 sessions were Windows-only (gaming PC offline). Windows `cargo check`, `cargo clippy -- -D warnings`, `cargo fmt --check`, and `cargo check --all-features` (expected-fail via compile_error) all green. The B.5 CI workflow exercises both Linux and Windows on push, so this is self-healing as soon as CI runs on main — but a gaming-PC session to run `cargo check --manifest-path src/Cargo.toml --features ebpf` and confirm the cfg gate doesn't accidentally exclude required modules on Linux is still worth doing.
 - **B2.1 live verification on gaming PC**: the Windows session can only smoke-test the migration via `cargo check`/`clippy`/`test`. The behaviour claim (session-start, in-tick, and session-summary docs are byte-for-byte identical to pre-B2.1, modulo timestamps) needs a live Linux session — boot a real game, capture a session-start doc and a session-summary doc, diff field-by-field against a known-good pre-B2.1 sample from ES Discover. Same trip should also confirm the eBPF daemon still parses `/tmp/rigsignal/session.json` cleanly (format wasn't supposed to change, but verify).
@@ -289,8 +330,9 @@ Commit: 561dc78
 
 ## Follow-ups to investigate
 
-- S3 `read_loss_counters` hardening, S4, and idle-doc suppression are the current 0.2.6 candidates.
+- S3 `read_loss_counters` hardening, S4, and idle-doc suppression remain open backlog items (not scheduled into a release yet).
 - Revisit elastic/integrations PR #18878 once the maintainer architecture rework and `fields.yml` gate are resolved.
+- D3 detector scoping is the next diagnostic-evidence-engine vertical per the ratified H2 strategy.
 
 - **Dashboard integration-compliance gap (Milestone G blocker)**: ✅ RESOLVED 2026-04-29 — `data_stream.dataset: rigsignal.*` wildcard filter added at dashboard level to all 6 new-suite dashboards via `scripts/add-dataset-filter.py`. `verify-dashboard.sh --require-dataset-filter` PASS 6/6 (API + UI gate). Deployed NJDSONs saved to `dashboards/*-dashboard-deployed.ndjson`. `verify-dashboard.sh` updated to accept dashboard-level filter as satisfying the integration-compliance requirement.
 - **Dev install: systemd unit ExecStart path drop-in override** ✅ DOCUMENTED 2026-04-29: `docs/install.md` now has a callout block showing the exact `~/.config/systemd/user/rigsignal-agent.service.d/override.conf` snippet for dev builds installed to `/usr/local/bin`. PKGBUILD installs to `/usr/bin/` and is unaffected.

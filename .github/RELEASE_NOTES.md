@@ -150,7 +150,7 @@ Sign up for a free [Elastic Cloud Serverless](https://www.elastic.co/cloud) proj
 ### 2. Create an API key
 
 In Kibana → **Stack Management → API Keys**, create a key with these privileges:
-- Index privileges: `create_index`, `create`, `write`, `view_index_metadata` on `metrics-rigsignal.*`
+- Index privileges: `create_index`, `create`, `write`, `view_index_metadata` on `metrics-rigsignal.*` **and** `logs-rigsignal.*` (the agent ships both metrics and logs data streams)
 - Cluster privileges: `monitor`
 
 ### 3. Run first-time setup

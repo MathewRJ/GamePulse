@@ -13,7 +13,7 @@ it does, not just that it stuttered.
 - **Linux**: full support, including eBPF kernel telemetry
 - **Windows**: supported; eBPF data stream is not available on Windows
 - **Kibana**: `^8.13` or `^9.0`
-- **Elasticsearch**: `^8.13`
+- **Elasticsearch**: `8.10+` (TSDS index templates)
 - **Subscription**: Basic
 
 ## Requirements

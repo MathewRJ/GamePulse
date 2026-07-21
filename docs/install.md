@@ -3,15 +3,15 @@
 ## Quick start
 
 ```bash
-# Arch Linux / CachyOS / Manjaro
-yay -S rigsignal-git
-
-# Other Linux (one-liner)
+# Linux — recommended, includes eBPF
 curl -sSfL https://mathewrj.github.io/RigSignal-Integration/install.sh | sh
 
-# Windows
-winget install MathewRJ.RigSignal
+# Arch Linux / CachyOS / Manjaro (AUR, builds from source incl. eBPF)
+yay -S rigsignal-git
 ```
+
+Windows: download the `.msi` from the [GitHub Releases page](https://github.com/MathewRJ/RigSignal/releases)
+and run it. There is no `winget` package at this time.
 
 Then:
 
@@ -49,8 +49,12 @@ Sign up at [cloud.elastic.co](https://cloud.elastic.co/). The free tier (8 GB) i
 
 ### 2. Get an API key
 
-In Kibana → Stack Management → API Keys, create a key with cluster `monitor` and index `auto_configure` + `create_doc` privileges on `metrics-rigsignal.*`. Note:
-- Your **Elasticsearch endpoint** (e.g. `https://your-deployment.es.us-central1.gcp.elastic.cloud`)
+In Kibana → Stack Management → API Keys, create a key with:
+- Index privileges: `create_index`, `create`, `write`, `view_index_metadata` on `metrics-rigsignal.*` **and** `logs-rigsignal.*` (the agent ships both metrics and logs data streams)
+- Cluster privileges: `monitor`
+
+Note:
+- Your **Elasticsearch endpoint** (e.g. `https://your-project.es.us-central1.gcp.elastic.cloud`)
 - The **API key** (base64 encoded, shown once at creation)
 
 For a personal deployment, `all` cluster + index privileges is simpler and fine.
@@ -61,7 +65,7 @@ For a personal deployment, `all` cluster + index privileges is simpler and fine.
 rigsignal setup
 ```
 
-This prompts for your ES endpoint and API key, verifies connectivity, and writes `~/.config/rigsignal/rigsignal.toml` (mode 600). The integration package is installed to your Kibana instance automatically.
+This prompts for your ES endpoint and API key, verifies connectivity, and writes `~/.config/rigsignal/rigsignal.toml` (mode 600). Import the Kibana dashboards separately — see "Import the dashboards" below.
 
 ---
 
@@ -69,7 +73,7 @@ This prompts for your ES endpoint and API key, verifies connectivity, and writes
 
 Download and install guide: [elastic.co/downloads/elasticsearch](https://www.elastic.co/downloads/elasticsearch) / [Installing Elasticsearch](https://www.elastic.co/docs/deploy-manage/deploy/self-managed/installing-elasticsearch)
 
-Requirements: Elasticsearch 8.13+, at least 2 GB RAM, Kibana (same version) for dashboards.
+Requirements: Elasticsearch 8.10+ (the integration uses TSDS index templates, which require 8.10+), at least 2 GB RAM, Kibana (same version) for dashboards.
 
 ### 1. Start Elasticsearch
 
@@ -108,7 +112,7 @@ curl -u elastic:<your-password> \
         "cluster": ["monitor"],
         "indices": [{
           "names": ["metrics-rigsignal.*", "logs-rigsignal.*"],
-          "privileges": ["auto_configure", "create_doc", "create_index"]
+          "privileges": ["create_index", "create", "write", "view_index_metadata"]
         }]
       }
     }
@@ -147,33 +151,42 @@ cd kibana-*/
 
 Kibana listens on `http://localhost:5601` by default. Log in as `elastic` with the password from step 1.
 
-### 5. Install the RigSignal integration package
+### 5. Import the dashboards
 
-Once Kibana is running, install the integration package via the Fleet API:
+There is no published Fleet integration package for RigSignal yet — the
+elastic/integrations submission ([PR #18878](https://github.com/elastic/integrations/pull/18878))
+is deferred pending a maintainer architecture rework, and this repository does
+not currently build a `fields.yml`/Fleet package. The agent writes directly to
+`metrics-rigsignal.*` / `logs-rigsignal.*` data streams (see `rigsignal setup`
+above) without needing Fleet.
 
-```bash
-curl -X POST "https://localhost:5601/api/fleet/epm/packages" \
-  -u elastic:<your-password> \
-  -H "kbn-xsrf: true" \
-  -H "Content-Type: application/zip" \
-  --data-binary @rigsignal-0.1.0.zip
-```
-
-Or navigate to Kibana → Fleet → Integrations → search "RigSignal" if the package is available in the registry.
-
-> For contributors: `elastic-package stack up` from the repo root starts a local stack with the package pre-loaded automatically.
+To get the Kibana dashboards, import the NDJSON files under
+[`dashboards/`](../dashboards/) via Kibana → Stack Management → Saved Objects →
+Import. See [`docs/dashboards.md`](dashboards.md) for the current dashboard list.
 
 ---
 
 ## Linux distro packages
 
-### Arch Linux / CachyOS / Manjaro (AUR)
+All distro packages below are **agent-only** — no eBPF daemon. If you want eBPF
+with a distro package, also run the one-line installer (above), or use AUR
+(which builds eBPF from source).
+
+### Arch Linux / CachyOS / Manjaro
+
+Pre-built package from the release (agent only):
+
+```bash
+sudo pacman -U rigsignal-0.3.0-1-x86_64.pkg.tar.zst
+```
+
+Or AUR, which builds from source and includes eBPF:
 
 ```bash
 yay -S rigsignal-git
 ```
 
-Or manually:
+Or manually from AUR:
 
 ```bash
 git clone https://aur.archlinux.org/rigsignal-git.git
@@ -181,22 +194,22 @@ cd rigsignal-git
 makepkg -si
 ```
 
-### Debian / Ubuntu (.deb)
+### Debian / Ubuntu 24.04+ (.deb)
 
 Download the latest `.deb` from the [GitHub releases page](https://github.com/MathewRJ/RigSignal/releases):
 
 ```bash
-sudo apt install ./rigsignal_*.deb
+sudo dpkg -i rigsignal_0.3.0-1_amd64.deb
 ```
 
 The package installs `rigsignal-agent` and `rigsignal` (launcher) to `/usr/bin/`, the systemd user unit, and an example config to `/etc/rigsignal/rigsignal.toml`.
 
-### Fedora / RHEL (.rpm)
+### Fedora / RHEL / openSUSE (.rpm)
 
 Download the latest `.rpm` from the [GitHub releases page](https://github.com/MathewRJ/RigSignal/releases):
 
 ```bash
-sudo dnf install ./rigsignal-*.rpm
+sudo rpm -i rigsignal-0.3.0-1.x86_64.rpm
 ```
 
 ### Building from source
@@ -227,13 +240,29 @@ sudo install -m 644 target/bpfel-unknown-none/release/rigsignal-ebpf-probes \
 
 ## Windows installer
 
-The Windows MSI installer shipped in Milestone E and is available on the
-[GitHub Releases page](https://github.com/MathewRJ/RigSignal/releases).
-Download `rigsignal-<version>-x86_64-windows.msi` and run the installer — it installs
-`rigsignal.exe` to `Program Files\RigSignal\` and registers the Windows Service.
-The installer bundles Intel GameTechDev PresentMon v2.4.1 (MIT license) for Windows
-frame timing. Set `RIGSIGNAL_PRESENTMON` to override it with your own copy.
-eBPF is not available on Windows; all other metric streams are supported.
+Download `rigsignal-0.3.0-x86_64.msi` from the
+[GitHub Releases page](https://github.com/MathewRJ/RigSignal/releases) and run it,
+or install silently from an admin PowerShell:
+
+```powershell
+msiexec /i rigsignal-0.3.0-x86_64.msi /qb!
+```
+
+This installs `rigsignal-agent.exe` to `C:\Program Files\RigSignal\bin\` (added
+to the system PATH), an example config at
+`C:\Program Files\RigSignal\config\rigsignal.toml.example`, and three starter
+game profiles. The installer also bundles Intel GameTechDev PresentMon v2.4.1
+(MIT license) for Windows frame timing — set `RIGSIGNAL_PRESENTMON` to a
+different path to override it.
+
+There is no Windows service or `rigsignal` launcher CLI in this release —
+Windows has no systemd analog. Run `rigsignal-agent.exe` directly from a
+terminal (foreground), or wrap it in a Steam launch option. eBPF is not
+available on Windows; all other metric streams are supported, with some gaps
+documented in [`RELEASE_NOTES.md`](../.github/RELEASE_NOTES.md#windows-caveats).
+
+To uninstall: `msiexec /x rigsignal-0.3.0-x86_64.msi /qb!` or *Settings → Apps
+→ Installed apps → RigSignal → Uninstall*.
 
 ---
 
@@ -256,7 +285,7 @@ log_duration=0
 output_folder=/tmp/MangoHud
 ```
 
-See `docs/steam-setup.md` for detailed Steam integration instructions.
+See [`docs/steam-setup.md`](steam-setup.md) for detailed Steam integration instructions.
 
 ---
 
@@ -272,7 +301,7 @@ systemctl --user enable --now rigsignal-agent
 sudo systemctl enable --now rigsignal-ebpf
 ```
 
-Service files are installed by the AUR package to the correct locations. For manual installs, copy from `packaging/systemd/`.
+The one-line installer and the AUR package both install and enable these units automatically (the one-line installer prompts once for `sudo` to install/start `rigsignal-ebpf`). For manual installs, copy the unit files from the release tarball or `packaging/systemd/`.
 
 > **Dev installs (build from source):** The unit's `ExecStart` defaults to `/usr/bin/rigsignal-agent`, but a source build installs to `/usr/local/bin/`. Create a drop-in to override:
 > ```bash
@@ -301,8 +330,8 @@ Config is read from (in priority order):
 ## Minimum API key permissions
 
 The API key you provide needs:
-- `monitor` privilege on the cluster
-- `auto_configure`, `create_doc`, `create_index` on indices `metrics-rigsignal.*` and `logs-rigsignal.*`
+- Cluster privileges: `monitor`
+- Index privileges: `create_index`, `create`, `write`, `view_index_metadata` on `metrics-rigsignal.*` **and** `logs-rigsignal.*` (the agent ships both metrics and logs data streams)
 
 For a personal deployment, `all` cluster + index privileges is simpler and fine.
 
@@ -318,6 +347,15 @@ rigsignal-agent diagnose
 
 This outputs kernel version, GPU info, Elasticsearch reachability (with the API key redacted),
 and the resolved config path. Use `--output report.txt` to save it for bug reports.
+
+On Linux, if you use Gamescope, you can also check for display mode-override
+problems directly:
+
+```bash
+rigsignal-agent diagnose display
+```
+
+See [`docs/diagnose-display.md`](diagnose-display.md) for the verdict/evidence/exit-code contract.
 
 ---
 
