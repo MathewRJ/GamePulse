@@ -68,7 +68,7 @@ reference and a real replay transcript:
 - **Linux** x86_64, glibc 2.39+ (Ubuntu 24.04, Fedora 40, Arch, CachyOS, SteamOS 3.6+) — full feature set
 - **Windows** 10 / 11 x86_64 — agent only, no eBPF; some metrics partial (see "Windows caveats" below)
 - An Elasticsearch endpoint — the free tier on [Elastic Cloud Serverless](https://www.elastic.co/cloud) works
-- An API key with `write` access to `metrics-rigsignal.*` data streams (see Quick Start)
+- An API key with `write` access to `metrics-rigsignal.*` and `logs-rigsignal.*` data streams (see Quick Start)
 - **MangoHud** (Linux) / **PresentMon** (Windows) — optional, required for frame timing (`rigsignal.fps.*` fields)
 - `rigsignal-agent diagnose display` additionally requires an active Gamescope session with a connected external display to produce a `ok`/finding verdict; it exits `not-applicable` otherwise.
 
