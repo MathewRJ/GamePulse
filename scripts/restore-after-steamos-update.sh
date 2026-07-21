@@ -18,8 +18,8 @@ set -euo pipefail
 # Test-only fault knobs must never alter a shipped restore invoked from ambient root env.
 for fault_var in "${!RIGSIGNAL_RESTORE_FAULT_@}"; do unset "$fault_var"; done
 
-DAEMON_SHA=8f4676684ecfe38814af4b6cae362b442200b94a17f7acc261f08634ed9a4e9a
-DAEMON_SIZE=8574648
+DAEMON_SHA=6e70b514ad44754e0899d650eef68b119ad56b4a3df06e2ff6b548747d00c44e
+DAEMON_SIZE=8991984
 PROBES_SHA=ddf8199e9fe6935b43ca546ac4e1db35c7cee9334c068894817b12ae83ac0bdb
 PROBES_SIZE=18888
 UNIT=rigsignal-ebpf.service

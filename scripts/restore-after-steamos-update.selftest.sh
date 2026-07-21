@@ -86,7 +86,7 @@ if [[ $fmt == %u || $fmt == %u:%a ]]; then
 elif [[ $fmt == %s ]]; then
   case $path in
     *rigsignal-ebpf-probes*) printf '18888\n' ;;
-    *rigsignal-ebpf*|*/proc/*/exe) printf '8574648\n' ;;
+    *rigsignal-ebpf*|*/proc/*/exe) printf '8991984\n' ;;
     *) /usr/bin/stat -c %s "$path" ;;
   esac
 elif [[ $fmt == %i ]]; then /usr/bin/stat -Lc %i "$path"
@@ -97,8 +97,8 @@ EOF
 set -eu
 case ${1:?} in
   *rigsignal-ebpf-probes*) printf '%s  %s\n' ddf8199e9fe6935b43ca546ac4e1db35c7cee9334c068894817b12ae83ac0bdb "$1" ;;
-  *input/rigsignal-ebpf) [[ ${MOCK_BAD_HASH:-0} == 1 ]] && printf '%s  %s\n' bad "$1" || printf '%s  %s\n' 8f4676684ecfe38814af4b6cae362b442200b94a17f7acc261f08634ed9a4e9a "$1" ;;
-  *rigsignal-ebpf*|*/proc/*/exe) printf '%s  %s\n' 8f4676684ecfe38814af4b6cae362b442200b94a17f7acc261f08634ed9a4e9a "$1" ;;
+  *input/rigsignal-ebpf) [[ ${MOCK_BAD_HASH:-0} == 1 ]] && printf '%s  %s\n' bad "$1" || printf '%s  %s\n' 6e70b514ad44754e0899d650eef68b119ad56b4a3df06e2ff6b548747d00c44e "$1" ;;
+  *rigsignal-ebpf*|*/proc/*/exe) printf '%s  %s\n' 6e70b514ad44754e0899d650eef68b119ad56b4a3df06e2ff6b548747d00c44e "$1" ;;
   *) /usr/bin/sha256sum "$1" ;;
 esac
 EOF
