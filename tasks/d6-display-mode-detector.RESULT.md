@@ -22,11 +22,32 @@ behavior. The Rust suite has 119 passing tests, including hardening regressions
 for malformed DRM with an empty modes file, oversized fixtures, and non-regular
 fixture paths.
 
-## Live-replay verification (orchestrator-owned)
+## Live-replay verification (orchestrator-run, 2026-07-21, PASS)
 
-Not run by this implementation worker. The orchestrator must perform Work step 4
-on `.254`, including preflight, candidate hash, degraded (0.85/exit 1) and restored
-healthy (ok/exit 0) commands, EXIT-trap restoration proof, and before/after SHA-256.
+Performed on GamingPC `deck@192.168.50.254` via
+`Workflow projects/RigSignal/scripts/d6-live-replay.sh` (EXIT-trap, existence-aware
+restore). Full transcript:
+`Workflow projects/RigSignal/evidence/d6-live-replay-2026-07-21/d6-live-replay-20260721T170204.log`.
+
+- Candidate: commit `018f65f` build, binary sha256 `3ededae8...9bf7a48e`,
+  shipped to `~/rigsignal-test/rigsignal-agent-3ededae8`, remote hash verified equal.
+- Preflight: `card0-DP-2` connected (AOC AG352UCG6), sysfs modes still advertise
+  `1280x800`; original `modes.cfg` = `AOC AG352UCG6:3440x1440@120`,
+  sha256 `23ec0055...caa3010`.
+- Baseline run: verdict `ok`, confidence 0.75, exit 0 ("pinned mode matches preferred").
+- Seeded `AOC AG352UCG6:1280x800@60`: verdict `mode-override-degraded`,
+  confidence 0.85, exit 1; evidence includes degraded branch
+  `area ratio 0.207 < 0.5, aspect delta 0.789 > 0.05 vs preferred 3440x1440` and
+  refresh divergence vs `valid_refresh_rates=[120.0]`; plain language names the
+  stale-override cause and that a reboot won't help; two actionable suggested fixes.
+- Restore: `modes.cfg` sha256 identical before/after (`23ec0055...caa3010`),
+  healthy re-run verdict `ok` exit 0, backup removed.
+- First replay attempt (candidate `fdaf2885`) FAILED and exposed two live-path bugs
+  (selection predicate never matching; sysfs edid stat-size 0) — fixed with unit
+  tests before this passing run. The EXIT trap restored the box cleanly on failure.
+
+An earlier candidate note: this run exercised the exit-code contract 0/1 in both
+directions on real hardware, per spec Work step 4.
 
 ## Gates
 
