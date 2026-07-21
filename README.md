@@ -112,6 +112,11 @@ finding, `2` for an incomplete or invalid invocation. See
 verdict/evidence/confidence/falsifier/scope/missing-evidence/alternative
 contract and a real incident replay.
 
+RigSignal also includes D3, `rigsignal-agent diagnose gpu-boot`, for a GPU
+that disappears after a warm boot. It compares authoritative PCI sysfs state
+with retained boot journals and uses an explicit per-slot baseline. See
+[`docs/diagnose-gpu-boot.md`](docs/diagnose-gpu-boot.md).
+
 ---
 
 ## Connecting to Elasticsearch
@@ -169,6 +174,7 @@ See [`docs/STATUS.md`](docs/STATUS.md) for current release state and
 | Getting started | [`docs/getting-started.md`](docs/getting-started.md) | First install + first session |
 | Installation | [`docs/install.md`](docs/install.md) | Full install guide: Elastic Cloud, self-hosted, AUR, packages, systemd |
 | `diagnose display` (D6) | [`docs/diagnose-display.md`](docs/diagnose-display.md) | Display mode-override diagnostic — usage, verdicts, exit codes |
+| `diagnose gpu-boot` (D3) | [`docs/diagnose-gpu-boot.md`](docs/diagnose-gpu-boot.md) | PCI/journal GPU boot-enumeration diagnostic — explicit slot baseline, findings, and recovery |
 | Metrics reference | [`docs/metrics-reference.md`](docs/metrics-reference.md) | Field-by-field reference for every data stream |
 | Configuration reference | [`docs/configuration.md`](docs/configuration.md) | All config options |
 | eBPF kernel telemetry | [`docs/ebpf.md`](docs/ebpf.md) | eBPF daemon setup and probe reference |

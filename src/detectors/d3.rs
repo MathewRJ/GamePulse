@@ -5,7 +5,7 @@
 //! verdict, persistence, or output semantics.
 
 use super::contract::{
-    DetectorContract, Diagnosis, DiagnosisFields, Disposition, NotApplicable, Outcome,
+    self, DetectorContract, Diagnosis, DiagnosisFields, Disposition, NotApplicable, Outcome,
 };
 use chrono::{DateTime, FixedOffset, Utc};
 use fs2::FileExt;
@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::process::{Command, ExitCode, Stdio};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -26,6 +27,8 @@ pub const RESET_ATTEMPT_MIN: usize = 2;
 pub const PRECURSOR_WINDOW_S: i64 = 900;
 const STATE_SCHEMA_VERSION: u32 = 1;
 const READ_LIMIT: u64 = 1024 * 1024;
+const JOURNAL_LIMIT: usize = 1024 * 1024;
+const JOURNAL_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Platform {
@@ -246,6 +249,7 @@ pub struct D3Input {
     pub boot_inventory: Option<BootInventory>,
     pub current_journal: Option<String>,
     pub prior_tail: Option<String>,
+    pub collection_missing: Vec<String>,
     pub host: Option<String>,
 }
 
@@ -254,6 +258,402 @@ pub enum Operation {
     Diagnose,
     Learn { slot: Option<String> },
     Reset,
+}
+
+/// Arguments supplied by the Clap adapter. Keeping this separate from
+/// `D3Input` makes the core independently replayable and prevents an offline
+/// invocation from silently filling a missing fixture with live evidence.
+#[derive(Clone, Debug, Default)]
+pub struct CliOptions {
+    pub offline: bool,
+    pub journal_current: Option<PathBuf>,
+    pub journal_prior_kernel: Option<PathBuf>,
+    pub journal_prior_tail: Option<PathBuf>,
+    pub pci_snapshot: Option<PathBuf>,
+    pub boot_list: Option<PathBuf>,
+    pub current_boot_id: Option<String>,
+    pub state_file: Option<PathBuf>,
+    pub slot: Option<String>,
+    pub json: bool,
+    pub host: Option<String>,
+    pub learn_baseline: bool,
+    pub reset_baseline: bool,
+}
+
+pub fn run_cli(options: CliOptions) -> ExitCode {
+    contract::emit(CONTRACT, cli_outcome(options.clone()), options.json)
+}
+
+fn cli_outcome(options: CliOptions) -> Result<Outcome, String> {
+    let supplied_fixture = options.journal_current.is_some()
+        || options.journal_prior_kernel.is_some()
+        || options.journal_prior_tail.is_some()
+        || options.pci_snapshot.is_some()
+        || options.boot_list.is_some()
+        || options.current_boot_id.is_some();
+    if supplied_fixture && !options.offline {
+        return Err("offline fixture flags require explicit --offline".into());
+    }
+    if options.learn_baseline && options.reset_baseline {
+        return Err("--learn-baseline and --reset-baseline are mutually exclusive".into());
+    }
+    if options.reset_baseline && options.slot.is_some() {
+        return Err("--reset-baseline cannot be combined with --slot".into());
+    }
+    let operation = if options.reset_baseline {
+        Operation::Reset
+    } else if options.learn_baseline {
+        Operation::Learn {
+            slot: options.slot.clone(),
+        }
+    } else {
+        Operation::Diagnose
+    };
+    let state_file = options
+        .state_file
+        .clone()
+        .unwrap_or_else(default_state_file);
+    if options.offline {
+        if options.pci_snapshot.is_none() {
+            return Err("offline gpu-boot diagnosis requires --pci-snapshot".into());
+        }
+        if options.state_file.is_none() {
+            return Err("offline gpu-boot diagnosis requires a non-default --state-file".into());
+        }
+        if options.boot_list.is_none() && options.current_boot_id.is_none() {
+            return Err(
+                "offline gpu-boot diagnosis requires --boot-list or --current-boot-id".into(),
+            );
+        }
+        let snapshot_text = read_regular_text(options.pci_snapshot.as_deref().expect("checked"))?;
+        let snapshot = parse_pci_snapshot(&snapshot_text)?;
+        let current_boot_id = options
+            .current_boot_id
+            .as_deref()
+            .map(normalize_boot_id)
+            .transpose()?
+            .unwrap_or_else(|| snapshot.boot_id.clone());
+        let boot_inventory = options
+            .boot_list
+            .as_deref()
+            .map(read_regular_text)
+            .transpose()?
+            .map(|source| parse_boot_inventory(&source))
+            .transpose()?;
+        let current_journal = options
+            .journal_current
+            .as_deref()
+            .map(read_regular_text)
+            .transpose()?;
+        let prior_kernel = options
+            .journal_prior_kernel
+            .as_deref()
+            .map(read_regular_text)
+            .transpose()?;
+        let prior_tail = options
+            .journal_prior_tail
+            .as_deref()
+            .map(read_regular_text)
+            .transpose()?;
+        return run(
+            D3Input {
+                // Offline fixtures model Linux PCI/journald evidence and must
+                // remain replayable on Windows CI hosts.
+                platform: Platform::Linux,
+                snapshot,
+                current_boot_id,
+                boot_inventory,
+                current_journal,
+                // The full end-tail is authoritative for the end timestamp. A
+                // supplied kernel excerpt can add precursor lines without
+                // changing which entry defines the tail's end.
+                prior_tail: combine_prior(prior_kernel, prior_tail),
+                collection_missing: vec![],
+                host: options.host,
+            },
+            operation,
+            &state_file,
+        );
+    }
+    live_outcome(operation, state_file, options.host)
+}
+
+fn combine_prior(kernel: Option<String>, tail: Option<String>) -> Option<String> {
+    match (kernel, tail) {
+        (_, None) => None,
+        (None, Some(tail)) => Some(tail),
+        (Some(kernel), Some(tail)) => {
+            // The end-tail commonly contains the same kernel records as the
+            // full kernel query.  Keep the kernel-first ordering while
+            // treating each short-iso-precise journal line as one event.
+            let mut seen = std::collections::HashSet::new();
+            Some(
+                kernel
+                    .lines()
+                    .chain(tail.lines())
+                    .filter(|line| seen.insert(*line))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            )
+        }
+    }
+}
+
+fn default_state_file() -> PathBuf {
+    let root = std::env::var_os("XDG_STATE_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/state")))
+        .unwrap_or_else(|| PathBuf::from(".local/state"));
+    root.join("rigsignal/detectors/d3-gpu-boot.json")
+}
+
+fn read_regular_text(path: &Path) -> Result<String, String> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|error| format!("cannot inspect {}: {error}", path.display()))?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(format!(
+            "{} must be a regular non-symlink file",
+            path.display()
+        ));
+    }
+    if metadata.len() > READ_LIMIT {
+        return Err(format!("{} exceeds bounded read limit", path.display()));
+    }
+    fs::read_to_string(path).map_err(|error| format!("cannot read {}: {error}", path.display()))
+}
+
+#[cfg(target_os = "linux")]
+fn live_outcome(
+    operation: Operation,
+    state_file: PathBuf,
+    host: Option<String>,
+) -> Result<Outcome, String> {
+    let current_boot_id = normalize_boot_id(&read_regular_text(Path::new(
+        "/proc/sys/kernel/random/boot_id",
+    ))?)?;
+    let snapshot = collect_sysfs_snapshot(&current_boot_id)?;
+    let mut collection_missing = Vec::new();
+    let inventory = match journal_command(&["--list-boots"]) {
+        Ok(text) => match parse_boot_inventory(&text) {
+            Ok(value) => Some(value),
+            Err(error) => {
+                collection_missing.push(format!("boot inventory unavailable: {error}"));
+                None
+            }
+        },
+        Err(error) => {
+            collection_missing.push(format!("boot inventory unavailable: {error}"));
+            None
+        }
+    };
+    let mut current_journal = None;
+    let mut prior_tail = None;
+    // Journal failures are deliberately non-fatal: sysfs remains authoritative.
+    match journal_command(&["--boot", &current_boot_id, "-k"]) {
+        Ok(value) => current_journal = Some(value),
+        Err(error) => {
+            collection_missing.push(format!("same-boot kernel journal unavailable: {error}"))
+        }
+    }
+    if let Some(prior) = inventory
+        .as_ref()
+        .and_then(|value| prior_for(value, &current_boot_id))
+    {
+        match (
+            journal_command(&["--boot", &prior, "-k"]),
+            journal_tail(&prior),
+        ) {
+            (Ok(kernel), Ok(tail)) => prior_tail = combine_prior(Some(kernel), Some(tail)),
+            (kernel, tail) => collection_missing.push(format!(
+                "prior boot journal unavailable: {}{}",
+                kernel.err().unwrap_or_default(),
+                tail.err()
+                    .map(|error| format!(" {error}"))
+                    .unwrap_or_default()
+            )),
+        }
+    }
+    run(
+        D3Input {
+            platform: Platform::Linux,
+            snapshot,
+            current_boot_id,
+            boot_inventory: inventory,
+            current_journal,
+            prior_tail,
+            collection_missing,
+            host,
+        },
+        operation,
+        &state_file,
+    )
+}
+
+#[cfg(not(target_os = "linux"))]
+fn live_outcome(
+    _operation: Operation,
+    _state_file: PathBuf,
+    _host: Option<String>,
+) -> Result<Outcome, String> {
+    Ok(Outcome::NotApplicable(NotApplicable::new(
+        "Live D3 collection is only available on Linux.",
+        vec!["platform: non-Linux".into()],
+    )))
+}
+
+#[cfg(target_os = "linux")]
+fn collect_sysfs_snapshot(boot_id: &str) -> Result<PciSnapshot, String> {
+    let mut devices = Vec::new();
+    for entry in fs::read_dir("/sys/bus/pci/devices")
+        .map_err(|error| format!("cannot enumerate PCI sysfs: {error}"))?
+    {
+        let entry = entry.map_err(|error| format!("cannot read PCI sysfs entry: {error}"))?;
+        let bdf = entry.file_name().to_string_lossy().to_ascii_lowercase();
+        if !valid_bdf(&bdf) {
+            continue;
+        }
+        let root = entry.path();
+        let vendor = read_regular_text(&root.join("vendor"))?
+            .trim()
+            .to_ascii_lowercase();
+        let device = read_regular_text(&root.join("device"))?
+            .trim()
+            .to_ascii_lowercase();
+        let class = read_regular_text(&root.join("class"))?
+            .trim()
+            .to_ascii_lowercase();
+        if !valid_hex_field(&vendor, 4)
+            || !valid_hex_field(&device, 4)
+            || !valid_hex_field(&class, 6)
+        {
+            return Err(format!("PCI sysfs identity malformed for {bdf}"));
+        }
+        let canonical = fs::canonicalize(&root)
+            .map_err(|error| format!("cannot resolve PCI parent chain for {bdf}: {error}"))?;
+        let parent_path = canonical.to_string_lossy().into_owned();
+        let chain: Vec<String> = parent_path
+            .split('/')
+            .filter(|part| valid_bdf(part))
+            .map(str::to_ascii_lowercase)
+            .collect();
+        devices.push(PciDevice {
+            bdf,
+            vendor,
+            device,
+            class,
+            upstream_bridge: chain.iter().rev().nth(1).cloned(),
+            parent_path,
+        });
+    }
+    if devices.is_empty() {
+        return Err("PCI sysfs contains no devices".into());
+    }
+    Ok(PciSnapshot {
+        boot_id: boot_id.into(),
+        devices,
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn journal_command(extra: &[&str]) -> Result<String, String> {
+    journal_command_bounded(extra, false)
+}
+
+#[cfg(target_os = "linux")]
+fn journal_command_start(extra: &[&str]) -> Result<String, String> {
+    journal_command_bounded(extra, true)
+}
+
+#[cfg(target_os = "linux")]
+fn journal_command_bounded(extra: &[&str], retain_start: bool) -> Result<String, String> {
+    let mut args = vec!["--no-pager", "-o", "short-iso-precise"];
+    args.extend_from_slice(extra);
+    let mut child = Command::new("journalctl")
+        .args(&args)
+        .env("LC_ALL", "C")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| format!("journalctl spawn failed: {error}"))?;
+    let started = std::time::Instant::now();
+    while child
+        .try_wait()
+        .map_err(|error| format!("journalctl wait failed: {error}"))?
+        .is_none()
+    {
+        if started.elapsed() > JOURNAL_TIMEOUT {
+            let _ = child.kill();
+            return Err("journalctl timed out".into());
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    let output = child
+        .wait_with_output()
+        .map_err(|error| format!("journalctl output failed: {error}"))?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success() {
+        return Err(format!(
+            "journalctl failed ({}): {}",
+            output.status,
+            truncate(&stderr)
+        ));
+    }
+    if !stderr.trim().is_empty() {
+        return Err(format!("journalctl wrote stderr: {}", truncate(&stderr)));
+    }
+    let text = String::from_utf8_lossy(&output.stdout).into_owned();
+    if retain_start {
+        bounded_start(text)
+    } else {
+        bounded_end(text)
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn journal_tail(boot_id: &str) -> Result<String, String> {
+    // --reverse starts at the boot's final entry. We retain an end-oriented
+    // window, then restore chronological order for the core parser.
+    let reversed = journal_command_start(&["--boot", boot_id, "--reverse", "-n", "2048"])?;
+    let mut lines: Vec<&str> = reversed.lines().collect();
+    let terminal = lines
+        .first()
+        .map(|line| line.trim())
+        .unwrap_or_default()
+        .to_string();
+    let last = journal_command(&["--boot", boot_id, "-n", "1"])?;
+    let expected = last.lines().last().map(str::trim).unwrap_or_default();
+    if terminal != expected {
+        return Err("journal tail does not reach this boot's final inventory entry".into());
+    }
+    lines.reverse();
+    Ok(lines.join("\n"))
+}
+
+#[cfg(target_os = "linux")]
+fn bounded_end(value: String) -> Result<String, String> {
+    if value.len() <= JOURNAL_LIMIT {
+        return Ok(value);
+    }
+    let start = value.len() - JOURNAL_LIMIT;
+    let start = value[start..]
+        .find('\n')
+        .map(|offset| start + offset + 1)
+        .unwrap_or(start);
+    Ok(value[start..].to_string())
+}
+
+#[cfg(target_os = "linux")]
+fn bounded_start(value: String) -> Result<String, String> {
+    if value.len() <= JOURNAL_LIMIT {
+        return Ok(value);
+    }
+    let end = value[..JOURNAL_LIMIT].rfind('\n').unwrap_or(JOURNAL_LIMIT);
+    Ok(value[..end].to_string())
+}
+
+#[cfg(target_os = "linux")]
+fn truncate(value: &str) -> String {
+    value.chars().take(512).collect()
 }
 
 /// The stateful boundary used by the future CLI.  It locks a stable sidecar,
@@ -339,7 +739,12 @@ pub fn run(input: D3Input, operation: Operation, state_file: &Path) -> Result<Ou
                     return Err("fixture consistency invalid: healthy baseline PCI snapshot contradicts same-boot absent-GPU journal evidence".into());
                 }
             }
-            let outcome = evaluate(&input, &mut state)?;
+            let mut outcome = evaluate(&input, &mut state)?;
+            if let Outcome::Diagnosis(diagnosis) = &mut outcome {
+                diagnosis
+                    .missing_evidence
+                    .extend(input.collection_missing.iter().cloned());
+            }
             store.save(&state)?;
             Ok(outcome)
         }
@@ -692,6 +1097,7 @@ impl StateStore {
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent)
                 .map_err(|error| format!("cannot create D3 state directory: {error}"))?;
+            restrict_permissions(parent, 0o700)?;
         }
         let file = OpenOptions::new()
             .read(true)
@@ -700,6 +1106,7 @@ impl StateStore {
             .truncate(false)
             .open(&self.lock_path)
             .map_err(|error| format!("cannot open D3 sidecar lock: {error}"))?;
+        restrict_permissions(&self.lock_path, 0o600)?;
         for _ in 0..50 {
             if file.try_lock_exclusive().is_ok() {
                 return Ok(StateLock(file));
@@ -749,6 +1156,7 @@ impl StateStore {
             .create_new(true)
             .open(&temporary)
             .map_err(|error| format!("cannot create atomic D3 state temporary: {error}"))?;
+        restrict_permissions(&temporary, 0o600)?;
         file.write_all(&encoded)
             .and_then(|_| file.sync_all())
             .map_err(|error| {
@@ -762,6 +1170,23 @@ impl StateStore {
         Ok(())
     }
 }
+
+#[cfg(unix)]
+fn restrict_permissions(path: &Path, mode: u32) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(path, fs::Permissions::from_mode(mode)).map_err(|error| {
+        format!(
+            "cannot restrict permissions for {}: {error}",
+            path.display()
+        )
+    })
+}
+
+#[cfg(not(unix))]
+fn restrict_permissions(_path: &Path, _mode: u32) -> Result<(), String> {
+    Ok(())
+}
+
 impl Drop for StateLock {
     fn drop(&mut self) {
         let _ = self.0.unlock();
@@ -799,6 +1224,7 @@ mod tests {
             boot_inventory: inventory.map(|value| parse_boot_inventory(value).unwrap()),
             current_journal: None,
             prior_tail: tail.map(str::to_owned),
+            collection_missing: vec![],
             host: None,
         }
     }
@@ -839,6 +1265,32 @@ mod tests {
             "../../fixtures/d3/synthetic/malformed-pci-topology.txt"
         ))
         .is_err());
+    }
+    #[test]
+    fn combine_prior_deduplicates_overlap_and_preserves_disjoint_order() {
+        assert_eq!(
+            combine_prior(
+                Some("kernel-a\nkernel-b".into()),
+                Some("kernel-b\ntail-c".into())
+            ),
+            Some("kernel-a\nkernel-b\ntail-c".into())
+        );
+        assert_eq!(
+            combine_prior(Some("kernel-a".into()), Some("tail-b".into())),
+            Some("kernel-a\ntail-b".into())
+        );
+    }
+    #[test]
+    fn combine_prior_handles_empty_inputs() {
+        assert_eq!(
+            combine_prior(Some(String::new()), Some(String::new())),
+            Some(String::new())
+        );
+        assert_eq!(
+            combine_prior(None, Some("tail".into())),
+            Some("tail".into())
+        );
+        assert_eq!(combine_prior(Some("kernel".into()), None), None);
     }
     #[test]
     fn absent_recovery_once_and_bridge_routes_to_absent() {
@@ -1236,6 +1688,7 @@ mod tests {
             boot_inventory: Some(legacy_inventory),
             current_journal: Some(legacy_kernel.into()),
             prior_tail: None,
+            collection_missing: vec![],
             host: None,
         };
         assert_eq!(

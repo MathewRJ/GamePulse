@@ -1,0 +1,4 @@
+2026-07-21T23:58:00.000000+00:00 HOST-SYNTH kernel: amdgpu 0000:03:00.0: amdgpu: SMU: response:0xFFFFFFFF
+2026-07-21T23:58:01.000000+00:00 HOST-SYNTH kernel: amdgpu 0000:03:00.0: amdgpu: SMU: response:0xFFFFFFFF
+2026-07-21T23:58:02.000000+00:00 HOST-SYNTH kernel: amdgpu 0000:03:00.0: amdgpu: GPU reset begin
+2026-07-21T23:58:03.000000+00:00 HOST-SYNTH kernel: amdgpu 0000:03:00.0: amdgpu: GPU reset begin

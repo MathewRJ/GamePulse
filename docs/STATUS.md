@@ -1,6 +1,6 @@
 # RigSignal — Project Status
 
-Last updated: 2026-07-21 (0.3.0 released — D6 display detector shipped end-to-end)
+Last updated: 2026-07-21 (D3 GPU-boot detector implemented; pending orchestration gate)
 Active streams: main (local ElasticHome deployment) + offline (air-gapped, not yet forked)
 
 ## For AI agents reading this file
@@ -95,7 +95,10 @@ eBPF). There is no winget package — it remains unavailable/closed pending the 
 architecture rework. elastic/integrations PR #18878 remains deferred for the maintainer
 architecture rework and `fields.yml` gating.
 
-**Next.** Per the ratified H2 strategy, next up is D3 detector scoping (the next diagnostic-evidence-engine vertical after D6).
+**D3 GPU-boot detector.** `rigsignal-agent diagnose gpu-boot` is implemented with explicit-slot
+baselines, authoritative PCI sysfs collection, bounded boot-ID-addressed journald collection,
+offline replay, and stateful one-time recovery reporting. It remains pending the orchestration
+gate; see `docs/diagnose-gpu-boot.md`.
 
 ## Completed work
 

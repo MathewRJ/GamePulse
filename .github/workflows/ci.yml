@@ -40,7 +40,10 @@ jobs:
         run: cargo check --manifest-path src/Cargo.toml --locked
 
       - name: cargo clippy
-        run: cargo clippy --manifest-path src/Cargo.toml --locked -- -D warnings
+        run: cargo clippy --manifest-path src/Cargo.toml --locked --all-targets -- -D warnings
+
+      - name: cargo test
+        run: cargo test --manifest-path src/Cargo.toml --locked
 
       - name: cargo check --features ebpf (linux only)
         if: matrix.os == 'ubuntu-latest'
@@ -48,7 +51,7 @@ jobs:
 
       - name: cargo clippy --features ebpf (linux only)
         if: matrix.os == 'ubuntu-latest'
-        run: cargo clippy --manifest-path src/Cargo.toml --locked --features ebpf -- -D warnings
+        run: cargo clippy --manifest-path src/Cargo.toml --locked --all-targets --features ebpf -- -D warnings
 
       - name: Build release binary (windows only)
         if: matrix.os == 'windows-latest'
