@@ -1,4 +1,5 @@
 # SYNTHETIC PCI snapshot; boot_id=dddddddd-dddd-4ddd-8ddd-dddddddddddd
 0000:00:03.1 path=pci0000:00/0000:00:03.1 vendor=0x1022 device=0x14db class=0x060400
+0000:00:08.1 path=pci0000:00/0000:00:08.1 vendor=0x1022 device=0x14db class=0x060400
 0000:03:00.0 path=pci0000:00/0000:00:03.1/0000:03:00.0 vendor=0x1002 device=0x7550 class=0x030000
 0000:7b:00.0 path=pci0000:00/0000:00:08.1/0000:7b:00.0 vendor=0x1002 device=0x13c0 class=0x030000

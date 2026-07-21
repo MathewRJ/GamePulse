@@ -49,3 +49,15 @@ check → fire `precursor-warning` with DEGRADED confidence, and the truncation 
 `missing_evidence`. This is the spec's "lowers confidence" case — the forbidden case (truncation
 alone supporting a latch claim) does not apply because the positive evidence is visible.
 No other row may change without a new orchestrator ruling.
+
+## Adjudication 2 (orchestrator, 2026-07-21f — replay-harness discrepancy)
+
+The "Immediate rerun of the recovery fixture after consumption → ok" row UNDERSPECIFIES its
+inputs. RULING: the row's `ok` expectation presumes the full healthy input set INCLUDING a
+prior-boot journal tail (e.g. `clean-tail-prior-tail.log`). Without a prior journal, §1 row 7
+applies and `history-unavailable` (exit 0, missing_evidence populated) is the CORRECT verdict —
+the spec forbids a bare `ok` claim when precursor history could not be checked. The
+implementation's behavior is spec-faithful in both variants; the row is clarified, not changed.
+Adjudication 2 addendum: the same input-completion applies to EVERY row-8 `ok` row — "ok"
+presumes a paired prior boot (inventory) AND a prior journal. The multi-GPU ok row's inputs are
+completed by `synthetic/multi-gpu-boot-inventory.txt` + `clean-tail-prior-tail.log`.

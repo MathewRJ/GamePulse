@@ -7,9 +7,10 @@
 use super::contract::{
     self, DetectorContract, Diagnosis, DiagnosisFields, Disposition, NotApplicable, Outcome,
 };
-use chrono::{DateTime, FixedOffset, Utc};
+use chrono::{DateTime, FixedOffset, NaiveDateTime, Utc};
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -27,8 +28,16 @@ pub const RESET_ATTEMPT_MIN: usize = 2;
 pub const PRECURSOR_WINDOW_S: i64 = 900;
 const STATE_SCHEMA_VERSION: u32 = 1;
 const READ_LIMIT: u64 = 1024 * 1024;
+const OFFLINE_JOURNAL_ABSURD_LIMIT: u64 = 64 * 1024 * 1024;
 const JOURNAL_LIMIT: usize = 1024 * 1024;
 const JOURNAL_TIMEOUT: Duration = Duration::from_secs(10);
+// journalctl's ordering can differ from adjacent realtime stamps by a few
+// milliseconds as records from separate transports are committed.  Preserve
+// that per-pair jitter allowance, but reject its cumulative backward drift:
+// more than one tolerance quantum cannot be treated as harmless jitter and
+// makes the window unreliable like a single larger RTC jump.
+const TIMING_REGRESSION_TOLERANCE_MS: i64 = 100;
+const INVENTORY_WINDOW_GRACE_S: i64 = 3600;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Platform {
@@ -139,6 +148,15 @@ pub fn parse_pci_snapshot(source: &str) -> Result<PciSnapshot, String> {
                 line_number + 1
             ));
         }
+        if chain
+            .last()
+            .is_none_or(|leaf| !leaf.eq_ignore_ascii_case(bdf))
+        {
+            return Err(format!(
+                "PCI snapshot line {} path leaf does not match row BDF",
+                line_number + 1
+            ));
+        }
         devices.push(PciDevice {
             bdf: bdf.to_ascii_lowercase(),
             vendor: vendor.to_ascii_lowercase(),
@@ -163,6 +181,19 @@ pub fn parse_pci_snapshot(source: &str) -> Result<PciSnapshot, String> {
         != devices.len()
     {
         return Err("PCI snapshot contains duplicate BDFs".into());
+    }
+    let known_bdfs: std::collections::HashSet<&str> =
+        devices.iter().map(|device| device.bdf.as_str()).collect();
+    if let Some(device) = devices.iter().find(|device| {
+        device
+            .upstream_bridge
+            .as_deref()
+            .is_some_and(|bridge| !known_bdfs.contains(bridge))
+    }) {
+        return Err(format!(
+            "PCI snapshot derived upstream BDF for {} is absent from snapshot rows",
+            device.bdf
+        ));
     }
     Ok(PciSnapshot { boot_id, devices })
 }
@@ -249,6 +280,9 @@ pub struct D3Input {
     pub boot_inventory: Option<BootInventory>,
     pub current_journal: Option<String>,
     pub prior_tail: Option<String>,
+    /// Set before combining independently journal-ordered prior sources.  A
+    /// merged stream is evidence, not an authority on either source's order.
+    pub prior_timing_unreliable: bool,
     pub collection_missing: Vec<String>,
     pub host: Option<String>,
 }
@@ -333,28 +367,48 @@ fn cli_outcome(options: CliOptions) -> Result<Outcome, String> {
             .map(normalize_boot_id)
             .transpose()?
             .unwrap_or_else(|| snapshot.boot_id.clone());
-        let boot_inventory = options
+        let boot_inventory_source = options
             .boot_list
             .as_deref()
             .map(read_regular_text)
-            .transpose()?
-            .map(|source| parse_boot_inventory(&source))
             .transpose()?;
-        let current_journal = options
-            .journal_current
+        let boot_inventory = boot_inventory_source
             .as_deref()
-            .map(read_regular_text)
+            .map(parse_boot_inventory)
             .transpose()?;
-        let prior_kernel = options
-            .journal_prior_kernel
+        let mut collection_missing = Vec::new();
+        let current_journal = read_offline_journal_option(
+            options.journal_current.as_deref(),
+            false,
+            "same-boot journal",
+            &mut collection_missing,
+        )?;
+        let prior_kernel = read_offline_journal_option(
+            options.journal_prior_kernel.as_deref(),
+            true,
+            "prior boot kernel journal",
+            &mut collection_missing,
+        )?;
+        let prior_tail = read_offline_journal_option(
+            options.journal_prior_tail.as_deref(),
+            false,
+            "prior boot journal tail",
+            &mut collection_missing,
+        )?;
+        validate_supplied_journal_pairing(
+            boot_inventory_source.as_deref(),
+            &current_boot_id,
+            current_journal.as_deref(),
+            prior_kernel.as_deref(),
+            prior_tail.as_deref(),
+            &mut collection_missing,
+        )?;
+        let prior_timing_unreliable = prior_kernel
             .as_deref()
-            .map(read_regular_text)
-            .transpose()?;
-        let prior_tail = options
-            .journal_prior_tail
-            .as_deref()
-            .map(read_regular_text)
-            .transpose()?;
+            .is_some_and(journal_timestamps_non_monotonic)
+            || prior_tail
+                .as_deref()
+                .is_some_and(journal_timestamps_non_monotonic);
         return run(
             D3Input {
                 // Offline fixtures model Linux PCI/journald evidence and must
@@ -368,7 +422,8 @@ fn cli_outcome(options: CliOptions) -> Result<Outcome, String> {
                 // supplied kernel excerpt can add precursor lines without
                 // changing which entry defines the tail's end.
                 prior_tail: combine_prior(prior_kernel, prior_tail),
-                collection_missing: vec![],
+                prior_timing_unreliable,
+                collection_missing,
                 host: options.host,
             },
             operation,
@@ -383,20 +438,88 @@ fn combine_prior(kernel: Option<String>, tail: Option<String>) -> Option<String>
         (_, None) => None,
         (None, Some(tail)) => Some(tail),
         (Some(kernel), Some(tail)) => {
-            // The end-tail commonly contains the same kernel records as the
-            // full kernel query.  Keep the kernel-first ordering while
-            // treating each short-iso-precise journal line as one event.
-            let mut seen = std::collections::HashSet::new();
-            Some(
-                kernel
-                    .lines()
-                    .chain(tail.lines())
-                    .filter(|line| seen.insert(*line))
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-            )
+            // Cross-source overlap is deduplicated, but repeated records in
+            // either authoritative source remain repeated evidence.
+            let kernel_records = journal_records(&kernel);
+            let tail_records = journal_records(&tail);
+            let mut kernel_counts: HashMap<String, usize> = HashMap::new();
+            for record in &kernel_records {
+                *kernel_counts.entry(record.text.clone()).or_insert(0usize) += 1;
+            }
+            let mut tail_seen: HashMap<String, usize> = HashMap::new();
+            let mut unique_tail = Vec::new();
+            for record in tail_records {
+                let seen = tail_seen.entry(record.text.clone()).or_insert(0usize);
+                *seen += 1;
+                if *seen > kernel_counts.get(&record.text).copied().unwrap_or(0) {
+                    unique_tail.push(record);
+                }
+            }
+            Some(stable_merge_journal_records(kernel_records, unique_tail))
         }
     }
+}
+
+#[derive(Debug)]
+struct JournalRecord {
+    timestamp: Option<DateTime<FixedOffset>>,
+    text: String,
+}
+
+fn journal_records(value: &str) -> Vec<JournalRecord> {
+    let mut records = Vec::new();
+    for line in value.lines() {
+        if let Some((timestamp, _)) = parse_journal_line(line) {
+            records.push(JournalRecord {
+                timestamp: Some(timestamp),
+                text: line.into(),
+            });
+        } else if line.starts_with(char::is_whitespace) {
+            if let Some(record) = records.last_mut() {
+                record.text.push('\n');
+                record.text.push_str(line);
+            } else {
+                records.push(JournalRecord {
+                    timestamp: None,
+                    text: line.into(),
+                });
+            }
+        } else {
+            records.push(JournalRecord {
+                timestamp: None,
+                text: line.into(),
+            });
+        }
+    }
+    records
+}
+
+fn stable_merge_journal_records(kernel: Vec<JournalRecord>, tail: Vec<JournalRecord>) -> String {
+    let mut kernel = kernel.into_iter().peekable();
+    let mut tail = tail.into_iter().peekable();
+    let mut merged = Vec::new();
+    while kernel.peek().is_some() || tail.peek().is_some() {
+        let take_kernel = match (kernel.peek(), tail.peek()) {
+            (Some(kernel), Some(tail)) => match (kernel.timestamp, tail.timestamp) {
+                // Equal timestamps retain kernel-stream order, making this a
+                // stable merge while retaining both distinct records.
+                (Some(kernel), Some(tail)) => kernel <= tail,
+                // Invalid/non-journal records retain the historical source
+                // ordering; journal evidence itself is timestamp-merged.
+                _ => true,
+            },
+            (Some(_), None) => true,
+            (None, Some(_)) => false,
+            (None, None) => unreachable!(),
+        };
+        let record = if take_kernel {
+            kernel.next().expect("peeked")
+        } else {
+            tail.next().expect("peeked")
+        };
+        merged.push(record.text);
+    }
+    merged.join("\n")
 }
 
 fn default_state_file() -> PathBuf {
@@ -422,38 +545,208 @@ fn read_regular_text(path: &Path) -> Result<String, String> {
     fs::read_to_string(path).map_err(|error| format!("cannot read {}: {error}", path.display()))
 }
 
+fn read_offline_journal_option(
+    path: Option<&Path>,
+    retain_start: bool,
+    label: &str,
+    missing: &mut Vec<String>,
+) -> Result<Option<String>, String> {
+    let Some(path) = path else {
+        return Ok(None);
+    };
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|error| format!("cannot inspect {}: {error}", path.display()))?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(format!(
+            "{} must be a regular non-symlink file",
+            path.display()
+        ));
+    }
+    if metadata.len() > OFFLINE_JOURNAL_ABSURD_LIMIT {
+        return Err(format!(
+            "{} exceeds offline journal safety limit",
+            path.display()
+        ));
+    }
+    let source = fs::read_to_string(path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    if journal_has_no_entries(&source) {
+        missing.push(format!(
+            "{label} unavailable: journalctl reported no entries"
+        ));
+        return Ok(None);
+    }
+    let was_truncated = source.len() > JOURNAL_LIMIT;
+    let bounded = if retain_start {
+        bounded_start(&source)
+    } else {
+        bounded_end(&source)
+    };
+    if was_truncated {
+        missing.push(format!("{label} was bounded to the D3 journal read limit"));
+    }
+    Ok(Some(bounded))
+}
+
+#[derive(Debug)]
+struct InventoryWindow {
+    start: NaiveDateTime,
+    end: NaiveDateTime,
+}
+
+fn validate_supplied_journal_pairing(
+    inventory_source: Option<&str>,
+    current_boot_id: &str,
+    current: Option<&str>,
+    prior_kernel: Option<&str>,
+    prior_tail: Option<&str>,
+    missing: &mut Vec<String>,
+) -> Result<(), String> {
+    if current.is_none() && prior_kernel.is_none() && prior_tail.is_none() {
+        return Ok(());
+    }
+    let source = inventory_source.ok_or_else(|| {
+        "boot identity pairing invalid: supplied journal fixtures require a boot inventory"
+            .to_string()
+    })?;
+    let inventory = parse_boot_inventory(source)?;
+    let prior = prior_for(&inventory, current_boot_id);
+    let windows = parse_inventory_windows(source)?;
+    if let Some(journal) = current {
+        validate_journal_window(journal, "same-boot journal", current_boot_id, &windows)?;
+    }
+    if let Some(journal) = prior_kernel {
+        if let Some(prior) = prior.as_deref() {
+            validate_journal_window(journal, "prior boot kernel journal", prior, &windows)?;
+        } else {
+            missing.push(
+                "supplied prior boot kernel journal could not be attributed to a paired prior boot"
+                    .into(),
+            );
+        }
+    }
+    if let Some(journal) = prior_tail {
+        if let Some(prior) = prior.as_deref() {
+            validate_journal_window(journal, "prior boot journal tail", prior, &windows)?;
+        } else {
+            missing.push(
+                "supplied prior boot journal tail could not be attributed to a paired prior boot"
+                    .into(),
+            );
+        }
+    }
+    Ok(())
+}
+
+fn parse_inventory_windows(source: &str) -> Result<HashMap<String, InventoryWindow>, String> {
+    let mut windows = HashMap::new();
+    for line in source.lines() {
+        let fields: Vec<_> = line.split_whitespace().collect();
+        let Some(index) = fields
+            .iter()
+            .position(|field| normalize_boot_id(field).is_ok())
+        else {
+            continue;
+        };
+        // journalctl --list-boots prints weekday, date, time, zone twice.
+        let Some(start_fields) = fields.get(index + 1..index + 5) else {
+            continue;
+        };
+        let Some(end_fields) = fields.get(index + 5..index + 9) else {
+            continue;
+        };
+        let start = parse_inventory_time(start_fields)?;
+        let end = parse_inventory_time(end_fields)?;
+        let id = normalize_boot_id(fields[index])?;
+        windows.insert(id, InventoryWindow { start, end });
+    }
+    Ok(windows)
+}
+
+fn parse_inventory_time(fields: &[&str]) -> Result<NaiveDateTime, String> {
+    if fields.len() != 4 {
+        return Err("boot inventory timestamp is malformed".into());
+    }
+    NaiveDateTime::parse_from_str(
+        &format!("{} {} {}", fields[0], fields[1], fields[2]),
+        "%a %Y-%m-%d %H:%M:%S",
+    )
+    .map_err(|_| "boot inventory timestamp is malformed".into())
+}
+
+fn validate_journal_window(
+    journal: &str,
+    label: &str,
+    boot_id: &str,
+    windows: &HashMap<String, InventoryWindow>,
+) -> Result<(), String> {
+    let window = windows.get(boot_id).ok_or_else(|| {
+        format!("boot identity pairing invalid: {label} has no attributable boot window")
+    })?;
+    let rows = fold_journal_records(journal);
+    let (Some((first, _)), Some((last, _))) = (rows.first(), rows.last()) else {
+        return Err(format!(
+            "boot identity pairing invalid: {label} contains no attributable journal timestamps"
+        ));
+    };
+    // The list-boots bounds are display-resolution inventory metadata, while
+    // an end-tail can include shutdown records emitted shortly after its last
+    // indexed entry. Keep that bounded grace, but reject fixtures clearly
+    // belonging to another effective boot.
+    let grace = chrono::Duration::seconds(INVENTORY_WINDOW_GRACE_S);
+    if first.naive_local() < window.start - grace || last.naive_local() > window.end + grace {
+        return Err(format!(
+            "boot identity pairing invalid: {label} cannot be paired with the effective boot"
+        ));
+    }
+    Ok(())
+}
+
+fn journal_has_no_entries(value: &str) -> bool {
+    value.trim() == "-- No entries --"
+}
+
 #[cfg(target_os = "linux")]
 fn live_outcome(
     operation: Operation,
     state_file: PathBuf,
     host: Option<String>,
 ) -> Result<Outcome, String> {
-    let current_boot_id = normalize_boot_id(&read_regular_text(Path::new(
-        "/proc/sys/kernel/random/boot_id",
-    ))?)?;
+    let boot_id_text = read_regular_text(Path::new("/proc/sys/kernel/random/boot_id"))?;
+    let current_boot_id = normalize_live_boot_id(&boot_id_text)?;
     let snapshot = collect_sysfs_snapshot(&current_boot_id)?;
     let mut collection_missing = Vec::new();
     let inventory = match journal_command(&["--list-boots"]) {
         Ok(text) => match parse_boot_inventory(&text) {
             Ok(value) => Some(value),
             Err(error) => {
-                collection_missing.push(format!("boot inventory unavailable: {error}"));
+                collection_missing.push(redacted_collection_failure(
+                    format!("boot inventory unavailable: {error}"),
+                    host.as_deref(),
+                ));
                 None
             }
         },
         Err(error) => {
-            collection_missing.push(format!("boot inventory unavailable: {error}"));
+            collection_missing.push(redacted_collection_failure(
+                format!("boot inventory unavailable: {error}"),
+                host.as_deref(),
+            ));
             None
         }
     };
     let mut current_journal = None;
     let mut prior_tail = None;
+    let mut prior_timing_unreliable = false;
     // Journal failures are deliberately non-fatal: sysfs remains authoritative.
     match journal_command(&["--boot", &current_boot_id, "-k"]) {
+        Ok(value) if journal_has_no_entries(&value) => collection_missing
+            .push("same-boot kernel journal unavailable: journalctl reported no entries".into()),
         Ok(value) => current_journal = Some(value),
-        Err(error) => {
-            collection_missing.push(format!("same-boot kernel journal unavailable: {error}"))
-        }
+        Err(error) => collection_missing.push(redacted_collection_failure(
+            format!("same-boot kernel journal unavailable: {error}"),
+            host.as_deref(),
+        )),
     }
     if let Some(prior) = inventory
         .as_ref()
@@ -463,13 +756,42 @@ fn live_outcome(
             journal_command(&["--boot", &prior, "-k"]),
             journal_tail(&prior),
         ) {
-            (Ok(kernel), Ok(tail)) => prior_tail = combine_prior(Some(kernel), Some(tail)),
-            (kernel, tail) => collection_missing.push(format!(
-                "prior boot journal unavailable: {}{}",
-                kernel.err().unwrap_or_default(),
-                tail.err()
-                    .map(|error| format!(" {error}"))
-                    .unwrap_or_default()
+            (Ok(kernel), Ok(tail)) => {
+                let kernel = if journal_has_no_entries(&kernel) {
+                    collection_missing.push(
+                        "prior boot kernel journal unavailable: journalctl reported no entries"
+                            .into(),
+                    );
+                    None
+                } else {
+                    Some(kernel)
+                };
+                let tail = if journal_has_no_entries(&tail) {
+                    collection_missing.push(
+                        "prior boot journal tail unavailable: journalctl reported no entries"
+                            .into(),
+                    );
+                    None
+                } else {
+                    Some(tail)
+                };
+                prior_timing_unreliable = kernel
+                    .as_deref()
+                    .is_some_and(journal_timestamps_non_monotonic)
+                    || tail
+                        .as_deref()
+                        .is_some_and(journal_timestamps_non_monotonic);
+                prior_tail = combine_prior(kernel, tail);
+            }
+            (kernel, tail) => collection_missing.push(redacted_collection_failure(
+                format!(
+                    "prior boot journal unavailable: {}{}",
+                    kernel.err().unwrap_or_default(),
+                    tail.err()
+                        .map(|error| format!(" {error}"))
+                        .unwrap_or_default()
+                ),
+                host.as_deref(),
             )),
         }
     }
@@ -481,12 +803,17 @@ fn live_outcome(
             boot_inventory: inventory,
             current_journal,
             prior_tail,
+            prior_timing_unreliable,
             collection_missing,
             host,
         },
         operation,
         &state_file,
     )
+}
+
+fn normalize_live_boot_id(value: &str) -> Result<String, String> {
+    normalize_boot_id(value.trim())
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -603,9 +930,9 @@ fn journal_command_bounded(extra: &[&str], retain_start: bool) -> Result<String,
     }
     let text = String::from_utf8_lossy(&output.stdout).into_owned();
     if retain_start {
-        bounded_start(text)
+        Ok(bounded_start(&text))
     } else {
-        bounded_end(text)
+        Ok(bounded_end(&text))
     }
 }
 
@@ -629,26 +956,33 @@ fn journal_tail(boot_id: &str) -> Result<String, String> {
     Ok(lines.join("\n"))
 }
 
-#[cfg(target_os = "linux")]
-fn bounded_end(value: String) -> Result<String, String> {
+fn bounded_end(value: &str) -> String {
     if value.len() <= JOURNAL_LIMIT {
-        return Ok(value);
+        return value.into();
     }
     let start = value.len() - JOURNAL_LIMIT;
+    let start = preceding_char_boundary(value, start);
     let start = value[start..]
         .find('\n')
         .map(|offset| start + offset + 1)
         .unwrap_or(start);
-    Ok(value[start..].to_string())
+    value[start..].to_string()
 }
 
-#[cfg(target_os = "linux")]
-fn bounded_start(value: String) -> Result<String, String> {
+fn bounded_start(value: &str) -> String {
     if value.len() <= JOURNAL_LIMIT {
-        return Ok(value);
+        return value.into();
     }
-    let end = value[..JOURNAL_LIMIT].rfind('\n').unwrap_or(JOURNAL_LIMIT);
-    Ok(value[..end].to_string())
+    let end = preceding_char_boundary(value, JOURNAL_LIMIT);
+    let end = value[..end].rfind('\n').unwrap_or(end);
+    value[..end].to_string()
+}
+
+fn preceding_char_boundary(value: &str, mut index: usize) -> usize {
+    while index > 0 && !value.is_char_boundary(index) {
+        index -= 1;
+    }
+    index
 }
 
 #[cfg(target_os = "linux")]
@@ -741,9 +1075,12 @@ pub fn run(input: D3Input, operation: Operation, state_file: &Path) -> Result<Ou
             }
             let mut outcome = evaluate(&input, &mut state)?;
             if let Outcome::Diagnosis(diagnosis) = &mut outcome {
-                diagnosis
-                    .missing_evidence
-                    .extend(input.collection_missing.iter().cloned());
+                diagnosis.missing_evidence.extend(
+                    input
+                        .collection_missing
+                        .iter()
+                        .map(|item| redact_collection_missing(item, input.host.as_deref())),
+                );
             }
             store.save(&state)?;
             Ok(outcome)
@@ -763,6 +1100,57 @@ fn preflight(input: &D3Input) -> Result<(), String> {
             return Err(
                 "boot identity pairing invalid: current boot is absent from inventory".into(),
             );
+        }
+    }
+    Ok(())
+}
+
+fn canonical_boot_id(value: &str) -> bool {
+    normalize_boot_id(value).is_ok_and(|normalized| normalized == value)
+}
+
+fn valid_timestamp(value: &str) -> bool {
+    DateTime::parse_from_rfc3339(value).is_ok()
+}
+
+fn canonical_bdf(value: &str) -> bool {
+    valid_bdf(value) && value == value.to_ascii_lowercase()
+}
+
+fn canonical_hex_field(value: &str, width: usize) -> bool {
+    valid_hex_field(value, width) && value == value.to_ascii_lowercase()
+}
+
+fn validate_state(state: &D3State) -> Result<(), String> {
+    let Some(baseline) = state.baseline.as_ref() else {
+        if state.pending.is_some() {
+            return Err("D3 state corrupt: pending finding has no baseline".into());
+        }
+        return Ok(());
+    };
+    if !canonical_boot_id(&baseline.learned_boot_id)
+        || !valid_timestamp(&baseline.learned_at)
+        || !canonical_bdf(&baseline.slot)
+        || !canonical_hex_field(&baseline.vendor, 4)
+        || !canonical_hex_field(&baseline.device, 4)
+        || !canonical_hex_field(&baseline.class, 6)
+        || baseline
+            .parent_bridge_chain
+            .iter()
+            .any(|bdf| !canonical_bdf(bdf))
+        || baseline
+            .upstream_bridge
+            .as_deref()
+            .is_some_and(|bdf| !canonical_bdf(bdf))
+    {
+        return Err("D3 state corrupt: baseline contains non-canonical fields".into());
+    }
+    if let Some(pending) = &state.pending {
+        if pending.verdict != "bus-absent"
+            || !canonical_boot_id(&pending.observation_boot_id)
+            || !valid_timestamp(&pending.observed_at)
+        {
+            return Err("D3 state corrupt: invalid pending finding".into());
         }
     }
     Ok(())
@@ -820,7 +1208,11 @@ fn evaluate(input: &D3Input, state: &mut D3State) -> Result<Outcome, String> {
             .as_deref()
             .is_some_and(|journal| link_down_for(journal, baseline.upstream_bridge.as_deref()));
         let mut missing = Vec::new();
-        if input.current_journal.is_none() {
+        if input
+            .current_journal
+            .as_deref()
+            .is_none_or(journal_has_no_entries)
+        {
             missing.push("same-boot journal evidence unavailable".into());
         }
         let confidence = if corroborated { 0.95 } else { 0.72 };
@@ -859,16 +1251,39 @@ fn evaluate(input: &D3Input, state: &mut D3State) -> Result<Outcome, String> {
         .boot_inventory
         .as_ref()
         .and_then(|inventory| prior_for(inventory, &input.snapshot.boot_id));
+    let mut precursor_missing = Vec::new();
     if let (Some(prior_id), Some(tail)) = (prior.as_deref(), input.prior_tail.as_deref()) {
-        let precursor = precursor(tail, baseline);
-        if precursor.fires {
-            let mut missing = Vec::new();
-            if precursor.truncated {
-                missing.push(
-                    "prior boot tail appears truncated; shutdown completion is unavailable".into(),
-                );
+        if !journal_has_no_entries(tail) {
+            let mut precursor = precursor(tail, baseline);
+            precursor.timing_unreliable |= input.prior_timing_unreliable;
+            precursor.fires &= !precursor.timing_unreliable;
+            if precursor.timing_unreliable {
+                precursor_missing.push(
+                "prior boot timestamps are non-monotonic in the evaluated window; timing evidence is unreliable"
+                    .into(),
+            );
             }
-            return diagnosis(Disposition::Finding, "precursor-warning", if precursor.truncated { 0.76 } else { 0.88 }, "AMD/amdgpu d3.1 compound precursor thresholds were met on the baseline BDF in the trailing 900-second window.", vec![format!("prior boot: {prior_id}"), format!("baseline BDF {}: SMU-unresponsive={} (minimum {}), reset-attempts={} (minimum {})", baseline.slot, precursor.smu, SMU_UNRESPONSIVE_MIN, precursor.resets, RESET_ATTEMPT_MIN)], "The prior boot evidence is most consistent with an AMD GPU reset/SMU precursor; it does not establish a later boot failure.", vec!["Avoid a warm reboot if the GPU becomes unavailable; capture journal evidence and use a full power drain if needed.".into()], "A later complete prior-boot journal with recovery after every reset would falsify the terminal-failure condition.", missing, "A driver-only recovery event without a power-state latch remains the nearest alternative.", input.host.clone());
+            if precursor.suppressed {
+                precursor_missing.push(
+                "prior boot journal contains printk suppressed-record markers; precursor confidence is degraded"
+                    .into(),
+            );
+            }
+            if precursor.fires {
+                let mut missing = precursor_missing;
+                if precursor.truncated {
+                    missing.push(
+                        "prior boot tail appears truncated; shutdown completion is unavailable"
+                            .into(),
+                    );
+                }
+                let confidence = if precursor.truncated || precursor.suppressed {
+                    0.76
+                } else {
+                    0.88
+                };
+                return diagnosis(Disposition::Finding, "precursor-warning", confidence, "AMD/amdgpu d3.1 compound precursor thresholds were met on the baseline BDF in the trailing 900-second window.", vec![format!("prior boot: {prior_id}"), format!("baseline BDF {}: SMU-unresponsive={} (minimum {}), reset-attempts={} (minimum {})", baseline.slot, precursor.smu, SMU_UNRESPONSIVE_MIN, precursor.resets, RESET_ATTEMPT_MIN)], "The prior boot evidence is most consistent with an AMD GPU reset/SMU precursor; it does not establish a later boot failure.", vec!["Avoid a warm reboot if the GPU becomes unavailable; capture journal evidence and use a full power drain if needed.".into()], "A later complete prior-boot journal with recovery after every reset would falsify the terminal-failure condition.", missing, "A driver-only recovery event without a power-state latch remains the nearest alternative.", input.host.clone());
+            }
         }
     }
     if let Some(pending) = state.pending.clone() {
@@ -877,14 +1292,30 @@ fn evaluate(input: &D3Input, state: &mut D3State) -> Result<Outcome, String> {
             return diagnosis(Disposition::NonFinding, "recovered", 0.9, "The learned GPU identity is present and a pending bus-absence was recorded on an earlier boot.", vec![format!("current boot: {}", input.snapshot.boot_id), format!("consumed pending {} from boot {}", pending.verdict, pending.observation_boot_id)], "The GPU is present now; this is most consistent with recovery from the earlier observed enumeration absence.", vec!["Keep the baseline and retain future journal evidence if the symptom returns.".into()], "A repeated absence at the learned BDF would falsify the recovery observation.", vec![], "The earlier fault may have been transient rather than a power-state latch.", input.host.clone());
         }
     }
-    if prior.is_none() || input.prior_tail.is_none() {
+    if prior.is_none()
+        || input.prior_tail.is_none()
+        || input
+            .prior_tail
+            .as_deref()
+            .is_some_and(journal_has_no_entries)
+    {
         let mut missing = vec!["usable paired prior Linux boot history unavailable".into()];
-        if input.prior_tail.is_none() {
+        if input.prior_tail.is_none()
+            || input
+                .prior_tail
+                .as_deref()
+                .is_some_and(journal_has_no_entries)
+        {
             missing.push("prior boot journal tail unavailable".into());
         }
         return diagnosis(Disposition::NonFinding, "history-unavailable", 0.8, "The learned GPU identity is present, but prior-boot precursor history is unavailable.", vec![format!("baseline identity present at {}", baseline.slot)], "The GPU is present; D3 cannot make a prior-boot precursor claim because history is unavailable.", vec!["Retain journal history across boots for precursor analysis.".into()], "A paired prior boot journal would permit precursor analysis.", missing, "A precursor could have occurred but cannot be assessed from the available history.", input.host.clone());
     }
-    diagnosis(Disposition::NonFinding, "ok", 0.92, "The learned GPU identity is present and no d3.1 precursor matched on the paired prior boot.", vec![format!("baseline identity present at {}", baseline.slot)], "The available evidence is most consistent with normal GPU enumeration for this boot.", vec!["No corrective action is indicated; retain journal history for future comparisons.".into()], "An authoritative future snapshot with the identity absent would falsify this observation.", vec![], "A failure outside the collected evidence window remains possible.", input.host.clone())
+    let confidence = if precursor_missing.is_empty() {
+        0.92
+    } else {
+        0.76
+    };
+    diagnosis(Disposition::NonFinding, "ok", confidence, "The learned GPU identity is present and no d3.1 precursor matched on the paired prior boot.", vec![format!("baseline identity present at {}", baseline.slot)], "The available evidence is most consistent with normal GPU enumeration for this boot.", vec!["No corrective action is indicated; retain journal history for future comparisons.".into()], "An authoritative future snapshot with the identity absent would falsify this observation.", precursor_missing, "A failure outside the collected evidence window remains possible.", input.host.clone())
 }
 
 #[allow(clippy::too_many_arguments)] // Converts immediately into the shared named field API below.
@@ -957,22 +1388,24 @@ struct Precursor {
     smu: usize,
     resets: usize,
     truncated: bool,
+    timing_unreliable: bool,
+    suppressed: bool,
 }
 
 fn precursor(tail: &str, baseline: &Baseline) -> Precursor {
-    let rows: Vec<(DateTime<FixedOffset>, &str)> = tail
-        .lines()
-        .filter_map(|line| parse_journal_line(line))
-        .collect();
+    let rows = fold_journal_records(tail);
     let Some((end, _)) = rows.last() else {
         return Precursor::default();
     };
     let earliest = *end - chrono::Duration::seconds(PRECURSOR_WINDOW_S);
-    let scoped: Vec<_> = rows
+    let window: Vec<_> = rows
         .into_iter()
-        .filter(|(time, line)| {
-            *time >= earliest && line.contains(&baseline.slot) && line.contains("amdgpu")
-        })
+        .filter(|(time, _)| *time >= earliest)
+        .collect();
+    let timing_unreliable = timestamps_regress(&window);
+    let scoped: Vec<_> = window
+        .iter()
+        .filter(|(_, line)| kernel_amdgpu_record(line, &baseline.slot))
         .collect();
     let smu = scoped
         .iter()
@@ -996,16 +1429,67 @@ fn precursor(tail: &str, baseline: &Baseline) -> Precursor {
         && !tail.contains("Powering Off")
         && !tail.contains("reboot: Power down");
     Precursor {
-        fires: smu >= SMU_UNRESPONSIVE_MIN && resets.len() >= RESET_ATTEMPT_MIN && terminal,
+        fires: !timing_unreliable
+            && smu >= SMU_UNRESPONSIVE_MIN
+            && resets.len() >= RESET_ATTEMPT_MIN
+            && terminal,
         smu,
         resets: resets.len(),
         truncated,
+        timing_unreliable,
+        suppressed: tail.contains("printk:") && tail.contains("messages suppressed"),
     }
+}
+
+fn journal_timestamps_non_monotonic(journal: &str) -> bool {
+    timestamps_regress(&fold_journal_records(journal))
+}
+
+fn timestamps_regress(rows: &[(DateTime<FixedOffset>, String)]) -> bool {
+    let tolerance = chrono::Duration::milliseconds(TIMING_REGRESSION_TOLERANCE_MS);
+    let mut cumulative_regression = chrono::Duration::zero();
+    for pair in rows.windows(2) {
+        let regression = pair[0].0 - pair[1].0;
+        if regression <= chrono::Duration::zero() {
+            continue;
+        }
+        cumulative_regression += regression;
+        if regression > tolerance || cumulative_regression > tolerance {
+            return true;
+        }
+    }
+    false
 }
 
 fn parse_journal_line(line: &str) -> Option<(DateTime<FixedOffset>, &str)> {
     let (stamp, rest) = line.split_once(' ')?;
     Some((DateTime::parse_from_rfc3339(stamp).ok()?, rest))
+}
+
+fn fold_journal_records(value: &str) -> Vec<(DateTime<FixedOffset>, String)> {
+    let mut records: Vec<(DateTime<FixedOffset>, String)> = Vec::new();
+    for line in value.lines() {
+        if let Some((stamp, rest)) = parse_journal_line(line) {
+            records.push((stamp, rest.into()));
+        } else if line.starts_with(char::is_whitespace) {
+            if let Some((_, record)) = records.last_mut() {
+                record.push('\n');
+                record.push_str(line.trim_start());
+            }
+        }
+    }
+    records
+}
+
+fn kernel_amdgpu_record(record: &str, bdf: &str) -> bool {
+    let Some((_, transport_and_message)) = record.split_once(' ') else {
+        return false;
+    };
+    let Some(message) = transport_and_message.strip_prefix("kernel:") else {
+        return false;
+    };
+    let prefix = format!("amdgpu {bdf}:");
+    message.trim_start().starts_with(&prefix)
 }
 fn link_down_for(journal: &str, upstream: Option<&str>) -> bool {
     journal.lines().any(|line| {
@@ -1049,13 +1533,22 @@ pub fn redact_excerpt(value: &str, target_host: Option<&str>) -> String {
             .trim_matches(|character: char| matches!(character, ',' | ';' | '(' | ')' | '[' | ']'));
         let redacted = if clean.contains("@") {
             "[REDACTED_USER]".into()
+        } else if looks_like_private_path(clean) {
+            "[REDACTED_PATH]".into()
         } else if looks_like_mac(clean) {
             "[REDACTED_MAC]".into()
+        } else if looks_like_ipv6(clean) {
+            "[REDACTED_IPV6]".into()
         } else if looks_like_uuid(clean) {
             "[REDACTED_UUID]".into()
-        } else if clean.to_ascii_lowercase().contains("serial") || clean.starts_with("SN=") {
+        } else if clean.to_ascii_lowercase().contains("serial")
+            || clean.starts_with("SN=")
+            || has_long_hex_run(clean)
+        {
             "[REDACTED_SERIAL]".into()
-        } else if (index == 1 && target_host.is_none_or(|host| clean != host))
+        } else if (index == 1
+            && looks_like_bare_hostname(clean)
+            && target_host.is_none_or(|host| clean != host))
             || clean.contains("hostname=")
             || (clean.contains('.')
                 && !clean.contains(':')
@@ -1069,12 +1562,55 @@ pub fn redact_excerpt(value: &str, target_host: Option<&str>) -> String {
     }
     words.join(" ").chars().take(1024).collect()
 }
+fn redacted_collection_failure(value: String, target_host: Option<&str>) -> String {
+    redact_collection_missing(&value, target_host)
+}
+
+fn redact_collection_missing(value: &str, target_host: Option<&str>) -> String {
+    // The prefix comes from this detector. Only journalctl's error text is an
+    // untrusted excerpt, so redacting the whole sentence must not erase words
+    // such as "boot", "kernel", or "inventory".
+    let Some((structure, excerpt)) = value.split_once(": ") else {
+        return redact_excerpt(value, target_host);
+    };
+    format!("{structure}: {}", redact_excerpt(excerpt, target_host))
+}
+fn looks_like_bare_hostname(value: &str) -> bool {
+    value.contains('-') || value.chars().any(char::is_uppercase)
+}
 fn looks_like_mac(value: &str) -> bool {
     let parts: Vec<_> = value.split(':').collect();
     parts.len() == 6
         && parts
             .iter()
             .all(|part| part.len() == 2 && part.chars().all(|c| c.is_ascii_hexdigit()))
+}
+fn looks_like_ipv6(value: &str) -> bool {
+    let clean = value.trim_matches(|c| matches!(c, '[' | ']' | ',' | ';' | '(' | ')'));
+    clean.matches(':').count() >= 2
+        && clean
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() || c == ':' || c == '.')
+}
+fn looks_like_private_path(value: &str) -> bool {
+    value.starts_with("/home/")
+        || value.starts_with("/Users/")
+        || value.contains("/home/")
+        || value.contains("/Users/")
+}
+fn has_long_hex_run(value: &str) -> bool {
+    let mut run = 0;
+    for character in value.chars() {
+        if character.is_ascii_hexdigit() {
+            run += 1;
+            if run >= 16 {
+                return true;
+            }
+        } else {
+            run = 0;
+        }
+    }
+    false
 }
 fn looks_like_uuid(value: &str) -> bool {
     normalize_boot_id(value).is_ok()
@@ -1116,11 +1652,13 @@ impl StateStore {
         Err("D3 state lock contention timed out".into())
     }
     fn load(&self) -> Result<D3State, String> {
-        if !self.path.exists() {
-            return Ok(D3State::empty());
-        }
-        let metadata = fs::symlink_metadata(&self.path)
-            .map_err(|error| format!("cannot inspect D3 state: {error}"))?;
+        let metadata = match fs::symlink_metadata(&self.path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(D3State::empty())
+            }
+            Err(error) => return Err(format!("cannot inspect D3 state: {error}")),
+        };
         if metadata.file_type().is_symlink() || !metadata.is_file() {
             return Err("D3 state file must be a regular non-symlink file".into());
         }
@@ -1140,6 +1678,7 @@ impl StateStore {
                 state.schema_version
             ));
         }
+        validate_state(&state)?;
         Ok(state)
     }
     fn save(&self, state: &D3State) -> Result<(), String> {
@@ -1224,6 +1763,7 @@ mod tests {
             boot_inventory: inventory.map(|value| parse_boot_inventory(value).unwrap()),
             current_journal: None,
             prior_tail: tail.map(str::to_owned),
+            prior_timing_unreliable: false,
             collection_missing: vec![],
             host: None,
         }
@@ -1291,6 +1831,52 @@ mod tests {
             Some("tail".into())
         );
         assert_eq!(combine_prior(Some("kernel".into()), None), None);
+    }
+
+    #[test]
+    fn capture_a_kernel_and_tail_merge_without_fabricating_non_monotonic_time() {
+        let merged = combine_prior(
+            Some(
+                include_str!("../../fixtures/d3/real/capture-a/journal-previous-1-kernel.log")
+                    .into(),
+            ),
+            Some(
+                include_str!("../../fixtures/d3/real/capture-a/journal-previous-1-tail.log").into(),
+            ),
+        )
+        .unwrap();
+        let snapshot = parse_pci_snapshot(include_str!(
+            "../../fixtures/d3/real/capture-a/pci-topology.txt"
+        ))
+        .unwrap();
+        let baseline = baseline_from(
+            snapshot
+                .devices
+                .iter()
+                .find(|device| device.bdf == "0000:03:00.0")
+                .unwrap(),
+            &snapshot.boot_id,
+        );
+        assert!(!precursor(&merged, &baseline).timing_unreliable);
+    }
+
+    #[test]
+    fn timestamp_merge_keeps_a_precursor_when_tail_starts_before_kernel_overlap() {
+        let kernel = "2026-07-21T23:58:00+00:00 host kernel: amdgpu 0000:03:00.0: amdgpu: SMU: response:0xFFFFFFFF\n2026-07-21T23:58:01+00:00 host kernel: amdgpu 0000:03:00.0: amdgpu: SMU: response:0xFFFFFFFF\n2026-07-21T23:58:02+00:00 host kernel: amdgpu 0000:03:00.0: amdgpu: GPU reset begin\n2026-07-21T23:58:03+00:00 host kernel: amdgpu 0000:03:00.0: amdgpu: SMU: response:0xFFFFFFFF\n2026-07-21T23:58:04+00:00 host kernel: amdgpu 0000:03:00.0: amdgpu: GPU reset begin";
+        let tail = format!("2026-07-21T23:57:59+00:00 host app[1]: userspace record before overlap\n{kernel}\n2026-07-21T23:59:00+00:00 host systemd[1]: Reached target Shutdown.");
+        let merged = combine_prior(Some(kernel.into()), Some(tail)).unwrap();
+        let snapshot = parse_pci_snapshot(RECOVERY).unwrap();
+        let baseline = baseline_from(
+            snapshot
+                .devices
+                .iter()
+                .find(|device| device.bdf == "0000:03:00.0")
+                .unwrap(),
+            &snapshot.boot_id,
+        );
+        let precursor = precursor(&merged, &baseline);
+        assert!(precursor.fires);
+        assert!(!precursor.timing_unreliable);
     }
     #[test]
     fn absent_recovery_once_and_bridge_routes_to_absent() {
@@ -1688,6 +2274,7 @@ mod tests {
             boot_inventory: Some(legacy_inventory),
             current_journal: Some(legacy_kernel.into()),
             prior_tail: None,
+            prior_timing_unreliable: false,
             collection_missing: vec![],
             host: None,
         };
@@ -1855,6 +2442,278 @@ mod tests {
             ),
             "ok"
         );
+        let _ = fs::remove_dir_all(state.parent().unwrap());
+    }
+
+    #[test]
+    fn live_boot_id_newline_is_trimmed_before_normalization() {
+        assert_eq!(
+            normalize_live_boot_id("AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA\n").unwrap(),
+            "aaaaaaaaaaaa4aaa8aaaaaaaaaaaaaaa"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dangling_state_symlink_is_refused_without_replacement() {
+        use std::os::unix::fs::symlink;
+        let state = path();
+        fs::create_dir_all(state.parent().unwrap()).unwrap();
+        symlink(state.parent().unwrap().join("missing-state.json"), &state).unwrap();
+        assert!(run(
+            input(RECOVERY, Some(INVENTORY), None),
+            Operation::Diagnose,
+            &state
+        )
+        .is_err());
+        assert!(fs::symlink_metadata(&state)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        let _ = fs::remove_dir_all(state.parent().unwrap());
+    }
+
+    #[test]
+    fn corrupt_pending_hardware_changed_json_is_refused_on_load() {
+        let state = path();
+        fs::create_dir_all(state.parent().unwrap()).unwrap();
+        fs::write(&state, r#"{"schema_version":1,"baseline":{"learned_boot_id":"bbbbbbbbbbbb4bbb8bbbbbbbbbbbbbbb","learned_at":"2026-07-21T00:00:00Z","slot":"0000:03:00.0","vendor":"0x1002","device":"0x7550","class":"0x030000","parent_bridge_chain":["0000:00:03.1"],"upstream_bridge":"0000:00:03.1"},"pending":{"verdict":"hardware-changed","observation_boot_id":"aaaaaaaaaaaa4aaa8aaaaaaaaaaaaaaa","observed_at":"2026-07-21T00:01:00Z"}}"#).unwrap();
+        let error = run(
+            input(RECOVERY, Some(INVENTORY), None),
+            Operation::Diagnose,
+            &state,
+        )
+        .unwrap_err();
+        assert!(error.contains("invalid pending finding"));
+        let _ = fs::remove_dir_all(state.parent().unwrap());
+    }
+
+    #[test]
+    fn no_entries_journals_are_unavailable_not_clean_evidence() {
+        let state = path();
+        learn(&state, RECOVERY, Some(INVENTORY));
+        let no_entries = "-- No entries --";
+        let history = diagnosis(
+            run(
+                input(RECOVERY, Some(INVENTORY), Some(no_entries)),
+                Operation::Diagnose,
+                &state,
+            )
+            .unwrap(),
+        );
+        assert_eq!(history.verdict, "history-unavailable");
+        assert!(!history.missing_evidence.is_empty());
+        let mut absent = input(ABSENT, Some(INVENTORY), None);
+        absent.current_journal = Some(no_entries.into());
+        let absence = diagnosis(run(absent, Operation::Diagnose, &state).unwrap());
+        assert_eq!(absence.verdict, "bus-absent");
+        assert!(!absence.missing_evidence.is_empty());
+        let _ = fs::remove_dir_all(state.parent().unwrap());
+    }
+
+    #[test]
+    fn indented_journal_continuations_are_folded_into_kernel_records() {
+        let tail = "2026-07-21T23:58:00+00:00 host kernel: amdgpu 0000:03:00.0: amdgpu:\n    SMU: response:0xFFFFFFFF\n2026-07-21T23:58:01+00:00 host kernel: amdgpu 0000:03:00.0: amdgpu:\n    SMU: response:0xFFFFFFFF\n2026-07-21T23:58:02+00:00 host kernel: amdgpu 0000:03:00.0: amdgpu: GPU reset begin\n2026-07-21T23:58:03+00:00 host kernel: amdgpu 0000:03:00.0: amdgpu:\n    SMU: response:0xFFFFFFFF\n2026-07-21T23:58:04+00:00 host kernel: amdgpu 0000:03:00.0: amdgpu: GPU reset begin";
+        let snapshot = parse_pci_snapshot(RECOVERY).unwrap();
+        let baseline = baseline_from(
+            snapshot
+                .devices
+                .iter()
+                .find(|device| device.bdf == "0000:03:00.0")
+                .unwrap(),
+            "bbbbbbbbbbbb4bbb8bbbbbbbbbbbbbbb",
+        );
+        let precursor = precursor(tail, &baseline);
+        assert_eq!(precursor.smu, 3);
+        assert!(precursor.fires);
+    }
+
+    #[test]
+    fn backwards_timestamps_make_window_evidence_unreliable() {
+        let state = path();
+        learn(&state, HEALTHY, Some(PRECURSOR_INVENTORY));
+        let tail = "2026-07-21T23:58:02+00:00 host kernel: amdgpu 0000:03:00.0: amdgpu: SMU: response:0xFFFFFFFF\n2026-07-21T23:58:01+00:00 host kernel: amdgpu 0000:03:00.0: amdgpu: SMU: response:0xFFFFFFFF\n2026-07-21T23:58:03+00:00 host kernel: amdgpu 0000:03:00.0: amdgpu: GPU reset begin\n2026-07-21T23:58:04+00:00 host kernel: amdgpu 0000:03:00.0: amdgpu: SMU: response:0xFFFFFFFF\n2026-07-21T23:58:05+00:00 host kernel: amdgpu 0000:03:00.0: amdgpu: GPU reset begin";
+        let outcome = diagnosis(
+            run(
+                input(HEALTHY, Some(PRECURSOR_INVENTORY), Some(tail)),
+                Operation::Diagnose,
+                &state,
+            )
+            .unwrap(),
+        );
+        assert_eq!(outcome.verdict, "ok");
+        assert!(outcome
+            .missing_evidence
+            .iter()
+            .any(|item| item.contains("non-monotonic")));
+        let _ = fs::remove_dir_all(state.parent().unwrap());
+    }
+
+    #[test]
+    fn accumulated_small_timestamp_regressions_make_window_evidence_unreliable() {
+        let state = path();
+        learn(&state, HEALTHY, Some(PRECURSOR_INVENTORY));
+        let mut lines = vec![
+            "2026-07-21T23:58:00+00:00 host kernel: amdgpu 0000:03:00.0: amdgpu: SMU: response:0xFFFFFFFF".into(),
+            "2026-07-21T23:58:01+00:00 host kernel: amdgpu 0000:03:00.0: amdgpu: SMU: response:0xFFFFFFFF".into(),
+            "2026-07-21T23:58:02+00:00 host kernel: amdgpu 0000:03:00.0: amdgpu: GPU reset begin".into(),
+            "2026-07-21T23:58:03+00:00 host kernel: amdgpu 0000:03:00.0: amdgpu: SMU: response:0xFFFFFFFF".into(),
+            "2026-07-21T23:58:04+00:00 host kernel: amdgpu 0000:03:00.0: amdgpu: GPU reset begin".into(),
+        ];
+        let start = DateTime::parse_from_rfc3339("2026-07-21T23:58:04+00:00").unwrap();
+        for step in 1..=9_202 {
+            let timestamp = start - chrono::Duration::milliseconds(99 * step);
+            lines.push(format!(
+                "{} host app[1]: cross-transport jitter record",
+                timestamp.to_rfc3339()
+            ));
+        }
+        lines.push("2026-07-21T23:59:00+00:00 host systemd[1]: Reached target Shutdown.".into());
+        let outcome = diagnosis(
+            run(
+                input(HEALTHY, Some(PRECURSOR_INVENTORY), Some(&lines.join("\n"))),
+                Operation::Diagnose,
+                &state,
+            )
+            .unwrap(),
+        );
+        assert_eq!(outcome.verdict, "ok");
+        assert!(outcome
+            .missing_evidence
+            .iter()
+            .any(|item| item.contains("non-monotonic")));
+        let _ = fs::remove_dir_all(state.parent().unwrap());
+    }
+
+    #[test]
+    fn small_timestamp_regressions_within_cumulative_tolerance_remain_reliable() {
+        let tail = "2026-07-21T23:58:00+00:00 host kernel: amdgpu 0000:03:00.0: amdgpu: SMU: response:0xFFFFFFFF\n2026-07-21T23:57:59.975+00:00 host kernel: amdgpu 0000:03:00.0: amdgpu: SMU: response:0xFFFFFFFF\n2026-07-21T23:57:59.950+00:00 host kernel: amdgpu 0000:03:00.0: amdgpu: GPU reset begin\n2026-07-21T23:57:59.925+00:00 host kernel: amdgpu 0000:03:00.0: amdgpu: SMU: response:0xFFFFFFFF\n2026-07-21T23:58:01+00:00 host kernel: amdgpu 0000:03:00.0: amdgpu: GPU reset begin\n2026-07-21T23:59:00+00:00 host systemd[1]: Reached target Shutdown.";
+        let snapshot = parse_pci_snapshot(RECOVERY).unwrap();
+        let baseline = baseline_from(
+            snapshot
+                .devices
+                .iter()
+                .find(|device| device.bdf == "0000:03:00.0")
+                .unwrap(),
+            &snapshot.boot_id,
+        );
+        let precursor = precursor(tail, &baseline);
+        assert!(!precursor.timing_unreliable);
+        assert!(precursor.fires);
+    }
+
+    #[test]
+    fn multiset_merge_preserves_repeats_and_deduplicates_cross_source_overlap() {
+        let smu = "2026-07-21T23:58:00+00:00 host kernel: amdgpu 0000:03:00.0: amdgpu: SMU: response:0xFFFFFFFF";
+        let reset =
+            "2026-07-21T23:58:01+00:00 host kernel: amdgpu 0000:03:00.0: amdgpu: GPU reset begin";
+        let kernel = format!("{smu}\n{smu}\n{smu}\n{reset}\n{reset}");
+        let tail = format!(
+            "{kernel}\n2026-07-21T23:59:00+00:00 host systemd[1]: Reached target Shutdown."
+        );
+        let merged = combine_prior(Some(kernel), Some(tail)).unwrap();
+        let snapshot = parse_pci_snapshot(RECOVERY).unwrap();
+        let baseline = baseline_from(
+            snapshot
+                .devices
+                .iter()
+                .find(|device| device.bdf == "0000:03:00.0")
+                .unwrap(),
+            "bbbbbbbbbbbb4bbb8bbbbbbbbbbbbbbb",
+        );
+        assert!(
+            precursor(&merged, &baseline).fires,
+            "within-source repeats must fire"
+        );
+        assert_eq!(
+            combine_prior(Some("SMU\nSMU\nSMU".into()), Some("SMU".into())),
+            Some("SMU\nSMU\nSMU".into())
+        );
+        assert_eq!(
+            combine_prior(Some("SMU\nSMU".into()), Some("SMU\nSMU".into())),
+            Some("SMU\nSMU".into())
+        );
+        assert_eq!(
+            combine_prior(Some("SMU".into()), Some("SMU\nSMU".into())),
+            Some("SMU\nSMU".into())
+        );
+    }
+
+    #[test]
+    fn quoted_amdgpu_tokens_from_non_kernel_transport_do_not_match() {
+        let quoted = "2026-07-21T23:58:00+00:00 host helper[42]: contains amdgpu 0000:03:00.0: SMU: response:0xFFFFFFFF\n2026-07-21T23:58:01+00:00 host helper[42]: contains amdgpu 0000:03:00.0: SMU: response:0xFFFFFFFF\n2026-07-21T23:58:02+00:00 host helper[42]: contains amdgpu 0000:03:00.0: GPU reset begin\n2026-07-21T23:58:03+00:00 host helper[42]: contains amdgpu 0000:03:00.0: SMU: response:0xFFFFFFFF\n2026-07-21T23:58:04+00:00 host helper[42]: contains amdgpu 0000:03:00.0: GPU reset begin";
+        let snapshot = parse_pci_snapshot(RECOVERY).unwrap();
+        let baseline = baseline_from(
+            snapshot
+                .devices
+                .iter()
+                .find(|device| device.bdf == "0000:03:00.0")
+                .unwrap(),
+            "bbbbbbbbbbbb4bbb8bbbbbbbbbbbbbbb",
+        );
+        assert!(!precursor(quoted, &baseline).fires);
+    }
+
+    #[test]
+    fn malformed_topology_leaf_and_missing_upstream_are_refused() {
+        let leaf_mismatch = "# boot_id=bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\n0000:03:00.0 path=pci0000:00/0000:00:03.1/0000:04:00.0 vendor=0x1002 device=0x7550 class=0x030000";
+        assert!(parse_pci_snapshot(leaf_mismatch)
+            .unwrap_err()
+            .contains("path leaf"));
+        let missing_upstream = "# boot_id=bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\n0000:03:00.0 path=pci0000:00/0000:00:03.1/0000:03:00.0 vendor=0x1002 device=0x7550 class=0x030000";
+        assert!(parse_pci_snapshot(missing_upstream)
+            .unwrap_err()
+            .contains("upstream BDF"));
+    }
+
+    #[test]
+    fn collection_failures_are_redacted_before_output() {
+        let state = path();
+        learn(&state, RECOVERY, Some(INVENTORY));
+        let mut evidence = input(
+            RECOVERY,
+            Some(INVENTORY),
+            Some(include_str!(
+                "../../fixtures/d3/synthetic/clean-tail-prior-tail.log"
+            )),
+        );
+        evidence.collection_missing.push(redacted_collection_failure("prior boot journal unavailable: journalctl stderr from hostname=host.example alice@private.example [2001:db8:dead:beef::1] serial=abcDEF1234567890FACE".into(), None));
+        let outcome = diagnosis(run(evidence, Operation::Diagnose, &state).unwrap());
+        let joined = outcome.missing_evidence.join(" ");
+        for sensitive in ["alice", "host.example", "2001:db8", "abcDEF1234567890FACE"] {
+            assert!(!joined.contains(sensitive));
+        }
+        assert!(joined.contains("[REDACTED_USER]"));
+        assert!(joined.contains("[REDACTED_HOST]"));
+        assert!(joined.contains("[REDACTED_IPV6]"));
+        assert!(joined.contains("[REDACTED_SERIAL]"));
+        assert!(joined.contains("prior boot journal unavailable"));
+        assert!(joined.contains("journalctl stderr from"));
+        let _ = fs::remove_dir_all(state.parent().unwrap());
+    }
+
+    #[test]
+    fn suppressed_printk_records_degrade_precursor_confidence() {
+        let state = path();
+        learn(&state, HEALTHY, Some(PRECURSOR_INVENTORY));
+        let tail = format!(
+            "{}\n2026-07-21T23:59:31+00:00 host kernel: printk: 12 messages suppressed",
+            include_str!("../../fixtures/d3/synthetic/precursor-prior-tail.log")
+        );
+        let outcome = diagnosis(
+            run(
+                input(HEALTHY, Some(PRECURSOR_INVENTORY), Some(&tail)),
+                Operation::Diagnose,
+                &state,
+            )
+            .unwrap(),
+        );
+        assert_eq!(outcome.verdict, "precursor-warning");
+        assert_eq!(outcome.confidence, 0.76);
+        assert!(outcome
+            .missing_evidence
+            .iter()
+            .any(|item| item.contains("suppressed")));
         let _ = fs::remove_dir_all(state.parent().unwrap());
     }
 }
