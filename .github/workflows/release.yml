@@ -86,12 +86,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # rust-toolchain.toml in ebpf/ pins nightly to a specific date — let it
-      # control the toolchain so CI always uses the same version as local builds.
+      # Keep the release eBPF toolchain aligned with ebpf/rust-toolchain.toml.
       - name: Install Rust nightly + rust-src (for build-std)
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c
         with:
-          toolchain: nightly
+          toolchain: nightly-2026-07-18
           components: rust-src
 
       - name: Cache cargo registry + build artefacts (eBPF workspace)
@@ -101,7 +100,7 @@ jobs:
           key: ebpf-nightly
 
       - name: Install bpf-linker
-        run: cargo install bpf-linker --locked
+        run: cargo install bpf-linker --version 0.10.4 --locked
 
       - name: Build BPF probes + daemon
         run: |

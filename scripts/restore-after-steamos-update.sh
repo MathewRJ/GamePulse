@@ -231,8 +231,9 @@ apply_sysctl() {
   [[ $(sysctl -n kernel.perf_event_paranoid) == 1 ]] || die 'perf_event_paranoid is not 1'
 }
 acceptance() {
-  local pid before after journal installed_inode running_inode attempt
+  local pid before after journal installed_inode running_inode attempt start_cursor
   systemctl daemon-reload
+  start_cursor=$(journalctl -u "$UNIT" --no-pager -n1 --show-cursor 2>/dev/null | sed -n 's/^-- cursor: //p')
   systemctl start "$UNIT"               # remains disabled by quiesce_unit
   [[ $(systemctl is-active "$UNIT") == active ]] || die 'unit did not become active'
   assert_pinned "$(target /usr/local/bin/rigsignal-ebpf)" "$DAEMON_SHA" "$DAEMON_SIZE" daemon
@@ -244,7 +245,11 @@ acceptance() {
   [[ $installed_inode == "$running_inode" && $(sha_of "$PROC_ROOT/$pid/exe") == "$DAEMON_SHA" ]] || die 'running daemon bytes do not match installed daemon'
   # A cold eBPF attach can take time; the self-test's journalctl mock is instantaneous.
   for attempt in {1..10}; do
-    journal=$(journalctl -u "$UNIT" -n 200 --no-pager) || die 'cannot read daemon journal'
+    if [[ -n $start_cursor ]]; then
+      journal=$(journalctl -u "$UNIT" --after-cursor "$start_cursor" --no-pager) || die 'cannot read daemon journal'
+    else
+      journal=$(journalctl -u "$UNIT" -b --no-pager) || die 'cannot read daemon journal'
+    fi
     [[ $journal == *'probes: 9/9 loaded'* ]] && break
     (( attempt < 10 )) && sleep 1
   done

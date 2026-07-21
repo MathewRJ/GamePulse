@@ -1,5 +1,5 @@
 [toolchain]
 # Nightly is required for the probes crate (bpfel-unknown-none target, build-std).
 # The daemon crate compiles fine on stable but we pin nightly for workspace consistency.
-channel = "nightly"
+channel = "nightly-2026-07-18"
 components = ["rust-src", "rustfmt", "clippy"]

@@ -320,8 +320,7 @@ fn parse_fdinfo(fd: u32, path: &Path) -> Option<FdCounters> {
     let pdev = values.remove("drm-pdev")?;
     // Kernel format is `drm-engine-<name>:\t<u64> ns` — parse the leading numeric
     // token so the ` ns` suffix (or its absence) never breaks the counter.
-    let parse_ns =
-        |value: &String| value.split_whitespace().next().and_then(|t| t.parse().ok());
+    let parse_ns = |value: &String| value.split_whitespace().next().and_then(|t| t.parse().ok());
     let dec = values.get("drm-engine-dec").and_then(parse_ns);
     let enc = values.get("drm-engine-enc").and_then(parse_ns);
     let gfx = values.get("drm-engine-gfx").and_then(parse_ns);

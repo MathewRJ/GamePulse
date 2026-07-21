@@ -61,6 +61,10 @@ printf 'readonly %s\n' "$1" >>"${MOCK_LOG:?}"
 EOF
   cat >"$d/journalctl" <<'EOF'
 #!/usr/bin/env bash
+if [[ " $* " == *' --show-cursor '* ]]; then
+  printf '%s\n' '-- cursor: mock-start'
+  exit 0
+fi
 if [[ ${MOCK_JOURNAL_BAD:-0} == 1 ]]; then printf 'probes: 9/9 loaded\nfailed to attach probe\n'; else printf 'probes: 9/9 loaded\n'; fi
 EOF
   cat >"$d/openssl" <<'EOF'
