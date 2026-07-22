@@ -1,0 +1,82 @@
+{
+  "_meta": {
+    "managed": true,
+    "managed_by": "rigsignal-asset-bundle",
+    "package": {
+      "name": "rigsignal"
+    }
+  },
+  "description": "Ingest pipeline for RigSignal GPU metrics. Sets @timestamp, validates temperature and utilisation ranges, and derives the thermal_throttle_warning flag.\n",
+  "on_failure": [
+    {
+      "set": {
+        "field": "_ingest.pipeline_error",
+        "value": "{{_ingest.on_failure_message}}"
+      }
+    },
+    {
+      "set": {
+        "field": "_ingest.failed_pipeline",
+        "value": "rigsignal-gpu"
+      }
+    }
+  ],
+  "processors": [
+    {
+      "set": {
+        "description": "Set @timestamp to ingest time if not provided by the collector",
+        "field": "@timestamp",
+        "if": "ctx['@timestamp'] == null",
+        "value": "{{{_ingest.timestamp}}}"
+      }
+    },
+    {
+      "trim": {
+        "field": "rigsignal.game.name",
+        "ignore_missing": true
+      }
+    },
+    {
+      "script": {
+        "description": "Validate GPU utilisation is 0\u2013100% and temperature is in a plausible range",
+        "lang": "painless",
+        "source": "def util = ctx.rigsignal?.gpu?.utilisation_pct;\nif (util != null && (util < 0 || util > 100)) {\n  throw new Exception('rigsignal.gpu.utilisation_pct must be 0-100, got: ' + util);\n}\ndef temp = ctx.rigsignal?.gpu?.temperature_c;\nif (temp != null && (temp < -10 || temp > 150)) {\n  throw new Exception('rigsignal.gpu.temperature_c out of plausible range: ' + temp);\n}\n"
+      }
+    },
+    {
+      "script": {
+        "description": "Derive thermal_throttle_warning when hotspot or edge temp exceeds 95\u00b0C",
+        "lang": "painless",
+        "source": "if (ctx.rigsignal == null) ctx.rigsignal = [:];\nif (ctx.rigsignal.gpu == null) ctx.rigsignal.gpu = [:];\ndef hotspot = ctx.rigsignal?.gpu?.hotspot_c;\ndef edge = ctx.rigsignal?.gpu?.temperature_c;\ndef temp = (hotspot != null) ? hotspot : edge;\nctx.rigsignal.gpu.thermal_throttle_warning = (temp != null && temp > 95.0);\n"
+      }
+    },
+    {
+      "pipeline": {
+        "description": "[Fleet] Global pipeline for all data streams",
+        "ignore_missing_pipeline": true,
+        "name": "global@custom"
+      }
+    },
+    {
+      "pipeline": {
+        "description": "[Fleet] Pipeline for all data streams of type `metrics`",
+        "ignore_missing_pipeline": true,
+        "name": "metrics@custom"
+      }
+    },
+    {
+      "pipeline": {
+        "description": "[Fleet] Pipeline for all data streams of type `metrics` defined by the `rigsignal` integration",
+        "ignore_missing_pipeline": true,
+        "name": "metrics-rigsignal.integration@custom"
+      }
+    },
+    {
+      "pipeline": {
+        "description": "[Fleet] Pipeline for the `rigsignal.gpu` dataset",
+        "ignore_missing_pipeline": true,
+        "name": "metrics-rigsignal.gpu@custom"
+      }
+    }
+  ]
+}

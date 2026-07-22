@@ -1,0 +1,90 @@
+{
+  "_meta": {
+    "managed": true,
+    "managed_by": "rigsignal-asset-bundle",
+    "package": {
+      "name": "rigsignal"
+    }
+  },
+  "description": "Ingest pipeline for RigSignal frame performance metrics. Sets @timestamp, normalises common fields, validates FPS ranges, and derives the stutter_detected flag from frametime variance.\n",
+  "on_failure": [
+    {
+      "set": {
+        "field": "_ingest.pipeline_error",
+        "value": "{{_ingest.on_failure_message}}"
+      }
+    },
+    {
+      "set": {
+        "field": "_ingest.failed_pipeline",
+        "value": "rigsignal-frame"
+      }
+    }
+  ],
+  "processors": [
+    {
+      "set": {
+        "description": "Set @timestamp to ingest time if not provided by the collector",
+        "field": "@timestamp",
+        "if": "ctx['@timestamp'] == null",
+        "value": "{{{_ingest.timestamp}}}"
+      }
+    },
+    {
+      "lowercase": {
+        "description": "Normalise graphics API string (Vulkan -> vulkan)",
+        "field": "rigsignal.game.graphics_api",
+        "ignore_missing": true
+      }
+    },
+    {
+      "trim": {
+        "description": "Strip whitespace from game name",
+        "field": "rigsignal.game.name",
+        "ignore_missing": true
+      }
+    },
+    {
+      "script": {
+        "description": "Validate FPS and frame time values are non-negative",
+        "lang": "painless",
+        "source": "if (ctx.rigsignal?.fps?.current != null && ctx.rigsignal.fps.current < 0) {\n  throw new Exception('rigsignal.fps.current must be >= 0, got: ' + ctx.rigsignal.fps.current);\n}\nif (ctx.rigsignal?.fps?.frametime_ms != null && ctx.rigsignal.fps.frametime_ms < 0) {\n  throw new Exception('rigsignal.fps.frametime_ms must be >= 0');\n}\n"
+      }
+    },
+    {
+      "script": {
+        "description": "Derive stutter_detected flag when frametime variance exceeds 8ms threshold",
+        "lang": "painless",
+        "source": "if (ctx.rigsignal == null) ctx.rigsignal = [:];\nif (ctx.rigsignal.fps == null) ctx.rigsignal.fps = [:];\ndef variance = ctx.rigsignal?.fps?.frametime_variance;\nctx.rigsignal.fps.stutter_detected = (variance != null && variance > 8.0);\n"
+      }
+    },
+    {
+      "pipeline": {
+        "description": "[Fleet] Global pipeline for all data streams",
+        "ignore_missing_pipeline": true,
+        "name": "global@custom"
+      }
+    },
+    {
+      "pipeline": {
+        "description": "[Fleet] Pipeline for all data streams of type `metrics`",
+        "ignore_missing_pipeline": true,
+        "name": "metrics@custom"
+      }
+    },
+    {
+      "pipeline": {
+        "description": "[Fleet] Pipeline for all data streams of type `metrics` defined by the `rigsignal` integration",
+        "ignore_missing_pipeline": true,
+        "name": "metrics-rigsignal.integration@custom"
+      }
+    },
+    {
+      "pipeline": {
+        "description": "[Fleet] Pipeline for the `rigsignal.frame` dataset",
+        "ignore_missing_pipeline": true,
+        "name": "metrics-rigsignal.frame@custom"
+      }
+    }
+  ]
+}

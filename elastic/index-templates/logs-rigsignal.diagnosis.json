@@ -1,0 +1,33 @@
+{
+  "_meta": {
+    "description": "2026-07-22: dedicated template so rigsignal.diagnosis escapes the delete-bearing generic 'logs' ILM policy",
+    "managed": false,
+    "managed_by": "rigsignal-asset-bundle"
+  },
+  "composed_of": [
+    "logs@mappings",
+    "logs@settings",
+    "logs@custom",
+    "ecs@mappings"
+  ],
+  "data_stream": {
+    "allow_custom_routing": false,
+    "hidden": false
+  },
+  "ignore_missing_component_templates": [
+    "logs@custom"
+  ],
+  "index_patterns": [
+    "logs-rigsignal.diagnosis-*"
+  ],
+  "priority": 200,
+  "template": {
+    "settings": {
+      "index": {
+        "lifecycle": {
+          "name": "logs@lifecycle"
+        }
+      }
+    }
+  }
+}

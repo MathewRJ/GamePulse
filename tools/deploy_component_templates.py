@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Deploy RigSignal component templates to Elasticsearch.
+"""DEPRECATED: use tools/install_assets.py for the canonical asset bundle.
+
+Deploy RigSignal component templates to Elasticsearch.
 
 Component templates declare explicit field mappings for rigsignal.* fields so
 Kibana shows them in the field list even before any docs with those fields

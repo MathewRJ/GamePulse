@@ -1,0 +1,46 @@
+{
+  "_meta": {
+    "managed": true,
+    "managed_by": "rigsignal-asset-bundle",
+    "package": {
+      "name": "rigsignal"
+    }
+  },
+  "composed_of": [
+    "metrics@tsdb-settings",
+    "metrics-rigsignal.audio@package",
+    "metrics@custom",
+    "rigsignal@custom",
+    "metrics-rigsignal.audio@custom",
+    "ecs@mappings"
+  ],
+  "data_stream": {
+    "allow_custom_routing": false,
+    "hidden": false
+  },
+  "ignore_missing_component_templates": [
+    "metrics@custom",
+    "rigsignal@custom",
+    "metrics-rigsignal.audio@custom"
+  ],
+  "index_patterns": [
+    "metrics-rigsignal.audio-*"
+  ],
+  "priority": 200,
+  "template": {
+    "mappings": {
+      "_meta": {
+        "managed": true,
+        "managed_by": "rigsignal-asset-bundle",
+        "package": {
+          "name": "rigsignal"
+        }
+      }
+    },
+    "settings": {
+      "index": {
+        "mode": "time_series"
+      }
+    }
+  }
+}

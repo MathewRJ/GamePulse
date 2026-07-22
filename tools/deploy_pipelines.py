@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Deploy RigSignal ingest pipelines to Elasticsearch.
+"""DEPRECATED: use tools/install_assets.py for the canonical asset bundle.
+
+Deploy RigSignal ingest pipelines to Elasticsearch.
 
 Pipeline naming convention follows the Elastic integration package standard:
   metrics-rigsignal.<dataset>-default  (metrics data streams)

@@ -1,0 +1,93 @@
+{
+  "timestamps": {
+    "startedAt": "2026-07-22T10:54:05Z",
+    "finishedAt": "2026-07-22T10:55:03Z"
+  },
+  "images": {
+    "elasticsearch": {
+      "tag": "docker.elastic.co/elasticsearch/elasticsearch:9.4.4",
+      "repoDigests": [
+        "docker.elastic.co/elasticsearch/elasticsearch@sha256:a3545404e436e348721786bed638042a81f2181ebe2e2636501bb43940677747"
+      ]
+    },
+    "kibana": {
+      "tag": "docker.elastic.co/kibana/kibana:9.4.4",
+      "repoDigests": [
+        "docker.elastic.co/kibana/kibana@sha256:fbdf2b53fd1a9cec892c69eed735e7ee27a912dabff600308f5a576138a9806f"
+      ]
+    }
+  },
+  "imports": [
+    {
+      "file": "rigsignal-engine.ndjson",
+      "httpStatus": "200",
+      "successCount": 4,
+      "errors": []
+    },
+    {
+      "file": "rigsignal-flamegraph-dashboard.ndjson",
+      "httpStatus": "200",
+      "successCount": 6,
+      "errors": []
+    },
+    {
+      "file": "rigsignal-game-perf.ndjson",
+      "httpStatus": "200",
+      "successCount": 4,
+      "errors": []
+    },
+    {
+      "file": "rigsignal-home.ndjson",
+      "httpStatus": "200",
+      "successCount": 4,
+      "errors": []
+    },
+    {
+      "file": "rigsignal-software.ndjson",
+      "httpStatus": "200",
+      "successCount": 4,
+      "errors": []
+    },
+    {
+      "file": "rigsignal-streaming-lab.ndjson",
+      "httpStatus": "200",
+      "successCount": 3,
+      "errors": []
+    },
+    {
+      "file": "rigsignal-system-health.ndjson",
+      "httpStatus": "200",
+      "successCount": 4,
+      "errors": []
+    }
+  ],
+  "esqlProbe": {
+    "httpStatus": "200",
+    "success": true,
+    "response": {
+      "took": 275,
+      "is_partial": false,
+      "completion_time_in_millis": 1784717703161,
+      "documents_found": 1,
+      "values_loaded": 2,
+      "start_time_in_millis": 1784717702886,
+      "expiration_time_in_millis": 1785149703013,
+      "columns": [
+        {
+          "name": "source",
+          "type": "text"
+        },
+        {
+          "name": "source.keyword",
+          "type": "keyword"
+        }
+      ],
+      "values": [
+        [
+          "rigsignal-clean-stack-spike",
+          "rigsignal-clean-stack-spike"
+        ]
+      ]
+    }
+  }
+}

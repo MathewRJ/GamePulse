@@ -1,0 +1,86 @@
+{
+  "_meta": {
+    "managed": true,
+    "managed_by": "rigsignal-asset-bundle",
+    "package": {
+      "name": "rigsignal"
+    }
+  },
+  "description": "Ingest pipeline for RigSignal discrete events (logs type). Sets @timestamp, validates required event fields, and maps to ECS event fields. This is a logs data stream \u2014 events are not periodic measurements.\n",
+  "on_failure": [
+    {
+      "set": {
+        "field": "_ingest.pipeline_error",
+        "value": "{{_ingest.on_failure_message}}"
+      }
+    },
+    {
+      "set": {
+        "field": "_ingest.failed_pipeline",
+        "value": "rigsignal-events"
+      }
+    }
+  ],
+  "processors": [
+    {
+      "set": {
+        "field": "@timestamp",
+        "if": "ctx['@timestamp'] == null",
+        "value": "{{{_ingest.timestamp}}}"
+      }
+    },
+    {
+      "trim": {
+        "field": "rigsignal.game.name",
+        "ignore_missing": true
+      }
+    },
+    {
+      "script": {
+        "description": "Validate legacy event fields and set ECS event.kind",
+        "lang": "painless",
+        "source": "if (ctx.rigsignal?.stream?.client?.event == null) {\n  def kind = ctx.rigsignal?.event?.kind;\n  if (kind == null || kind.isEmpty()) {\n    throw new Exception('rigsignal.event.kind is required');\n  }\n  // Map to ECS event.kind\n  if (ctx.event == null) ctx.event = [:];\n  ctx.event.kind = 'event';\n  // Map severity to ECS\n  def severity = ctx.rigsignal?.event?.severity;\n  if (severity == 'error' || severity == 'critical') {\n    ctx.event.type = ['error'];\n  } else {\n    ctx.event.type = ['info'];\n  }\n}\n"
+      }
+    },
+    {
+      "lowercase": {
+        "field": "rigsignal.event.kind",
+        "ignore_missing": true
+      }
+    },
+    {
+      "lowercase": {
+        "field": "rigsignal.event.severity",
+        "ignore_missing": true
+      }
+    },
+    {
+      "pipeline": {
+        "description": "[Fleet] Global pipeline for all data streams",
+        "ignore_missing_pipeline": true,
+        "name": "global@custom"
+      }
+    },
+    {
+      "pipeline": {
+        "description": "[Fleet] Pipeline for all data streams of type `logs`",
+        "ignore_missing_pipeline": true,
+        "name": "logs@custom"
+      }
+    },
+    {
+      "pipeline": {
+        "description": "[Fleet] Pipeline for all data streams of type `logs` defined by the `rigsignal` integration",
+        "ignore_missing_pipeline": true,
+        "name": "logs-rigsignal.integration@custom"
+      }
+    },
+    {
+      "pipeline": {
+        "description": "[Fleet] Pipeline for the `rigsignal.events` dataset",
+        "ignore_missing_pipeline": true,
+        "name": "logs-rigsignal.events@custom"
+      }
+    }
+  ]
+}

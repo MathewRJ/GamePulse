@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""
+"""DEPRECATED: use tools/install_assets.py for the canonical asset bundle.
+
 Deploy the rigsignal-game-timeline Elasticsearch transform.
 
 This transform reads session summary documents from metrics-rigsignal.session-default

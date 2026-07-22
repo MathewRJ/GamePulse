@@ -1,0 +1,200 @@
+{
+  "_meta": {
+    "managed": true,
+    "managed_by": "rigsignal-asset-bundle",
+    "package": {
+      "name": "rigsignal"
+    }
+  },
+  "template": {
+    "mappings": {
+      "properties": {
+        "@timestamp": {
+          "ignore_malformed": false,
+          "type": "date"
+        },
+        "data_stream": {
+          "properties": {
+            "dataset": {
+              "type": "constant_keyword"
+            },
+            "namespace": {
+              "type": "constant_keyword"
+            },
+            "type": {
+              "type": "constant_keyword"
+            }
+          }
+        },
+        "event": {
+          "properties": {
+            "category": {
+              "ignore_above": 1024,
+              "type": "keyword"
+            },
+            "kind": {
+              "ignore_above": 1024,
+              "type": "keyword"
+            },
+            "severity": {
+              "type": "long"
+            },
+            "type": {
+              "ignore_above": 1024,
+              "type": "keyword"
+            }
+          }
+        },
+        "host": {
+          "properties": {
+            "name": {
+              "ignore_above": 1024,
+              "type": "keyword"
+            }
+          }
+        },
+        "message": {
+          "type": "match_only_text"
+        },
+        "rigsignal": {
+          "properties": {
+            "event": {
+              "properties": {
+                "crash": {
+                  "properties": {
+                    "exit_code": {
+                      "type": "long"
+                    },
+                    "module": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    },
+                    "signal": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    }
+                  }
+                },
+                "duration_ms": {
+                  "type": "float"
+                },
+                "kind": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "severity": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "shader_compile": {
+                  "properties": {
+                    "cache_hit": {
+                      "type": "boolean"
+                    },
+                    "duration_ms": {
+                      "type": "float"
+                    },
+                    "pipeline_hash": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    }
+                  }
+                },
+                "stutter": {
+                  "properties": {
+                    "dropped_frames": {
+                      "type": "long"
+                    },
+                    "frametime_spike_ms": {
+                      "type": "float"
+                    },
+                    "root_cause": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    }
+                  }
+                }
+              }
+            },
+            "game": {
+              "properties": {
+                "launcher": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "name": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "source": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "steam_app_id": {
+                  "type": "long"
+                }
+              }
+            },
+            "session": {
+              "properties": {
+                "agent_version": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "id": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "label": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                }
+              }
+            },
+            "stream": {
+              "properties": {
+                "client": {
+                  "properties": {
+                    "event": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    },
+                    "peer": {
+                      "properties": {
+                        "id": {
+                          "ignore_above": 1024,
+                          "type": "keyword"
+                        },
+                        "name": {
+                          "ignore_above": 1024,
+                          "type": "keyword"
+                        }
+                      }
+                    },
+                    "transport": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "settings": {
+      "index": {
+        "default_pipeline": "logs-rigsignal.events-0.5.0",
+        "lifecycle": {
+          "name": "logs@lifecycle"
+        },
+        "mapping": {
+          "total_fields": {
+            "limit": "1000"
+          }
+        }
+      }
+    }
+  }
+}

@@ -59,3 +59,7 @@ packaging/.claude/
 deploy-staging/rigsignal-agent
 deploy-staging/rigsignal-ebpf
 deploy-staging/rigsignal-ebpf-probes
+
+# TK-2: raw cluster exports (input-only, never commit) + local bundle output
+tools/asset-export-*/
+dist/

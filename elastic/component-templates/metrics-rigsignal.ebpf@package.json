@@ -1,0 +1,443 @@
+{
+  "_meta": {
+    "managed": true,
+    "managed_by": "rigsignal-asset-bundle",
+    "package": {
+      "name": "rigsignal"
+    }
+  },
+  "template": {
+    "mappings": {
+      "properties": {
+        "@timestamp": {
+          "ignore_malformed": false,
+          "type": "date"
+        },
+        "data_stream": {
+          "properties": {
+            "dataset": {
+              "type": "constant_keyword"
+            },
+            "namespace": {
+              "type": "constant_keyword"
+            },
+            "type": {
+              "type": "constant_keyword"
+            }
+          }
+        },
+        "host": {
+          "properties": {
+            "name": {
+              "time_series_dimension": true,
+              "type": "keyword"
+            },
+            "os": {
+              "properties": {
+                "kernel": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                }
+              }
+            }
+          }
+        },
+        "rigsignal": {
+          "properties": {
+            "ebpf": {
+              "properties": {
+                "bio": {
+                  "properties": {
+                    "bytes_total": {
+                      "meta": {
+                        "unit": "byte"
+                      },
+                      "time_series_metric": "gauge",
+                      "type": "long"
+                    },
+                    "event_count": {
+                      "meta": {},
+                      "time_series_metric": "gauge",
+                      "type": "long"
+                    },
+                    "latency_avg_us": {
+                      "meta": {
+                        "unit": "micros"
+                      },
+                      "time_series_metric": "gauge",
+                      "type": "double"
+                    },
+                    "latency_histogram": {
+                      "type": "histogram"
+                    },
+                    "latency_max_us": {
+                      "meta": {
+                        "unit": "micros"
+                      },
+                      "time_series_metric": "gauge",
+                      "type": "double"
+                    },
+                    "latency_min_us": {
+                      "meta": {
+                        "unit": "micros"
+                      },
+                      "time_series_metric": "gauge",
+                      "type": "double"
+                    }
+                  }
+                },
+                "futex": {
+                  "properties": {
+                    "contended_count": {
+                      "meta": {},
+                      "time_series_metric": "gauge",
+                      "type": "long"
+                    },
+                    "event_count": {
+                      "meta": {},
+                      "time_series_metric": "gauge",
+                      "type": "long"
+                    },
+                    "latency_avg_us": {
+                      "meta": {
+                        "unit": "micros"
+                      },
+                      "time_series_metric": "gauge",
+                      "type": "double"
+                    },
+                    "latency_histogram": {
+                      "type": "histogram"
+                    },
+                    "latency_max_us": {
+                      "meta": {
+                        "unit": "micros"
+                      },
+                      "time_series_metric": "gauge",
+                      "type": "double"
+                    },
+                    "latency_min_us": {
+                      "meta": {
+                        "unit": "micros"
+                      },
+                      "time_series_metric": "gauge",
+                      "type": "double"
+                    }
+                  }
+                },
+                "gpu_fence": {
+                  "properties": {
+                    "blocked_count": {
+                      "meta": {},
+                      "time_series_metric": "gauge",
+                      "type": "long"
+                    },
+                    "event_count": {
+                      "meta": {},
+                      "time_series_metric": "gauge",
+                      "type": "long"
+                    },
+                    "latency_avg_us": {
+                      "meta": {
+                        "unit": "micros"
+                      },
+                      "time_series_metric": "gauge",
+                      "type": "double"
+                    },
+                    "latency_histogram": {
+                      "type": "histogram"
+                    },
+                    "latency_max_us": {
+                      "meta": {
+                        "unit": "micros"
+                      },
+                      "time_series_metric": "gauge",
+                      "type": "double"
+                    },
+                    "latency_min_us": {
+                      "meta": {
+                        "unit": "micros"
+                      },
+                      "time_series_metric": "gauge",
+                      "type": "double"
+                    }
+                  }
+                },
+                "gpu_sched": {
+                  "properties": {
+                    "event_count": {
+                      "meta": {},
+                      "time_series_metric": "gauge",
+                      "type": "long"
+                    },
+                    "latency_avg_us": {
+                      "meta": {
+                        "unit": "micros"
+                      },
+                      "time_series_metric": "gauge",
+                      "type": "double"
+                    },
+                    "latency_histogram": {
+                      "type": "histogram"
+                    },
+                    "latency_max_us": {
+                      "meta": {
+                        "unit": "micros"
+                      },
+                      "time_series_metric": "gauge",
+                      "type": "double"
+                    },
+                    "latency_min_us": {
+                      "meta": {
+                        "unit": "micros"
+                      },
+                      "time_series_metric": "gauge",
+                      "type": "double"
+                    }
+                  }
+                },
+                "gpu_submit": {
+                  "properties": {
+                    "event_count": {
+                      "meta": {},
+                      "time_series_metric": "gauge",
+                      "type": "long"
+                    }
+                  }
+                },
+                "irq": {
+                  "properties": {
+                    "hard_irq": {
+                      "properties": {
+                        "event_count": {
+                          "meta": {},
+                          "time_series_metric": "gauge",
+                          "type": "long"
+                        },
+                        "latency_avg_us": {
+                          "meta": {
+                            "unit": "micros"
+                          },
+                          "time_series_metric": "gauge",
+                          "type": "double"
+                        },
+                        "latency_histogram": {
+                          "type": "histogram"
+                        }
+                      }
+                    },
+                    "softirq": {
+                      "properties": {
+                        "event_count": {
+                          "meta": {},
+                          "time_series_metric": "gauge",
+                          "type": "long"
+                        },
+                        "latency_avg_us": {
+                          "meta": {
+                            "unit": "micros"
+                          },
+                          "time_series_metric": "gauge",
+                          "type": "double"
+                        },
+                        "latency_histogram": {
+                          "type": "histogram"
+                        }
+                      }
+                    }
+                  }
+                },
+                "mem": {
+                  "properties": {
+                    "direct_reclaim_count": {
+                      "meta": {},
+                      "time_series_metric": "gauge",
+                      "type": "long"
+                    },
+                    "page_fault_count": {
+                      "meta": {},
+                      "time_series_metric": "gauge",
+                      "type": "long"
+                    },
+                    "page_fault_write": {
+                      "meta": {},
+                      "time_series_metric": "gauge",
+                      "type": "long"
+                    }
+                  }
+                },
+                "migration": {
+                  "properties": {
+                    "ccx_cross_count": {
+                      "meta": {},
+                      "time_series_metric": "gauge",
+                      "type": "long"
+                    },
+                    "total_count": {
+                      "meta": {},
+                      "time_series_metric": "gauge",
+                      "type": "long"
+                    }
+                  }
+                },
+                "probe": {
+                  "time_series_dimension": true,
+                  "type": "keyword"
+                },
+                "runqueue": {
+                  "properties": {
+                    "event_count": {
+                      "meta": {},
+                      "time_series_metric": "gauge",
+                      "type": "long"
+                    },
+                    "latency_avg_us": {
+                      "meta": {
+                        "unit": "micros"
+                      },
+                      "time_series_metric": "gauge",
+                      "type": "double"
+                    },
+                    "latency_histogram": {
+                      "type": "histogram"
+                    },
+                    "latency_max_us": {
+                      "meta": {
+                        "unit": "micros"
+                      },
+                      "time_series_metric": "gauge",
+                      "type": "double"
+                    },
+                    "latency_min_us": {
+                      "meta": {
+                        "unit": "micros"
+                      },
+                      "time_series_metric": "gauge",
+                      "type": "double"
+                    }
+                  }
+                },
+                "stutter": {
+                  "properties": {
+                    "bio_max_us": {
+                      "meta": {
+                        "unit": "micros"
+                      },
+                      "time_series_metric": "gauge",
+                      "type": "double"
+                    },
+                    "contributing_probes": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    },
+                    "gpu_sched_max_us": {
+                      "meta": {
+                        "unit": "micros"
+                      },
+                      "time_series_metric": "gauge",
+                      "type": "double"
+                    },
+                    "mem_pressure": {
+                      "type": "boolean"
+                    },
+                    "sched_max_us": {
+                      "meta": {
+                        "unit": "micros"
+                      },
+                      "time_series_metric": "gauge",
+                      "type": "double"
+                    },
+                    "severity_score": {
+                      "meta": {},
+                      "time_series_metric": "gauge",
+                      "type": "byte"
+                    }
+                  }
+                },
+                "vfs": {
+                  "properties": {
+                    "read": {
+                      "properties": {
+                        "bytes_total": {
+                          "meta": {
+                            "unit": "byte"
+                          },
+                          "time_series_metric": "gauge",
+                          "type": "long"
+                        },
+                        "event_count": {
+                          "meta": {},
+                          "time_series_metric": "gauge",
+                          "type": "long"
+                        },
+                        "latency_avg_us": {
+                          "meta": {
+                            "unit": "micros"
+                          },
+                          "time_series_metric": "gauge",
+                          "type": "double"
+                        },
+                        "latency_histogram": {
+                          "type": "histogram"
+                        }
+                      }
+                    },
+                    "write": {
+                      "properties": {
+                        "bytes_total": {
+                          "meta": {
+                            "unit": "byte"
+                          },
+                          "time_series_metric": "gauge",
+                          "type": "long"
+                        },
+                        "event_count": {
+                          "meta": {},
+                          "time_series_metric": "gauge",
+                          "type": "long"
+                        },
+                        "latency_avg_us": {
+                          "meta": {
+                            "unit": "micros"
+                          },
+                          "time_series_metric": "gauge",
+                          "type": "double"
+                        },
+                        "latency_histogram": {
+                          "type": "histogram"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "session": {
+              "properties": {
+                "id": {
+                  "time_series_dimension": true,
+                  "type": "keyword"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "settings": {
+      "index": {
+        "default_pipeline": "metrics-rigsignal.ebpf-0.5.0",
+        "lifecycle": {
+          "name": "metrics@lifecycle"
+        },
+        "mapping": {
+          "source": {
+            "mode": "synthetic"
+          },
+          "total_fields": {
+            "limit": "1000"
+          }
+        }
+      }
+    }
+  }
+}

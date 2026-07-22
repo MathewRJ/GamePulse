@@ -1,0 +1,105 @@
+{
+  "_meta": {
+    "description": "RigSignal perf flamegraph profiles \u2014 data stream so Serverless browser viz (_alias:* routing) can see it",
+    "managed_by": "rigsignal-asset-bundle"
+  },
+  "composed_of": [],
+  "data_stream": {
+    "allow_custom_routing": false,
+    "hidden": false
+  },
+  "index_patterns": [
+    "metrics-rigsignal.profiles-*"
+  ],
+  "priority": 500,
+  "template": {
+    "mappings": {
+      "dynamic": false,
+      "properties": {
+        "@timestamp": {
+          "type": "date"
+        },
+        "diff.delta": {
+          "type": "long"
+        },
+        "diff.delta_norm": {
+          "type": "float"
+        },
+        "diff.samples_a": {
+          "type": "long"
+        },
+        "diff.samples_b": {
+          "type": "long"
+        },
+        "diff.total_samples_a": {
+          "type": "long"
+        },
+        "diff.total_samples_b": {
+          "type": "long"
+        },
+        "diff.union_total_samples": {
+          "type": "long"
+        },
+        "game": {
+          "type": "keyword"
+        },
+        "host.name": {
+          "type": "keyword"
+        },
+        "node.depth": {
+          "type": "integer"
+        },
+        "node.function": {
+          "ignore_above": 8191,
+          "type": "keyword"
+        },
+        "node.module": {
+          "ignore_above": 1024,
+          "type": "keyword"
+        },
+        "node.parent_id": {
+          "type": "keyword"
+        },
+        "node.path_id": {
+          "type": "keyword"
+        },
+        "node.samples": {
+          "type": "long"
+        },
+        "node.total_samples": {
+          "type": "long"
+        },
+        "node.width": {
+          "type": "float"
+        },
+        "node.x0": {
+          "type": "float"
+        },
+        "node.x1": {
+          "type": "float"
+        },
+        "profile.kind": {
+          "type": "keyword"
+        },
+        "proton.a.version": {
+          "type": "keyword"
+        },
+        "proton.b.version": {
+          "type": "keyword"
+        },
+        "proton.version": {
+          "type": "keyword"
+        },
+        "session.a.label": {
+          "type": "keyword"
+        },
+        "session.b.label": {
+          "type": "keyword"
+        },
+        "session.label": {
+          "type": "keyword"
+        }
+      }
+    }
+  }
+}
