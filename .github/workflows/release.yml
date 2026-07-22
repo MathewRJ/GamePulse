@@ -150,9 +150,10 @@ jobs:
           DIR="rigsignal-${VERSION}-linux-x86_64"
           mkdir -p "dist-tar/${DIR}"
 
-          # Agent + launcher + user service
+          # Agent + launcher + uninstaller + user service
           cp target/release/rigsignal-agent                            "dist-tar/${DIR}/rigsignal-agent"
           cp packaging/rigsignal-launcher.sh                           "dist-tar/${DIR}/rigsignal"
+          cp packaging/uninstall.sh                                    "dist-tar/${DIR}/rigsignal-uninstall"
           cp packaging/systemd/rigsignal-agent.user-install.service    "dist-tar/${DIR}/rigsignal-agent.service"
 
           # eBPF daemon + probes + system service (installed by install.sh with sudo)
@@ -162,6 +163,7 @@ jobs:
 
           chmod +x "dist-tar/${DIR}/rigsignal-agent" \
                    "dist-tar/${DIR}/rigsignal" \
+                   "dist-tar/${DIR}/rigsignal-uninstall" \
                    "dist-tar/${DIR}/rigsignal-ebpf"
           cd dist-tar
           tar -czf "${DIR}.tar.gz" "${DIR}/"
@@ -440,6 +442,14 @@ jobs:
 
       - name: List release assets
         run: ls -lh dist/
+
+      - name: Generate per-asset SHA-256 checksum files
+        run: |
+          cd dist
+          for asset in *; do
+            [ -f "$asset" ] || continue
+            sha256sum "$asset" > "${asset}.sha256"
+          done
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

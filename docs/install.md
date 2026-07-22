@@ -3,8 +3,11 @@
 ## Quick start
 
 ```bash
-# Linux — recommended, includes eBPF
+# Linux — recommended; eBPF is opt-in
 curl -sSfL https://mathewrj.github.io/RigSignal-Integration/install.sh | sh
+
+# Explicitly opt in to the privileged eBPF daemon
+curl -sSfL https://mathewrj.github.io/RigSignal-Integration/install.sh | sh -s -- --with-ebpf
 
 # Arch Linux / CachyOS / Manjaro (AUR, builds from source incl. eBPF)
 yay -S rigsignal-git
@@ -24,6 +27,26 @@ rigsignal run %command%
 ```
 
 Data starts flowing to Elasticsearch the next time you launch a game.
+
+The default install is agent-only (`--no-ebpf`) and does not request `sudo`.
+To enable kernel telemetry later, rerun the installer with `--with-ebpf`.
+
+### Manual Linux download with checksum verification
+
+Download the tarball and its adjacent checksum file from the same release, then
+verify before unpacking:
+
+```bash
+VERSION=0.3.0
+ARCH=x86_64
+BASE="https://github.com/MathewRJ/RigSignal/releases/download/v${VERSION}"
+curl -fLO "$BASE/rigsignal-${VERSION}-linux-${ARCH}.tar.gz"
+curl -fLO "$BASE/rigsignal-${VERSION}-linux-${ARCH}.tar.gz.sha256"
+sha256sum -c "rigsignal-${VERSION}-linux-${ARCH}.tar.gz.sha256"
+tar -xzf "rigsignal-${VERSION}-linux-${ARCH}.tar.gz"
+```
+
+The one-line installer performs the same checksum verification before unpacking.
 
 ---
 
@@ -301,7 +324,10 @@ systemctl --user enable --now rigsignal-agent
 sudo systemctl enable --now rigsignal-ebpf
 ```
 
-The one-line installer and the AUR package both install and enable these units automatically (the one-line installer prompts once for `sudo` to install/start `rigsignal-ebpf`). For manual installs, copy the unit files from the release tarball or `packaging/systemd/`.
+The AUR package installs these units. The one-line installer installs only the
+user agent by default; pass `--with-ebpf` to explicitly install and enable the
+privileged eBPF service. For manual installs, copy the unit files from the
+release tarball or `packaging/systemd/`.
 
 > **Dev installs (build from source):** The unit's `ExecStart` defaults to `/usr/bin/rigsignal-agent`, but a source build installs to `/usr/local/bin/`. Create a drop-in to override:
 > ```bash
@@ -324,6 +350,23 @@ Config is read from (in priority order):
 3. `/etc/rigsignal/rigsignal.toml`
 
 `rigsignal setup` writes `~/.config/rigsignal/rigsignal.toml` automatically. See `docs/configuration.md` for the full reference.
+
+---
+
+## Uninstalling Linux user installs
+
+The one-line installer also installs `rigsignal-uninstall` alongside the
+launcher. It stops and disables the user unit, removes RigSignal binaries and
+unit files, and leaves configuration in place by default:
+
+```bash
+rigsignal-uninstall
+```
+
+Use `rigsignal-uninstall --purge` to also remove RigSignal configuration, or
+`--user-only` to leave any privileged eBPF files in place. Elasticsearch data is
+never removed. `DESTDIR` and `RIGSIGNAL_INSTALL_LOCAL_DIR` are test-only
+installer overrides used by the repository's root-free packaging tests.
 
 ---
 
