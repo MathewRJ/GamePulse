@@ -65,16 +65,26 @@ cpu_sentinel_fetch() {
   assert_equal "$name-unique-sentinel" "1" "$hits" 1>&2
   jq -cS '.hits.hits[0]._source' "$out" | sha256sum | awk '{print $1}'
 }
+# GET _doc/<id> does not resolve through a data-stream name — search by _id instead.
+events_sentinel_fetch() {
+  local name="$1" out="$2" hits
+  request "$name" "$out" --header 'Content-Type: application/json' --request POST \
+    --data '{"query":{"ids":{"values":["rigsignal-matrix-events-sentinel"]}},"size":2}' \
+    "$ES_URL/$EVENTS_INDEX/_search" 1>&2
+  hits="$(jq -r '.hits.total.value' "$out")"
+  assert_equal "$name-unique-sentinel" "1" "$hits" 1>&2
+  jq -cS '.hits.hits[0]._source' "$out" | sha256sum | awk '{print $1}'
+}
 record() {
   CPU_HASH="$(cpu_sentinel_fetch cpu-before "$RUN_DIR/cpu-before.json")"
-  request events-before "$RUN_DIR/events-before.json" --request GET "$ES_URL/$EVENTS_INDEX/_doc/rigsignal-matrix-events-sentinel"; EVENTS_HASH="$(hash_source "$RUN_DIR/events-before.json")"
+  EVENTS_HASH="$(events_sentinel_fetch events-before "$RUN_DIR/events-before.json")"
   request cpu-count-before "$RUN_DIR/cpu-count-before.json" --request GET "$ES_URL/$CPU_INDEX/_count"; CPU_COUNT="$(jq -r .count "$RUN_DIR/cpu-count-before.json")"
   request events-count-before "$RUN_DIR/events-count-before.json" --request GET "$ES_URL/$EVENTS_INDEX/_count"; EVENTS_COUNT="$(jq -r .count "$RUN_DIR/events-count-before.json")"
 }
 survival() {
   local actual
   actual="$(cpu_sentinel_fetch cpu-after "$RUN_DIR/cpu-after.json")"; assert_equal cpu-sentinel-source-hash "$CPU_HASH" "$actual"
-  request events-after "$RUN_DIR/events-after.json" --request GET "$ES_URL/$EVENTS_INDEX/_doc/rigsignal-matrix-events-sentinel"; actual="$(hash_source "$RUN_DIR/events-after.json")"; assert_equal events-sentinel-source-hash "$EVENTS_HASH" "$actual"
+  actual="$(events_sentinel_fetch events-after "$RUN_DIR/events-after.json")"; assert_equal events-sentinel-source-hash "$EVENTS_HASH" "$actual"
   request cpu-count-after "$RUN_DIR/cpu-count-after.json" --request GET "$ES_URL/$CPU_INDEX/_count"; actual="$(jq -r .count "$RUN_DIR/cpu-count-after.json")"; assert_equal cpu-sentinel-count "$CPU_COUNT" "$actual"
   request events-count-after "$RUN_DIR/events-count-after.json" --request GET "$ES_URL/$EVENTS_INDEX/_count"; actual="$(jq -r .count "$RUN_DIR/events-count-after.json")"; assert_equal events-sentinel-count "$EVENTS_COUNT" "$actual"
 }
