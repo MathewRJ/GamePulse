@@ -31,7 +31,7 @@
   "input": {"type": "filestream"},
   "log": {"file": {"device_id": "66312", "fingerprint": "e8888cc7ac0c795595943bbe737e86a764940e317bdf8d782ccacdb5412e53e8", "inode": "2773193", "path": "/home/deck/.local/state/rigsignal/spool/rigsignal-cpu.ndjson"}, "offset": 10037},
   "rigsignal": {
-    "cpu": {"boost_state": true, "clock_mhz_avg": 1893, "governor": "powersave", "per_core": [0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 6.9, 33.3], "temperature_c": 47.3, "total_utilisation_pct": 42.42},
+    "cpu": {"boost_state": true, "clock_mhz_avg": 1893, "governor": "powersave", "per_core": [0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 6.9, 33.3], "temperature_c": 47.3, "total_utilisation_pct": 42.25},
     "session": {"agent_version": "0.3.0", "id": "1dba15bd-ce4e-40e5-b920-5d9fa1066163", "label": "StreamClient", "label_source": "manual", "opt_in_public": false}
   }
 }

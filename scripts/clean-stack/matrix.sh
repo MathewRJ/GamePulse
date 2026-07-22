@@ -86,7 +86,7 @@ esql() {
 }
 asserts() {
   local title actual component pipeline
-  esql cpu-marker "FROM $CPU_INDEX | WHERE host.name == \"rigsignal-matrix-host\" | KEEP rigsignal.cpu.total_utilisation_pct" 42.42
+  esql cpu-marker "FROM $CPU_INDEX | WHERE host.name == \"rigsignal-matrix-host\" | KEEP rigsignal.cpu.total_utilisation_pct" 42.25
   esql events-value "FROM $EVENTS_INDEX | WHERE host.name == \"rigsignal-matrix-host\" | KEEP rigsignal.stream.client.event" connected
   kb_request dashboard-find "$RUN_DIR/dashboards.json" --request GET "$KB_URL/api/saved_objects/_find?type=dashboard&per_page=1000"; actual="$(jq -r .total "$RUN_DIR/dashboards.json")"; assert_equal dashboard-canonical-total 7 "$actual"
   for title in 'RigSignal: Engine & Diagnostics' 'RigSignal Flamegraph Profiles' 'RigSignal: Game Performance' 'RigSignal: Overview' 'RigSignal: Software Stack' 'RigSignal Streaming Lab' 'RigSignal: System Health'; do actual="$(jq -r --arg title "$title" '[.saved_objects[]|select(.attributes.title==$title)]|length' "$RUN_DIR/dashboards.json")"; assert_equal "dashboard-title-$title" 1 "$actual"; done
