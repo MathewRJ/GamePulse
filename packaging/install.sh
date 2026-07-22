@@ -10,6 +10,9 @@
 # After install:
 #   rigsignal setup    # configure Elasticsearch endpoint + API key
 #   rigsignal start    # start the agent
+#
+# eBPF is disabled by default. To explicitly install its privileged daemon, add
+# --with-ebpf. RIGSIGNAL_INSTALL_LOCAL_DIR and DESTDIR are test-only overrides.
 
 set -e
 
@@ -18,11 +21,13 @@ INSTALL_BIN="${HOME}/.local/bin"
 INSTALL_SERVICE="${HOME}/.config/systemd/user"
 GITHUB_API="https://api.github.com/repos/${REPO}"
 GITHUB_RELEASES="https://github.com/${REPO}/releases/download"
+DESTDIR="${DESTDIR:-}"
+RIGSIGNAL_INSTALL_LOCAL_DIR="${RIGSIGNAL_INSTALL_LOCAL_DIR:-}"
 
 # ── Argument parsing ─────────────────────────────────────────────────────────
 
 VERSION=""
-NO_EBPF=0
+NO_EBPF=1
 i=0
 for arg in "$@"; do
     i=$((i + 1))
@@ -32,6 +37,7 @@ for arg in "$@"; do
             eval "VERSION=\${$(( i + 1 ))}" 2>/dev/null || true
             ;;
         --no-ebpf) NO_EBPF=1 ;;
+        --with-ebpf) NO_EBPF=0 ;;
     esac
 done
 
@@ -40,6 +46,10 @@ done
 info()  { printf '  [info] %s\n' "$*"; }
 ok()    { printf '    [ok] %s\n' "$*"; }
 err()   { printf '   [err] %s\n' "$*" >&2; exit 1; }
+
+stage_path() {
+    printf '%s%s' "$DESTDIR" "$1"
+}
 
 download() {
     url="$1"; dest="$2"
@@ -94,12 +104,28 @@ fi
 
 TARBALL="rigsignal-${VERSION}-linux-${ARCH}.tar.gz"
 DOWNLOAD_URL="${GITHUB_RELEASES}/v${VERSION}/${TARBALL}"
+CHECKSUM_FILE="${TARBALL}.sha256"
+CHECKSUM_URL="${GITHUB_RELEASES}/v${VERSION}/${CHECKSUM_FILE}"
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
 info "Downloading ${TARBALL}..."
-download "$DOWNLOAD_URL" "$TMP/$TARBALL"
+if [ -n "$RIGSIGNAL_INSTALL_LOCAL_DIR" ]; then
+    # Test-only, network-free fixture override. Do not use this in production.
+    cp "${RIGSIGNAL_INSTALL_LOCAL_DIR%/}/${TARBALL}" "$TMP/$TARBALL" \
+        || err "Could not copy test tarball from RIGSIGNAL_INSTALL_LOCAL_DIR."
+    cp "${RIGSIGNAL_INSTALL_LOCAL_DIR%/}/${CHECKSUM_FILE}" "$TMP/$CHECKSUM_FILE" \
+        || err "Could not copy test checksum from RIGSIGNAL_INSTALL_LOCAL_DIR."
+else
+    download "$DOWNLOAD_URL" "$TMP/$TARBALL"
+    download "$CHECKSUM_URL" "$TMP/$CHECKSUM_FILE"
+fi
+
+command -v sha256sum >/dev/null 2>&1 || err "sha256sum is required to verify the release tarball."
+info "Verifying ${TARBALL} checksum..."
+(cd "$TMP" && sha256sum -c "$CHECKSUM_FILE") \
+    || err "Checksum verification failed for ${TARBALL}; refusing to unpack it."
 tar -xzf "$TMP/$TARBALL" -C "$TMP" --strip-components=1
 
 # ── Install binaries ──────────────────────────────────────────────────────────
@@ -110,17 +136,26 @@ SKIPPED=""
 add_installed() { INSTALLED="${INSTALLED}  + $1\n"; }
 add_skipped()   { SKIPPED="${SKIPPED}  - $1\n"; }
 
-mkdir -p "$INSTALL_BIN"
-install -m 755 "$TMP/rigsignal-agent"  "$INSTALL_BIN/rigsignal-agent"
-install -m 755 "$TMP/rigsignal"        "$INSTALL_BIN/rigsignal"
+INSTALL_BIN_PATH=$(stage_path "$INSTALL_BIN")
+INSTALL_SERVICE_PATH=$(stage_path "$INSTALL_SERVICE")
+
+mkdir -p "$INSTALL_BIN_PATH"
+install -m 755 "$TMP/rigsignal-agent"  "$INSTALL_BIN_PATH/rigsignal-agent"
+install -m 755 "$TMP/rigsignal"        "$INSTALL_BIN_PATH/rigsignal"
+install -m 755 "$TMP/rigsignal-uninstall" "$INSTALL_BIN_PATH/rigsignal-uninstall"
 add_installed "$INSTALL_BIN/rigsignal-agent  (collector)"
 add_installed "$INSTALL_BIN/rigsignal  (launcher CLI)"
+add_installed "$INSTALL_BIN/rigsignal-uninstall  (uninstaller)"
 
 # ── Install user systemd service ──────────────────────────────────────────────
 
-if command -v systemctl >/dev/null 2>&1; then
-    mkdir -p "$INSTALL_SERVICE"
-    install -m 644 "$TMP/rigsignal-agent.service" "$INSTALL_SERVICE/rigsignal-agent.service"
+if [ -n "$DESTDIR" ]; then
+    mkdir -p "$INSTALL_SERVICE_PATH"
+    install -m 644 "$TMP/rigsignal-agent.service" "$INSTALL_SERVICE_PATH/rigsignal-agent.service"
+    add_installed "$INSTALL_SERVICE/rigsignal-agent.service  (user systemd service; staged)"
+elif command -v systemctl >/dev/null 2>&1; then
+    mkdir -p "$INSTALL_SERVICE_PATH"
+    install -m 644 "$TMP/rigsignal-agent.service" "$INSTALL_SERVICE_PATH/rigsignal-agent.service"
     systemctl --user daemon-reload 2>/dev/null || true
     add_installed "$INSTALL_SERVICE/rigsignal-agent.service  (user systemd service)"
 else
@@ -138,8 +173,8 @@ EBPF_BIN="$TMP/rigsignal-ebpf"
 EBPF_PROBES="$TMP/rigsignal-ebpf-probes"
 
 if [ "$NO_EBPF" = "1" ]; then
-    info "Skipping eBPF daemon (--no-ebpf)"
-    add_skipped "rigsignal-ebpf (--no-ebpf flag)"
+    info "Skipping eBPF daemon by default (opt in with --with-ebpf)"
+    add_skipped "rigsignal-ebpf (opt in with --with-ebpf)"
 elif [ -f "$EBPF_BIN" ]; then
     if ! command -v sudo >/dev/null 2>&1; then
         info "eBPF daemon found but sudo not available — skipping system install."
@@ -207,18 +242,21 @@ fi
 # missing keys rather than overwriting user customisations.
 _mh_conf_dir="${XDG_CONFIG_HOME:-$HOME/.config}/MangoHud"
 _mh_conf="$_mh_conf_dir/MangoHud.conf"
-mkdir -p "$_mh_conf_dir"
-if ! grep -q "output_folder" "$_mh_conf" 2>/dev/null; then
-    printf 'output_folder=%s\n' "$HOME/.local/share/MangoHud" >> "$_mh_conf"
+_mh_conf_path=$(stage_path "$_mh_conf")
+_mh_conf_dir_path=$(stage_path "$_mh_conf_dir")
+mkdir -p "$_mh_conf_dir_path"
+if ! grep -q "output_folder" "$_mh_conf_path" 2>/dev/null; then
+    printf 'output_folder=%s\n' "$HOME/.local/share/MangoHud" >> "$_mh_conf_path"
 fi
-if ! grep -q "autostart_log" "$_mh_conf" 2>/dev/null; then
-    printf 'autostart_log=1\n' >> "$_mh_conf"
+if ! grep -q "autostart_log" "$_mh_conf_path" 2>/dev/null; then
+    printf 'autostart_log=1\n' >> "$_mh_conf_path"
 fi
 add_installed "$_mh_conf  (MangoHud frame logging)"
 
 # ── PATH setup ────────────────────────────────────────────────────────────────
 
 # Check if ~/.local/bin is already in PATH
+if [ -z "$DESTDIR" ]; then
 case ":${PATH}:" in
     *":${INSTALL_BIN}:"*) ;;
     *)
@@ -244,6 +282,7 @@ case ":${PATH}:" in
         fi
         ;;
 esac
+fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 
@@ -269,11 +308,12 @@ fi
 printf '         rigsignal setup\n'
 printf '    2. Add to Steam launch options:\n'
 printf '         rigsignal run %%command%%\n'
+printf '    3. To uninstall this user install:\n'
+printf '         rigsignal-uninstall\n'
 if printf '%b' "$INSTALLED" | grep -q "rigsignal-ebpf.service  (enabled"; then
-    printf '    3. eBPF kernel telemetry is active. To check status:\n'
+    printf '    4. eBPF kernel telemetry is active. To check status:\n'
     printf '         sudo systemctl status rigsignal-ebpf\n'
 elif printf '%b' "$INSTALLED" | grep -q "rigsignal-ebpf"; then
-    printf '    3. Enable eBPF kernel telemetry at boot:\n'
-    printf '         sudo systemctl enable --now rigsignal-ebpf\n'
+    printf '    4. To enable eBPF kernel telemetry, reinstall with --with-ebpf.\n'
 fi
 printf '\n'

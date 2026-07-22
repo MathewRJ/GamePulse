@@ -14,6 +14,12 @@
 AGENT_UNIT="rigsignal-agent"
 EBPF_UNIT="rigsignal-ebpf"
 
+# Elasticsearch compatibility policy. The tested range is intentionally kept in
+# one place so setup messaging and the version gate cannot drift.
+ES_TESTED_MIN_VERSION="9.4.3"
+ES_TESTED_MAX_VERSION="9.4.4"
+ES_MIN_VERSION="8.13.0"
+
 # User config path — mirrors what the Rust agent's Config::load() searches first.
 # The agent also reads /etc/rigsignal/rigsignal.toml (system-wide), but setup
 # writes the user config so credentials stay per-user and never world-readable.
@@ -80,48 +86,167 @@ toml_get() {
 
 # ── Connectivity test ──────────────────────────────────────────────────────────
 
-# Returns 0 if the endpoint is reachable (HTTP 2xx or 4xx — anything but timeout/refuse).
-# 401 Unauthorized means the endpoint is alive but the key is wrong.
-# Uses python3 urllib (always available) with a fallback to curl.
-test_connection() {
+# Sets ES_STATUS and ES_BODY. Requests deliberately keep credentials out of
+# output; callers report only an HTTP status and a safe remediation hint.
+es_request() {
     endpoint="$1"
     api_key="$2"
-    health_url="${endpoint%/}/_cluster/health"
+    method="$3"
+    path="$4"
+    payload="$5"
+    request_url="${endpoint%/}${path}"
 
     if command -v python3 >/dev/null 2>&1; then
-        code=$(python3 - "$health_url" "$api_key" <<'PYEOF'
-import sys, urllib.request, ssl, urllib.error
-url, key = sys.argv[1], sys.argv[2]
-ctx = ssl.create_default_context()
-ctx.check_hostname = False
-ctx.verify_mode = ssl.CERT_NONE
-req = urllib.request.Request(url, headers={"Authorization": f"ApiKey {key}"})
+        response=$(python3 - "$request_url" "$api_key" "$method" "$payload" <<'PYEOF'
+import ssl
+import sys
+import urllib.error
+import urllib.request
+
+url, key, method, payload = sys.argv[1:]
+body = payload.encode() if payload else None
+headers = {"Authorization": f"ApiKey {key}"}
+if body is not None:
+    headers["Content-Type"] = "application/json"
+request = urllib.request.Request(url, data=body, headers=headers, method=method)
+context = ssl.create_default_context()
+context.check_hostname = False
+context.verify_mode = ssl.CERT_NONE
 try:
-    with urllib.request.urlopen(req, context=ctx, timeout=8) as r:
-        print(r.status)
-except urllib.error.HTTPError as e:
-    print(e.code)
+    with urllib.request.urlopen(request, context=context, timeout=8) as result:
+        print(result.status)
+        print(result.read().decode("utf-8", "replace").replace("\n", " "))
+except urllib.error.HTTPError as error:
+    print(error.code)
+    print(error.read().decode("utf-8", "replace").replace("\n", " "))
 except Exception:
     print(0)
 PYEOF
 )
     elif command -v curl >/dev/null 2>&1; then
-        code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 8 \
-            -H "Authorization: ApiKey $api_key" \
-            -k \
-            "$health_url" 2>/dev/null)
+        if [ -n "$payload" ]; then
+            if ! response=$(curl -sS -k --max-time 8 -X "$method" \
+                -H "Authorization: ApiKey $api_key" \
+                -H "Content-Type: application/json" \
+                --data "$payload" -w '\n%{http_code}' "$request_url" 2>/dev/null); then
+                ES_STATUS=0
+                ES_BODY=""
+                return 0
+            fi
+        else
+            if ! response=$(curl -sS -k --max-time 8 -X "$method" \
+                -H "Authorization: ApiKey $api_key" \
+                -w '\n%{http_code}' "$request_url" 2>/dev/null); then
+                ES_STATUS=0
+                ES_BODY=""
+                return 0
+            fi
+        fi
+        ES_STATUS=$(printf '%s\n' "$response" | tail -n 1)
+        ES_BODY=$(printf '%s\n' "$response" | sed '$d')
+        return 0
     else
-        _warn "Neither python3 nor curl found — cannot verify connectivity."
-        return 0  # assume reachable, let the agent report errors
+        ES_STATUS=0
+        ES_BODY=""
+        return 0
     fi
 
-    # Any HTTP response means the endpoint is reachable.
-    # 200 = OK, 401 = wrong key (endpoint alive), 410 = API not supported on Serverless (alive).
-    # Only connection errors (timeout, DNS failure) → code 0 or empty → unreachable.
-    case "$code" in
-        ""|0)  return 1 ;;   # no response — timeout or connection refused
-        *)     return 0 ;;   # any HTTP status = endpoint is up
+    ES_STATUS=$(printf '%s\n' "$response" | sed -n '1p')
+    ES_BODY=$(printf '%s\n' "$response" | sed -n '2p')
+}
+
+is_2xx() {
+    case "$1" in
+        2??) return 0 ;;
+        *) return 1 ;;
     esac
+}
+
+json_has_all_requested() {
+    if command -v python3 >/dev/null 2>&1; then
+        printf '%s' "$1" | python3 -c '
+import json, sys
+try:
+    print("true" if json.load(sys.stdin).get("has_all_requested") is True else "false")
+except (json.JSONDecodeError, AttributeError):
+    print("false")
+'
+    else
+        printf '%s\n' "$1" | grep -Eq '"has_all_requested"[[:space:]]*:[[:space:]]*true'
+    fi
+}
+
+json_version_number() {
+    if command -v python3 >/dev/null 2>&1; then
+        printf '%s' "$1" | python3 -c '
+import json, sys
+try:
+    print(json.load(sys.stdin)["version"]["number"])
+except (json.JSONDecodeError, KeyError, TypeError):
+    pass
+'
+    else
+        printf '%s\n' "$1" | sed -n 's/.*"number"[[:space:]]*:[[:space:]]*"\([0-9][0-9.]*\)".*/\1/p' | head -1
+    fi
+}
+
+version_at_least() {
+    actual="$1"
+    required="$2"
+    awk -v actual="$actual" -v required="$required" 'BEGIN {
+        split(actual, a, "."); split(required, r, ".");
+        for (i = 1; i <= 3; i++) {
+            av = (a[i] == "" ? 0 : a[i]) + 0;
+            rv = (r[i] == "" ? 0 : r[i]) + 0;
+            if (av > rv) exit 0;
+            if (av < rv) exit 1;
+        }
+        exit 0;
+    }'
+}
+
+validate_elasticsearch() {
+    endpoint="$1"
+    api_key="$2"
+    privileges='{"index":[{"names":["metrics-rigsignal.*","logs-rigsignal.*"],"privileges":["create_doc"]}]}'
+
+    es_request "$endpoint" "$api_key" GET "/_security/_authenticate" ""
+    if ! is_2xx "$ES_STATUS"; then
+        _err "Elasticsearch authentication failed (HTTP status: ${ES_STATUS:-0})."
+        _info "Check the endpoint and API key; the key must be active and authorized."
+        return 1
+    fi
+
+    es_request "$endpoint" "$api_key" POST "/_security/user/_has_privileges" "$privileges"
+    if ! is_2xx "$ES_STATUS"; then
+        _err "Elasticsearch privilege check failed (HTTP status: ${ES_STATUS:-0})."
+        _info "Check that the API key may check privileges; it needs create_doc on RigSignal data streams."
+        return 1
+    fi
+    if [ "$(json_has_all_requested "$ES_BODY")" != "true" ]; then
+        _err "API key is missing create_doc privilege for metrics-rigsignal.* and/or logs-rigsignal.*."
+        _info "Create or update the key with create_doc on both RigSignal data streams."
+        return 1
+    fi
+
+    es_request "$endpoint" "$api_key" GET "/" ""
+    if ! is_2xx "$ES_STATUS"; then
+        _err "Elasticsearch version check failed (HTTP status: ${ES_STATUS:-0})."
+        _info "Check the endpoint and API key; setup needs a successful Elasticsearch response."
+        return 1
+    fi
+    es_version=$(json_version_number "$ES_BODY")
+    if [ -z "$es_version" ]; then
+        _warn "Could not determine Elasticsearch version; see docs/install.md for the tested range ${ES_TESTED_MIN_VERSION}–${ES_TESTED_MAX_VERSION}."
+        return 0
+    fi
+    if ! version_at_least "$es_version" "$ES_MIN_VERSION"; then
+        _err "Elasticsearch ${es_version} is unsupported; RigSignal requires ${ES_MIN_VERSION}+ (TSDS-era APIs)."
+        return 1
+    fi
+    if ! version_at_least "$es_version" "$ES_TESTED_MIN_VERSION" || ! version_at_least "$ES_TESTED_MAX_VERSION" "$es_version"; then
+        _warn "Elasticsearch ${es_version} is outside the tested ${ES_TESTED_MIN_VERSION}–${ES_TESTED_MAX_VERSION} range; see docs/install.md."
+    fi
 }
 
 # ── Service control ────────────────────────────────────────────────────────────
@@ -180,6 +305,10 @@ resolve_agent_bin() {
 # ── Subcommand: setup ──────────────────────────────────────────────────────────
 
 cmd_setup() {
+    # Debug tracing would expand the API key in command arguments. Disable it
+    # for setup so credentials never reach the persistent launcher debug log.
+    [ "${RIGSIGNAL_DEBUG:-0}" = "1" ] && set +x
+
     # Check for existing valid config first.
     if [ -f "$CONFIG_FILE" ]; then
         existing_endpoint=$(toml_get "endpoint" "$CONFIG_FILE")
@@ -188,9 +317,9 @@ cmd_setup() {
         if [ -n "$existing_endpoint" ] && [ -n "$existing_key" ]; then
             printf "       Config found: %s\n" "$CONFIG_FILE"
             printf "       Endpoint:     %s\n" "$existing_endpoint"
-            printf "       Testing connection...\n"
-            if test_connection "$existing_endpoint" "$existing_key"; then
-                _ok "Already configured. Connection OK."
+            printf "       Verifying authentication and write privileges...\n"
+            if validate_elasticsearch "$existing_endpoint" "$existing_key"; then
+                _ok "Already configured. Authentication and write privileges verified."
                 return 0
             else
                 _warn "Already configured but connection failed."
@@ -201,7 +330,7 @@ cmd_setup() {
     fi
 
     # Print a brief explanation.
-    printf "\n${_GRN}RigSignal Setup${_NC}\n"
+    printf '\n%sRigSignal Setup%s\n' "$_GRN" "$_NC"
     printf "===============\n"
     printf "RigSignal ships gaming metrics to Elasticsearch.\n"
     printf "You need an Elastic Cloud deployment (or self-hosted ES 8.13+).\n\n"
@@ -237,15 +366,12 @@ cmd_setup() {
         _die "API key cannot be empty."
     fi
 
-    # Test connectivity before writing anything.
-    printf "       Testing connection to %s ...\n" "$endpoint"
-    if ! test_connection "$endpoint" "$api_key"; then
-        _err "Cannot reach Elasticsearch endpoint."
-        _info "Check that the URL is correct and the endpoint is reachable."
-        _info "If using Elastic Cloud, ensure the deployment is running."
+    # Verify authentication and required write privileges before writing anything.
+    printf "       Verifying authentication and write privileges for %s ...\n" "$endpoint"
+    if ! validate_elasticsearch "$endpoint" "$api_key"; then
         exit 1
     fi
-    _ok "Connection verified."
+    _ok "Authentication and write privileges verified."
 
     # Write config.
     mkdir -p "$CONFIG_DIR"
@@ -262,6 +388,13 @@ cmd_setup() {
 endpoint = "$endpoint"
 api_key = "$api_key"
 
+TOML
+    if [ -f "$CONFIG_FILE" ] && grep -q '^\[collection\]' "$CONFIG_FILE"; then
+        # Credential update on an existing install: preserve the user's
+        # [collection]/[session] settings verbatim (e.g. ebpf = true stays true).
+        sed -n '/^\[collection\]/,$p' "$CONFIG_FILE" >> "$tmp_cfg"
+    else
+        cat >> "$tmp_cfg" << TOML
 [collection]
 # All collectors enabled by default.
 # Set individual fields to false to disable:
@@ -271,12 +404,16 @@ api_key = "$api_key"
 #   storage = true
 #   network = true
 #   frame_timing = true
+# eBPF deep telemetry is opt-in. Set to true only after explicitly installing
+# and enabling the separate eBPF daemon.
+ebpf = false
 
 [session]
 # Optional: set a fixed label for all sessions (e.g. "testing-driver-26").
 # If unset, labels are auto-generated: "starfield-20260414-143000"
 # label = ""
 TOML
+    fi
 
     chmod 600 "$tmp_cfg"
     mv "$tmp_cfg" "$CONFIG_FILE"
@@ -379,6 +516,7 @@ cmd_run() {
                     *[!A-Za-z0-9_]*) break ;;
                     *)
                         _llog "cmd_run: exporting env: $_varname"
+                        # shellcheck disable=SC2163  # $1 is NAME=VALUE by prior validation
                         export "$1"
                         shift
                         continue
