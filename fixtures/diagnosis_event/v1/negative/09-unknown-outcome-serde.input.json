@@ -1,0 +1,1 @@
+{"evidence":["modes.cfg line 1 names a display that is not connected","No connected usable external display maps the parsed override"],"explanation":"The parsed Gamescope override does not apply to any connected usable display.","outcome":"unknown-outcome","verdict":"not-applicable"}
