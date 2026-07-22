@@ -198,3 +198,34 @@ Docker: eBPF probe loading typically fails without `--privileged` — acceptable
 | Docker | ebpf | No output | Requires --privileged |
 | Docker | audio | No backend | No audio server in container |
 | Docker | power | ac_connected may be absent | No /sys/class/power_supply |
+
+---
+
+## Clean-stack matrix (G4)
+
+### How to run
+
+```bash
+bash scripts/clean-stack/matrix.sh fresh 9.4.4          # fresh install proof
+bash scripts/clean-stack/matrix.sh upgrade 9.4.3        # previous-state -> current bundle
+bash scripts/clean-stack/matrix.sh stackupgrade 9.4.3 9.4.4  # in-place stack upgrade
+bash scripts/clean-stack/matrix.sh --keep fresh 9.4.4   # keep containers + run dir
+bash scripts/clean-stack/matrix.sh --dry-run fresh 9.4.4     # command plan only
+```
+
+
+Fresh installs current assets and proves fixture data, assets, saved objects, and
+a lifted CPU panel query. Upgrade installs the previous state, records sentinels,
+installs current, and proves source hashes and counts are unchanged. Stackupgrade
+reuses run-scoped named volumes with target images and reruns all asserts.
+Dry-run makes no Docker or network calls; keep retains resources.
+
+The previous state is **the 0.3.0-era production asset state, minimally adapted
+to boot on a Fleet-free clean stack**. This is the honest previous version until
+0.3.1 ships a real bundle (Amendment 1 / Sol F5: never install-current-twice).
+Fixtures keep production structure, use lowercase host.name
+rigsignal-matrix-host, and receive timestamp at ingest. CPU marker
+rigsignal.cpu.total_utilisation_pct=42.42 and the connected events value are
+exact asserts. Browser-visual verification is a known limitation deferred to the
+app/kiosk design task. TK-4 publishes a range only after every mode passes both
+endpoints.

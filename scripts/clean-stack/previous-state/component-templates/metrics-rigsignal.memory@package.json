@@ -1,0 +1,144 @@
+{
+  "_meta": {
+    "managed": true,
+    "managed_by": "fleet",
+    "package": {
+      "name": "rigsignal"
+    }
+  },
+  "template": {
+    "mappings": {
+      "properties": {
+        "@timestamp": {
+          "ignore_malformed": false,
+          "type": "date"
+        },
+        "data_stream": {
+          "properties": {
+            "dataset": {
+              "type": "constant_keyword"
+            },
+            "namespace": {
+              "type": "constant_keyword"
+            },
+            "type": {
+              "type": "constant_keyword"
+            }
+          }
+        },
+        "host": {
+          "properties": {
+            "name": {
+              "time_series_dimension": true,
+              "type": "keyword"
+            }
+          }
+        },
+        "rigsignal": {
+          "properties": {
+            "game": {
+              "properties": {
+                "launcher": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "name": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "source": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "steam_app_id": {
+                  "type": "long"
+                }
+              }
+            },
+            "memory": {
+              "properties": {
+                "game_rss_mb": {
+                  "meta": {},
+                  "time_series_metric": "gauge",
+                  "type": "long"
+                },
+                "oom_events": {
+                  "meta": {},
+                  "time_series_metric": "counter",
+                  "type": "long"
+                },
+                "page_cache_mb": {
+                  "meta": {},
+                  "time_series_metric": "gauge",
+                  "type": "long"
+                },
+                "page_faults_major": {
+                  "meta": {},
+                  "time_series_metric": "counter",
+                  "type": "long"
+                },
+                "page_faults_minor": {
+                  "meta": {},
+                  "time_series_metric": "counter",
+                  "type": "long"
+                },
+                "shared_mb": {
+                  "meta": {},
+                  "time_series_metric": "gauge",
+                  "type": "long"
+                },
+                "swap_used_mb": {
+                  "meta": {},
+                  "time_series_metric": "gauge",
+                  "type": "long"
+                },
+                "system_used_mb": {
+                  "meta": {},
+                  "time_series_metric": "gauge",
+                  "type": "long"
+                },
+                "virtual_mb": {
+                  "meta": {},
+                  "time_series_metric": "gauge",
+                  "type": "long"
+                }
+              }
+            },
+            "session": {
+              "properties": {
+                "agent_version": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "id": {
+                  "time_series_dimension": true,
+                  "type": "keyword"
+                },
+                "label": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "settings": {
+      "index": {
+        "default_pipeline": "metrics-rigsignal.memory-0.5.0",
+        "lifecycle": {
+          "name": "metrics@lifecycle"
+        },
+        "mapping": {
+          "source": {
+            "mode": "synthetic"
+          },
+          "total_fields": {
+            "limit": "1000"
+          }
+        }
+      }
+    }
+  }
+}

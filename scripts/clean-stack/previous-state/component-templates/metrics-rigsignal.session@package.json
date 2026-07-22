@@ -1,0 +1,519 @@
+{
+  "_meta": {
+    "managed": true,
+    "managed_by": "fleet",
+    "package": {
+      "name": "rigsignal"
+    }
+  },
+  "template": {
+    "mappings": {
+      "properties": {
+        "@timestamp": {
+          "ignore_malformed": false,
+          "type": "date"
+        },
+        "data_stream": {
+          "properties": {
+            "dataset": {
+              "type": "constant_keyword"
+            },
+            "namespace": {
+              "type": "constant_keyword"
+            },
+            "type": {
+              "type": "constant_keyword"
+            }
+          }
+        },
+        "host": {
+          "properties": {
+            "name": {
+              "time_series_dimension": true,
+              "type": "keyword"
+            },
+            "os": {
+              "properties": {
+                "kernel": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "name": {
+                  "fields": {
+                    "text": {
+                      "type": "match_only_text"
+                    }
+                  },
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "platform": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "type": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "version": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                }
+              }
+            }
+          }
+        },
+        "rigsignal": {
+          "properties": {
+            "compatibility": {
+              "properties": {
+                "dxvk_version": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "gamescope_version": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "proton_version": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "vkd3d_proton_version": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "wine_version": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                }
+              }
+            },
+            "game": {
+              "properties": {
+                "graphics_api": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "launch_args": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "launcher": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "name": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "source": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "steam_app_id": {
+                  "type": "long"
+                },
+                "upscaler": {
+                  "properties": {
+                    "quality": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    },
+                    "type": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    }
+                  }
+                },
+                "version": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                }
+              }
+            },
+            "hardware": {
+              "properties": {
+                "cpu": {
+                  "properties": {
+                    "base_clock_mhz": {
+                      "type": "long"
+                    },
+                    "boost_clock_mhz": {
+                      "type": "long"
+                    },
+                    "cores": {
+                      "type": "long"
+                    },
+                    "model": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    },
+                    "threads": {
+                      "type": "long"
+                    }
+                  }
+                },
+                "device": {
+                  "properties": {
+                    "model": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    },
+                    "power_source": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    },
+                    "tdp_watts": {
+                      "type": "float"
+                    },
+                    "type": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    }
+                  }
+                },
+                "gpu": {
+                  "properties": {
+                    "driver_version": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    },
+                    "mesa_version": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    },
+                    "model": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    },
+                    "pcie_gen": {
+                      "type": "byte"
+                    },
+                    "pcie_width": {
+                      "type": "byte"
+                    },
+                    "vendor": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    },
+                    "vram_mb": {
+                      "type": "long"
+                    },
+                    "vulkan_driver": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    }
+                  }
+                },
+                "monitors": {
+                  "properties": {
+                    "current_vrr_enabled": {
+                      "type": "boolean"
+                    },
+                    "hdr_capable": {
+                      "type": "boolean"
+                    },
+                    "is_primary": {
+                      "type": "boolean"
+                    },
+                    "name": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    },
+                    "refresh_rate_hz": {
+                      "type": "float"
+                    },
+                    "resolution_h": {
+                      "type": "long"
+                    },
+                    "resolution_v": {
+                      "type": "long"
+                    },
+                    "vrr_capable": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "ram": {
+                  "properties": {
+                    "speed_mhz": {
+                      "type": "long"
+                    },
+                    "total_mb": {
+                      "type": "long"
+                    },
+                    "type": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    }
+                  }
+                },
+                "storage": {
+                  "properties": {
+                    "game_drive": {
+                      "properties": {
+                        "capacity_gb": {
+                          "type": "long"
+                        },
+                        "encrypted": {
+                          "type": "boolean"
+                        },
+                        "firmware": {
+                          "ignore_above": 1024,
+                          "type": "keyword"
+                        },
+                        "free_gb": {
+                          "type": "long"
+                        },
+                        "free_pct": {
+                          "type": "float"
+                        },
+                        "interface": {
+                          "ignore_above": 1024,
+                          "type": "keyword"
+                        },
+                        "model": {
+                          "ignore_above": 1024,
+                          "type": "keyword"
+                        },
+                        "nvme_spec": {
+                          "ignore_above": 1024,
+                          "type": "keyword"
+                        },
+                        "smart_health": {
+                          "ignore_above": 1024,
+                          "type": "keyword"
+                        },
+                        "temperature_c": {
+                          "type": "float"
+                        },
+                        "type": {
+                          "ignore_above": 1024,
+                          "type": "keyword"
+                        }
+                      }
+                    },
+                    "game_filesystem": {
+                      "properties": {
+                        "block_size": {
+                          "type": "long"
+                        },
+                        "compression": {
+                          "ignore_above": 1024,
+                          "type": "keyword"
+                        },
+                        "compression_level": {
+                          "type": "byte"
+                        },
+                        "mount_options": {
+                          "ignore_above": 1024,
+                          "type": "keyword"
+                        },
+                        "trim_enabled": {
+                          "type": "boolean"
+                        },
+                        "type": {
+                          "ignore_above": 1024,
+                          "type": "keyword"
+                        }
+                      }
+                    },
+                    "io_scheduler": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    },
+                    "read_ahead_kb": {
+                      "type": "long"
+                    }
+                  }
+                }
+              }
+            },
+            "session": {
+              "properties": {
+                "agent_version": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "id": {
+                  "time_series_dimension": true,
+                  "type": "keyword"
+                },
+                "label": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "label_source": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "opt_in_public": {
+                  "type": "boolean"
+                },
+                "sequence_number": {
+                  "type": "long"
+                }
+              }
+            },
+            "settings": {
+              "properties": {
+                "confidence": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "custom_overrides": {
+                  "type": "boolean"
+                },
+                "features_active": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "features_available": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "frame_gen": {
+                  "properties": {
+                    "multiplier": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    },
+                    "tech": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    }
+                  }
+                },
+                "notes": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "preset": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "render": {
+                  "properties": {
+                    "fullscreen_mode": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    },
+                    "resolution_output": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    },
+                    "vsync": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    }
+                  }
+                },
+                "source": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "upscaler": {
+                  "properties": {
+                    "preset": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    },
+                    "source_res": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    },
+                    "tech": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    },
+                    "version": {
+                      "ignore_above": 1024,
+                      "type": "keyword"
+                    }
+                  }
+                }
+              }
+            },
+            "summary": {
+              "properties": {
+                "avg_fps": {
+                  "meta": {},
+                  "time_series_metric": "gauge",
+                  "type": "float"
+                },
+                "bottleneck_dominant": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                },
+                "duration_s": {
+                  "meta": {
+                    "unit": "s"
+                  },
+                  "time_series_metric": "gauge",
+                  "type": "long"
+                },
+                "ended": {
+                  "type": "boolean"
+                },
+                "low_1pct_fps": {
+                  "meta": {},
+                  "time_series_metric": "gauge",
+                  "type": "long"
+                },
+                "p99_frametime_ms": {
+                  "meta": {
+                    "unit": "ms"
+                  },
+                  "time_series_metric": "gauge",
+                  "type": "float"
+                },
+                "peak_cpu_temp_c": {
+                  "meta": {},
+                  "time_series_metric": "gauge",
+                  "type": "float"
+                },
+                "peak_gpu_power_w": {
+                  "meta": {},
+                  "time_series_metric": "gauge",
+                  "type": "float"
+                },
+                "peak_gpu_temp_c": {
+                  "meta": {},
+                  "time_series_metric": "gauge",
+                  "type": "float"
+                },
+                "stutter_count": {
+                  "meta": {},
+                  "time_series_metric": "gauge",
+                  "type": "long"
+                },
+                "total_frames": {
+                  "meta": {},
+                  "time_series_metric": "gauge",
+                  "type": "long"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "settings": {
+      "index": {
+        "default_pipeline": "metrics-rigsignal.session-0.5.0",
+        "lifecycle": {
+          "name": "metrics@lifecycle"
+        },
+        "mapping": {
+          "source": {
+            "mode": "synthetic"
+          },
+          "total_fields": {
+            "limit": "1000"
+          }
+        }
+      }
+    }
+  }
+}

@@ -11,6 +11,8 @@ CS_BIND_ADDRESS="${CLEAN_STACK_BIND_ADDRESS:-127.0.0.1}"
 CS_NETWORK_CREATED=0
 CS_ES_CREATED=0
 CS_KB_CREATED=0
+CS_ES_VOLUME_CREATED=0
+CS_KB_VOLUME_CREATED=0
 
 cs_usage_error() {
   printf 'error: %s\n' "$1" >&2
@@ -36,6 +38,8 @@ cs_init_names() {
   CS_NETWORK="rigsignal-clean-stack-${CS_SUFFIX}"
   CS_ES_CONTAINER="rigsignal-es-${CS_SUFFIX}"
   CS_KB_CONTAINER="rigsignal-kibana-${CS_SUFFIX}"
+  CS_ES_DATA_VOLUME="rigsignal-es-data-${CS_SUFFIX}"
+  CS_KB_DATA_VOLUME="rigsignal-kibana-data-${CS_SUFFIX}"
 }
 
 cs_print_command() {
@@ -93,6 +97,29 @@ cs_start_elasticsearch() {
   CS_ES_CREATED=1
 }
 
+cs_create_named_volumes() {
+  cs_docker_quiet volume create "$CS_ES_DATA_VOLUME"
+  CS_ES_VOLUME_CREATED=1
+  cs_docker_quiet volume create "$CS_KB_DATA_VOLUME"
+  CS_KB_VOLUME_CREATED=1
+}
+
+cs_start_elasticsearch_with_volume() {
+  local image="$1"
+  local port_mapping="$2"
+
+  cs_docker_quiet run --detach \
+    --name "$CS_ES_CONTAINER" \
+    --network "$CS_NETWORK" \
+    --publish "$port_mapping" \
+    --volume "${CS_ES_DATA_VOLUME}:/usr/share/elasticsearch/data" \
+    --env 'discovery.type=single-node' \
+    --env 'xpack.security.enabled=true' \
+    --env ELASTIC_PASSWORD \
+    "$image"
+  CS_ES_CREATED=1
+}
+
 cs_start_kibana() {
   local image="$1"
   local port_mapping="$2"
@@ -101,6 +128,23 @@ cs_start_kibana() {
     --name "$CS_KB_CONTAINER" \
     --network "$CS_NETWORK" \
     --publish "$port_mapping" \
+    --env 'SERVER_HOST=0.0.0.0' \
+    --env "ELASTICSEARCH_HOSTS=http://${CS_ES_CONTAINER}:9200" \
+    --env 'ELASTICSEARCH_USERNAME=kibana_system' \
+    --env ELASTICSEARCH_PASSWORD \
+    "$image"
+  CS_KB_CREATED=1
+}
+
+cs_start_kibana_with_volume() {
+  local image="$1"
+  local port_mapping="$2"
+
+  cs_docker_quiet run --detach \
+    --name "$CS_KB_CONTAINER" \
+    --network "$CS_NETWORK" \
+    --publish "$port_mapping" \
+    --volume "${CS_KB_DATA_VOLUME}:/usr/share/kibana/data" \
     --env 'SERVER_HOST=0.0.0.0' \
     --env "ELASTICSEARCH_HOSTS=http://${CS_ES_CONTAINER}:9200" \
     --env 'ELASTICSEARCH_USERNAME=kibana_system' \
@@ -216,8 +260,8 @@ cs_cleanup() {
   local exit_status="$?"
 
   if [[ "$CS_KEEP" == '1' ]]; then
-    printf 'Keeping clean-stack resources (requested with --keep): %s, %s, %s\n' \
-      "$CS_ES_CONTAINER" "$CS_KB_CONTAINER" "$CS_NETWORK" >&2
+    printf 'Keeping clean-stack resources (requested with --keep): %s, %s, %s, %s, %s\n' \
+      "$CS_ES_CONTAINER" "$CS_KB_CONTAINER" "$CS_NETWORK" "$CS_ES_DATA_VOLUME" "$CS_KB_DATA_VOLUME" >&2
     return "$exit_status"
   fi
 
@@ -240,6 +284,20 @@ cs_cleanup() {
       cs_docker_quiet network rm "$CS_NETWORK"
     else
       cs_docker_quiet network rm "$CS_NETWORK" >/dev/null 2>&1 || true
+    fi
+  fi
+  if [[ "$CS_KB_VOLUME_CREATED" == '1' ]]; then
+    if [[ "$CS_DRY_RUN" == '1' ]]; then
+      cs_docker_quiet volume rm "$CS_KB_DATA_VOLUME"
+    else
+      cs_docker_quiet volume rm "$CS_KB_DATA_VOLUME" >/dev/null 2>&1 || true
+    fi
+  fi
+  if [[ "$CS_ES_VOLUME_CREATED" == '1' ]]; then
+    if [[ "$CS_DRY_RUN" == '1' ]]; then
+      cs_docker_quiet volume rm "$CS_ES_DATA_VOLUME"
+    else
+      cs_docker_quiet volume rm "$CS_ES_DATA_VOLUME" >/dev/null 2>&1 || true
     fi
   fi
 

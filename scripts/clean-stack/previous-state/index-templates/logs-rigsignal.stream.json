@@ -1,0 +1,314 @@
+{
+  "_meta": {
+    "description": "Steam Remote Play streaming telemetry for RigSignal",
+    "owner": "sl-c1"
+  },
+  "composed_of": [],
+  "data_stream": {
+    "allow_custom_routing": false,
+    "hidden": false
+  },
+  "index_patterns": [
+    "logs-rigsignal.stream-*"
+  ],
+  "priority": 500,
+  "template": {
+    "mappings": {
+      "dynamic": true,
+      "properties": {
+        "@timestamp": {
+          "type": "date"
+        },
+        "data_stream": {
+          "properties": {
+            "dataset": {
+              "type": "constant_keyword",
+              "value": "rigsignal.stream"
+            },
+            "namespace": {
+              "type": "keyword"
+            },
+            "type": {
+              "type": "constant_keyword",
+              "value": "logs"
+            }
+          }
+        },
+        "ecs": {
+          "properties": {
+            "version": {
+              "type": "keyword"
+            }
+          }
+        },
+        "event": {
+          "properties": {
+            "action": {
+              "type": "keyword"
+            },
+            "category": {
+              "type": "keyword"
+            },
+            "dataset": {
+              "type": "keyword"
+            },
+            "kind": {
+              "type": "keyword"
+            }
+          }
+        },
+        "host": {
+          "properties": {
+            "hostname": {
+              "type": "keyword"
+            },
+            "name": {
+              "type": "keyword"
+            },
+            "role": {
+              "type": "keyword"
+            }
+          }
+        },
+        "labels": {
+          "properties": {
+            "appid": {
+              "type": "keyword"
+            },
+            "test": {
+              "type": "boolean"
+            }
+          }
+        },
+        "message": {
+          "type": "match_only_text"
+        },
+        "steam": {
+          "properties": {
+            "log": {
+              "properties": {
+                "monotonic_s": {
+                  "type": "double"
+                },
+                "payload": {
+                  "type": "match_only_text"
+                },
+                "timestamp": {
+                  "type": "keyword"
+                }
+              }
+            }
+          }
+        },
+        "stream": {
+          "properties": {
+            "anomaly": {
+              "properties": {
+                "flag": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "bottleneck": {
+              "properties": {
+                "stage": {
+                  "type": "keyword"
+                }
+              }
+            },
+            "capture": {
+              "properties": {
+                "backend": {
+                  "type": "keyword"
+                }
+              }
+            },
+            "correlation": {
+              "properties": {
+                "method": {
+                  "ignore_above": 1024,
+                  "type": "keyword"
+                }
+              }
+            },
+            "decode": {
+              "properties": {
+                "backend": {
+                  "type": "keyword"
+                }
+              }
+            },
+            "event": {
+              "properties": {
+                "type": {
+                  "type": "keyword"
+                }
+              }
+            },
+            "frame": {
+              "properties": {
+                "id": {
+                  "type": "long"
+                },
+                "status": {
+                  "type": "keyword"
+                }
+              }
+            },
+            "game": {
+              "properties": {
+                "appid": {
+                  "type": "long"
+                },
+                "name": {
+                  "type": "keyword"
+                }
+              }
+            },
+            "network": {
+              "properties": {
+                "bandwidth_limit_kbps": {
+                  "type": "long"
+                },
+                "instant_mbps": {
+                  "type": "double"
+                },
+                "link_bandwidth_mbps": {
+                  "type": "double"
+                },
+                "link_filtered_mbps": {
+                  "type": "double"
+                },
+                "loss": {
+                  "properties": {
+                    "event": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "measured_mbps": {
+                  "type": "double"
+                },
+                "ping_avg_ms": {
+                  "type": "double"
+                },
+                "ping_max_ms": {
+                  "type": "double"
+                },
+                "server_bitrate_kbps": {
+                  "type": "long"
+                },
+                "target_mbps": {
+                  "type": "double"
+                }
+              }
+            },
+            "pipeline": {
+              "properties": {
+                "capture_ms": {
+                  "type": "double"
+                },
+                "convert_ms": {
+                  "type": "double"
+                },
+                "decode_ms": {
+                  "type": "double"
+                },
+                "display_ms": {
+                  "type": "double"
+                },
+                "encode_ms": {
+                  "type": "double"
+                },
+                "game_ms": {
+                  "type": "double"
+                },
+                "network_ms": {
+                  "type": "double"
+                }
+              }
+            },
+            "session": {
+              "properties": {
+                "id": {
+                  "type": "keyword"
+                },
+                "start_bucket": {
+                  "type": "date"
+                },
+                "summary": {
+                  "properties": {
+                    "slow_percent": {
+                      "properties": {
+                        "capture": {
+                          "type": "double"
+                        },
+                        "convert": {
+                          "type": "double"
+                        },
+                        "decode": {
+                          "type": "double"
+                        },
+                        "display": {
+                          "type": "double"
+                        },
+                        "encode": {
+                          "type": "double"
+                        },
+                        "game": {
+                          "type": "double"
+                        },
+                        "network": {
+                          "type": "double"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "side": {
+              "type": "keyword"
+            },
+            "video": {
+              "properties": {
+                "codec": {
+                  "type": "keyword"
+                },
+                "codec_profile": {
+                  "type": "keyword"
+                },
+                "fps": {
+                  "type": "double"
+                },
+                "fps_limit": {
+                  "type": "double"
+                },
+                "height": {
+                  "type": "integer"
+                },
+                "target_fps": {
+                  "type": "double"
+                },
+                "width": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": {
+          "type": "keyword"
+        }
+      }
+    },
+    "settings": {
+      "index": {
+        "default_pipeline": "logs-rigsignal.stream@pipeline",
+        "lifecycle": {
+          "name": "logs@lifecycle"
+        }
+      }
+    }
+  }
+}
