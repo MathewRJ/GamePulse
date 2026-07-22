@@ -1,0 +1,43 @@
+{
+  "_meta": {
+    "managed": true,
+    "managed_by": "fleet",
+    "package": {
+      "name": "rigsignal"
+    }
+  },
+  "composed_of": [
+    "logs@mappings",
+    "logs@settings",
+    "logs-rigsignal.events@package",
+    "logs@custom",
+    "rigsignal@custom",
+    "logs-rigsignal.events@custom",
+    "ecs@mappings"
+  ],
+  "data_stream": {
+    "allow_custom_routing": false,
+    "hidden": false
+  },
+  "ignore_missing_component_templates": [
+    "logs@custom",
+    "rigsignal@custom",
+    "logs-rigsignal.events@custom"
+  ],
+  "index_patterns": [
+    "logs-rigsignal.events-*"
+  ],
+  "priority": 200,
+  "template": {
+    "mappings": {
+      "_meta": {
+        "managed": true,
+        "managed_by": "fleet",
+        "package": {
+          "name": "rigsignal"
+        }
+      }
+    },
+    "settings": {}
+  }
+}

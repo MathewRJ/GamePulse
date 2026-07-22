@@ -1,0 +1,94 @@
+{
+  "_meta": {
+    "managed": true,
+    "managed_by": "fleet",
+    "package": {
+      "name": "rigsignal"
+    }
+  },
+  "description": "Ingest pipeline for RigSignal session documents. Sets @timestamp, validates required identification fields, and normalises hardware vendor strings. Fired once at session start and once at session end.\n",
+  "on_failure": [
+    {
+      "set": {
+        "field": "_ingest.pipeline_error",
+        "value": "{{_ingest.on_failure_message}}"
+      }
+    },
+    {
+      "set": {
+        "field": "_ingest.failed_pipeline",
+        "value": "rigsignal-session"
+      }
+    }
+  ],
+  "processors": [
+    {
+      "set": {
+        "field": "@timestamp",
+        "if": "ctx['@timestamp'] == null",
+        "value": "{{{_ingest.timestamp}}}"
+      }
+    },
+    {
+      "script": {
+        "description": "Validate required session identification fields are present",
+        "lang": "painless",
+        "source": "def sid = ctx.rigsignal?.session?.id;\nif (sid == null || sid.isEmpty()) {\n  throw new Exception('rigsignal.session.id is required');\n}\ndef name = ctx.rigsignal?.game?.name;\nif (name == null || name.isEmpty()) {\n  throw new Exception('rigsignal.game.name is required');\n}\n"
+      }
+    },
+    {
+      "lowercase": {
+        "description": "Normalise GPU vendor (AMD -> amd, NVIDIA -> nvidia)",
+        "field": "rigsignal.hardware.gpu.vendor",
+        "ignore_missing": true
+      }
+    },
+    {
+      "lowercase": {
+        "field": "rigsignal.game.graphics_api",
+        "ignore_missing": true
+      }
+    },
+    {
+      "trim": {
+        "field": "rigsignal.game.name",
+        "ignore_missing": true
+      }
+    },
+    {
+      "lowercase": {
+        "description": "Normalise OS type (Linux -> linux, Windows -> windows)",
+        "field": "host.os.type",
+        "ignore_missing": true
+      }
+    },
+    {
+      "pipeline": {
+        "description": "[Fleet] Global pipeline for all data streams",
+        "ignore_missing_pipeline": true,
+        "name": "global@custom"
+      }
+    },
+    {
+      "pipeline": {
+        "description": "[Fleet] Pipeline for all data streams of type `metrics`",
+        "ignore_missing_pipeline": true,
+        "name": "metrics@custom"
+      }
+    },
+    {
+      "pipeline": {
+        "description": "[Fleet] Pipeline for all data streams of type `metrics` defined by the `rigsignal` integration",
+        "ignore_missing_pipeline": true,
+        "name": "metrics-rigsignal.integration@custom"
+      }
+    },
+    {
+      "pipeline": {
+        "description": "[Fleet] Pipeline for the `rigsignal.session` dataset",
+        "ignore_missing_pipeline": true,
+        "name": "metrics-rigsignal.session@custom"
+      }
+    }
+  ]
+}

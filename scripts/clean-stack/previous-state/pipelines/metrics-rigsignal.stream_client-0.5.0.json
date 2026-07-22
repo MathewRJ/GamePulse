@@ -1,0 +1,74 @@
+{
+  "_meta": {
+    "managed": true,
+    "managed_by": "fleet",
+    "package": {
+      "name": "rigsignal"
+    }
+  },
+  "description": "Ingest pipeline for RigSignal Stream Client metrics. Sets @timestamp and validates GPU utilization gauges.\n",
+  "on_failure": [
+    {
+      "set": {
+        "field": "_ingest.pipeline_error",
+        "value": "{{_ingest.on_failure_message}}"
+      }
+    },
+    {
+      "set": {
+        "field": "_ingest.failed_pipeline",
+        "value": "rigsignal-stream_client"
+      }
+    }
+  ],
+  "processors": [
+    {
+      "set": {
+        "field": "@timestamp",
+        "if": "ctx['@timestamp'] == null",
+        "value": "{{{_ingest.timestamp}}}"
+      }
+    },
+    {
+      "trim": {
+        "field": "rigsignal.game.name",
+        "ignore_missing": true
+      }
+    },
+    {
+      "script": {
+        "description": "Validate stream client utilization gauges are 0-100%",
+        "lang": "painless",
+        "source": "def video = ctx.rigsignal?.stream?.client?.video_busy_pct;\nif (video != null && (video < 0 || video > 100)) {\n  throw new Exception('rigsignal.stream.client.video_busy_pct must be 0-100, got: ' + video);\n}\ndef gfx = ctx.rigsignal?.stream?.client?.gfx_busy_pct;\nif (gfx != null && (gfx < 0 || gfx > 100)) {\n  throw new Exception('rigsignal.stream.client.gfx_busy_pct must be 0-100, got: ' + gfx);\n}\n"
+      }
+    },
+    {
+      "pipeline": {
+        "description": "[Fleet] Global pipeline for all data streams",
+        "ignore_missing_pipeline": true,
+        "name": "global@custom"
+      }
+    },
+    {
+      "pipeline": {
+        "description": "[Fleet] Pipeline for all data streams of type `metrics`",
+        "ignore_missing_pipeline": true,
+        "name": "metrics@custom"
+      }
+    },
+    {
+      "pipeline": {
+        "description": "[Fleet] Pipeline for all data streams of type `metrics` defined by the `rigsignal` integration",
+        "ignore_missing_pipeline": true,
+        "name": "metrics-rigsignal.integration@custom"
+      }
+    },
+    {
+      "pipeline": {
+        "description": "[Fleet] Pipeline for the `rigsignal.stream_client` dataset",
+        "ignore_missing_pipeline": true,
+        "name": "metrics-rigsignal.stream_client@custom"
+      }
+    }
+  ]
+}

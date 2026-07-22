@@ -1,0 +1,17 @@
+{
+  "_meta": {
+    "consumer": "mig2 backfill plain archive indices"
+  },
+  "composed_of": [],
+  "index_patterns": [
+    "metrics-rigsignal.*-archive"
+  ],
+  "priority": 100000,
+  "template": {
+    "settings": {
+      "index": {
+        "number_of_shards": "1"
+      }
+    }
+  }
+}
