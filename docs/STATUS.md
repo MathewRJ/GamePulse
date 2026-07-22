@@ -1,7 +1,18 @@
 # RigSignal — Project Status
 
-Last updated: 2026-07-21 (D3 GPU-boot detector implemented; pending orchestration gate)
+Last updated: 2026-07-22 (turnkey-readiness slice: TK-1..TK-4 complete — supported ES/Kibana range published)
 Active streams: main (local ElasticHome deployment) + offline (air-gapped, not yet forked)
+
+## Decision record — supported stack range (TK-4, 2026-07-22)
+
+Supported Elasticsearch/Kibana range: **9.4.3 – 9.4.4** (exact patch tags; image digests in
+Workflow `projects/Workflow/evidence/pilot-readiness-2026-07-22/`). Proven by the G4
+clean-stack matrix (5 legs, 162 asserts): fresh install + previous-state→bundle upgrade at
+both endpoints + in-place 9.4.3→9.4.4 stack upgrade. Rationale: min = owner's production
+stack (proven daily), max = newest GA at test time. "Newest" is a selection policy, never an
+acceptance criterion — the published range only moves when the matrix passes at a new
+endpoint. Per STRATEGY-2026H2.md Amendment 1: G3 pilot deferred; this range serves the
+turnkey bar (bundled local stack pins inside this range).
 
 ## For AI agents reading this file
 
