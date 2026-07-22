@@ -308,7 +308,11 @@ def main() -> int:
                         raise
                     request(es_url, path, "PUT", authorization, asset.data)
                 else:
-                    request(es_url, path + "/_update", "POST", authorization, asset.data)
+                    # _update rejects immutable fields (pivot); send only updatable keys.
+                    update_body = {k: v for k, v in json.loads(asset.data).items()
+                                   if k not in ("pivot",)}
+                    request(es_url, path + "/_update", "POST", authorization,
+                            json.dumps(update_body, sort_keys=True).encode("utf-8"))
                 request(es_url, path, "GET", authorization)
             else:
                 path = es_path(asset)

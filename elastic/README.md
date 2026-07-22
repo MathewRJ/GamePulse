@@ -42,6 +42,14 @@ the exact target API paths without making network calls.
   `create_time`).
 - Preserved existing `_meta` and normalized `_meta.managed_by` to
   `rigsignal-asset-bundle`.
+- Removed Fleet-internal component references (`.fleet_globals-1`,
+  `.fleet_agent_id_verification-1`) from `composed_of`: they exist only on
+  Fleet-managed clusters and make a clean Fleet-free stack reject the template
+  (proven live against a fresh 9.4.4 container, 2026-07-22).
+- Transform updates: `_transform/_update` rejects the immutable `pivot` field,
+  so the installer strips it when updating an existing transform. A changed
+  `pivot` therefore does NOT propagate via re-install — that is a breaking
+  change requiring delete + recreate, by design.
 
 The diagnostic-results (diagnose verdict) assets are **not yet part of this
 bundle**, pending the results-to-Kibana design task.
