@@ -1,6 +1,6 @@
 //! Shared output contract for detector CLI diagnoses.
 
-use serde::Serialize;
+use serde::{Deserialize, Deserializer, Serialize};
 use std::process::ExitCode;
 
 /// Immutable identity and error-label metadata for a detector rule pack.
@@ -12,13 +12,15 @@ pub struct DetectorContract {
 }
 
 /// Exit behavior is deliberately separate from the serialized verdict text.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum Disposition {
+    #[default]
     NonFinding,
     Finding,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Diagnosis {
     #[serde(rename = "@timestamp")]
     pub timestamp: String,
@@ -36,7 +38,11 @@ pub struct Diagnosis {
     pub supported_scope: Vec<String>,
     pub missing_evidence: Vec<String>,
     pub nearest_alternative: String,
-    #[serde(skip)]
+    #[serde(
+        skip_serializing,
+        default,
+        deserialize_with = "deserialize_ignored_disposition"
+    )]
     disposition: Disposition,
 }
 
@@ -109,21 +115,28 @@ pub struct DiagnosisFields {
     pub host: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct NotApplicable {
-    pub outcome: &'static str,
-    pub verdict: &'static str,
+    #[serde(deserialize_with = "deserialize_not_applicable_outcome")]
+    pub outcome: String,
+    #[serde(deserialize_with = "deserialize_not_applicable_verdict")]
+    pub verdict: String,
     pub explanation: String,
     pub evidence: Vec<String>,
-    #[serde(skip)]
+    #[serde(
+        skip_serializing,
+        default,
+        deserialize_with = "deserialize_ignored_disposition"
+    )]
     disposition: Disposition,
 }
 
 impl NotApplicable {
     pub fn new(explanation: impl Into<String>, evidence: Vec<String>) -> Self {
         Self {
-            outcome: "not-applicable",
-            verdict: "not-applicable",
+            outcome: "not-applicable".into(),
+            verdict: "not-applicable".into(),
             explanation: explanation.into(),
             evidence,
             disposition: Disposition::NonFinding,
@@ -131,7 +144,46 @@ impl NotApplicable {
     }
 }
 
-#[derive(Debug, Serialize)]
+fn deserialize_not_applicable_outcome<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let outcome = String::deserialize(deserializer)?;
+    if outcome == "not-applicable" {
+        Ok(outcome)
+    } else {
+        Err(serde::de::Error::custom(
+            "not-applicable outcome must be exactly \"not-applicable\"",
+        ))
+    }
+}
+
+fn deserialize_not_applicable_verdict<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let verdict = String::deserialize(deserializer)?;
+    if verdict == "not-applicable" {
+        Ok(verdict)
+    } else {
+        Err(serde::de::Error::custom(
+            "not-applicable verdict must be exactly \"not-applicable\"",
+        ))
+    }
+}
+
+/// `disposition` is an in-process signal, never a raw CLI JSON input.  Accept
+/// a stale/injected key at the serde boundary but discard it so it cannot affect
+/// CLI exit behavior or envelope construction.
+fn deserialize_ignored_disposition<'de, D>(deserializer: D) -> Result<Disposition, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let _ = serde::de::IgnoredAny::deserialize(deserializer)?;
+    Ok(Disposition::default())
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum Outcome {
     Diagnosis(Box<Diagnosis>),
@@ -145,7 +197,18 @@ impl Outcome {
             Self::NotApplicable(not_applicable) => not_applicable.disposition,
         }
     }
+
+    #[cfg(test)]
+    fn with_disposition(mut self, disposition: Disposition) -> Self {
+        match &mut self {
+            Self::Diagnosis(diagnosis) => diagnosis.disposition = disposition,
+            Self::NotApplicable(not_applicable) => not_applicable.disposition = disposition,
+        }
+        self
+    }
 }
+
+pub mod diagnosis_event;
 
 fn print_human(outcome: &Outcome) {
     match outcome {
@@ -190,14 +253,18 @@ fn print_human(outcome: &Outcome) {
     }
 }
 
+fn json_output_line(outcome: &Outcome) -> Result<String, serde_json::Error> {
+    serde_json::to_string(outcome).map(|line| format!("{line}\n"))
+}
+
 /// Emit a completed detector outcome and map its non-serialized disposition to
 /// the process status. Contract/collection errors are always exit 2.
 pub fn emit(contract: DetectorContract, result: Result<Outcome, String>, json: bool) -> ExitCode {
     match result {
         Ok(outcome) => {
             if json {
-                match serde_json::to_string(&outcome) {
-                    Ok(line) => println!("{line}"),
+                match json_output_line(&outcome) {
+                    Ok(line) => print!("{line}"),
                     Err(error) => {
                         eprintln!(
                             "{} incomplete: cannot serialize outcome: {error}",
