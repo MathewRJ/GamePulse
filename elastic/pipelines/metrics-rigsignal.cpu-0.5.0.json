@@ -1,0 +1,74 @@
+{
+  "_meta": {
+    "managed": true,
+    "managed_by": "rigsignal-asset-bundle",
+    "package": {
+      "name": "rigsignal"
+    }
+  },
+  "description": "Ingest pipeline for RigSignal CPU metrics. Sets @timestamp and validates CPU utilisation ranges.\n",
+  "on_failure": [
+    {
+      "set": {
+        "field": "_ingest.pipeline_error",
+        "value": "{{_ingest.on_failure_message}}"
+      }
+    },
+    {
+      "set": {
+        "field": "_ingest.failed_pipeline",
+        "value": "rigsignal-cpu"
+      }
+    }
+  ],
+  "processors": [
+    {
+      "set": {
+        "field": "@timestamp",
+        "if": "ctx['@timestamp'] == null",
+        "value": "{{{_ingest.timestamp}}}"
+      }
+    },
+    {
+      "trim": {
+        "field": "rigsignal.game.name",
+        "ignore_missing": true
+      }
+    },
+    {
+      "script": {
+        "description": "Validate CPU utilisation is 0\u2013100%",
+        "lang": "painless",
+        "source": "def total = ctx.rigsignal?.cpu?.total_utilisation_pct;\nif (total != null && (total < 0 || total > 100)) {\n  throw new Exception('rigsignal.cpu.total_utilisation_pct must be 0-100, got: ' + total);\n}\ndef game = ctx.rigsignal?.cpu?.game_utilisation_pct;\nif (game != null && (game < 0 || game > 100)) {\n  throw new Exception('rigsignal.cpu.game_utilisation_pct must be 0-100, got: ' + game);\n}\n"
+      }
+    },
+    {
+      "pipeline": {
+        "description": "[Fleet] Global pipeline for all data streams",
+        "ignore_missing_pipeline": true,
+        "name": "global@custom"
+      }
+    },
+    {
+      "pipeline": {
+        "description": "[Fleet] Pipeline for all data streams of type `metrics`",
+        "ignore_missing_pipeline": true,
+        "name": "metrics@custom"
+      }
+    },
+    {
+      "pipeline": {
+        "description": "[Fleet] Pipeline for all data streams of type `metrics` defined by the `rigsignal` integration",
+        "ignore_missing_pipeline": true,
+        "name": "metrics-rigsignal.integration@custom"
+      }
+    },
+    {
+      "pipeline": {
+        "description": "[Fleet] Pipeline for the `rigsignal.cpu` dataset",
+        "ignore_missing_pipeline": true,
+        "name": "metrics-rigsignal.cpu@custom"
+      }
+    }
+  ]
+}

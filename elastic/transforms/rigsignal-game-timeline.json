@@ -1,0 +1,119 @@
+{
+  "_meta": {
+    "managed_by": "rigsignal-asset-bundle"
+  },
+  "description": "Pre-computes per-session metrics per game for the Games continuous line dashboard. Source: metrics-rigsignal.session-default. One output doc per (game_name, session_id).",
+  "dest": {
+    "index": "rigsignal-game-timeline"
+  },
+  "pivot": {
+    "aggregations": {
+      "avg_fps": {
+        "max": {
+          "field": "rigsignal.summary.avg_fps"
+        }
+      },
+      "duration_s": {
+        "max": {
+          "field": "rigsignal.summary.duration_s"
+        }
+      },
+      "low_1pct_fps": {
+        "max": {
+          "field": "rigsignal.summary.low_1pct_fps"
+        }
+      },
+      "p99_frametime_ms": {
+        "max": {
+          "field": "rigsignal.summary.p99_frametime_ms"
+        }
+      },
+      "peak_cpu_temp_c": {
+        "max": {
+          "field": "rigsignal.summary.peak_cpu_temp_c"
+        }
+      },
+      "peak_gpu_power_w": {
+        "max": {
+          "field": "rigsignal.summary.peak_gpu_power_w"
+        }
+      },
+      "peak_gpu_temp_c": {
+        "max": {
+          "field": "rigsignal.summary.peak_gpu_temp_c"
+        }
+      },
+      "session_start": {
+        "min": {
+          "field": "@timestamp"
+        }
+      },
+      "stutter_count": {
+        "max": {
+          "field": "rigsignal.summary.stutter_count"
+        }
+      },
+      "total_frames": {
+        "max": {
+          "field": "rigsignal.summary.total_frames"
+        }
+      }
+    },
+    "group_by": {
+      "game_name": {
+        "terms": {
+          "field": "rigsignal.game.name"
+        }
+      },
+      "session_id": {
+        "terms": {
+          "field": "rigsignal.session.id"
+        }
+      }
+    }
+  },
+  "settings": {
+    "max_page_search_size": 500
+  },
+  "source": {
+    "index": [
+      "metrics-rigsignal.session*"
+    ],
+    "query": {
+      "bool": {
+        "filter": [
+          {
+            "range": {
+              "rigsignal.summary.duration_s": {
+                "gt": 0
+              }
+            }
+          },
+          {
+            "term": {
+              "rigsignal.summary.ended": true
+            }
+          },
+          {
+            "exists": {
+              "field": "rigsignal.game.name"
+            }
+          },
+          {
+            "range": {
+              "@timestamp": {
+                "gte": "2026-04-12"
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "sync": {
+    "time": {
+      "delay": "60s",
+      "field": "@timestamp"
+    }
+  }
+}
