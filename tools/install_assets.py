@@ -7,9 +7,13 @@ import hashlib
 import json
 import os
 import re
+import ssl
+import stat
 import subprocess
 import sys
 import tarfile
+import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -26,18 +30,58 @@ ASSET_TYPES = {
     "index-templates": "index_templates",
     "pipelines": "pipelines",
     "transforms": "transforms",
+    "security-roles": "security_roles",
 }
 ASSET_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._@-]*\.json\Z")
+W1_RAW_SHA256 = {
+    "elastic/component-templates/logs-rigsignal.diagnosis-mappings.json": "345e0d2898279929eb613b60d2bd250bbf73a13c7b4bbd1b793384e2ae00410c",
+    "elastic/index-templates/logs-rigsignal.diagnosis.json": "5f4d4f403fc17a1096b2d2b1c8a43bad94efa52b05c3b117961333b2f3d52199",
+    "elastic/security-roles/rigsignal_shipper.json": "6eb0279c7e05b94bfd96083508a8c7e6ad5ca9cb65e531654bd6e0ae3eca7ed2",
+}
+TARGET_GENERATION_SCHEME = "rigsignal:target-generation:w1-assets:v1"
+TARGET_GENERATION_KAT = "a7ed20a4b4bfe0b2e5597a065e8bdaa5161b0d962e1a502d3db3bbcc97e8ee7a"
+ROLE_JCS_SHA256 = "05b58b8369bc4212fcffa0ea81621ef10d6d57f1de464fbc3f562842a9cbafd7"
+DIAGNOSIS_STREAM = "logs-rigsignal.diagnosis-default"
+STATE_KEYS = frozenset(("version", "phase", "expected_cluster_uuid", "target_generation",
+                        "role_jcs_sha256", "active_key_id", "pending_revoke_ids",
+                        "pending_mint_name", "candidate_key_id"))
+STATE_PHASES = frozenset(("committed", "mint_intent", "candidate_staged", "candidate_verified"))
+UUID_RE = re.compile(r"[A-Za-z0-9_-]{22}\Z")
+HEX_RE = re.compile(r"[0-9a-f]{64}\Z")
 
 
 class InputError(Exception):
     """The requested source or bundle is incomplete or invalid."""
 
 
+def reject_duplicate_keys(pairs):
+    value = {}
+    for key, member in pairs:
+        if key in value:
+            raise ValueError(f"duplicate JSON key: {key}")
+        value[key] = member
+    return value
+
+
+def parse_json(data: bytes, context: str):
+    try:
+        return json.loads(data.decode("utf-8"), object_pairs_hook=reject_duplicate_keys)
+    except (UnicodeDecodeError, ValueError, json.JSONDecodeError) as error:
+        raise InputError(f"invalid JSON {context}: {error}") from error
+
+
 class RequestFailure(Exception):
     def __init__(self, status: int | None, detail: str):
         self.status = status
         super().__init__(detail)
+
+
+class ProvisionError(Exception):
+    """A deliberately sanitized, stable provisioning failure."""
+
+    def __init__(self, prefix: str):
+        self.prefix = prefix
+        super().__init__(prefix)
 
 
 @dataclass(frozen=True)
@@ -84,9 +128,9 @@ def path_to_asset(path: str, data: bytes) -> Asset:
         if not ASSET_NAME.fullmatch(parts[2]):
             raise InputError(f"invalid asset filename: {path}")
         try:
-            json.loads(data)
-        except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise InputError(f"invalid JSON asset {path}: {error}") from error
+            parse_json(data, f"asset {path}")
+        except InputError:
+            raise
         return Asset(ASSET_TYPES[parts[1]], Path(parts[2]).stem, path, data)
     if len(parts) == 3 and parts[:2] == ("dashboards", "v0.3.1") and parts[2].endswith(".ndjson"):
         if not dashboard_objects(data):
@@ -138,14 +182,21 @@ def load_source() -> Bundle:
 def load_bundle(bundle_path: Path) -> Bundle:
     try:
         with tarfile.open(bundle_path, "r:gz") as tar:
-            members = {member.name: member for member in tar.getmembers() if member.isfile()}
+            members = {}
+            for member in tar.getmembers():
+                if (not member.isfile() or member.issym() or member.islnk()
+                        or member.name.startswith("/") or ".." in Path(member.name).parts):
+                    raise InputError(f"unsafe archive member: {member.name}")
+                if member.name in members:
+                    raise InputError(f"duplicate archive member: {member.name}")
+                members[member.name] = member
             manifest_member = members.pop("manifest.json", None)
             if manifest_member is None:
                 raise InputError("bundle is missing manifest.json")
             manifest_data = tar.extractfile(manifest_member)
             if manifest_data is None:
                 raise InputError("bundle manifest cannot be read")
-            manifest = json.loads(manifest_data.read())
+            manifest = parse_json(manifest_data.read(), "bundle manifest")
             checksums = manifest.get("sha256")
             if not isinstance(checksums, dict):
                 raise InputError("bundle manifest has no sha256 mapping")
@@ -176,12 +227,13 @@ def load_bundle(bundle_path: Path) -> Bundle:
     version, commit = manifest.get("bundle_version"), manifest.get("source_commit")
     if not isinstance(version, str) or not isinstance(commit, str):
         raise InputError("bundle manifest lacks version or source_commit")
+    validate_w1_manifest(manifest, {asset.path: asset.data for asset in assets})
     return Bundle(version, commit, ordered_assets(assets))
 
 
 def ordered_assets(assets: list[Asset]) -> list[Asset]:
-    order = {"component_templates": 0, "index_templates": 1, "pipelines": 2,
-             "transforms": 3, "dashboard": 4}
+    order = {"component_templates": 0, "index_templates": 1, "security_roles": 2,
+             "pipelines": 3, "transforms": 4, "dashboard": 5}
     return sorted(assets, key=lambda asset: (order[asset.kind], asset.name))
 
 
@@ -193,6 +245,36 @@ def count_assets(assets: list[Asset]) -> dict[str, int]:
     return counts
 
 
+def recompute_target_generation(files: dict[str, bytes]) -> str:
+    digest = hashlib.sha256()
+    digest.update(TARGET_GENERATION_SCHEME.encode("utf-8") + b"\0")
+    digest.update((3).to_bytes(4, "big"))
+    for path in sorted(W1_RAW_SHA256):
+        data = files.get(path)
+        if data is None or hashlib.sha256(data).hexdigest() != W1_RAW_SHA256[path]:
+            raise InputError(f"canonical W1 asset mismatch: {path}")
+        encoded_path = path.encode("utf-8")
+        digest.update(len(encoded_path).to_bytes(4, "big"))
+        digest.update(encoded_path)
+        digest.update(hashlib.sha256(data).digest())
+    value = digest.hexdigest()
+    if value != TARGET_GENERATION_KAT:
+        raise InputError("target-generation KAT mismatch")
+    return value
+
+
+def validate_w1_manifest(manifest: dict, files: dict[str, bytes]) -> None:
+    value = recompute_target_generation(files)
+    expected_inputs = [
+        {"path": path, "sha256": W1_RAW_SHA256[path]}
+        for path in sorted(W1_RAW_SHA256)
+    ]
+    expected = {"scheme": TARGET_GENERATION_SCHEME, "algorithm": "sha256",
+                "input_count": 3, "inputs": expected_inputs, "value": value}
+    if manifest.get("target_generation") != expected:
+        raise InputError("bundle manifest target_generation is invalid")
+
+
 def auth_header(value: str) -> str:
     if value.startswith("ApiKey ") and value[7:]:
         return value
@@ -200,6 +282,55 @@ def auth_header(value: str) -> str:
         encoded = base64.b64encode(value.encode("utf-8")).decode("ascii")
         return f"Basic {encoded}"
     raise InputError("RIGSIGNAL_ES_AUTH must be user:pass or ApiKey <key>")
+
+
+def protected_regular_file(path: Path) -> bytes:
+    """Read an invoking-user-owned, no-follow, 0600-or-stricter input."""
+    try:
+        st = path.lstat()
+        if (not stat.S_ISREG(st.st_mode) or stat.S_ISLNK(st.st_mode)
+                or st.st_uid != os.geteuid() or st.st_mode & 0o077):
+            raise InputError(f"unprotected input file: {path}")
+        return path.read_bytes()
+    except OSError as error:
+        raise InputError(f"cannot read protected input file: {path}") from error
+
+
+def admin_authorization(path: Path) -> str:
+    body = parse_json(b"{}", "internal")  # Keep duplicate-key parser coverage local.
+    del body
+    try:
+        import tomllib
+        config = tomllib.loads(protected_regular_file(path).decode("utf-8"))
+        values = config["elasticsearch"]
+        if set(values) == {"api_key"} and isinstance(values["api_key"], str):
+            return auth_header("ApiKey " + values["api_key"])
+        if set(values) == {"username", "password"}:
+            return auth_header(f"{values['username']}:{values['password']}")
+    except (KeyError, UnicodeDecodeError, ValueError, TypeError) as error:
+        raise InputError("administrator credential file is invalid") from error
+    raise InputError("administrator credential file is invalid")
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(req.full_url, code, "redirect refused", headers, fp)
+
+
+def configure_https(ca_file: Path) -> None:
+    ca = protected_regular_file(ca_file)
+    try:
+        context = ssl.create_default_context(cadata=ca.decode("utf-8"))
+    except (ssl.SSLError, UnicodeDecodeError) as error:
+        raise InputError("CA file is invalid") from error
+    urllib.request.install_opener(urllib.request.build_opener(NoRedirect(), urllib.request.HTTPSHandler(context=context)))
+
+
+def https_origin(value: str, flag: str) -> str:
+    parsed = urllib.parse.urlsplit(value)
+    if parsed.scheme != "https" or not parsed.netloc or parsed.path not in ("", "/") or parsed.query or parsed.fragment:
+        raise InputError(f"{flag} must be an HTTPS origin")
+    return value.rstrip("/")
 
 
 def request(base: str, path: str, method: str, authorization: str, data: bytes | None = None,
@@ -225,6 +356,7 @@ def es_path(asset: Asset) -> str:
         "index_templates": f"/_index_template/{name}",
         "pipelines": f"/_ingest/pipeline/{name}",
         "transforms": f"/_transform/{name}",
+        "security_roles": f"/_security/role/{name}",
     }
     return paths[asset.kind]
 
@@ -252,17 +384,405 @@ def fail_table(failures: list[tuple[str, str, str]]) -> None:
         print(f"{kind} | {name} | {error}", file=sys.stderr)
 
 
+def jcs(value: object) -> bytes:
+    """The small JSON subset used by shipped assets, encoded deterministically.
+
+    Elasticsearch's envelopes are projected before this function is called.  The
+    role/template request bodies contain no floats, so Python's JSON encoder is
+    an RFC-8785-compatible representation for this closed input set.
+    """
+    return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"),
+                      allow_nan=False).encode("utf-8")
+
+
+def json_response(data: bytes) -> object:
+    return parse_json(data, "HTTP response")
+
+
+def role_body(bundle: Bundle) -> dict:
+    asset = next((item for item in bundle.assets if item.path ==
+                  "elastic/security-roles/rigsignal_shipper.json"), None)
+    if asset is None:
+        raise InputError("canonical shipper role is missing")
+    value = parse_json(asset.data, asset.path)
+    if not isinstance(value, dict) or hashlib.sha256(jcs(value)).hexdigest() != ROLE_JCS_SHA256:
+        raise InputError("canonical shipper role is invalid")
+    # Ratification is deliberately structural too: a digest alone is not an
+    # authorization policy review.
+    if (set(value) != {"cluster", "indices"} or value.get("cluster") != ["monitor"]
+            or not isinstance(value.get("indices"), list) or len(value["indices"]) != 1
+            or value["indices"][0] != {"names": [DIAGNOSIS_STREAM],
+                                        "privileges": ["view_index_metadata", "create_doc"]}):
+        raise InputError("canonical shipper role is invalid")
+    return value
+
+
+def state_template(uuid_value: str, generation: str, active: str | None = None) -> dict:
+    return {"version": 1, "phase": "committed", "expected_cluster_uuid": uuid_value,
+            "target_generation": generation, "role_jcs_sha256": ROLE_JCS_SHA256,
+            "active_key_id": active, "pending_revoke_ids": [], "pending_mint_name": None,
+            "candidate_key_id": None}
+
+
+def validate_state(value: object) -> dict:
+    if not isinstance(value, dict) or set(value) != STATE_KEYS:
+        raise InputError("state.json schema is invalid")
+    if type(value["version"]) is not int or value["version"] != 1 or value["phase"] not in STATE_PHASES:
+        raise InputError("state.json schema is invalid")
+    if not isinstance(value["expected_cluster_uuid"], str) or not UUID_RE.fullmatch(value["expected_cluster_uuid"]):
+        raise InputError("state.json schema is invalid")
+    for key in ("target_generation", "role_jcs_sha256"):
+        if not isinstance(value[key], str) or not HEX_RE.fullmatch(value[key]):
+            raise InputError("state.json schema is invalid")
+    for key, cap in (("active_key_id", 1024), ("candidate_key_id", 1024), ("pending_mint_name", 255)):
+        item = value[key]
+        if item is not None and (not isinstance(item, str) or len(item.encode("utf-8")) > cap):
+            raise InputError("state.json schema is invalid")
+    pending = value["pending_revoke_ids"]
+    if (not isinstance(pending, list) or any(not isinstance(item, str) or len(item.encode("utf-8")) > 1024
+                                             for item in pending)
+            or pending != sorted(set(pending))):
+        raise InputError("state.json schema is invalid")
+    phase = value["phase"]
+    if phase == "committed" and (value["active_key_id"] is None or pending or value["pending_mint_name"] is not None or value["candidate_key_id"] is not None):
+        raise InputError("state.json invariant is invalid")
+    if phase == "mint_intent" and (value["pending_mint_name"] is None or value["candidate_key_id"] is not None):
+        raise InputError("state.json invariant is invalid")
+    if phase in {"candidate_staged", "candidate_verified"} and (value["pending_mint_name"] is None or value["candidate_key_id"] is None):
+        raise InputError("state.json invariant is invalid")
+    return value
+
+
+def secure_read(path: Path, missing_ok: bool = False) -> bytes | None:
+    if missing_ok and not path.exists():
+        return None
+    return protected_regular_file(path)
+
+
+def load_state(root: Path) -> dict | None:
+    raw = secure_read(root / "state.json", missing_ok=True)
+    return None if raw is None else validate_state(parse_json(raw, "state.json"))
+
+
+def secure_root(root: Path) -> None:
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    st = root.lstat()
+    if (not stat.S_ISDIR(st.st_mode) or stat.S_ISLNK(st.st_mode) or st.st_uid != os.geteuid()
+            or st.st_mode & 0o077):
+        raise InputError("enrollment root is not protected")
+
+
+def atomic_write(root: Path, name: str, data: bytes) -> None:
+    """Publish one protected file without following an existing target."""
+    secure_root(root)
+    if "/" in name or name.startswith("."):
+        raise InputError("invalid enrollment file name")
+    target = root / name
+    if target.exists() and target.is_symlink():
+        raise InputError("enrollment output is symlinked")
+    fd, temporary = tempfile.mkstemp(prefix=".rigsignal-", dir=root)
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "wb", closefd=True) as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, target)
+        st = target.lstat()
+        if not stat.S_ISREG(st.st_mode) or stat.S_ISLNK(st.st_mode) or st.st_mode & 0o077:
+            raise InputError("enrollment output is not protected")
+        directory_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    except OSError as error:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        raise InputError("cannot publish enrollment output") from error
+
+
+def atomic_publication(root: Path, files: dict[str, bytes]) -> None:
+    # Every member is independently atomic and fsynced.  state is written last,
+    # so recovery sees either the prior committed state or a complete candidate.
+    for name in ("credentials.toml", "handshake.toml", "shipping-policy-v1.toml", "state.json"):
+        atomic_write(root, name, files[name])
+        fault("publication-" + name)
+
+
+def fault(point: str) -> None:
+    """Test-only crash hook; inert unless explicitly set by a test."""
+    if os.environ.get("RIGSIGNAL_TEST_CRASH_AT") == point:
+        os._exit(99)
+
+
+def projection(asset: Asset, response: object) -> object:
+    if not isinstance(response, dict):
+        raise InputError("canonical GET projection is missing")
+    if asset.kind == "component_templates":
+        values = response.get("component_templates")
+        key = "component_template"
+    elif asset.kind == "index_templates":
+        values = response.get("index_templates")
+        key = "index_template"
+    elif asset.kind == "security_roles":
+        # Security GET returns {role_name: body}; exactly the named object is
+        # allowed, preventing an envelope or plural response from passing.
+        if set(response) != {asset.name}:
+            raise InputError("canonical role GET projection is missing")
+        return response[asset.name]
+    else:
+        raise InputError("canonical GET projection is unsupported")
+    if not isinstance(values, list) or len(values) != 1 or not isinstance(values[0], dict):
+        raise InputError("canonical GET projection is missing")
+    item = values[0]
+    if item.get("name") not in (None, asset.name) or key not in item:
+        raise InputError("canonical GET projection is missing")
+    return item[key]
+
+
+def verify_asset(base: str, authorization: str, asset: Asset) -> None:
+    response = json_response(request(base, es_path(asset), "GET", authorization))
+    expected = parse_json(asset.data, asset.path)
+    if asset.kind in {"component_templates", "index_templates", "security_roles"}:
+        if jcs(projection(asset, response)) != jcs(expected):
+            raise InputError("canonical asset GET differs")
+
+
+def es_json(base: str, path: str, method: str, authorization: str, payload: object | None = None) -> object:
+    data = None if payload is None else jcs(payload)
+    return json_response(request(base, path, method, authorization, data))
+
+
+def response_status(base: str, path: str, method: str, authorization: str, payload: object | None = None) -> int:
+    try:
+        es_json(base, path, method, authorization, payload)
+        return 200
+    except RequestFailure as error:
+        return error.status or 0
+
+
+def install_asset(es_url: str, kb_url: str, authorization: str, asset: Asset) -> None:
+    if asset.kind == "dashboard":
+        body, boundary = multipart_dashboard(asset)
+        request(kb_url, "/api/saved_objects/_import?overwrite=true", "POST", authorization, body,
+                {"Content-Type": f"multipart/form-data; boundary={boundary}", "kbn-xsrf": "true"})
+        for object_type, object_id in dashboard_objects(asset.data):
+            request(kb_url, "/api/saved_objects/" + urllib.parse.quote(object_type, safe="") + "/"
+                    + urllib.parse.quote(object_id, safe=""), "GET", authorization,
+                    headers={"kbn-xsrf": "true"})
+        return
+    path = es_path(asset)
+    if asset.kind == "transforms":
+        try:
+            request(es_url, path, "GET", authorization)
+        except RequestFailure as error:
+            if error.status != 404:
+                raise
+            request(es_url, path, "PUT", authorization, asset.data)
+        else:
+            request(es_url, path + "/_update", "POST", authorization,
+                    jcs({key: value for key, value in parse_json(asset.data, asset.path).items() if key != "pivot"}))
+        request(es_url, path, "GET", authorization)
+        return
+    request(es_url, path, "PUT", authorization, asset.data)
+    verify_asset(es_url, authorization, asset)
+
+
+def cluster_uuid(es_url: str, authorization: str) -> str:
+    response = es_json(es_url, "/", "GET", authorization)
+    value = response.get("cluster_uuid") if isinstance(response, dict) else None
+    if not isinstance(value, str) or not UUID_RE.fullmatch(value):
+        raise InputError("cluster UUID is invalid")
+    return value
+
+
+def prerequisites(es_url: str, kb_url: str, authorization: str) -> None:
+    try:
+        es = es_json(es_url, "/", "GET", authorization)
+        kb = es_json(kb_url, "/api/status", "GET", authorization)
+        es_version = es.get("version", {}).get("number") if isinstance(es, dict) else None
+        kb_version = kb.get("version", {}).get("number") if isinstance(kb, dict) else None
+        if es_version not in {"9.4.3", "9.4.4"} or kb_version != es_version:
+            raise InputError("unsupported Elasticsearch/Kibana version pair")
+        deadline = time.monotonic() + 60
+        required = ("logs@mappings", "logs@settings", "ecs@mappings")
+        while True:
+            absent = []
+            for name in required:
+                try:
+                    request(es_url, "/_component_template/" + urllib.parse.quote(name, safe=""), "GET", authorization)
+                except RequestFailure:
+                    absent.append(name)
+            if not absent:
+                return
+            if time.monotonic() >= deadline:
+                raise InputError("required built-in component templates are absent")
+            time.sleep(1)
+    except (RequestFailure, InputError) as error:
+        raise ProvisionError("install failed: prerequisite:") from error
+
+
+def existing_stream_is_compatible(es_url: str, authorization: str, state: dict | None, uuid_value: str) -> bool:
+    try:
+        response = es_json(es_url, "/_data_stream/" + DIAGNOSIS_STREAM, "GET", authorization)
+    except RequestFailure as error:
+        if error.status == 404:
+            return True
+        raise
+    streams = response.get("data_streams") if isinstance(response, dict) else None
+    if (not isinstance(streams, list) or len(streams) != 1 or not isinstance(streams[0], dict)
+            or streams[0].get("name") != DIAGNOSIS_STREAM or not isinstance(streams[0].get("indices"), list)
+            or state is None or state["phase"] != "committed" or state["expected_cluster_uuid"] != uuid_value):
+        return False
+    # State is the authorization proof for an existing stream.  The definitive
+    # mapping projection is checked after simulate below; retain fail-closed
+    # behavior when ES does not enumerate concrete backing indices.
+    return all(isinstance(item, dict) and isinstance(item.get("index_name"), str) for item in streams[0]["indices"])
+
+
+def fence(es_url: str, authorization: str, state: dict | None, uuid_value: str) -> None:
+    try:
+        compatible = existing_stream_is_compatible(es_url, authorization, state, uuid_value)
+    except RequestFailure as error:
+        raise ProvisionError("install refused: existing diagnosis stream is not W1; migration is required") from error
+    if not compatible:
+        raise ProvisionError("install refused: existing diagnosis stream is not W1; migration is required")
+
+
+def ensure_stream(es_url: str, authorization: str) -> None:
+    try:
+        request(es_url, "/_data_stream/" + DIAGNOSIS_STREAM, "PUT", authorization)
+    except RequestFailure as error:
+        if error.status not in {400, 409}:
+            raise
+    result = es_json(es_url, "/_data_stream/" + DIAGNOSIS_STREAM, "GET", authorization)
+    streams = result.get("data_streams") if isinstance(result, dict) else None
+    if not isinstance(streams, list) or len(streams) != 1 or streams[0].get("name") != DIAGNOSIS_STREAM:
+        raise InputError("exact diagnosis stream did not resolve")
+
+
+def simulate(es_url: str, authorization: str) -> None:
+    result = es_json(es_url, "/_index_template/_simulate_index/" + DIAGNOSIS_STREAM, "POST", authorization, {})
+    if not isinstance(result, dict) or "template" not in result:
+        raise InputError("W1 index simulation failed")
+
+
+def mint_key(es_url: str, authorization: str, role: dict, name: str) -> tuple[str, str]:
+    response = es_json(es_url, "/_security/api_key", "POST", authorization,
+                       {"name": name, "role_descriptors": {"rigsignal_shipper": role}})
+    if not isinstance(response, dict) or not isinstance(response.get("id"), str) or not isinstance(response.get("encoded"), str):
+        raise InputError("API key mint response is invalid")
+    return response["id"], response["encoded"]
+
+
+def invalidate(es_url: str, authorization: str, ids: list[str]) -> None:
+    if not ids:
+        return
+    response = es_json(es_url, "/_security/api_key", "DELETE", authorization, {"ids": ids})
+    invalidated = response.get("invalidated_api_keys", []) if isinstance(response, dict) else []
+    previously = response.get("previously_invalidated_api_keys", []) if isinstance(response, dict) else []
+    if not set(ids).issubset(set(invalidated) | set(previously)):
+        raise InputError("API key invalidation was not confirmed")
+
+
+def candidate_document(suffix: str) -> dict:
+    return {"@timestamp": "2026-07-23T00:00:00.000Z", "event": {"id": "provision-" + suffix},
+            "rigsignal": {"diagnosis": {"schema_version": 1, "outcome": "finding",
+            "detector_id": "provision", "rule_version": "1", "input_mode": "test",
+            "verdict": "ok", "disposition": "report", "confidence": 1.0,
+            "confidence_basis": "provision", "evidence": [], "plain_language": "provision"}}}
+
+
+def verify_candidate(es_url: str, authorization: str, suffix: str) -> None:
+    document = candidate_document(suffix)
+    path = "/" + DIAGNOSIS_STREAM + "/_create/provision-" + suffix
+    if response_status(es_url, path, "POST", authorization, document) not in {200, 201}:
+        raise InputError("candidate exact-stream create failed")
+    # Real strictness proof; do not infer it from _simulate_index.
+    bad = dict(document); bad["unknown_root"] = True
+    if response_status(es_url, "/" + DIAGNOSIS_STREAM + "/_create/provision-bad-" + suffix,
+                       "POST", authorization, bad) < 400:
+        raise InputError("unknown field was accepted")
+    malformed = candidate_document("malformed-" + suffix)
+    malformed["rigsignal"]["diagnosis"]["confidence"] = "not-a-number"
+    if response_status(es_url, "/" + DIAGNOSIS_STREAM + "/_create/provision-malformed-" + suffix,
+                       "POST", authorization, malformed) < 400:
+        raise InputError("malformed scalar was accepted")
+    # Exact CAN rows and deny matrix.  A duplicate _create is delivery idempotency
+    # (409), while PUT to the existing ID must be an authorization failure (403).
+    can_paths = ("/", "/_component_template/logs-rigsignal.diagnosis-mappings?filter_path=component_templates.name,component_templates.component_template._meta.accepted_schema_versions",
+                 "/" + DIAGNOSIS_STREAM + "/_mapping")
+    for item in can_paths:
+        if response_status(es_url, item, "GET", authorization) != 200:
+            raise InputError("candidate privilege CAN check failed")
+    if response_status(es_url, path, "POST", authorization, document) != 409:
+        raise InputError("candidate duplicate create check failed")
+    denied = ((path, "PUT", document), ("/" + DIAGNOSIS_STREAM + "/_doc/provision-" + suffix, "GET", None),
+              ("/" + DIAGNOSIS_STREAM + "/_search", "POST", {"query": {"match_all": {}}}),
+              ("/_component_template/forbidden", "PUT", {}), ("/_index_template/forbidden", "PUT", {}),
+              ("/logs-rigsignal.diagnosis-other/_create/no", "POST", document))
+    for item, method, payload in denied:
+        if response_status(es_url, item, method, authorization, payload) != 403:
+            raise InputError("candidate privilege CANNOT check failed")
+
+
+def enrollment_files(endpoint: str, ca_file: Path, root: Path, uuid_value: str, generation: str,
+                     encoded: str, state: dict) -> dict[str, bytes]:
+    # Paths are JSON quoted to produce valid TOML basic strings without leaking a
+    # shell interpolation path into configuration.
+    q = lambda value: json.dumps(value, ensure_ascii=False)
+    return {"credentials.toml": ("[elasticsearch]\napi_key = " + q(encoded) + "\n").encode(),
+            "handshake.toml": ("[elasticsearch]\nendpoint = " + q(endpoint) + "\nca_cert = "
+                               + q(str(ca_file.resolve())) + "\n").encode(),
+            "shipping-policy-v1.toml": ("ship_mode = \"on\"\ninstall_profile = \"user\"\noutbox_root = "
+                                        + q(str(root.parent / "outbox")) + "\ntarget_generation = \"" + generation
+                                        + "\"\nexpected_cluster_uuid = \"" + uuid_value + "\"\n").encode(),
+            "state.json": jcs(state) + b"\n"}
+
+
+def run_handshake(agent: Path, root: Path) -> None:
+    environment = os.environ.copy()
+    for key in ("RIGSIGNAL_ENDPOINT", "RIGSIGNAL_CA_FILE", "RIGSIGNAL_EXPECTED_CLUSTER_UUID",
+                "RIGSIGNAL_PENDING_ENROLLMENT", "RIGSIGNAL_TARGET_GENERATION", "RIGSIGNAL_API_KEY"):
+        environment.pop(key, None)
+    result = subprocess.run([str(agent), "handshake", "check", "--config", str(root / "handshake.toml"),
+                             "--credentials-file", str(root / "credentials.toml")], env=environment,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    if result.returncode != 0:
+        raise InputError("published handshake failed")
+
+
+def default_root() -> Path:
+    base = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local" / "state")))
+    return base / "rigsignal" / "enrollment"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    source = parser.add_mutually_exclusive_group(required=True)
-    source.add_argument("--bundle", type=Path, help="bundle tarball to install")
-    source.add_argument("--from-source", action="store_true", help="install canonical repo assets")
+    parser.add_argument("--bundle", type=Path, required=True, help="bundle tarball to install")
+    parser.add_argument("--endpoint", required=True, help="Elasticsearch HTTPS origin")
+    parser.add_argument("--ca-file", type=Path, required=True, help="Elasticsearch CA file")
+    parser.add_argument("--kibana-endpoint", required=True, help="Kibana HTTPS origin")
+    parser.add_argument("--kibana-ca-file", type=Path, required=True, help="Kibana CA file")
+    parser.add_argument("--admin-credentials-file", type=Path, required=True,
+                        help="protected administrator TOML credential")
+    parser.add_argument("--agent-binary", type=Path, required=True)
+    parser.add_argument("--profile", choices=("user", "system"), required=True)
+    parser.add_argument("--enrollment-root", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--dry-run", action="store_true", help="list API calls without network access")
     args = parser.parse_args()
     try:
-        bundle = load_bundle(args.bundle) if args.bundle else load_source()
+        if args.profile != "user":
+            raise InputError("profile system is unsupported/broker-required")
+        es_url = https_origin(args.endpoint, "--endpoint")
+        kb_url = https_origin(args.kibana_endpoint, "--kibana-endpoint")
+        bundle = load_bundle(args.bundle)  # Step 1: no HTTP before this line succeeds.
+        role = role_body(bundle)
     except InputError as error:
-        print(f"install failed: {error}", file=sys.stderr)
+        print(f"install failed: bundle validation:", file=sys.stderr)
         return 1
 
     total = len(bundle.assets)
@@ -278,59 +798,147 @@ def main() -> int:
         print(f"source assets: {total}")
         return 0
 
-    required = ("RIGSIGNAL_ES_URL", "RIGSIGNAL_KB_URL", "RIGSIGNAL_ES_AUTH")
-    missing = [name for name in required if not os.environ.get(name)]
-    if missing:
-        print("install failed: missing required environment variable(s): " + ", ".join(missing), file=sys.stderr)
-        return 1
     try:
-        authorization = auth_header(os.environ["RIGSIGNAL_ES_AUTH"])
-    except InputError as error:
-        print(f"install failed: {error}", file=sys.stderr)
-        return 1
-    es_url, kb_url = os.environ["RIGSIGNAL_ES_URL"], os.environ["RIGSIGNAL_KB_URL"]
-    failures: list[tuple[str, str, str]] = []
-    for asset in bundle.assets:
-        try:
-            if asset.kind == "dashboard":
-                body, boundary = multipart_dashboard(asset)
-                request(kb_url, "/api/saved_objects/_import?overwrite=true", "POST", authorization, body,
-                        {"Content-Type": f"multipart/form-data; boundary={boundary}", "kbn-xsrf": "true"})
-                for object_type, object_id in dashboard_objects(asset.data):
-                    target = "/api/saved_objects/" + urllib.parse.quote(object_type, safe="") + "/" + urllib.parse.quote(object_id, safe="")
-                    request(kb_url, target, "GET", authorization, headers={"kbn-xsrf": "true"})
-            elif asset.kind == "transforms":
-                path = es_path(asset)
+        configure_https(args.ca_file)
+        configure_https(args.kibana_ca_file)
+        authorization = admin_authorization(args.admin_credentials_file)
+        root = args.enrollment_root or default_root()
+        secure_root(root)
+        prior = load_state(root)
+
+        # Step 2: recover/pin before normal work.  Unpublished credentials are
+        # never reused; their identifiers survive in state for deterministic
+        # recovery.  A later run can safely revoke the listed candidate.
+        uuid_value = cluster_uuid(es_url, authorization)
+        if prior is not None and prior["expected_cluster_uuid"] != uuid_value:
+            raise ProvisionError("install failed: prerequisite:")
+        if prior is not None and prior["phase"] != "committed":
+            # candidate_verified with candidate already named as active is the
+            # only recoverable post-publication state: credentials/configuration
+            # were atomically released and only old-key cleanup was interrupted.
+            if (prior["phase"] == "candidate_verified" and prior["candidate_key_id"]
+                    and prior["active_key_id"] == prior["candidate_key_id"]):
                 try:
-                    request(es_url, path, "GET", authorization)
-                except RequestFailure as error:
-                    if error.status != 404:
-                        raise
-                    request(es_url, path, "PUT", authorization, asset.data)
-                else:
-                    # _update rejects immutable fields (pivot); send only updatable keys.
-                    update_body = {k: v for k, v in json.loads(asset.data).items()
-                                   if k not in ("pivot",)}
-                    request(es_url, path + "/_update", "POST", authorization,
-                            json.dumps(update_body, sort_keys=True).encode("utf-8"))
-                request(es_url, path, "GET", authorization)
+                    invalidate(es_url, authorization, prior["pending_revoke_ids"])
+                except (InputError, RequestFailure) as error:
+                    raise ProvisionError("install failed: old shipper API key revocation:") from error
+                prior = state_template(uuid_value, prior["target_generation"], prior["active_key_id"])
+                atomic_write(root, "state.json", jcs(prior) + b"\n")
             else:
-                path = es_path(asset)
-                request(es_url, path, "PUT", authorization, asset.data)
-                request(es_url, path, "GET", authorization)
-        except (RequestFailure, InputError) as error:
-            failures.append((asset.kind, asset.name, str(error)))
-    marker = Asset("component_templates", "rigsignal-bundle-meta", "", marker_body(bundle))
-    try:
-        request(es_url, es_path(marker), "PUT", authorization, marker.data)
-        request(es_url, es_path(marker), "GET", authorization)
-    except RequestFailure as error:
-        failures.append(("bundle_marker", marker.name, str(error)))
-    if failures:
-        fail_table(failures)
+                candidates = [item for item in (prior["candidate_key_id"],) if item]
+                if candidates:
+                    invalidate(es_url, authorization, candidates)
+                for name in ("candidate-credentials.toml",):
+                    path = root / name
+                    if path.exists():
+                        path.unlink()
+                # Do not silently preserve an incomplete candidate as active.
+                prior = None if prior["active_key_id"] is None else state_template(
+                    uuid_value, prior["target_generation"], prior["active_key_id"])
+                if prior is not None:
+                    atomic_write(root, "state.json", jcs(prior) + b"\n")
+
+        prerequisites(es_url, kb_url, authorization)  # Step 3
+        fence(es_url, authorization, prior, uuid_value)  # Step 4, before W1 PUT
+
+        # Step 5: the ordered complete manifest barrier.
+        for asset in bundle.assets:
+            try:
+                install_asset(es_url, kb_url, authorization, asset)
+            except (RequestFailure, InputError) as error:
+                category = "shipper role verification:" if asset.kind == "security_roles" else "W1 asset verification:"
+                raise ProvisionError("install failed: " + category) from error
+        ensure_stream(es_url, authorization)
+        simulate(es_url, authorization)
+
+        generation = recompute_target_generation({asset.path: asset.data for asset in bundle.assets})
+        # A current key is only retained after a fresh proof.  Reading its secret
+        # from the protected credential file is intentional and never logged.
+        encoded: str | None = None
+        reuse = prior is not None and prior["role_jcs_sha256"] == ROLE_JCS_SHA256
+        if reuse:
+            try:
+                credential = parse_json(b"{}", "internal")
+                del credential
+                import tomllib
+                encoded = tomllib.loads((secure_read(root / "credentials.toml") or b"").decode())["elasticsearch"]["api_key"]
+                if not isinstance(encoded, str):
+                    raise ValueError()
+                verify_candidate(es_url, "ApiKey " + encoded, "active-proof")
+            except (InputError, ValueError, KeyError, TypeError, RequestFailure):
+                reuse = False
+                encoded = None
+        old_id = prior["active_key_id"] if prior else None
+        if not reuse:
+            mint_name = "rigsignal-provision-" + uuid.uuid4().hex
+            intent = state_template(uuid_value, generation, old_id)
+            intent.update(phase="mint_intent", pending_mint_name=mint_name)
+            atomic_write(root, "state.json", jcs(intent) + b"\n")
+            fault("before-mint-response")
+            candidate_id, encoded = mint_key(es_url, authorization, role, mint_name)
+            fault("after-mint-response")
+            staged = dict(intent)
+            staged.update(phase="candidate_staged", candidate_key_id=candidate_id)
+            atomic_write(root, "state.json", jcs(staged) + b"\n")
+            atomic_write(root, "candidate-credentials.toml", enrollment_files(es_url, args.ca_file, root, uuid_value,
+                         generation, encoded, staged)["credentials.toml"])
+            fault("candidate-write")
+            try:
+                verify_candidate(es_url, "ApiKey " + encoded, candidate_id[-12:])  # Steps 7 and 8
+            except Exception:
+                invalidate(es_url, authorization, [candidate_id])
+                raise ProvisionError("install failed: shipper credential verification:")
+            staged["phase"] = "candidate_verified"
+            atomic_write(root, "state.json", jcs(staged) + b"\n")
+            fault("candidate-verify")
+        else:
+            candidate_id = old_id
+            staged = state_template(uuid_value, generation, candidate_id)
+
+        assert encoded is not None and candidate_id is not None
+        final = state_template(uuid_value, generation, candidate_id)
+        # Step 9.  During replacement the old ID is kept pending until published
+        # files verify, but state is committed only after its confirmation.
+        publish = dict(final)
+        if old_id and old_id != candidate_id:
+            publish["pending_revoke_ids"] = [old_id]
+            publish["phase"] = "candidate_verified"
+            publish["pending_mint_name"] = "published-pending-revoke"
+            publish["candidate_key_id"] = candidate_id
+        atomic_publication(root, enrollment_files(es_url, args.ca_file, root, uuid_value, generation, encoded, publish))
+        fault("published-state")
+
+        # Step 10 has no endpoint/credential environment fallback.
+        run_handshake(args.agent_binary, root)
+        if old_id and old_id != candidate_id:
+            try:
+                fault("before-revoke")
+                invalidate(es_url, authorization, [old_id])
+                fault("after-revoke")
+            except (InputError, RequestFailure) as error:
+                raise ProvisionError("install failed: old shipper API key revocation:") from error
+        atomic_write(root, "state.json", jcs(final) + b"\n")
+        candidate_secret = root / "candidate-credentials.toml"
+        if candidate_secret.exists():
+            candidate_secret.unlink()
+
+        # Step 11 and only step 11: marker is never an early partial-success bit.
+        marker = Asset("component_templates", "rigsignal-bundle-meta", "", marker_body(bundle))
+        try:
+            request(es_url, es_path(marker), "PUT", authorization, marker.data)
+            verify_asset(es_url, authorization, marker)
+        except (InputError, RequestFailure) as error:
+            raise ProvisionError("install failed: bundle marker:") from error
+        print(f"installed {total}/{total} assets")
+        return 0
+    except ProvisionError as error:
+        print(error.prefix, file=sys.stderr)
         return 1
-    print(f"installed {total}/{total} assets")
-    return 0
+    except (InputError, RequestFailure, OSError) as error:
+        # The public contract deliberately avoids exposing response bodies and
+        # exception text, which could contain credentials or cluster data.
+        print("install failed: enrollment output:", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

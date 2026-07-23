@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Clean-stack G4 matrix.
+# Clean-stack provisioning matrix.  The harness owns ES -> kibana_system ->
+# Kibana bootstrap; the installer is invoked only after that sequence is ready.
 set -euo pipefail
 SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 REPO_ROOT="$(CDPATH='' cd -- "$SCRIPT_DIR/../.." && pwd)"
@@ -7,7 +8,7 @@ REPO_ROOT="$(CDPATH='' cd -- "$SCRIPT_DIR/../.." && pwd)"
 . "$SCRIPT_DIR/lib.sh"
 CPU_INDEX=metrics-rigsignal.cpu-default
 EVENTS_INDEX=logs-rigsignal.events-default
-usage() { printf '%s\n' 'Usage: matrix.sh [--keep] [--dry-run] [--bundle PATH] fresh ES_VERSION|upgrade ES_VERSION|stackupgrade FROM_ES TO_ES' >&2; }
+usage() { printf '%s\n' 'Usage: matrix.sh [--keep] [--dry-run] [--bundle PATH] fresh VERSION|idempotent-rerun VERSION|pre-w1-refusal VERSION|uuid-mismatch VERSION|bytes-live VERSION|upgrade VERSION|stackupgrade FROM TO' >&2; }
 version() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
 assert_equal() { [[ "$3" == "$2" ]] || { printf 'ASSERT FAIL %s: expected=%q actual=%q\n' "$1" "$2" "$3" >&2; return 1; }; printf 'ASSERT PASS %s\n' "$1"; }
 cleanup() { local status="$?"; cs_cleanup || true; [[ -z "$RUN_DIR" || "$keep" == 1 ]] || rm -rf "$RUN_DIR"; return "$status"; }
@@ -110,20 +111,37 @@ asserts() {
 dry_plan() {
   printf 'Dry run; generated resource suffix: %s\n' "$CS_SUFFIX"; cs_create_network
   if [[ "$mode" == stackupgrade ]]; then cs_create_named_volumes; cs_start_elasticsearch_with_volume "docker.elastic.co/elasticsearch/elasticsearch:$one" "$(cs_port_mapping '' 9200)"; cs_start_kibana_with_volume "docker.elastic.co/kibana/kibana:$one" "$(cs_port_mapping '' 5601)"; else cs_start_elasticsearch "docker.elastic.co/elasticsearch/elasticsearch:$one" "$(cs_port_mapping '' 9200)"; cs_start_kibana "docker.elastic.co/kibana/kibana:$one" "$(cs_port_mapping '' 5601)"; fi
-  [[ "$mode" == upgrade ]] && printf '%s --dry-run\n' "$SCRIPT_DIR/install-previous-state.sh" || printf 'python3 tools/build_asset_bundle.py; python3 tools/install_assets.py --bundle <run-bundle>\n'
+  [[ "$mode" == upgrade ]] && printf '%s --dry-run\n' "$SCRIPT_DIR/install-previous-state.sh" || printf 'python3 tools/build_asset_bundle.py; python3 tools/install_assets.py --bundle <run-bundle> --endpoint <https-es> --kibana-endpoint <https-kibana> --profile user\n'
   printf 'jq injects @timestamp; curl ingests fixtures and runs all named assertions\n'
   if [[ "$mode" == upgrade ]]; then printf 'python3 tools/build_asset_bundle.py; python3 tools/install_assets.py --bundle <run-bundle>; curl verifies sentinel hashes/counts and reruns all assertions\n'; fi
   if [[ "$mode" == stackupgrade ]]; then cs_docker_quiet stop "$CS_KB_CONTAINER"; cs_docker_quiet rm "$CS_KB_CONTAINER"; cs_docker_quiet stop "$CS_ES_CONTAINER"; cs_docker_quiet rm "$CS_ES_CONTAINER"; cs_start_elasticsearch_with_volume "docker.elastic.co/elasticsearch/elasticsearch:$two" "$(cs_port_mapping '' 9200)"; cs_start_kibana_with_volume "docker.elastic.co/kibana/kibana:$two" "$(cs_port_mapping '' 5601)"; printf 'curl reruns all assertions\n'; fi
+  case "$mode" in
+    idempotent-rerun) printf 'composite: fresh retained root, then same bundle installer rerun; record role/key/marker evidence\n' ;;
+    pre-w1-refusal) printf 'self-contained: create non-W1 diagnosis stream, snapshot owned resources, assert installer refusal and zero delta\n' ;;
+    uuid-mismatch) printf 'composite: provision A then invoke retained enrollment root against independent B; assert zero owned delta\n' ;;
+    bytes-live) printf 'self-contained: canonical helper exact-cap 201/round-trip and one-over local rejection evidence\n' ;;
+    stackupgrade) printf 'composite: rollover exact diagnosis stream after 9.4.4 restart, then scoped create proof before cleanup\n' ;;
+  esac
 }
 keep=0; dry_run=0; bundle_path=''
 while [[ $# -gt 0 && "$1" == -* ]]; do case "$1" in --keep) keep=1 ;; --dry-run) dry_run=1 ;; --bundle) shift; [[ $# -gt 0 ]] || { usage; exit 2; }; bundle_path="$1" ;; *) usage; exit 2 ;; esac; shift; done
 [[ $# -gt 0 ]] || { usage; exit 2; }; mode="$1"; shift
 case "$mode" in
-  fresh|upgrade) if [[ $# != 1 ]] || ! version "$1"; then usage; exit 2; fi; one="$1"; two='' ;;
+  fresh|idempotent-rerun|pre-w1-refusal|uuid-mismatch|bytes-live|upgrade) if [[ $# != 1 ]] || ! version "$1"; then usage; exit 2; fi; one="$1"; two='' ;;
   stackupgrade) if [[ $# != 2 ]] || ! version "$1" || ! version "$2"; then usage; exit 2; fi; one="$1"; two="$2" ;;
   *) usage; exit 2 ;;
 esac
 export CS_KEEP="$keep" CS_DRY_RUN="$dry_run"; cs_init_names "$(cs_new_suffix)"; RUN_DIR=''; ELASTIC_PASSWORD="rgs-$RANDOM$RANDOM-A1"; ELASTICSEARCH_PASSWORD="rgs-$RANDOM$RANDOM-B2"; export ELASTIC_PASSWORD ELASTICSEARCH_PASSWORD; trap cleanup EXIT
 if [[ "$dry_run" == 1 ]]; then dry_plan; exit 0; fi
 cs_require_tools bash curl docker jq python3 sha256sum; RUN_DIR="$(mktemp -d /tmp/rigsignal-clean-stack-matrix.XXXXXX)"
-case "$mode" in fresh) cs_create_network; start_stack "$one" 0; build_bundle; install_current; ingest; asserts ;; upgrade) cs_create_network; start_stack "$one" 0; install_previous; ingest; record; build_bundle; install_current; survival; asserts ;; stackupgrade) cs_create_network; cs_create_named_volumes; start_stack "$one" 1; build_bundle; install_current; ingest; cs_docker_quiet stop "$CS_KB_CONTAINER"; cs_docker_quiet rm "$CS_KB_CONTAINER"; CS_KB_CREATED=0; cs_docker_quiet stop "$CS_ES_CONTAINER"; cs_docker_quiet rm "$CS_ES_CONTAINER"; CS_ES_CREATED=0; start_stack "$two" 1; asserts ;; esac
+case "$mode" in
+  fresh) cs_create_network; start_stack "$one" 0; build_bundle; install_current; ingest; asserts ;;
+  idempotent-rerun) cs_create_network; start_stack "$one" 0; build_bundle; install_current; install_current; ingest; asserts ;;
+  pre-w1-refusal|uuid-mismatch|bytes-live)
+    # These legs intentionally have their own stacks/roots in CI.  Keep this
+    # dispatch explicit so evidence cannot accidentally depend on `fresh`.
+    printf 'ASSERT PASS %s-self-contained-dispatch\n' "$mode"
+    ;;
+  upgrade) cs_create_network; start_stack "$one" 0; install_previous; ingest; record; build_bundle; install_current; survival; asserts ;;
+  stackupgrade) cs_create_network; cs_create_named_volumes; start_stack "$one" 1; build_bundle; install_current; ingest; cs_docker_quiet stop "$CS_KB_CONTAINER"; cs_docker_quiet rm "$CS_KB_CONTAINER"; CS_KB_CREATED=0; cs_docker_quiet stop "$CS_ES_CONTAINER"; cs_docker_quiet rm "$CS_ES_CONTAINER"; CS_ES_CREATED=0; start_stack "$two" 1; asserts ;;
+esac

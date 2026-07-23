@@ -227,6 +227,15 @@ struct ProtectedShipping {
     pending_enrollment: Option<bool>,
     target_generation: Option<String>,
 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ShippingPolicyV1 {
+    ship_mode: String,
+    install_profile: String,
+    outbox_root: PathBuf,
+    target_generation: String,
+    expected_cluster_uuid: String,
+}
 #[derive(Clone)]
 enum Credentials {
     ApiKey(String),
@@ -253,6 +262,7 @@ pub(crate) trait Environment {
     fn value(&self, name: &str) -> Result<Option<String>, ()>;
     fn read_public(&self, path: &Path) -> Result<Vec<u8>, ()>;
     fn read_protected(&self, path: &Path) -> Result<String, ()>;
+    fn read_optional_protected(&self, path: &Path) -> Result<Option<String>, ()>;
 }
 
 pub(crate) struct ProcessEnvironment;
@@ -268,6 +278,12 @@ impl Environment for ProcessEnvironment {
     }
     fn read_protected(&self, path: &Path) -> Result<String, ()> {
         protected_read(path)
+    }
+    fn read_optional_protected(&self, path: &Path) -> Result<Option<String>, ()> {
+        if !path.exists() {
+            return Ok(None);
+        }
+        self.read_protected(path).map(Some)
     }
 }
 
@@ -416,6 +432,10 @@ fn preflight(environment: &impl Environment, args: &CheckArgs) -> Result<Preflig
     };
     let es = config.elasticsearch.unwrap_or_default();
     let shipping = config.shipping.unwrap_or_default();
+    let capsule = match &args.config {
+        Some(path) => read_shipping_policy(environment, path)?,
+        None => None,
+    };
     let endpoint = match &args.endpoint {
         Some(value) => value.clone(),
         None => environment
@@ -428,11 +448,14 @@ fn preflight(environment: &impl Environment, args: &CheckArgs) -> Result<Preflig
         Some(value) => Some(value.clone()),
         None => environment
             .value("RIGSIGNAL_TARGET_GENERATION")?
+            .or(capsule
+                .as_ref()
+                .map(|policy| policy.target_generation.clone()))
             .or(shipping.target_generation.clone()),
     }
     .and_then(|s| TargetGeneration::parse(&s))
     .ok_or(())?;
-    let affinity = resolve_affinity(environment, args, &shipping)?;
+    let affinity = resolve_affinity(environment, args, &shipping, capsule.as_ref())?;
     let ca_path = match &args.ca_file {
         Some(path) => Some(path.clone()),
         None => environment
@@ -497,6 +520,7 @@ fn resolve_affinity(
     environment: &impl Environment,
     args: &CheckArgs,
     shipping: &ProtectedShipping,
+    capsule: Option<&ShippingPolicyV1>,
 ) -> Result<Affinity, ()> {
     let flag = affinity_pair(
         args.expected_cluster_uuid.clone(),
@@ -517,10 +541,36 @@ fn resolve_affinity(
         return Ok(v);
     }
     affinity_pair(
+        capsule.map(|policy| policy.expected_cluster_uuid.clone()),
+        None,
+    )?
+    .or(affinity_pair(
         shipping.expected_cluster_uuid.clone(),
         shipping.pending_enrollment,
-    )?
+    )?)
     .ok_or(())
+}
+
+fn read_shipping_policy(
+    environment: &impl Environment,
+    config_path: &Path,
+) -> Result<Option<ShippingPolicyV1>, ()> {
+    let parent = config_path.parent().ok_or(())?;
+    let Some(text) =
+        environment.read_optional_protected(&parent.join("shipping-policy-v1.toml"))?
+    else {
+        return Ok(None);
+    };
+    let policy: ShippingPolicyV1 = toml::from_str(&text).map_err(|_| ())?;
+    if policy.ship_mode != "on"
+        || policy.install_profile != "user"
+        || !policy.outbox_root.is_absolute()
+        || TargetGeneration::parse(&policy.target_generation).is_none()
+        || ElasticsearchClusterUuid::parse(&policy.expected_cluster_uuid).is_none()
+    {
+        return Err(());
+    }
+    Ok(Some(policy))
 }
 fn affinity_pair(uuid: Option<String>, pending: Option<bool>) -> Result<Option<Affinity>, ()> {
     match (uuid, pending) {
@@ -1351,6 +1401,9 @@ mod tests {
                 })
                 .ok_or(())
         }
+        fn read_optional_protected(&self, path: &Path) -> Result<Option<String>, ()> {
+            Ok(self.protected.get(path).cloned())
+        }
     }
     fn args(pending: bool) -> CheckArgs {
         CheckArgs {
@@ -1950,14 +2003,18 @@ mod tests {
             config: None,
         };
         let shipping = ProtectedShipping::default();
-        assert!(resolve_affinity(&TestEnvironment::default(), &check_args, &shipping).is_err());
+        assert!(
+            resolve_affinity(&TestEnvironment::default(), &check_args, &shipping, None).is_err()
+        );
         check_args.expected_cluster_uuid = Some(UUID.into());
         assert!(matches!(
-            resolve_affinity(&TestEnvironment::default(), &check_args, &shipping),
+            resolve_affinity(&TestEnvironment::default(), &check_args, &shipping, None),
             Ok(Affinity::Expected(_))
         ));
         check_args.pending_enrollment = true;
-        assert!(resolve_affinity(&TestEnvironment::default(), &check_args, &shipping).is_err());
+        assert!(
+            resolve_affinity(&TestEnvironment::default(), &check_args, &shipping, None).is_err()
+        );
         assert!(
             credentials_from_values(Some("".into()), Some("user".into()), Some("pass".into()))
                 .is_err()

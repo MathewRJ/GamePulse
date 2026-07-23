@@ -20,12 +20,41 @@ ASSET_TYPES = {
     "index-templates": "index_templates",
     "pipelines": "pipelines",
     "transforms": "transforms",
+    "security-roles": "security_roles",
 }
 ASSET_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._@-]*\.json\Z")
+W1_ASSET_PATHS = (
+    "elastic/component-templates/logs-rigsignal.diagnosis-mappings.json",
+    "elastic/index-templates/logs-rigsignal.diagnosis.json",
+    "elastic/security-roles/rigsignal_shipper.json",
+)
+W1_RAW_SHA256 = {
+    "elastic/component-templates/logs-rigsignal.diagnosis-mappings.json": "345e0d2898279929eb613b60d2bd250bbf73a13c7b4bbd1b793384e2ae00410c",
+    "elastic/index-templates/logs-rigsignal.diagnosis.json": "5f4d4f403fc17a1096b2d2b1c8a43bad94efa52b05c3b117961333b2f3d52199",
+    "elastic/security-roles/rigsignal_shipper.json": "6eb0279c7e05b94bfd96083508a8c7e6ad5ca9cb65e531654bd6e0ae3eca7ed2",
+}
+TARGET_GENERATION_SCHEME = "rigsignal:target-generation:w1-assets:v1"
+TARGET_GENERATION_KAT = "a7ed20a4b4bfe0b2e5597a065e8bdaa5161b0d962e1a502d3db3bbcc97e8ee7a"
 
 
 class BundleError(Exception):
     """An invalid source tree cannot be bundled."""
+
+
+def reject_duplicate_keys(pairs):
+    value = {}
+    for key, member in pairs:
+        if key in value:
+            raise ValueError(f"duplicate JSON key: {key}")
+        value[key] = member
+    return value
+
+
+def parse_json(data: bytes, path: str):
+    try:
+        return json.loads(data.decode("utf-8"), object_pairs_hook=reject_duplicate_keys)
+    except (UnicodeDecodeError, ValueError, json.JSONDecodeError) as error:
+        raise BundleError(f"invalid JSON asset {path}: {error}") from error
 
 
 def package_version() -> str:
@@ -62,11 +91,9 @@ def read_assets() -> dict[str, bytes]:
         for entry in sorted(base.iterdir()):
             if not entry.is_file() or not ASSET_NAME.fullmatch(entry.name):
                 raise BundleError(f"invalid asset filename: {entry.relative_to(ROOT)}")
-            try:
-                json.loads(entry.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError) as error:
-                raise BundleError(f"invalid JSON asset {entry.relative_to(ROOT)}: {error}") from error
-            paths[entry.relative_to(ROOT).as_posix()] = entry.read_bytes()
+            data = entry.read_bytes()
+            parse_json(data, entry.relative_to(ROOT).as_posix())
+            paths[entry.relative_to(ROOT).as_posix()] = data
     return paths
 
 
@@ -93,7 +120,7 @@ def requires_component(name: str, bundled: set[str]) -> bool:
 
 
 def validate_dependencies(files: dict[str, bytes]) -> None:
-    decoded = {path: json.loads(data) for path, data in files.items()}
+    decoded = {path: parse_json(data, path) for path, data in files.items()}
     pipelines = {
         Path(path).stem for path in files if path.startswith("elastic/pipelines/")
     }
@@ -119,6 +146,30 @@ def validate_dependencies(files: dict[str, bytes]) -> None:
     if missing_pipelines or missing_components:
         details = missing_pipelines + missing_components
         raise BundleError("unresolved asset dependency:\n  " + "\n  ".join(details))
+
+
+def target_generation(files: dict[str, bytes]) -> dict[str, object]:
+    """Return the ratified Option A generation tuple, using raw asset bytes."""
+    if set(W1_ASSET_PATHS) - set(files):
+        raise BundleError("missing required W1 asset")
+    entries = []
+    digest = hashlib.sha256()
+    digest.update(TARGET_GENERATION_SCHEME.encode("utf-8") + b"\0")
+    digest.update(len(W1_ASSET_PATHS).to_bytes(4, "big"))
+    for path in sorted(W1_ASSET_PATHS):
+        raw_hash = hashlib.sha256(files[path]).hexdigest()
+        if raw_hash != W1_RAW_SHA256[path]:
+            raise BundleError(f"W1 raw sha256 mismatch: {path}")
+        encoded_path = path.encode("utf-8")
+        digest.update(len(encoded_path).to_bytes(4, "big"))
+        digest.update(encoded_path)
+        digest.update(bytes.fromhex(raw_hash))
+        entries.append({"path": path, "sha256": raw_hash})
+    value = digest.hexdigest()
+    if value != TARGET_GENERATION_KAT:
+        raise BundleError("W1 target-generation KAT mismatch")
+    return {"scheme": TARGET_GENERATION_SCHEME, "algorithm": "sha256",
+            "input_count": 3, "inputs": entries, "value": value}
 
 
 def read_dashboards() -> dict[str, bytes]:
@@ -148,6 +199,7 @@ def main() -> int:
         version = args.version or package_version()
         assets = read_assets()
         validate_dependencies(assets)
+        generation = target_generation(assets)
         dashboards = read_dashboards()
         all_files = {**assets, **dashboards}
         counts = {output_name: sum(path.startswith(f"elastic/{directory}/") for path in assets)
@@ -162,6 +214,7 @@ def main() -> int:
                 for path, data in sorted(all_files.items())
             },
             "source_commit": args.source_commit,
+            "target_generation": generation,
         }
         manifest_data = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode()
         output = args.output or ROOT / "dist" / f"rigsignal-assets-{version}.tar.gz"
