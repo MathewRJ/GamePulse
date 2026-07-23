@@ -27,13 +27,17 @@ start_stack() {
   local v="$1" volumes="$2" ep='' kp=''
   [[ -v CLEAN_STACK_ES_PORT ]] && ep="$CLEAN_STACK_ES_PORT"; [[ -v CLEAN_STACK_KB_PORT ]] && kp="$CLEAN_STACK_KB_PORT"
   if [[ "$volumes" == 1 ]]; then cs_start_elasticsearch_with_volume "docker.elastic.co/elasticsearch/elasticsearch:$v" "$(cs_port_mapping "$ep" 9200)"; else cs_start_elasticsearch "docker.elastic.co/elasticsearch/elasticsearch:$v" "$(cs_port_mapping "$ep" 9200)"; fi
-  ES_URL="http://$CS_BIND_ADDRESS:$(cs_published_port "$CS_ES_CONTAINER" 9200/tcp)"
+  CS_ES_URL="https://localhost:$(cs_published_port "$CS_ES_CONTAINER" 9200/tcp)"
+  ES_URL="$CS_ES_URL"
+  export CS_ES_URL
   cs_wait_for_elasticsearch "$ES_URL" elastic "$ELASTIC_PASSWORD" "$RUN_DIR/es-health.json" || { cs_timeout_with_logs Elasticsearch "$CS_ES_CONTAINER"; return 1; }
   local status
   status="$(cs_http_to_file "$RUN_DIR/kb-password.json" --user "elastic:$ELASTIC_PASSWORD" --header 'Content-Type: application/json' --request POST --data "{\"password\":\"$ELASTICSEARCH_PASSWORD\"}" "$ES_URL/_security/user/kibana_system/_password")"
   cs_status_is_success "$status" || return 1
   if [[ "$volumes" == 1 ]]; then cs_start_kibana_with_volume "docker.elastic.co/kibana/kibana:$v" "$(cs_port_mapping "$kp" 5601)"; else cs_start_kibana "docker.elastic.co/kibana/kibana:$v" "$(cs_port_mapping "$kp" 5601)"; fi
-  KB_URL="http://$CS_BIND_ADDRESS:$(cs_published_port "$CS_KB_CONTAINER" 5601/tcp)"
+  CS_KIBANA_URL="https://localhost:$(cs_published_port "$CS_KB_CONTAINER" 5601/tcp)"
+  KB_URL="$CS_KIBANA_URL"
+  export CS_KIBANA_URL
   cs_wait_for_kibana "$KB_URL" elastic "$ELASTIC_PASSWORD" "$RUN_DIR/kb-health.json" || { cs_timeout_with_logs Kibana "$CS_ES_CONTAINER" "$CS_KB_CONTAINER"; return 1; }
 }
 build_bundle() {
@@ -46,16 +50,18 @@ PY
 }
 install_current() {
   local root_args=()
+  local installer="${CLEAN_STACK_INSTALL_COMMAND:-}"
   [[ -z "${RIGSIGNAL_ENROLLMENT_ROOT:-}" ]] || root_args=(--enrollment-root "$RIGSIGNAL_ENROLLMENT_ROOT")
-  # The clean-stack launcher intentionally does not downgrade the installer to
-  # HTTP or synthesize credentials.  A live invocation therefore needs the
-  # TLS/bootstrap wrapper used by CI; absent that wrapper this is a hard fail,
-  # never a green dispatch stub.
-  [[ -n "${CLEAN_STACK_INSTALL_COMMAND:-}" ]] || {
+  if [[ -z "$installer" && "${CLEAN_STACK_ALLOW_DEFAULT_INSTALLER:-0}" == 1 ]]; then
+    installer="$SCRIPT_DIR/install-wrapper.sh"
+  fi
+  # A bare matrix invocation must still fail loudly: the default wrapper is an
+  # explicit harness opt-in, never a substitute for a caller's installer.
+  [[ -n "$installer" ]] || {
     printf 'ASSERT FAIL installer-precondition: CLEAN_STACK_INSTALL_COMMAND must provide the HTTPS/CA/admin inputs\n' >&2
     return 1
   }
-  "$CLEAN_STACK_INSTALL_COMMAND" --bundle "$BUNDLE" "${root_args[@]}"
+  "$installer" --bundle "$BUNDLE" "${root_args[@]}"
 }
 install_previous() { RIGSIGNAL_ES_URL="$ES_URL" RIGSIGNAL_ES_AUTH="elastic:$ELASTIC_PASSWORD" "$SCRIPT_DIR/install-previous-state.sh"; }
 owned_snapshot() {
@@ -77,7 +83,10 @@ owned_snapshot() {
   sha256sum "$output" | awk '{print $1}'
 }
 assert_refusal() {
-  local name="$1" root="$2" output="$RUN_DIR/$name-installer.out" before after
+  local name root output before after
+  name="$1"
+  root="$2"
+  output="$RUN_DIR/$name-installer.out"
   before="$(owned_snapshot "$RUN_DIR/$name-before.snapshot" "$root")"
   if install_current >"$output" 2>&1; then
     printf 'ASSERT FAIL %s-nonzero: installer unexpectedly succeeded\n' "$name" >&2
@@ -216,7 +225,7 @@ asserts() {
 dry_plan() {
   printf 'Dry run; generated resource suffix: %s\n' "$CS_SUFFIX"; cs_create_network
   if [[ "$mode" == stackupgrade ]]; then cs_create_named_volumes; cs_start_elasticsearch_with_volume "docker.elastic.co/elasticsearch/elasticsearch:$one" "$(cs_port_mapping '' 9200)"; cs_start_kibana_with_volume "docker.elastic.co/kibana/kibana:$one" "$(cs_port_mapping '' 5601)"; else cs_start_elasticsearch "docker.elastic.co/elasticsearch/elasticsearch:$one" "$(cs_port_mapping '' 9200)"; cs_start_kibana "docker.elastic.co/kibana/kibana:$one" "$(cs_port_mapping '' 5601)"; fi
-  [[ "$mode" == upgrade ]] && printf '%s --dry-run\n' "$SCRIPT_DIR/install-previous-state.sh" || printf 'python3 tools/build_asset_bundle.py; python3 tools/install_assets.py --bundle <run-bundle> --endpoint <https-es> --kibana-endpoint <https-kibana> --profile user\n'
+  [[ "$mode" == upgrade ]] && printf '%s --dry-run\n' "$SCRIPT_DIR/install-previous-state.sh" || printf '%s --bundle <run-bundle> --endpoint <https-es> --ca-file <run-ca> --kibana-endpoint <https-kibana> --kibana-ca-file <run-ca> --profile user\n' "$SCRIPT_DIR/install-wrapper.sh"
   printf 'jq injects @timestamp; curl ingests fixtures and runs all named assertions\n'
   if [[ "$mode" == upgrade ]]; then printf 'python3 tools/build_asset_bundle.py; python3 tools/install_assets.py --bundle <run-bundle>; curl verifies sentinel hashes/counts and reruns all assertions\n'; fi
   if [[ "$mode" == stackupgrade ]]; then cs_docker_quiet stop "$CS_KB_CONTAINER"; cs_docker_quiet rm "$CS_KB_CONTAINER"; cs_docker_quiet stop "$CS_ES_CONTAINER"; cs_docker_quiet rm "$CS_ES_CONTAINER"; cs_start_elasticsearch_with_volume "docker.elastic.co/elasticsearch/elasticsearch:$two" "$(cs_port_mapping '' 9200)"; cs_start_kibana_with_volume "docker.elastic.co/kibana/kibana:$two" "$(cs_port_mapping '' 5601)"; printf 'curl reruns all assertions\n'; fi
@@ -236,9 +245,9 @@ case "$mode" in
   stackupgrade) if [[ $# != 2 ]] || ! version "$1" || ! version "$2"; then usage; exit 2; fi; one="$1"; two="$2" ;;
   *) usage; exit 2 ;;
 esac
-export CS_KEEP="$keep" CS_DRY_RUN="$dry_run"; cs_init_names "$(cs_new_suffix)"; RUN_DIR=''; ELASTIC_PASSWORD="rgs-$RANDOM$RANDOM-A1"; ELASTICSEARCH_PASSWORD="rgs-$RANDOM$RANDOM-B2"; export ELASTIC_PASSWORD ELASTICSEARCH_PASSWORD; trap cleanup EXIT
-if [[ "$dry_run" == 1 ]]; then dry_plan; exit 0; fi
-cs_require_tools bash curl docker jq python3 sha256sum; RUN_DIR="$(mktemp -d /tmp/rigsignal-clean-stack-matrix.XXXXXX)"
+export CS_KEEP="$keep" CS_DRY_RUN="$dry_run"; cs_init_names "$(cs_new_suffix)"; RUN_DIR=''; CS_RUN_DIR=''; ELASTIC_PASSWORD="rgs-$RANDOM$RANDOM-A1"; ELASTICSEARCH_PASSWORD="rgs-$RANDOM$RANDOM-B2"; export ELASTIC_PASSWORD ELASTICSEARCH_PASSWORD; trap cleanup EXIT
+if [[ "$dry_run" == 1 ]]; then cs_set_tls_paths '/tmp/rigsignal-clean-stack-matrix-dry-run'; dry_plan; exit 0; fi
+cs_require_tools bash curl docker jq openssl python3 sha256sum; RUN_DIR="$(mktemp -d /tmp/rigsignal-clean-stack-matrix.XXXXXX)"; chmod 700 "$RUN_DIR"; CS_RUN_DIR="$RUN_DIR"; export CS_RUN_DIR; cs_prepare_tls "$RUN_DIR"
 case "$mode" in
   fresh) cs_create_network; start_stack "$one" 0; build_bundle; install_current; ingest; asserts ;;
   idempotent-rerun) cs_create_network; start_stack "$one" 0; build_bundle; install_current; install_current; ingest; asserts ;;

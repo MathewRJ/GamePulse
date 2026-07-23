@@ -175,6 +175,7 @@ trap cleanup EXIT
 
 if [[ "$dry_run" == '1' ]]; then
   printf 'Dry run; generated resource suffix: %s\n' "$CS_SUFFIX"
+  cs_set_tls_paths '/tmp/rigsignal-clean-stack-dry-run'
   cs_create_network
   cs_start_elasticsearch "$ES_IMAGE" "$ES_PORT_MAPPING"
   cs_start_kibana "$KB_IMAGE" "$KB_PORT_MAPPING"
@@ -183,8 +184,10 @@ if [[ "$dry_run" == '1' ]]; then
   exit 0
 fi
 
-cs_require_tools bash curl jq docker
+cs_require_tools bash curl jq docker openssl
 RUN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/rigsignal-clean-stack.XXXXXX")"
+chmod 700 "$RUN_DIR"
+cs_prepare_tls "$RUN_DIR"
 IMPORT_RESULTS_FILE="$RUN_DIR/import-results.ndjson"
 shopt -s nullglob
 dashboard_files=("$REPO_ROOT"/dashboards/v0.3.1/*.ndjson)
@@ -196,7 +199,9 @@ fi
 cs_create_network
 cs_start_elasticsearch "$ES_IMAGE" "$ES_PORT_MAPPING"
 ES_PORT="$(cs_published_port "$CS_ES_CONTAINER" '9200/tcp')"
-ES_URL="http://${CS_BIND_ADDRESS}:${ES_PORT}"
+CS_ES_URL="https://localhost:${ES_PORT}"
+ES_URL="$CS_ES_URL"
+export CS_ES_URL
 
 ES_HEALTH_FILE="$RUN_DIR/es-health.json"
 if ! cs_wait_for_elasticsearch "$ES_URL" elastic "$ELASTIC_PASSWORD" "$ES_HEALTH_FILE"; then
@@ -222,7 +227,9 @@ fi
 
 cs_start_kibana "$KB_IMAGE" "$KB_PORT_MAPPING"
 KB_PORT="$(cs_published_port "$CS_KB_CONTAINER" '5601/tcp')"
-KB_URL="http://${CS_BIND_ADDRESS}:${KB_PORT}"
+CS_KIBANA_URL="https://localhost:${KB_PORT}"
+KB_URL="$CS_KIBANA_URL"
+export CS_KIBANA_URL
 
 KB_STATUS_FILE="$RUN_DIR/kibana-status.json"
 if ! cs_wait_for_kibana "$KB_URL" elastic "$ELASTIC_PASSWORD" "$KB_STATUS_FILE"; then

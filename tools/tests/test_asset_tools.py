@@ -233,6 +233,64 @@ i.atomic_publication(r, {n: ('new-' + n).encode() for n in ('credentials.toml','
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("ASSERT FAIL installer-precondition:", result.stderr)
 
+        opt_in = subprocess.run([
+            "bash", "-c", function + "\n"
+            + f"SCRIPT_DIR={ROOT / 'scripts/clean-stack'}; BUNDLE=x; "
+            + "unset CLEAN_STACK_INSTALL_COMMAND CS_ES_URL; "
+            + "CLEAN_STACK_ALLOW_DEFAULT_INSTALLER=1; install_current",
+        ], text=True, capture_output=True, check=False)
+        self.assertNotEqual(opt_in.returncode, 0)
+        self.assertIn("CS_ES_URL must be set by the clean-stack harness", opt_in.stderr)
+        self.assertNotIn("ASSERT FAIL installer-precondition:", opt_in.stderr)
+
+    def test_clean_stack_wrapper_assembles_tls_installer_arguments(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            bundle, ca, agent = root / "assets.tar.gz", root / "ca.pem", root / "rigsignal-agent"
+            bundle.touch()
+            ca.touch()
+            agent.touch()
+            agent.chmod(0o755)
+            args_file = root / "installer-args"
+            installer = root / "installer-stub.py"
+            installer.write_text(
+                "#!/usr/bin/env python3\n"
+                "import os, sys\n"
+                "from pathlib import Path\n"
+                "Path(os.environ['WRAPPER_ARGS_FILE']).write_text('\\n'.join(sys.argv[1:]))\n"
+            )
+            installer.chmod(0o755)
+            enrollment_root = root / "enrollment"
+            environment = os.environ.copy()
+            environment.update({
+                "CS_RUN_DIR": str(root),
+                "CS_ES_URL": "https://localhost:9200",
+                "CS_KIBANA_URL": "https://localhost:5601",
+                "CS_CA_FILE": str(ca),
+                "ELASTIC_PASSWORD": "test-password",
+                "CLEAN_STACK_AGENT_BINARY": str(agent),
+                "CLEAN_STACK_INSTALLER": str(installer),
+                "WRAPPER_ARGS_FILE": str(args_file),
+            })
+            result = subprocess.run(
+                [str(ROOT / "scripts/clean-stack/install-wrapper.sh"), "--bundle", str(bundle),
+                 "--enrollment-root", str(enrollment_root)],
+                text=True, capture_output=True, env=environment, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((root / "admin-credentials.toml").stat().st_mode & 0o777, 0o600)
+            self.assertEqual(args_file.read_text().splitlines(), [
+                "--bundle", str(bundle),
+                "--endpoint", "https://localhost:9200",
+                "--ca-file", str(ca),
+                "--kibana-endpoint", "https://localhost:5601",
+                "--kibana-ca-file", str(ca),
+                "--admin-credentials-file", str(root / "admin-credentials.toml"),
+                "--agent-binary", str(agent),
+                "--profile", "user",
+                "--enrollment-root", str(enrollment_root),
+            ])
+
     def test_fault_hook_is_inert_unless_named(self):
         old = os.environ.pop("RIGSIGNAL_TEST_CRASH_AT", None)
         try: INSTALL.fault("before-mint-response")

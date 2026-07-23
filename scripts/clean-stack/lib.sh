@@ -13,6 +13,8 @@ CS_ES_CREATED=0
 CS_KB_CREATED=0
 CS_ES_VOLUME_CREATED=0
 CS_KB_VOLUME_CREATED=0
+CS_TLS_DIR=''
+CS_CA_FILE=''
 
 cs_usage_error() {
   printf 'error: %s\n' "$1" >&2
@@ -40,6 +42,53 @@ cs_init_names() {
   CS_KB_CONTAINER="rigsignal-kibana-${CS_SUFFIX}"
   CS_ES_DATA_VOLUME="rigsignal-es-data-${CS_SUFFIX}"
   CS_KB_DATA_VOLUME="rigsignal-kibana-data-${CS_SUFFIX}"
+}
+
+cs_set_tls_paths() {
+  local run_dir="$1"
+
+  CS_TLS_DIR="${run_dir}/tls"
+  CS_CA_FILE="${CS_TLS_DIR}/ca.pem"
+  export CS_TLS_DIR CS_CA_FILE
+}
+
+cs_prepare_tls() {
+  local run_dir="$1"
+
+  cs_require_tools openssl
+  cs_set_tls_paths "$run_dir"
+  umask 077
+  [[ -d "$run_dir" ]] || { cs_usage_error "TLS run directory does not exist: $run_dir"; return 1; }
+  mkdir -m 700 "$CS_TLS_DIR"
+
+  # The one server certificate is presented by both HTTP endpoints.  Including
+  # the ephemeral container names lets Kibana verify its in-network ES URL.
+  openssl req -x509 -new -nodes -newkey rsa:2048 \
+    -keyout "${CS_TLS_DIR}/ca.key" \
+    -out "$CS_CA_FILE" \
+    -days 1 \
+    -subj '/CN=RigSignal Clean Stack CA' \
+    -addext 'basicConstraints=critical,CA:TRUE' \
+    -addext 'keyUsage=critical,keyCertSign,cRLSign' >/dev/null 2>&1
+  openssl req -new -nodes -newkey rsa:2048 \
+    -keyout "${CS_TLS_DIR}/server.key" \
+    -out "${CS_TLS_DIR}/server.csr" \
+    -subj '/CN=localhost' \
+    -addext "subjectAltName=DNS:localhost,IP:127.0.0.1,DNS:${CS_ES_CONTAINER},DNS:${CS_KB_CONTAINER}" >/dev/null 2>&1
+  openssl x509 -req \
+    -in "${CS_TLS_DIR}/server.csr" \
+    -CA "$CS_CA_FILE" \
+    -CAkey "${CS_TLS_DIR}/ca.key" \
+    -CAcreateserial \
+    -out "${CS_TLS_DIR}/server.pem" \
+    -days 1 \
+    -sha256 \
+    -copy_extensions copy >/dev/null 2>&1
+  chmod 600 "$CS_TLS_DIR"/*
+
+  # curl is used throughout the harness, including a few direct calls in the
+  # matrix assertions.  Set its CA input once rather than weakening any call.
+  export CURL_CA_BUNDLE="$CS_CA_FILE"
 }
 
 cs_print_command() {
@@ -90,8 +139,13 @@ cs_start_elasticsearch() {
     --name "$CS_ES_CONTAINER" \
     --network "$CS_NETWORK" \
     --publish "$port_mapping" \
+    --volume "${CS_TLS_DIR}:/usr/share/elasticsearch/config/certs:ro" \
     --env 'discovery.type=single-node' \
     --env 'xpack.security.enabled=true' \
+    --env 'xpack.security.http.ssl.enabled=true' \
+    --env 'xpack.security.http.ssl.key=/usr/share/elasticsearch/config/certs/server.key' \
+    --env 'xpack.security.http.ssl.certificate=/usr/share/elasticsearch/config/certs/server.pem' \
+    --env 'xpack.security.http.ssl.certificate_authorities=/usr/share/elasticsearch/config/certs/ca.pem' \
     --env ELASTIC_PASSWORD \
     "$image"
   CS_ES_CREATED=1
@@ -113,8 +167,13 @@ cs_start_elasticsearch_with_volume() {
     --network "$CS_NETWORK" \
     --publish "$port_mapping" \
     --volume "${CS_ES_DATA_VOLUME}:/usr/share/elasticsearch/data" \
+    --volume "${CS_TLS_DIR}:/usr/share/elasticsearch/config/certs:ro" \
     --env 'discovery.type=single-node' \
     --env 'xpack.security.enabled=true' \
+    --env 'xpack.security.http.ssl.enabled=true' \
+    --env 'xpack.security.http.ssl.key=/usr/share/elasticsearch/config/certs/server.key' \
+    --env 'xpack.security.http.ssl.certificate=/usr/share/elasticsearch/config/certs/server.pem' \
+    --env 'xpack.security.http.ssl.certificate_authorities=/usr/share/elasticsearch/config/certs/ca.pem' \
     --env ELASTIC_PASSWORD \
     "$image"
   CS_ES_CREATED=1
@@ -128,8 +187,13 @@ cs_start_kibana() {
     --name "$CS_KB_CONTAINER" \
     --network "$CS_NETWORK" \
     --publish "$port_mapping" \
+    --volume "${CS_TLS_DIR}:/usr/share/kibana/config/certs:ro" \
     --env 'SERVER_HOST=0.0.0.0' \
-    --env "ELASTICSEARCH_HOSTS=http://${CS_ES_CONTAINER}:9200" \
+    --env 'SERVER_SSL_ENABLED=true' \
+    --env 'SERVER_SSL_CERTIFICATE=/usr/share/kibana/config/certs/server.pem' \
+    --env 'SERVER_SSL_KEY=/usr/share/kibana/config/certs/server.key' \
+    --env "ELASTICSEARCH_HOSTS=[\"https://${CS_ES_CONTAINER}:9200\"]" \
+    --env 'ELASTICSEARCH_SSL_CERTIFICATEAUTHORITIES=["/usr/share/kibana/config/certs/ca.pem"]' \
     --env 'ELASTICSEARCH_USERNAME=kibana_system' \
     --env ELASTICSEARCH_PASSWORD \
     "$image"
@@ -145,8 +209,13 @@ cs_start_kibana_with_volume() {
     --network "$CS_NETWORK" \
     --publish "$port_mapping" \
     --volume "${CS_KB_DATA_VOLUME}:/usr/share/kibana/data" \
+    --volume "${CS_TLS_DIR}:/usr/share/kibana/config/certs:ro" \
     --env 'SERVER_HOST=0.0.0.0' \
-    --env "ELASTICSEARCH_HOSTS=http://${CS_ES_CONTAINER}:9200" \
+    --env 'SERVER_SSL_ENABLED=true' \
+    --env 'SERVER_SSL_CERTIFICATE=/usr/share/kibana/config/certs/server.pem' \
+    --env 'SERVER_SSL_KEY=/usr/share/kibana/config/certs/server.key' \
+    --env "ELASTICSEARCH_HOSTS=[\"https://${CS_ES_CONTAINER}:9200\"]" \
+    --env 'ELASTICSEARCH_SSL_CERTIFICATEAUTHORITIES=["/usr/share/kibana/config/certs/ca.pem"]' \
     --env 'ELASTICSEARCH_USERNAME=kibana_system' \
     --env ELASTICSEARCH_PASSWORD \
     "$image"
