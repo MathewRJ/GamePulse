@@ -661,7 +661,18 @@ def projection(asset: Asset, response: object) -> object:
         # allowed, preventing an envelope or plural response from passing.
         if set(response) != {asset.name}:
             raise InputError("canonical role GET projection is missing")
-        return response[asset.name]
+        role = _strip_server_metadata(response[asset.name], _ROLE_SERVER_KEYS, _ROLE_EMPTY_DEFAULT_KEYS)
+        if isinstance(role, dict) and isinstance(role.get("indices"), list):
+            # GET injects allow_restricted_indices into each grant; false is
+            # the server default and is stripped, true is an escalation and
+            # is deliberately kept so equality fails.
+            role = dict(role)
+            role["indices"] = [
+                {k: v for k, v in entry.items() if not (k == "allow_restricted_indices" and v is False)}
+                if isinstance(entry, dict) else entry
+                for entry in role["indices"]
+            ]
+        return role
     else:
         raise InputError("canonical GET projection is unsupported")
     if not isinstance(values, list) or len(values) != 1 or not isinstance(values[0], dict):
@@ -669,14 +680,60 @@ def projection(asset: Asset, response: object) -> object:
     item = values[0]
     if item.get("name") not in (None, asset.name) or key not in item:
         raise InputError("canonical GET projection is missing")
-    return item[key]
+    return _strip_server_metadata(item[key], _TEMPLATE_SERVER_KEYS, ())
+
+
+# Spec v2.1: "Server envelope/name/timestamp/order is not projected."  ES 9.4
+# stamps GET responses with server-generated metadata that the request body
+# never carried.  Exactly-known keys are stripped unconditionally; the
+# empty-default keys are stripped only when empty, so an unexpected non-empty
+# grant (e.g. an injected applications entry) still fails equality.
+_TEMPLATE_SERVER_KEYS = ("created_date", "created_date_millis", "modified_date", "modified_date_millis")
+_ROLE_SERVER_KEYS = ("transient_metadata",)
+_ROLE_EMPTY_DEFAULT_KEYS = ("applications", "run_as", "metadata", "remote_indices", "remote_cluster", "global")
+
+
+def _strip_server_metadata(body: object, drop: tuple, drop_if_empty: tuple) -> object:
+    if not isinstance(body, dict):
+        return body
+    projected = {k: v for k, v in body.items() if k not in drop}
+    for key in drop_if_empty:
+        if key in projected and projected[key] in ([], {}, None):
+            del projected[key]
+    return projected
+
+
+def _normalize_settings_scalars(body: object) -> object:
+    """ES stores index settings as strings and returns them so on GET; render
+    both sides' template.settings scalars in ES string form before equality."""
+    if not isinstance(body, dict):
+        return body
+    normalized = dict(body)
+    template = normalized.get("template")
+    if isinstance(template, dict) and isinstance(template.get("settings"), dict):
+        def render(value: object) -> object:
+            if isinstance(value, bool):
+                return "true" if value else "false"
+            if isinstance(value, (int, float)):
+                return str(value)
+            if isinstance(value, dict):
+                return {k: render(v) for k, v in value.items()}
+            if isinstance(value, list):
+                return [render(v) for v in value]
+            return value
+        template = dict(template)
+        template["settings"] = render(template["settings"])
+        normalized["template"] = template
+    return normalized
 
 
 def verify_asset(base: str, authorization: str, asset: Asset) -> None:
     response = json_response(request(base, es_path(asset), "GET", authorization))
     expected = parse_json(asset.data, asset.path)
     if asset.kind in {"component_templates", "index_templates", "security_roles"}:
-        if jcs(projection(asset, response)) != jcs(expected):
+        got = _normalize_settings_scalars(projection(asset, response))
+        want = _normalize_settings_scalars(expected)
+        if jcs(got) != jcs(want):
             raise InputError("canonical asset GET differs")
 
 
@@ -809,13 +866,28 @@ def owned_mapping_projection(mappings: object, ignore_malformed: object,
         target = projected["mappings"]
         for part in path[:-1]:
             target = target.setdefault(part, {})
-        target[path[-1]] = required_path(mappings, path)
+        target[path[-1]] = _drop_default_ignore_malformed(required_path(mappings, path))
+    return projected
+
+
+def _drop_default_ignore_malformed(node: object) -> object:
+    """ES composition normalizes an explicit field-level ignore_malformed:false
+    away (ratified P0 evidence: simulate renders @timestamp as {"type":"date"});
+    the hardening is asserted at the settings level. Only the false default is
+    dropped — ignore_malformed:true anywhere still fails equality."""
+    if not isinstance(node, dict):
+        return node
+    projected = {k: _drop_default_ignore_malformed(v) for k, v in node.items()}
+    if projected.get("ignore_malformed") is False:
+        del projected["ignore_malformed"]
     return projected
 
 
 def simulated_owned_mapping_projection(es_url: str, authorization: str) -> dict:
+    # No body: a JSON body (even {}) is read as an inline template override
+    # and ES then requires index_patterns.
     result = es_json(es_url, "/_index_template/_simulate_index/" + DIAGNOSIS_STREAM,
-                     "POST", authorization, {})
+                     "POST", authorization, None)
     template = required_path(result, ("template",))
     mappings = required_path(template, ("mappings",))
     ignore_malformed = required_path(template, ("settings", "index", "mapping", "ignore_malformed"))
@@ -1024,9 +1096,28 @@ def verify_role_matrix(es_url: str, authorization: str, suffix: str) -> None:
             raise InputError("candidate privilege CAN check failed")
     if response_status(es_url, path, "POST", authorization, document) != 409:
         raise InputError("candidate duplicate create check failed")
-    denied = ((path, "PUT", document), ("/" + DIAGNOSIS_STREAM + "/_doc/provision-" + suffix, "GET", None),
+    # Overwrite proof, two layers (live wire disproved the 403 expectation:
+    # data streams reject index-ops at request validation BEFORE authorization,
+    # so PUT _doc returns 400 for any principal — structural impossibility):
+    # (1) the 400 op_type guard below, (2) _has_privileges must show every
+    # mutating privilege false on the exact stream name.
+    if response_status(es_url, "/" + DIAGNOSIS_STREAM + "/_doc/provision-" + suffix,
+                       "PUT", authorization, document) != 400:
+        raise InputError("candidate overwrite op_type guard check failed")
+    privileges = es_json(es_url, "/_security/user/_has_privileges", "POST", authorization, {
+        "index": [{"names": [DIAGNOSIS_STREAM],
+                   "privileges": ["index", "write", "delete", "delete_index", "manage"]}]})
+    granted = privileges.get("index", {}).get(DIAGNOSIS_STREAM, {}) if isinstance(privileges, dict) else {}
+    if not granted or any(granted.get(p) is not False for p in
+                          ("index", "write", "delete", "delete_index", "manage")):
+        raise InputError("candidate overwrite privilege check failed")
+    denied = (("/" + DIAGNOSIS_STREAM + "/_doc/provision-" + suffix, "GET", None),
               ("/" + DIAGNOSIS_STREAM + "/_search", "POST", {"query": {"match_all": {}}}),
-              ("/_component_template/forbidden", "PUT", {}), ("/_index_template/forbidden", "PUT", {}),
+              # Bodies must be minimally VALID: ES validates the request shape
+              # before authorization, so {} would 400 without proving denial.
+              ("/_component_template/forbidden", "PUT", {"template": {"settings": {}}}),
+              ("/_index_template/forbidden", "PUT",
+               {"index_patterns": ["forbidden-provision-probe-*"], "template": {"settings": {}}}),
               ("/logs-rigsignal.diagnosis-other/_create/no", "POST", document))
     for item, method, payload in denied:
         if response_status(es_url, item, method, authorization, payload) != 403:

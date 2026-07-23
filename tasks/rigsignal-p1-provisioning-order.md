@@ -307,7 +307,14 @@ Template-only change skips mint only after active proof and follows the applicab
 
 uninstall.sh --purge requires --endpoint HTTPS_URL --ca-file PATH --admin-credentials-file PATH --enrollment-root PATH. It rejects absent/redirected/unprotected inputs and authenticates only protected administrator credential. It discovers every candidate using a persisted pending_mint_name, then revokes active_key_id ∪ pending_revoke_ids ∪ candidate_key_id ∪ those discovered candidates, confirms invalidated/already-invalidated for every ID, and only then deletes candidate and committed credential/config/capsule/state material. Failure retains every retry-critical local file/state and returns uninstall purge failed: shipper API key revocation:. Default uninstall still preserves shared W1 assets/data.
 
-Role matrix has duplicate _create same ID -> 409 delivery proof and additionally shipper PUT exact-stream _doc existing-id -> 403 overwrite proof. Administrator pre-creates logs-rigsignal.diagnosis-other; shipper _create -> 403 proves authorization denial. Separate strict writes use unknown root, unknown rigsignal.diagnosis, malformed rigsignal.diagnosis.confidence; each rejects with no _ignored/failure-store artifact.
+Role matrix has duplicate _create same ID -> 409 delivery proof and a TWO-LAYER overwrite proof
+(CORRECTED 2026-07-23d from live wire evidence: data streams reject index-ops at request validation
+BEFORE authorization, so `PUT _doc existing-id` returns 400 for any principal and the originally
+ratified 403 expectation is unsatisfiable): (1) shipper PUT exact-stream _doc existing-id -> 400
+op_type guard (structural overwrite impossibility on the destination), AND (2)
+`_has_privileges` on the exact stream name shows `index`, `write`, `delete`, `delete_index`, and
+`manage` all false (privilege-level proof; self-check needs no extra grant). Denial-row request
+bodies must be minimally VALID (an empty body 400s at validation and proves nothing). Administrator pre-creates logs-rigsignal.diagnosis-other; shipper _create -> 403 proves authorization denial. Separate strict writes use unknown root, unknown rigsignal.diagnosis, malformed rigsignal.diagnosis.confidence; each rejects with no _ignored/failure-store artifact.
 
 RFC 8785/JCS is sole DiagnosisEvent serialization. try_from_outcome returns ValidatedDiagnosisEvent with private immutable event and canonical_bytes Arc byte slice, exposes only immutable event() and canonical_bytes(), and has no mutable accessor. It calls serialize_diagnosis_event_jcs exactly once; future outbox persists/sends those bytes, never reserializes/recounts. Named saturate_event_byte_count(actual: u64)->u32 is called in production over-cap branch; synthetic 4294967296 returns 4294967295 without giant allocation.
 
@@ -430,7 +437,7 @@ Credentials/passwords/authorization headers and raw installer bodies are forbidd
 | capsule / tier replacement | Versioned ON capsule replaces tier 3-4 shipping. | Parser/precedence tests. | Invalid ON fail-closed; zero-env handshake succeeds. |
 | credential state | Active/pending/candidate/UUID/role/generation survive crash. | v2.4 fault rows. | No orphan/lost ID; marker last/no advance. |
 | protected purge | Every active/pending ID admin-revoked first. | Protected admin mocks. | Confirm all before delete; failure retains state. |
-| overwrite / other stream | Overwrite 403, existing other target denial. | Live role matrix. | PUT 403; duplicate 409; other 403. |
+| overwrite / other stream | Overwrite impossible at both layers; existing other target denial. | Live role matrix. | PUT _doc 400 op_type guard; `_has_privileges` all-false on mutating grants; duplicate 409; other 403. |
 | immutable JCS bytes | One immutable retained canonical vector. | Rust API/static test. | No mutable/re-serialize; helper production-called. |
 | fixture checkpoint | Exact four pairs before code; old inventory exact. | `fixture-only-§15.1-byte-cap-v1` checkpoint approval/inventory diff. | Recorded checkpoint approval precedes production diff; only named files/MANIFEST rows; all baseline hashes match. |
 | executable matrix | State legs declare root/composite. | Command/evidence list. | Fresh x2, rerun x2, refusal x2, mismatch x2, upgrade-rollover, bytes x2 PASS. |
