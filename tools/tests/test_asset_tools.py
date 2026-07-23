@@ -77,6 +77,33 @@ class AssetToolsTests(unittest.TestCase):
         self.assertEqual(INSTALL.validate_state(intent)["phase"], "mint_intent")
         staged = dict(intent); staged.update(phase="candidate_staged", candidate_key_id="candidate")
         self.assertEqual(INSTALL.validate_state(staged)["phase"], "candidate_staged")
+        published = dict(staged); published.update(phase="candidate_verified", active_key_id="candidate",
+                                                   pending_mint_name="published-pending-revoke")
+        self.assertEqual(INSTALL.validate_state(published)["phase"], "candidate_verified")
+        for mutation in (
+            lambda value: value.update(phase="unknown"),
+            lambda value: value.update(active_key_id=""),
+            lambda value: value.update(pending_revoke_ids=["duplicate", "duplicate"]),
+            lambda value: value.update(candidate_key_id="x" * 1025),
+        ):
+            bad = dict(state); mutation(bad)
+            with self.assertRaises(INSTALL.InputError): INSTALL.validate_state(bad)
+
+    def test_recovery_discovers_all_keys_by_mint_intent_name(self):
+        calls = []
+        old_json, old_invalidate = INSTALL.es_json, INSTALL.invalidate
+        INSTALL.es_json = lambda *_args: {"api_keys": [
+            {"name": "mint", "id": "new-a"}, {"name": "mint", "id": "new-b"},
+        ]}
+        INSTALL.invalidate = lambda _url, _auth, ids: calls.append(ids)
+        try:
+            INSTALL.invalidate_mint_name("https://x", "admin", "mint")
+            self.assertEqual(calls, [["new-a", "new-b"]])
+            INSTALL.es_json = lambda *_args: {"api_keys": [{"name": "other", "id": "new-a"}]}
+            with self.assertRaises(INSTALL.InputError):
+                INSTALL.invalidate_mint_name("https://x", "admin", "mint")
+        finally:
+            INSTALL.es_json, INSTALL.invalidate = old_json, old_invalidate
 
     def test_duplicate_state_keys_rejected_and_atomic_mode_is_private(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -87,6 +114,37 @@ class AssetToolsTests(unittest.TestCase):
             with self.assertRaises(INSTALL.InputError): INSTALL.load_state(root)
             INSTALL.atomic_write(root, "credentials.toml", b"[elasticsearch]\napi_key = \"secret\"\n")
             self.assertEqual((root / "credentials.toml").stat().st_mode & 0o777, 0o600)
+
+    def test_publication_exchanges_all_consumer_files_as_one_generation(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "enrollment"; root.mkdir(mode=0o700); root.chmod(0o700)
+            old = {name: ("old-" + name).encode() for name in
+                   ("credentials.toml", "handshake.toml", "shipping-policy-v1.toml", "state.json")}
+            new = {name: ("new-" + name).encode() for name in old}
+            for name, value in old.items(): INSTALL.atomic_write(root, name, value)
+            candidate = INSTALL.secure_candidate_root(root)
+            INSTALL.atomic_write(candidate, "credentials.toml", b"candidate-secret")
+            INSTALL.atomic_publication(root, new)
+            self.assertEqual({name: (root / name).read_bytes() for name in new}, new)
+            self.assertFalse((root / "candidate").exists())
+            self.assertFalse((root.parent / ".rigsignal-publication-enrollment").exists())
+
+    def test_publication_fault_leaves_the_previous_generation_visible(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "enrollment"; root.mkdir(mode=0o700); root.chmod(0o700)
+            names = ("credentials.toml", "handshake.toml", "shipping-policy-v1.toml", "state.json")
+            old = {name: ("old-" + name).encode() for name in names}
+            for name, value in old.items(): INSTALL.atomic_write(root, name, value)
+            program = """from pathlib import Path
+from tools import install_assets as i
+r=Path(__import__('sys').argv[1])
+i.atomic_publication(r, {n: ('new-' + n).encode() for n in ('credentials.toml','handshake.toml','shipping-policy-v1.toml','state.json')})
+"""
+            environment = os.environ | {"RIGSIGNAL_TEST_CRASH_AT": "publication-credentials.toml"}
+            result = subprocess.run([sys.executable, "-c", program, str(root)], cwd=ROOT,
+                                    env=environment, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 99)
+            self.assertEqual({name: (root / name).read_bytes() for name in names}, old)
 
     def test_canonical_get_requires_exact_single_projection(self):
         asset = INSTALL.Asset("security_roles", "rigsignal_shipper", "x", (ROOT / "elastic/security-roles/rigsignal_shipper.json").read_bytes())
@@ -124,8 +182,11 @@ class AssetToolsTests(unittest.TestCase):
         old_json = INSTALL.es_json
         INSTALL.es_json = lambda *a, **k: {"data_streams": [{"name": INSTALL.DIAGNOSIS_STREAM,
             "indices": [{"index_name": ".ds-one"}, {"index_name": ".ds-two"}]}]}
-        old_desired, old_backing = INSTALL.simulated_owned_mapping_projection, INSTALL.backing_owned_mapping_projection
+        old_desired, old_canonical, old_backing = (INSTALL.simulated_owned_mapping_projection,
+                                                   INSTALL.canonical_owned_mapping_projection,
+                                                   INSTALL.backing_owned_mapping_projection)
         INSTALL.simulated_owned_mapping_projection = lambda *a: projection
+        INSTALL.canonical_owned_mapping_projection = lambda: projection
         INSTALL.backing_owned_mapping_projection = lambda *a: projection
         try:
             self.assertTrue(INSTALL.existing_stream_is_compatible("https://x", "auth", state, uuid_value))
@@ -133,7 +194,9 @@ class AssetToolsTests(unittest.TestCase):
                 "index.mapping.ignore_malformed": True, "index.failure_store.enabled": False}}
             self.assertFalse(INSTALL.existing_stream_is_compatible("https://x", "auth", state, uuid_value))
         finally:
-            INSTALL.es_json, INSTALL.simulated_owned_mapping_projection, INSTALL.backing_owned_mapping_projection = old_json, old_desired, old_backing
+            (INSTALL.es_json, INSTALL.simulated_owned_mapping_projection,
+             INSTALL.canonical_owned_mapping_projection, INSTALL.backing_owned_mapping_projection) = (
+                old_json, old_desired, old_canonical, old_backing)
 
     def test_stream_write_rejects_ignored_or_failure_store_and_queries_failures(self):
         old_json = INSTALL.es_json

@@ -3,6 +3,7 @@
 
 import argparse
 import base64
+import ctypes
 import hashlib
 import json
 import os
@@ -442,19 +443,33 @@ def validate_state(value: object) -> dict:
             raise InputError("state.json schema is invalid")
     for key, cap in (("active_key_id", 1024), ("candidate_key_id", 1024), ("pending_mint_name", 255)):
         item = value[key]
-        if item is not None and (not isinstance(item, str) or len(item.encode("utf-8")) > cap):
+        if item is not None and (not isinstance(item, str) or not item
+                                 or len(item.encode("utf-8")) > cap):
             raise InputError("state.json schema is invalid")
     pending = value["pending_revoke_ids"]
-    if (not isinstance(pending, list) or any(not isinstance(item, str) or len(item.encode("utf-8")) > 1024
+    if (not isinstance(pending, list) or any(not isinstance(item, str) or not item
+                                             or len(item.encode("utf-8")) > 1024
                                              for item in pending)
             or pending != sorted(set(pending))):
         raise InputError("state.json schema is invalid")
     phase = value["phase"]
     if phase == "committed" and (value["active_key_id"] is None or pending or value["pending_mint_name"] is not None or value["candidate_key_id"] is not None):
         raise InputError("state.json invariant is invalid")
-    if phase == "mint_intent" and (value["pending_mint_name"] is None or value["candidate_key_id"] is not None):
+    if phase == "mint_intent" and (value["pending_mint_name"] is None or value["candidate_key_id"] is not None
+                                    or pending):
         raise InputError("state.json invariant is invalid")
-    if phase in {"candidate_staged", "candidate_verified"} and (value["pending_mint_name"] is None or value["candidate_key_id"] is None):
+    if phase == "candidate_staged" and (value["pending_mint_name"] is None or value["candidate_key_id"] is None
+                                         or pending or value["candidate_key_id"] == value["active_key_id"]):
+        raise InputError("state.json invariant is invalid")
+    if phase == "candidate_verified" and (value["pending_mint_name"] is None or value["candidate_key_id"] is None):
+        raise InputError("state.json invariant is invalid")
+    if phase == "candidate_verified" and value["active_key_id"] == value["candidate_key_id"]:
+        # This is the post-directory-exchange state.  A first enrollment has
+        # no replaced ID, so its pending list is correctly empty; the sentinel
+        # distinguishes it from an uncommitted candidate.
+        if value["pending_mint_name"] != "published-pending-revoke":
+            raise InputError("state.json invariant is invalid")
+    elif phase == "candidate_verified" and pending:
         raise InputError("state.json invariant is invalid")
     return value
 
@@ -476,6 +491,32 @@ def secure_root(root: Path) -> None:
     if (not stat.S_ISDIR(st.st_mode) or stat.S_ISLNK(st.st_mode) or st.st_uid != os.geteuid()
             or st.st_mode & 0o077):
         raise InputError("enrollment root is not protected")
+
+
+def secure_candidate_root(root: Path) -> Path:
+    """Return the private, non-consumer-visible staging directory."""
+    secure_root(root)
+    candidate = root / "candidate"
+    candidate.mkdir(mode=0o700, exist_ok=True)
+    st = candidate.lstat()
+    if (not stat.S_ISDIR(st.st_mode) or stat.S_ISLNK(st.st_mode) or st.st_uid != os.geteuid()
+            or st.st_mode & 0o077):
+        raise InputError("candidate enrollment directory is not protected")
+    return candidate
+
+
+def remove_candidate_root(root: Path) -> None:
+    candidate = root / "candidate"
+    if not candidate.exists():
+        return
+    secure_candidate_root(root)
+    for name in ("credentials.toml", "handshake.toml", "shipping-policy-v1.toml", "state.json"):
+        path = candidate / name
+        if path.exists():
+            if path.is_symlink() or not path.is_file():
+                raise InputError("candidate enrollment output is invalid")
+            path.unlink()
+    candidate.rmdir()
 
 
 def atomic_write(root: Path, name: str, data: bytes) -> None:
@@ -511,11 +552,93 @@ def atomic_write(root: Path, name: str, data: bytes) -> None:
 
 
 def atomic_publication(root: Path, files: dict[str, bytes]) -> None:
-    # Every member is independently atomic and fsynced.  state is written last,
-    # so recovery sees either the prior committed state or a complete candidate.
+    """Atomically exchange the whole consumer-visible enrollment generation.
+
+    Four independent ``rename`` calls still permit a reader to observe a mixed
+    credential/configuration generation.  Linux's same-parent rename exchange
+    gives the directory path one atomic old-or-new transition; all member files
+    are fsynced in a private sibling before that transition.
+    """
+    secure_root(root)
+    parent = root.parent
+    try:
+        parent_st = parent.lstat()
+    except OSError as error:
+        raise InputError("cannot publish enrollment output") from error
+    if (not stat.S_ISDIR(parent_st.st_mode) or stat.S_ISLNK(parent_st.st_mode)
+            or parent_st.st_uid != os.geteuid() or parent_st.st_mode & 0o022):
+        raise InputError("enrollment parent is not protected")
+    stage = _publication_stage(root)
+    try:
+        stage.mkdir(mode=0o700)
+    except FileExistsError as error:
+        raise InputError("stale enrollment publication exists") from error
+    exchanged = False
+    try:
+        for name in ("credentials.toml", "handshake.toml", "shipping-policy-v1.toml", "state.json"):
+            atomic_write(stage, name, files[name])
+            fault("publication-" + name)
+        _rename_exchange(root, stage)
+        exchanged = True
+        fault("publication-exchange")
+        directory_fd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+        _remove_old_enrollment_generation(stage)
+    except OSError as error:
+        raise InputError("cannot publish enrollment output") from error
+    finally:
+        # Before an exchange this directory contains an uncommitted key.  A
+        # normal failure must not strand it outside the root's candidate tree;
+        # a power loss is handled by the deterministic cleanup on recovery.
+        if not exchanged and stage.exists():
+            try:
+                _remove_old_enrollment_generation(stage)
+            except (InputError, OSError):
+                pass
+
+
+def _publication_stage(root: Path) -> Path:
+    return root.parent / (".rigsignal-publication-" + root.name)
+
+
+def remove_stale_publication_stage(root: Path) -> None:
+    stage = _publication_stage(root)
+    if stage.exists():
+        _remove_old_enrollment_generation(stage)
+
+
+def _rename_exchange(left: Path, right: Path) -> None:
+    """Use renameat2(RENAME_EXCHANGE), failing closed if unavailable."""
+    try:
+        renameat2 = ctypes.CDLL(None, use_errno=True).renameat2
+    except AttributeError as error:
+        raise InputError("atomic enrollment publication is unsupported") from error
+    renameat2.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint)
+    renameat2.restype = ctypes.c_int
+    if renameat2(-100, os.fsencode(left), -100, os.fsencode(right), 2) != 0:  # AT_FDCWD, RENAME_EXCHANGE
+        error = ctypes.get_errno()
+        raise InputError("atomic enrollment publication is unsupported") from OSError(error, os.strerror(error))
+
+
+def _remove_old_enrollment_generation(root: Path) -> None:
+    """Remove the exchange's old private tree without traversing unexpected files."""
+    secure_root(root)
+    allowed = {"credentials.toml", "handshake.toml", "shipping-policy-v1.toml", "state.json", "candidate"}
+    entries = {entry.name for entry in root.iterdir()}
+    if not entries.issubset(allowed):
+        raise InputError("old enrollment generation is invalid")
     for name in ("credentials.toml", "handshake.toml", "shipping-policy-v1.toml", "state.json"):
-        atomic_write(root, name, files[name])
-        fault("publication-" + name)
+        path = root / name
+        if path.exists():
+            st = path.lstat()
+            if not stat.S_ISREG(st.st_mode) or stat.S_ISLNK(st.st_mode):
+                raise InputError("old enrollment generation is invalid")
+            path.unlink()
+    remove_candidate_root(root)
+    root.rmdir()
 
 
 def fault(point: str) -> None:
@@ -700,6 +823,24 @@ def simulated_owned_mapping_projection(es_url: str, authorization: str) -> dict:
     return owned_mapping_projection(mappings, ignore_malformed, failure_store_enabled)
 
 
+def canonical_owned_mapping_projection() -> dict:
+    """The fixed W1 owned surface, independent of live template simulation."""
+    component = parse_json(
+        (ROOT / "elastic/component-templates/logs-rigsignal.diagnosis-mappings.json").read_bytes(),
+        "canonical W1 component",
+    )
+    index = parse_json(
+        (ROOT / "elastic/index-templates/logs-rigsignal.diagnosis.json").read_bytes(),
+        "canonical W1 index template",
+    )
+    mappings = required_path(component, ("template", "mappings"))
+    return owned_mapping_projection(
+        mappings,
+        required_path(index, ("template", "settings", "index", "mapping", "ignore_malformed")),
+        required_path(index, ("template", "data_stream_options", "failure_store", "enabled")),
+    )
+
+
 def backing_owned_mapping_projection(es_url: str, authorization: str, index_name: str) -> dict:
     quoted = urllib.parse.quote(index_name, safe="")
     mapping_response = es_json(es_url, "/" + quoted + "/_mapping", "GET", authorization)
@@ -732,7 +873,7 @@ def existing_stream_is_compatible(es_url: str, authorization: str, state: dict |
     # state.json establishes installation ownership, but cannot prove that a
     # template change retrofitted every concrete backing index.  Compare every
     # live backing mapping and flat settings with the live desired simulation.
-    desired = simulated_owned_mapping_projection(es_url, authorization)
+    desired = canonical_owned_mapping_projection()
     return all(jcs(backing_owned_mapping_projection(es_url, authorization, item["index_name"])) == jcs(desired)
                for item in indices)
 
@@ -759,9 +900,12 @@ def ensure_stream(es_url: str, authorization: str) -> None:
 
 
 def simulate(es_url: str, authorization: str) -> None:
-    result = es_json(es_url, "/_index_template/_simulate_index/" + DIAGNOSIS_STREAM, "POST", authorization, {})
-    if not isinstance(result, dict) or "template" not in result:
+    try:
+        actual = simulated_owned_mapping_projection(es_url, authorization)
+    except InputError as error:
         raise InputError("W1 index simulation failed")
+    if jcs(actual) != jcs(canonical_owned_mapping_projection()):
+        raise InputError("W1 index simulation differs")
 
 
 def mint_key(es_url: str, authorization: str, role: dict, name: str) -> tuple[str, str]:
@@ -780,6 +924,29 @@ def invalidate(es_url: str, authorization: str, ids: list[str]) -> None:
     previously = response.get("previously_invalidated_api_keys", []) if isinstance(response, dict) else []
     if not set(ids).issubset(set(invalidated) | set(previously)):
         raise InputError("API key invalidation was not confirmed")
+
+
+def invalidate_mint_name(es_url: str, authorization: str, mint_name: str) -> None:
+    """Find and revoke every candidate made after a persisted mint intent.
+
+    A process can die after Elasticsearch creates a key but before it can persist
+    the returned ID.  The intent name is therefore a recovery handle, not just
+    diagnostic text.  Refuse a malformed lookup response rather than treating
+    it as proof that no orphan exists.
+    """
+    response = es_json(es_url, "/_security/api_key?name=" + urllib.parse.quote(mint_name, safe=""),
+                       "GET", authorization)
+    keys = response.get("api_keys") if isinstance(response, dict) else None
+    if not isinstance(keys, list):
+        raise InputError("API key recovery lookup is invalid")
+    ids: list[str] = []
+    for item in keys:
+        if (not isinstance(item, dict) or item.get("name") != mint_name
+                or not isinstance(item.get("id"), str) or not item["id"]
+                or len(item["id"].encode("utf-8")) > 1024):
+            raise InputError("API key recovery lookup is invalid")
+        ids.append(item["id"])
+    invalidate(es_url, authorization, sorted(set(ids)))
 
 
 def candidate_document(suffix: str) -> dict:
@@ -959,24 +1126,36 @@ def main() -> int:
             if (prior["phase"] == "candidate_verified" and prior["candidate_key_id"]
                     and prior["active_key_id"] == prior["candidate_key_id"]):
                 try:
+                    # The exchanged directory is coherent, but a crash may
+                    # have happened before Step 10's zero-environment probe.
+                    # Do not declare it committed until that exact consumer
+                    # check succeeds on the published paths.
+                    run_handshake(args.agent_binary, root)
                     invalidate(es_url, authorization, prior["pending_revoke_ids"])
                 except (InputError, RequestFailure) as error:
                     raise ProvisionError("install failed: old shipper API key revocation:") from error
                 prior = state_template(uuid_value, prior["target_generation"], prior["active_key_id"])
                 atomic_write(root, "state.json", jcs(prior) + b"\n")
             else:
+                # mint_intent is durable before the request.  A returned key ID
+                # is therefore insufficient for recovery: a crash after the
+                # server creates it but before our response is stored leaves an
+                # otherwise unreachable live key.  Discover by the exact intent
+                # name first, then invalidate the recorded ID as well.
+                invalidate_mint_name(es_url, authorization, prior["pending_mint_name"])
                 candidates = [item for item in (prior["candidate_key_id"],) if item]
                 if candidates:
                     invalidate(es_url, authorization, candidates)
-                for name in ("candidate-credentials.toml",):
-                    path = root / name
-                    if path.exists():
-                        path.unlink()
+                remove_candidate_root(root)
                 # Do not silently preserve an incomplete candidate as active.
                 prior = None if prior["active_key_id"] is None else state_template(
                     uuid_value, prior["target_generation"], prior["active_key_id"])
                 if prior is not None:
                     atomic_write(root, "state.json", jcs(prior) + b"\n")
+        # A pre-exchange crash leaves only this deterministic private staging
+        # path.  After phase recovery revokes/finishes its key lifecycle, it is
+        # safe to remove whichever old or unpublished generation remains here.
+        remove_stale_publication_stage(root)
 
         prerequisites(es_url, kb_url, authorization)  # Step 3
         fence(es_url, authorization, prior, uuid_value)  # Step 4, before W1 PUT
@@ -1024,8 +1203,10 @@ def main() -> int:
             staged = dict(intent)
             staged.update(phase="candidate_staged", candidate_key_id=candidate_id)
             atomic_write(root, "state.json", jcs(staged) + b"\n")
-            atomic_write(root, "candidate-credentials.toml", enrollment_files(es_url, args.ca_file, root, uuid_value,
-                         generation, encoded, staged)["credentials.toml"])
+            candidate_root = secure_candidate_root(root)
+            candidate_files = enrollment_files(es_url, args.ca_file, root, uuid_value, generation, encoded, staged)
+            for name, contents in candidate_files.items():
+                atomic_write(candidate_root, name, contents)
             fault("candidate-write")
             try:
                 verify_stream_behavior(es_url, "ApiKey " + encoded, authorization, candidate_id[-12:])  # Step 7
@@ -1048,13 +1229,24 @@ def main() -> int:
         final = state_template(uuid_value, generation, candidate_id)
         # Step 9.  During replacement the old ID is kept pending until published
         # files verify, but state is committed only after its confirmation.
+        # The directory exchange publishes a coherent but deliberately
+        # uncommitted generation.  Step 10's published-file probe is the only
+        # operation allowed to advance it to committed, including a reuse-only
+        # template generation where no key was minted.
         publish = dict(final)
+        publish.update(phase="candidate_verified", pending_mint_name="published-pending-revoke",
+                       candidate_key_id=candidate_id)
         if old_id and old_id != candidate_id:
             publish["pending_revoke_ids"] = [old_id]
-            publish["phase"] = "candidate_verified"
-            publish["pending_mint_name"] = "published-pending-revoke"
-            publish["candidate_key_id"] = candidate_id
-        atomic_publication(root, enrollment_files(es_url, args.ca_file, root, uuid_value, generation, encoded, publish))
+        publication_files = enrollment_files(es_url, args.ca_file, root, uuid_value, generation, encoded, publish)
+        # A minted candidate is staged under the private candidate directory
+        # before any named consumer file is touched.  Reuse has no new secret
+        # to stage, so render the equivalent already-proved generation here.
+        if not reuse:
+            candidate_root = secure_candidate_root(root)
+            for name in publication_files:
+                atomic_write(candidate_root, name, publication_files[name])
+        atomic_publication(root, publication_files)
         fault("published-state")
 
         # Step 10 has no endpoint/credential environment fallback.
@@ -1067,9 +1259,7 @@ def main() -> int:
             except (InputError, RequestFailure) as error:
                 raise ProvisionError("install failed: old shipper API key revocation:") from error
         atomic_write(root, "state.json", jcs(final) + b"\n")
-        candidate_secret = root / "candidate-credentials.toml"
-        if candidate_secret.exists():
-            candidate_secret.unlink()
+        remove_candidate_root(root)
 
         # Step 11 and only step 11: marker is never an early partial-success bit.
         marker = Asset("component_templates", "rigsignal-bundle-meta", "", marker_body(bundle))

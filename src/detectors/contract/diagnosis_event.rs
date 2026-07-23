@@ -318,7 +318,12 @@ fn jcs_value(value: &serde_json::Value) -> String {
         ),
         Value::Object(values) => {
             let mut entries = values.iter().collect::<Vec<_>>();
-            entries.sort_unstable_by_key(|(key, _)| *key);
+            // RFC 8785 orders member names by UTF-16 code units, rather than
+            // UTF-8 bytes/Rust scalar ordering.  The difference matters when a
+            // BMP key sorts around a supplementary-plane key.
+            entries.sort_unstable_by(|(left, _), (right, _)| {
+                left.encode_utf16().cmp(right.encode_utf16())
+            });
             format!(
                 "{{{}}}",
                 entries
@@ -336,18 +341,96 @@ fn jcs_value(value: &serde_json::Value) -> String {
 }
 
 fn jcs_number(value: &serde_json::Number) -> String {
-    // DiagnosisEvent's only floating point value is finite confidence.  The
-    // integer spelling and negative-zero handling below are the RFC 8785
-    // differences relevant to serde_json's normal representation.
-    if let Some(value) = value.as_f64() {
-        if value == 0.0 {
-            return "0".into();
-        }
-        if value.fract() == 0.0 && value.abs() < 1e21 {
-            return format!("{value:.0}");
-        }
+    if value.as_i64().is_some() || value.as_u64().is_some() {
+        return value.to_string();
     }
-    value.to_string()
+    let number = value
+        .as_f64()
+        .expect("serde_json Number is either an integer or finite f64");
+    if number == 0.0 {
+        return "0".into();
+    }
+    // serde_json/Ryu supplies the shortest round-tripping significand.  JCS
+    // then uses decimal notation for [1e-6, 1e21), and scientific notation
+    // outside that range (with an explicit '+' exponent sign).
+    let raw = value.to_string();
+    let magnitude = number.abs();
+    if (1e-6..1e21).contains(&magnitude) {
+        expand_jcs_decimal(&raw)
+    } else {
+        jcs_scientific(&raw)
+    }
+}
+
+fn split_number(raw: &str) -> (&str, i32) {
+    match raw.find(['e', 'E']) {
+        Some(index) => (
+            &raw[..index],
+            raw[index + 1..]
+                .parse()
+                .expect("serde_json emits a valid exponent"),
+        ),
+        None => (raw, 0),
+    }
+}
+
+fn expand_jcs_decimal(raw: &str) -> String {
+    let (mantissa, exponent) = split_number(raw);
+    let negative = mantissa.starts_with('-');
+    let digits = mantissa.trim_start_matches('-').replace('.', "");
+    let decimal_at = mantissa
+        .trim_start_matches('-')
+        .find('.')
+        .unwrap_or(digits.len()) as i32
+        + exponent;
+    let mut rendered = if decimal_at <= 0 {
+        format!("0.{}{}", "0".repeat((-decimal_at) as usize), digits)
+    } else if decimal_at as usize >= digits.len() {
+        format!(
+            "{}{}",
+            digits,
+            "0".repeat(decimal_at as usize - digits.len())
+        )
+    } else {
+        format!(
+            "{}.{}",
+            &digits[..decimal_at as usize],
+            &digits[decimal_at as usize..]
+        )
+    };
+    if rendered.contains('.') {
+        rendered = rendered
+            .trim_end_matches('0')
+            .trim_end_matches('.')
+            .to_owned();
+    }
+    if negative {
+        format!("-{rendered}")
+    } else {
+        rendered
+    }
+}
+
+fn jcs_scientific(raw: &str) -> String {
+    let (mantissa, exponent) = split_number(raw);
+    let negative = mantissa.starts_with('-');
+    let unsigned = mantissa.trim_start_matches('-');
+    let decimal_at = unsigned.find('.').unwrap_or(unsigned.len()) as i32 + exponent;
+    let digits = unsigned.replace('.', "");
+    let leading_zeroes = digits.bytes().take_while(|byte| *byte == b'0').count();
+    let significant = &digits[leading_zeroes..];
+    let exponent = decimal_at - 1 - leading_zeroes as i32;
+    let significand = if significant.len() == 1 {
+        significant.to_owned()
+    } else {
+        format!("{}.{}", &significant[..1], &significant[1..])
+    };
+    let sign = if exponent >= 0 { "+" } else { "" };
+    format!(
+        "{}{}e{sign}{exponent}",
+        if negative { "-" } else { "" },
+        significand
+    )
 }
 
 /// Return whether the compiled schema version occurs in the accepted set.
@@ -650,9 +733,12 @@ mod tests {
                         "{name}"
                     );
                 } else {
+                    // Compare through the production JCS primitive, rather
+                    // than carrying a fixture-side serializer solely to turn
+                    // f64 `0.0` into its canonical JSON spelling.
                     assert_eq!(
-                        canonical_json(&serde_json::to_value(event.event()).unwrap()),
-                        canonical_json(&expected_value),
+                        jcs_value(&serde_json::to_value(event.event()).unwrap()),
+                        jcs_value(&expected_value),
                         "{name}"
                     );
                 }
@@ -679,6 +765,20 @@ mod tests {
                 ValidationError::ConfidenceOutOfRange
             );
         }
+    }
+
+    #[test]
+    fn jcs_uses_ecmascript_number_and_utf16_key_ordering() {
+        let number = |text: &str| serde_json::from_str::<Value>(text).unwrap();
+        assert_eq!(jcs_value(&number("0.000001")), "0.000001");
+        assert_eq!(jcs_value(&number("0.0000001")), "1e-7");
+        assert_eq!(jcs_value(&number("1000000000000000000000.0")), "1e+21");
+        assert_eq!(jcs_value(&number("-0.0")), "0");
+        // U+10000 is a high-surrogate pair and sorts before U+E000 in UTF-16.
+        assert_eq!(
+            jcs_value(&serde_json::json!({"\u{e000}": 1, "\u{10000}": 2})),
+            "{\"𐀀\":2,\"\":1}"
+        );
     }
 
     #[test]
@@ -1053,54 +1153,6 @@ mod tests {
                 "actual_saturated": actual_saturated,
             }),
         }
-    }
-
-    // The corpus only uses ASCII object keys and finite JSON numbers.  This is a
-    // deliberately small RFC 8785 helper for that value domain; the integer-valued
-    // f64 branch accounts for serde_json's `0.0`/`1.0` spelling versus JCS's `0`/`1`.
-    fn canonical_json(value: &Value) -> String {
-        match value {
-            Value::Null => "null".into(),
-            Value::Bool(value) => value.to_string(),
-            Value::Number(value) => canonical_number(value),
-            Value::String(value) => serde_json::to_string(value).unwrap(),
-            Value::Array(values) => format!(
-                "[{}]",
-                values
-                    .iter()
-                    .map(canonical_json)
-                    .collect::<Vec<_>>()
-                    .join(",")
-            ),
-            Value::Object(values) => {
-                let mut entries = values.iter().collect::<Vec<_>>();
-                entries.sort_by_key(|(key, _)| *key);
-                format!(
-                    "{{{}}}",
-                    entries
-                        .into_iter()
-                        .map(|(key, value)| format!(
-                            "{}:{}",
-                            serde_json::to_string(key).unwrap(),
-                            canonical_json(value)
-                        ))
-                        .collect::<Vec<_>>()
-                        .join(",")
-                )
-            }
-        }
-    }
-
-    fn canonical_number(value: &serde_json::Number) -> String {
-        if let Some(value) = value.as_f64() {
-            if value == 0.0 {
-                return "0".into();
-            }
-            if value.fract() == 0.0 && value.abs() < 1e21 {
-                return format!("{value:.0}");
-            }
-        }
-        value.to_string()
     }
 
     fn test_contract() -> DetectorContract {

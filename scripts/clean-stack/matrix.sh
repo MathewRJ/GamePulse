@@ -71,7 +71,7 @@ owned_snapshot() {
     curl --silent --show-error --max-redirs 0 --user "elastic:$ELASTIC_PASSWORD" \
       --write-out '\nSTATUS:%{http_code}\n' "$ES_URL$item" >>"$output"
   done
-  for item in state.json credentials.toml handshake.toml shipping-policy-v1.toml candidate-credentials.toml; do
+  for item in state.json credentials.toml handshake.toml shipping-policy-v1.toml candidate/credentials.toml candidate/handshake.toml candidate/shipping-policy-v1.toml candidate/state.json; do
     if [[ -e "$root/$item" ]]; then stat -c "$item:%a:%u:%g:%s" "$root/$item" >>"$output"; sha256sum "$root/$item" >>"$output"; else printf '%s:ABSENT\n' "$item" >>"$output"; fi
   done
   sha256sum "$output" | awk '{print $1}'

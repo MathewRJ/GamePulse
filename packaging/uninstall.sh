@@ -44,6 +44,14 @@ done
 purge_fail() { printf 'uninstall purge failed: shipper API key revocation:\n' >&2; exit 1; }
 purge_output_fail() { printf 'uninstall purge failed: enrollment output:\n' >&2; exit 1; }
 
+https_origin() {
+    python3 - "$1" <<'PY'
+import sys, urllib.parse
+u=urllib.parse.urlsplit(sys.argv[1])
+raise SystemExit(0 if u.scheme == 'https' and u.netloc and u.path in ('','/') and not u.query and not u.fragment and not u.username and not u.password else 1)
+PY
+}
+
 protected_file() {
     [ -f "$1" ] && [ ! -L "$1" ] || return 1
     [ "$(stat -c '%u' "$1" 2>/dev/null)" = "$(id -u)" ] || return 1
@@ -65,30 +73,54 @@ PY
 
 purge_ids() {
     python3 - "$PURGE_ROOT/state.json" <<'PY'
-import json, re, sys
+import json, os, re, stat, sys
 def reject(pairs):
  d={}
  for k,v in pairs:
   if k in d: raise ValueError()
   d[k]=v
  return d
-with open(sys.argv[1], encoding='utf-8') as f: s=json.load(f, object_pairs_hook=reject)
+root=os.path.dirname(sys.argv[1])
+rst=os.lstat(root)
+if not stat.S_ISDIR(rst.st_mode) or stat.S_ISLNK(rst.st_mode) or rst.st_uid != os.geteuid() or rst.st_mode & 0o077: raise ValueError()
+flags=os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0)
+fd=os.open(sys.argv[1], flags)
+try:
+ st=os.fstat(fd)
+ if not stat.S_ISREG(st.st_mode) or st.st_uid != os.geteuid() or st.st_mode & 0o077: raise ValueError()
+ file=os.fdopen(fd, encoding='utf-8'); fd=None
+ with file as f: s=json.load(f, object_pairs_hook=reject)
+finally:
+ if fd is not None: os.close(fd)
 keys={'version','phase','expected_cluster_uuid','target_generation','role_jcs_sha256','active_key_id','pending_revoke_ids','pending_mint_name','candidate_key_id'}
 if set(s) != keys: raise ValueError()
+if type(s['version']) is not int or s['version'] != 1 or s['phase'] not in {'committed','mint_intent','candidate_staged','candidate_verified'}: raise ValueError()
+if not isinstance(s['expected_cluster_uuid'],str) or not re.fullmatch(r'[A-Za-z0-9_-]{22}',s['expected_cluster_uuid']): raise ValueError()
+if any(not isinstance(s[k],str) or not re.fullmatch(r'[0-9a-f]{64}',s[k]) for k in ('target_generation','role_jcs_sha256')): raise ValueError()
+for k,cap in (('active_key_id',1024),('candidate_key_id',1024),('pending_mint_name',255)):
+ v=s[k]
+ if v is not None and (not isinstance(v,str) or not v or len(v.encode()) > cap): raise ValueError()
+pending=s['pending_revoke_ids']
+if not isinstance(pending,list) or any(not isinstance(v,str) or not v or len(v.encode()) > 1024 for v in pending) or pending != sorted(set(pending)): raise ValueError()
+if s['phase'] == 'committed' and (s['active_key_id'] is None or pending or s['pending_mint_name'] is not None or s['candidate_key_id'] is not None): raise ValueError()
+if s['phase'] == 'mint_intent' and (s['pending_mint_name'] is None or s['candidate_key_id'] is not None or pending): raise ValueError()
+if s['phase'] == 'candidate_staged' and (s['pending_mint_name'] is None or s['candidate_key_id'] is None or pending or s['candidate_key_id'] == s['active_key_id']): raise ValueError()
+if s['phase'] == 'candidate_verified' and (s['pending_mint_name'] is None or s['candidate_key_id'] is None): raise ValueError()
+if s['phase'] == 'candidate_verified' and s['active_key_id'] == s['candidate_key_id']:
+ if s['pending_mint_name'] != 'published-pending-revoke': raise ValueError()
+elif s['phase'] == 'candidate_verified' and pending: raise ValueError()
 ids=[s['active_key_id'], *s['pending_revoke_ids'], s['candidate_key_id']]
 for item in ids:
  if item is not None:
-  if not isinstance(item,str) or len(item.encode())>1024: raise ValueError()
   print(item)
 if s['pending_mint_name'] is not None:
- if not isinstance(s['pending_mint_name'],str) or len(s['pending_mint_name'].encode())>255: raise ValueError()
  print('NAME:' + s['pending_mint_name'])
 PY
 }
 
 run_purge() {
     [ -n "$PURGE_ENDPOINT" ] && [ -n "$PURGE_CA_FILE" ] && [ -n "$PURGE_ADMIN_FILE" ] && [ -n "$PURGE_ROOT" ] || purge_fail
-    case "$PURGE_ENDPOINT" in https://* ) ;; *) purge_fail ;; esac
+    https_origin "$PURGE_ENDPOINT" || purge_fail
     protected_file "$PURGE_CA_FILE" && protected_file "$PURGE_ADMIN_FILE" || purge_fail
     [ -d "$PURGE_ROOT" ] && [ ! -L "$PURGE_ROOT" ] || purge_fail
     auth="$(purge_authorization)" || purge_fail
@@ -106,12 +138,17 @@ run_purge() {
         response="$(curl --silent --show-error --fail --max-redirs 0 --cacert "$PURGE_CA_FILE" \
             --header "Authorization: $auth" --header 'Content-Type: application/json' --request DELETE \
             --data "$request_body" "$PURGE_ENDPOINT/_security/api_key")" || purge_fail
-        printf '%s' "$response" | python3 -c 'import json,sys; v=json.load(sys.stdin); wanted=set(sys.argv[1:]); got=set(v.get("invalidated_api_keys",[]))|set(v.get("previously_invalidated_api_keys",[])); raise SystemExit(0 if wanted <= got else 1)' $ids || purge_fail
+        printf '%s' "$response" | python3 -c 'import json,sys; v=json.load(sys.stdin); wanted=set(json.loads(sys.argv[1])["ids"]); got=set(v.get("invalidated_api_keys",[]))|set(v.get("previously_invalidated_api_keys",[])); raise SystemExit(0 if wanted <= got else 1)' "$request_body" || purge_fail
     fi
     # Confirmation succeeded before deletion.  Never issue a shared-asset delete.
     rm -f "$PURGE_ROOT/credentials.toml" "$PURGE_ROOT/handshake.toml" \
-        "$PURGE_ROOT/shipping-policy-v1.toml" "$PURGE_ROOT/state.json" "$PURGE_ROOT/candidate-credentials.toml" || purge_output_fail
-    rmdir "$PURGE_ROOT/candidate" 2>/dev/null || true
+        "$PURGE_ROOT/shipping-policy-v1.toml" "$PURGE_ROOT/state.json" || purge_output_fail
+    if [ -e "$PURGE_ROOT/candidate" ]; then
+        [ -d "$PURGE_ROOT/candidate" ] && [ ! -L "$PURGE_ROOT/candidate" ] || purge_output_fail
+        rm -f "$PURGE_ROOT/candidate/credentials.toml" "$PURGE_ROOT/candidate/handshake.toml" \
+            "$PURGE_ROOT/candidate/shipping-policy-v1.toml" "$PURGE_ROOT/candidate/state.json" || purge_output_fail
+        rmdir "$PURGE_ROOT/candidate" || purge_output_fail
+    fi
 }
 
 if [ "$PURGE" = "1" ]; then run_purge; fi

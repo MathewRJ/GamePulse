@@ -196,11 +196,13 @@ impl ClassifiedProbe {
 }
 
 #[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 struct ProtectedConfig {
     elasticsearch: Option<ProtectedElasticsearch>,
     shipping: Option<ProtectedShipping>,
 }
 #[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 struct ProtectedElasticsearch {
     endpoint: Option<String>,
     ca_cert: Option<PathBuf>,
@@ -650,11 +652,17 @@ fn parse_protected(environment: &impl Environment, path: &Path) -> Result<Protec
 fn credentials_from_file(environment: &impl Environment, path: &Path) -> Result<Credentials, ()> {
     let text = environment.read_protected(path)?;
     let config: CredentialFile = toml::from_str(&text).map_err(|_| ())?;
-    credentials_from_values(
-        config.elasticsearch.api_key,
-        config.elasticsearch.username,
-        config.elasticsearch.password,
-    )
+    let values = config.elasticsearch;
+    // A dedicated credential file is a capability file, not a precedence
+    // layer.  Accept exactly one credential grammar so an accidentally
+    // appended Basic pair cannot be silently ignored behind an API key.
+    match (values.api_key, values.username, values.password) {
+        (Some(key), None, None) => credentials_from_values(Some(key), None, None),
+        (None, Some(username), Some(password)) => {
+            credentials_from_values(None, Some(username), Some(password))
+        }
+        _ => Err(()),
+    }
 }
 
 #[cfg(unix)]
@@ -2102,6 +2110,21 @@ mod tests {
             "[shipping]\nunknown = 'must-not-be-ignored'\n".into(),
         );
         assert!(parse_protected(&environment, Path::new("config.toml")).is_err());
+    }
+
+    #[test]
+    fn protected_config_and_dedicated_credentials_reject_ambiguous_fields() {
+        let mut environment = TestEnvironment::default();
+        environment.protected.insert(
+            PathBuf::from("config.toml"),
+            "[elasticsearch]\nendpoint = 'https://example.test'\nunknown = 'x'\n".into(),
+        );
+        assert!(parse_protected(&environment, Path::new("config.toml")).is_err());
+        environment.protected.insert(
+            PathBuf::from("creds.toml"),
+            "[elasticsearch]\napi_key = 'key'\nusername = 'user'\npassword = 'pass'\n".into(),
+        );
+        assert!(credentials_from_file(&environment, Path::new("creds.toml")).is_err());
     }
 
     #[test]
