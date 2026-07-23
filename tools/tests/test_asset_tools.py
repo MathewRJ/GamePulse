@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -101,6 +102,73 @@ class AssetToolsTests(unittest.TestCase):
         try:
             with self.assertRaises(INSTALL.ProvisionError): INSTALL.fence("https://x", "auth", None, "KUrXRgwRRQu-RikmIJhm0Q")
         finally: INSTALL.es_json = old
+
+    def test_fence_compares_every_live_backing_projection(self):
+        uuid_value = "KUrXRgwRRQu-RikmIJhm0Q"
+        state = INSTALL.state_template(uuid_value, INSTALL.TARGET_GENERATION_KAT, "active")
+        projection = {
+            "mappings": {
+                "properties": {
+                    "@timestamp": {"type": "date"},
+                    "event": {"properties": {"id": {"type": "keyword"}}},
+                    "host": {"properties": {"name": {"type": "keyword"}}},
+                    "observer": {"properties": {"name": {"type": "keyword"}}},
+                    "rigsignal": {"properties": {"diagnosis": {
+                        "dynamic": "strict", "properties": {"schema_version": {"type": "integer"}},
+                    }}},
+                },
+                "dynamic": "strict",
+            },
+            "settings": {"index.mapping.ignore_malformed": False, "index.failure_store.enabled": False},
+        }
+        old_json = INSTALL.es_json
+        INSTALL.es_json = lambda *a, **k: {"data_streams": [{"name": INSTALL.DIAGNOSIS_STREAM,
+            "indices": [{"index_name": ".ds-one"}, {"index_name": ".ds-two"}]}]}
+        old_desired, old_backing = INSTALL.simulated_owned_mapping_projection, INSTALL.backing_owned_mapping_projection
+        INSTALL.simulated_owned_mapping_projection = lambda *a: projection
+        INSTALL.backing_owned_mapping_projection = lambda *a: projection
+        try:
+            self.assertTrue(INSTALL.existing_stream_is_compatible("https://x", "auth", state, uuid_value))
+            INSTALL.backing_owned_mapping_projection = lambda *a: {**projection, "settings": {
+                "index.mapping.ignore_malformed": True, "index.failure_store.enabled": False}}
+            self.assertFalse(INSTALL.existing_stream_is_compatible("https://x", "auth", state, uuid_value))
+        finally:
+            INSTALL.es_json, INSTALL.simulated_owned_mapping_projection, INSTALL.backing_owned_mapping_projection = old_json, old_desired, old_backing
+
+    def test_stream_write_rejects_ignored_or_failure_store_and_queries_failures(self):
+        old_json = INSTALL.es_json
+        old_status = INSTALL.es_json_status
+        calls = []
+        def fake_json(_base, path, _method, _authorization, _payload=None):
+            calls.append(path)
+            if path.endswith("::failures/_search"):
+                return {"hits": {"hits": []}}
+            return {"result": "created"}
+        INSTALL.es_json = fake_json
+        INSTALL.es_json_status = lambda _base, path, *_a, **_k: (
+            (400, {"error": {}}) if "provision-bad" in path or "provision-malformed" in path
+            else (201, {"result": "created"})
+        )
+        try:
+            INSTALL.verify_stream_behavior("https://x", "key", "admin", "clean")
+            self.assertIn("/" + INSTALL.DIAGNOSIS_STREAM + "::failures/_search", calls)
+            with self.assertRaises(INSTALL.InputError):
+                INSTALL.assert_accepted_write_clean({"result": "created", "_ignored": ["x"]})
+            with self.assertRaises(INSTALL.InputError):
+                INSTALL.assert_accepted_write_clean({"result": "created", "failure_store": "used"})
+        finally:
+            INSTALL.es_json = old_json
+            INSTALL.es_json_status = old_status
+
+    def test_matrix_live_legs_fail_when_installer_precondition_is_absent(self):
+        script = (ROOT / "scripts/clean-stack/matrix.sh").read_text()
+        start = script.index("install_current() {")
+        end = script.index("install_previous()", start)
+        function = script[start:end]
+        result = subprocess.run(["bash", "-c", function + "\nBUNDLE=x; unset CLEAN_STACK_INSTALL_COMMAND; install_current"],
+                                text=True, capture_output=True, check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("ASSERT FAIL installer-precondition:", result.stderr)
 
     def test_fault_hook_is_inert_unless_named(self):
         old = os.environ.pop("RIGSIGNAL_TEST_CRASH_AT", None)

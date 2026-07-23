@@ -42,6 +42,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 purge_fail() { printf 'uninstall purge failed: shipper API key revocation:\n' >&2; exit 1; }
+purge_output_fail() { printf 'uninstall purge failed: enrollment output:\n' >&2; exit 1; }
 
 protected_file() {
     [ -f "$1" ] && [ ! -L "$1" ] || return 1
@@ -109,7 +110,7 @@ run_purge() {
     fi
     # Confirmation succeeded before deletion.  Never issue a shared-asset delete.
     rm -f "$PURGE_ROOT/credentials.toml" "$PURGE_ROOT/handshake.toml" \
-        "$PURGE_ROOT/shipping-policy-v1.toml" "$PURGE_ROOT/state.json" "$PURGE_ROOT/candidate-credentials.toml" || purge_fail
+        "$PURGE_ROOT/shipping-policy-v1.toml" "$PURGE_ROOT/state.json" "$PURGE_ROOT/candidate-credentials.toml" || purge_output_fail
     rmdir "$PURGE_ROOT/candidate" 2>/dev/null || true
 }
 

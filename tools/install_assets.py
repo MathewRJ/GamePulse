@@ -71,8 +71,9 @@ def parse_json(data: bytes, context: str):
 
 
 class RequestFailure(Exception):
-    def __init__(self, status: int | None, detail: str):
+    def __init__(self, status: int | None, detail: str, body: bytes = b""):
         self.status = status
+        self.body = body
         super().__init__(detail)
 
 
@@ -333,8 +334,8 @@ def https_origin(value: str, flag: str) -> str:
     return value.rstrip("/")
 
 
-def request(base: str, path: str, method: str, authorization: str, data: bytes | None = None,
-            headers: dict[str, str] | None = None) -> bytes:
+def request_response(base: str, path: str, method: str, authorization: str, data: bytes | None = None,
+                     headers: dict[str, str] | None = None) -> tuple[int, bytes]:
     request_headers = {"Authorization": authorization, **(headers or {})}
     if data is not None and "Content-Type" not in request_headers:
         request_headers["Content-Type"] = "application/json"
@@ -342,11 +343,16 @@ def request(base: str, path: str, method: str, authorization: str, data: bytes |
     req = urllib.request.Request(target, data=data, method=method, headers=request_headers)
     try:
         with urllib.request.urlopen(req) as response:
-            return response.read()
+            return response.status, response.read()
     except urllib.error.HTTPError as error:
-        raise RequestFailure(error.code, f"HTTP {error.code}") from error
+        raise RequestFailure(error.code, f"HTTP {error.code}", error.read()) from error
     except urllib.error.URLError as error:
         raise RequestFailure(None, f"network error: {error.reason}") from error
+
+
+def request(base: str, path: str, method: str, authorization: str, data: bytes | None = None,
+            headers: dict[str, str] | None = None) -> bytes:
+    return request_response(base, path, method, authorization, data, headers)[1]
 
 
 def es_path(asset: Asset) -> str:
@@ -556,10 +562,26 @@ def es_json(base: str, path: str, method: str, authorization: str, payload: obje
     return json_response(request(base, path, method, authorization, data))
 
 
-def response_status(base: str, path: str, method: str, authorization: str, payload: object | None = None) -> int:
+def es_json_status(base: str, path: str, method: str, authorization: str,
+                   payload: object | None = None) -> tuple[int, object]:
+    data = None if payload is None else jcs(payload)
     try:
-        es_json(base, path, method, authorization, payload)
-        return 200
+        status, body = request_response(base, path, method, authorization, data)
+        return status, json_response(body)
+    except RequestFailure as error:
+        if not error.body:
+            raise
+        return error.status or 0, json_response(error.body)
+
+
+def response_status(base: str, path: str, method: str, authorization: str, payload: object | None = None) -> int:
+    """Return only a status for authorization-matrix rows.
+
+    Real write proofs deliberately use ``es_json`` directly: reducing a write
+    response to a status code would hide ``_ignored`` and failure-store use.
+    """
+    try:
+        return es_json_status(base, path, method, authorization, payload)[0]
     except RequestFailure as error:
         return error.status or 0
 
@@ -625,6 +647,72 @@ def prerequisites(es_url: str, kb_url: str, authorization: str) -> None:
         raise ProvisionError("install failed: prerequisite:") from error
 
 
+def required_path(value: object, path: tuple[str, ...]) -> object:
+    """Return an owned JSON path, rejecting an absent or malformed branch."""
+    current = value
+    for name in path:
+        if not isinstance(current, dict) or name not in current:
+            raise InputError("W1 owned mapping path is missing")
+        current = current[name]
+    return current
+
+
+def setting_bool(value: object) -> bool:
+    # Flat-settings responses serialize booleans as strings, while simulation
+    # returns JSON booleans.  Normalize only these two unambiguous spellings.
+    if value is True or value == "true":
+        return True
+    if value is False or value == "false":
+        return False
+    raise InputError("W1 owned setting is invalid")
+
+
+def owned_mapping_projection(mappings: object, ignore_malformed: object,
+                             failure_store_enabled: object) -> dict:
+    paths = (
+        ("properties", "@timestamp"),
+        ("properties", "event", "properties", "id"),
+        ("properties", "host", "properties", "name"),
+        ("properties", "observer", "properties", "name"),
+        ("dynamic",),
+        ("properties", "rigsignal", "properties", "diagnosis", "dynamic"),
+        ("properties", "rigsignal", "properties", "diagnosis", "properties"),
+    )
+    projected: dict = {"mappings": {}, "settings": {
+        "index.mapping.ignore_malformed": setting_bool(ignore_malformed),
+        "index.failure_store.enabled": setting_bool(failure_store_enabled),
+    }}
+    for path in paths:
+        target = projected["mappings"]
+        for part in path[:-1]:
+            target = target.setdefault(part, {})
+        target[path[-1]] = required_path(mappings, path)
+    return projected
+
+
+def simulated_owned_mapping_projection(es_url: str, authorization: str) -> dict:
+    result = es_json(es_url, "/_index_template/_simulate_index/" + DIAGNOSIS_STREAM,
+                     "POST", authorization, {})
+    template = required_path(result, ("template",))
+    mappings = required_path(template, ("mappings",))
+    ignore_malformed = required_path(template, ("settings", "index", "mapping", "ignore_malformed"))
+    failure_store_enabled = required_path(template, ("data_stream_options", "failure_store", "enabled"))
+    return owned_mapping_projection(mappings, ignore_malformed, failure_store_enabled)
+
+
+def backing_owned_mapping_projection(es_url: str, authorization: str, index_name: str) -> dict:
+    quoted = urllib.parse.quote(index_name, safe="")
+    mapping_response = es_json(es_url, "/" + quoted + "/_mapping", "GET", authorization)
+    settings_response = es_json(es_url, "/" + quoted + "/_settings?flat_settings=true", "GET", authorization)
+    mappings = required_path(mapping_response, (index_name, "mappings"))
+    settings = required_path(settings_response, (index_name, "settings"))
+    return owned_mapping_projection(
+        mappings,
+        required_path(settings, ("index.mapping.ignore_malformed",)),
+        required_path(settings, ("index.failure_store.enabled",)),
+    )
+
+
 def existing_stream_is_compatible(es_url: str, authorization: str, state: dict | None, uuid_value: str) -> bool:
     try:
         response = es_json(es_url, "/_data_stream/" + DIAGNOSIS_STREAM, "GET", authorization)
@@ -637,16 +725,22 @@ def existing_stream_is_compatible(es_url: str, authorization: str, state: dict |
             or streams[0].get("name") != DIAGNOSIS_STREAM or not isinstance(streams[0].get("indices"), list)
             or state is None or state["phase"] != "committed" or state["expected_cluster_uuid"] != uuid_value):
         return False
-    # State is the authorization proof for an existing stream.  The definitive
-    # mapping projection is checked after simulate below; retain fail-closed
-    # behavior when ES does not enumerate concrete backing indices.
-    return all(isinstance(item, dict) and isinstance(item.get("index_name"), str) for item in streams[0]["indices"])
+    indices = streams[0]["indices"]
+    if not indices or not all(isinstance(item, dict) and isinstance(item.get("index_name"), str)
+                              for item in indices):
+        return False
+    # state.json establishes installation ownership, but cannot prove that a
+    # template change retrofitted every concrete backing index.  Compare every
+    # live backing mapping and flat settings with the live desired simulation.
+    desired = simulated_owned_mapping_projection(es_url, authorization)
+    return all(jcs(backing_owned_mapping_projection(es_url, authorization, item["index_name"])) == jcs(desired)
+               for item in indices)
 
 
 def fence(es_url: str, authorization: str, state: dict | None, uuid_value: str) -> None:
     try:
         compatible = existing_stream_is_compatible(es_url, authorization, state, uuid_value)
-    except RequestFailure as error:
+    except (RequestFailure, InputError) as error:
         raise ProvisionError("install refused: existing diagnosis stream is not W1; migration is required") from error
     if not compatible:
         raise ProvisionError("install refused: existing diagnosis stream is not W1; migration is required")
@@ -696,21 +790,64 @@ def candidate_document(suffix: str) -> dict:
             "confidence_basis": "provision", "evidence": [], "plain_language": "provision"}}}
 
 
-def verify_candidate(es_url: str, authorization: str, suffix: str) -> None:
+def assert_write_has_no_artifacts(response: object) -> None:
+    if not isinstance(response, dict):
+        raise InputError("candidate write response is invalid")
+    if "_ignored" in response or response.get("failure_store") == "used":
+        raise InputError("candidate write used ignored fields or failure store")
+
+
+def assert_accepted_write_clean(response: object) -> None:
+    assert_write_has_no_artifacts(response)
+
+
+def assert_no_failure_store_document(es_url: str, authorization: str, event_id: str) -> None:
+    try:
+        result = es_json(es_url, "/" + DIAGNOSIS_STREAM + "::failures/_search", "POST", authorization,
+                         {"query": {"term": {"event.id": event_id}}, "size": 1})
+    except RequestFailure as error:
+        # A disabled failure store may expose no searchable failure index.  A
+        # 404 is therefore affirmative absence; every other response failure
+        # leaves the proof incomplete.
+        if error.status == 404:
+            return
+        raise
+    hits = required_path(result, ("hits", "hits"))
+    if not isinstance(hits, list) or hits:
+        raise InputError("failure-store document exists after candidate write")
+
+
+def verify_stream_behavior(es_url: str, authorization: str, admin_authorization: str, suffix: str) -> None:
     document = candidate_document(suffix)
     path = "/" + DIAGNOSIS_STREAM + "/_create/provision-" + suffix
-    if response_status(es_url, path, "POST", authorization, document) not in {200, 201}:
+    status, response = es_json_status(es_url, path, "POST", authorization, document)
+    if status != 201 or not isinstance(response, dict) or response.get("result") != "created":
         raise InputError("candidate exact-stream create failed")
+    assert_accepted_write_clean(response)
+    assert_no_failure_store_document(es_url, admin_authorization, "provision-" + suffix)
     # Real strictness proof; do not infer it from _simulate_index.
     bad = dict(document); bad["unknown_root"] = True
-    if response_status(es_url, "/" + DIAGNOSIS_STREAM + "/_create/provision-bad-" + suffix,
-                       "POST", authorization, bad) < 400:
+    bad_id = "provision-bad-" + suffix
+    status, response = es_json_status(es_url, "/" + DIAGNOSIS_STREAM + "/_create/" + bad_id,
+                                      "POST", authorization, bad)
+    if status < 400:
         raise InputError("unknown field was accepted")
+    assert_write_has_no_artifacts(response)
+    assert_no_failure_store_document(es_url, admin_authorization, bad_id)
     malformed = candidate_document("malformed-" + suffix)
     malformed["rigsignal"]["diagnosis"]["confidence"] = "not-a-number"
-    if response_status(es_url, "/" + DIAGNOSIS_STREAM + "/_create/provision-malformed-" + suffix,
-                       "POST", authorization, malformed) < 400:
+    malformed_id = "provision-malformed-" + suffix
+    status, response = es_json_status(es_url, "/" + DIAGNOSIS_STREAM + "/_create/" + malformed_id,
+                                      "POST", authorization, malformed)
+    if status < 400:
         raise InputError("malformed scalar was accepted")
+    assert_write_has_no_artifacts(response)
+    assert_no_failure_store_document(es_url, admin_authorization, malformed_id)
+
+
+def verify_role_matrix(es_url: str, authorization: str, suffix: str) -> None:
+    document = candidate_document(suffix)
+    path = "/" + DIAGNOSIS_STREAM + "/_create/provision-" + suffix
     # Exact CAN rows and deny matrix.  A duplicate _create is delivery idempotency
     # (409), while PUT to the existing ID must be an authorization failure (403).
     can_paths = ("/", "/_component_template/logs-rigsignal.diagnosis-mappings?filter_path=component_templates.name,component_templates.component_template._meta.accepted_schema_versions",
@@ -811,7 +948,10 @@ def main() -> int:
         # recovery.  A later run can safely revoke the listed candidate.
         uuid_value = cluster_uuid(es_url, authorization)
         if prior is not None and prior["expected_cluster_uuid"] != uuid_value:
-            raise ProvisionError("install failed: prerequisite:")
+            # A retained enrollment root pointed at another cluster is the
+            # v2.4 rerun refusal, with the same no-mutation contract as an
+            # incompatible existing diagnosis stream.
+            raise ProvisionError("install refused: existing diagnosis stream is not W1; migration is required")
         if prior is not None and prior["phase"] != "committed":
             # candidate_verified with candidate already named as active is the
             # only recoverable post-publication state: credentials/configuration
@@ -848,8 +988,11 @@ def main() -> int:
             except (RequestFailure, InputError) as error:
                 category = "shipper role verification:" if asset.kind == "security_roles" else "W1 asset verification:"
                 raise ProvisionError("install failed: " + category) from error
-        ensure_stream(es_url, authorization)
-        simulate(es_url, authorization)
+        try:
+            ensure_stream(es_url, authorization)
+            simulate(es_url, authorization)
+        except (RequestFailure, InputError) as error:
+            raise ProvisionError("install failed: diagnosis stream verification:") from error
 
         generation = recompute_target_generation({asset.path: asset.data for asset in bundle.assets})
         # A current key is only retained after a fresh proof.  Reading its secret
@@ -864,7 +1007,8 @@ def main() -> int:
                 encoded = tomllib.loads((secure_read(root / "credentials.toml") or b"").decode())["elasticsearch"]["api_key"]
                 if not isinstance(encoded, str):
                     raise ValueError()
-                verify_candidate(es_url, "ApiKey " + encoded, "active-proof")
+                verify_stream_behavior(es_url, "ApiKey " + encoded, authorization, "active-proof")
+                verify_role_matrix(es_url, "ApiKey " + encoded, "active-proof")
             except (InputError, ValueError, KeyError, TypeError, RequestFailure):
                 reuse = False
                 encoded = None
@@ -884,8 +1028,13 @@ def main() -> int:
                          generation, encoded, staged)["credentials.toml"])
             fault("candidate-write")
             try:
-                verify_candidate(es_url, "ApiKey " + encoded, candidate_id[-12:])  # Steps 7 and 8
-            except Exception:
+                verify_stream_behavior(es_url, "ApiKey " + encoded, authorization, candidate_id[-12:])  # Step 7
+            except (InputError, RequestFailure):
+                invalidate(es_url, authorization, [candidate_id])
+                raise ProvisionError("install failed: diagnosis stream verification:")
+            try:
+                verify_role_matrix(es_url, "ApiKey " + encoded, candidate_id[-12:])  # Step 8
+            except (InputError, RequestFailure):
                 invalidate(es_url, authorization, [candidate_id])
                 raise ProvisionError("install failed: shipper credential verification:")
             staged["phase"] = "candidate_verified"

@@ -8,6 +8,7 @@ REPO_ROOT="$(CDPATH='' cd -- "$SCRIPT_DIR/../.." && pwd)"
 . "$SCRIPT_DIR/lib.sh"
 CPU_INDEX=metrics-rigsignal.cpu-default
 EVENTS_INDEX=logs-rigsignal.events-default
+DIAGNOSIS_STREAM=logs-rigsignal.diagnosis-default
 usage() { printf '%s\n' 'Usage: matrix.sh [--keep] [--dry-run] [--bundle PATH] fresh VERSION|idempotent-rerun VERSION|pre-w1-refusal VERSION|uuid-mismatch VERSION|bytes-live VERSION|upgrade VERSION|stackupgrade FROM TO' >&2; }
 version() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
 assert_equal() { [[ "$3" == "$2" ]] || { printf 'ASSERT FAIL %s: expected=%q actual=%q\n' "$1" "$2" "$3" >&2; return 1; }; printf 'ASSERT PASS %s\n' "$1"; }
@@ -43,8 +44,112 @@ with tarfile.open(sys.argv[1], "r:gz") as f: print(json.load(f.extractfile("mani
 PY
 )"
 }
-install_current() { RIGSIGNAL_ES_URL="$ES_URL" RIGSIGNAL_KB_URL="$KB_URL" RIGSIGNAL_ES_AUTH="elastic:$ELASTIC_PASSWORD" python3 "$REPO_ROOT/tools/install_assets.py" --bundle "$BUNDLE"; }
+install_current() {
+  local root_args=()
+  [[ -z "${RIGSIGNAL_ENROLLMENT_ROOT:-}" ]] || root_args=(--enrollment-root "$RIGSIGNAL_ENROLLMENT_ROOT")
+  # The clean-stack launcher intentionally does not downgrade the installer to
+  # HTTP or synthesize credentials.  A live invocation therefore needs the
+  # TLS/bootstrap wrapper used by CI; absent that wrapper this is a hard fail,
+  # never a green dispatch stub.
+  [[ -n "${CLEAN_STACK_INSTALL_COMMAND:-}" ]] || {
+    printf 'ASSERT FAIL installer-precondition: CLEAN_STACK_INSTALL_COMMAND must provide the HTTPS/CA/admin inputs\n' >&2
+    return 1
+  }
+  "$CLEAN_STACK_INSTALL_COMMAND" --bundle "$BUNDLE" "${root_args[@]}"
+}
 install_previous() { RIGSIGNAL_ES_URL="$ES_URL" RIGSIGNAL_ES_AUTH="elastic:$ELASTIC_PASSWORD" "$SCRIPT_DIR/install-previous-state.sh"; }
+owned_snapshot() {
+  local output="$1" root="$2" item
+  : >"$output"
+  for item in \
+    "/_component_template/logs-rigsignal.diagnosis-mappings" \
+    "/_index_template/logs-rigsignal.diagnosis" \
+    "/_security/role/rigsignal_shipper" \
+    "/_data_stream/$DIAGNOSIS_STREAM" \
+    "/_component_template/rigsignal-bundle-meta" \
+    "/_security/api_key?owner=false"; do
+    curl --silent --show-error --max-redirs 0 --user "elastic:$ELASTIC_PASSWORD" \
+      --write-out '\nSTATUS:%{http_code}\n' "$ES_URL$item" >>"$output"
+  done
+  for item in state.json credentials.toml handshake.toml shipping-policy-v1.toml candidate-credentials.toml; do
+    if [[ -e "$root/$item" ]]; then stat -c "$item:%a:%u:%g:%s" "$root/$item" >>"$output"; sha256sum "$root/$item" >>"$output"; else printf '%s:ABSENT\n' "$item" >>"$output"; fi
+  done
+  sha256sum "$output" | awk '{print $1}'
+}
+assert_refusal() {
+  local name="$1" root="$2" output="$RUN_DIR/$name-installer.out" before after
+  before="$(owned_snapshot "$RUN_DIR/$name-before.snapshot" "$root")"
+  if install_current >"$output" 2>&1; then
+    printf 'ASSERT FAIL %s-nonzero: installer unexpectedly succeeded\n' "$name" >&2
+    return 1
+  fi
+  grep -Fx 'install refused: existing diagnosis stream is not W1; migration is required' "$output" >/dev/null || {
+    printf 'ASSERT FAIL %s-refusal-message\n' "$name" >&2; return 1;
+  }
+  after="$(owned_snapshot "$RUN_DIR/$name-after.snapshot" "$root")"
+  assert_equal "$name-owned-delta" "$before" "$after"
+  for item in credentials.toml handshake.toml shipping-policy-v1.toml state.json; do
+    [[ ! -e "$root/$item" ]] || { printf 'ASSERT FAIL %s-no-local-enrollment-%s\n' "$name" "$item" >&2; return 1; }
+  done
+  printf 'ASSERT PASS %s-refusal\n' "$name"
+}
+pre_w1_refusal() {
+  local root="$RUN_DIR/pre-w1-enrollment"
+  cs_create_network; start_stack "$one" 0; build_bundle
+  request pre-w1-template "$RUN_DIR/pre-w1-template.json" --header 'Content-Type: application/json' --request PUT \
+    --data-binary "@$SCRIPT_DIR/fixtures/pre-w1-logs-rigsignal.diagnosis.json" "$ES_URL/_index_template/logs-rigsignal.diagnosis"
+  request pre-w1-stream "$RUN_DIR/pre-w1-stream.json" --request PUT "$ES_URL/_data_stream/$DIAGNOSIS_STREAM"
+  RIGSIGNAL_ENROLLMENT_ROOT="$root" assert_refusal pre-w1 "$root"
+}
+uuid_mismatch() {
+  local root="$RUN_DIR/uuid-enrollment" before after
+  cs_create_network; start_stack "$one" 0; build_bundle
+  # The first invocation must genuinely publish against A; do not manufacture
+  # state.json for this cross-cluster proof.
+  RIGSIGNAL_ENROLLMENT_ROOT="$root" install_current
+  cs_docker_quiet stop "$CS_KB_CONTAINER"; cs_docker_quiet rm "$CS_KB_CONTAINER"; CS_KB_CREATED=0
+  cs_docker_quiet stop "$CS_ES_CONTAINER"; cs_docker_quiet rm "$CS_ES_CONTAINER"; CS_ES_CREATED=0
+  start_stack "$one" 0
+  before="$(owned_snapshot "$RUN_DIR/uuid-before.snapshot" "$root")"
+  if RIGSIGNAL_ENROLLMENT_ROOT="$root" install_current >"$RUN_DIR/uuid-installer.out" 2>&1; then
+    printf 'ASSERT FAIL uuid-mismatch-nonzero: installer unexpectedly succeeded\n' >&2; return 1
+  fi
+  grep -Fx 'install refused: existing diagnosis stream is not W1; migration is required' "$RUN_DIR/uuid-installer.out" >/dev/null || {
+    printf 'ASSERT FAIL uuid-mismatch-refusal-message\n' >&2; return 1;
+  }
+  after="$(owned_snapshot "$RUN_DIR/uuid-after.snapshot" "$root")"
+  assert_equal uuid-mismatch-owned-delta "$before" "$after"
+  printf 'ASSERT PASS uuid-mismatch-refusal\n'
+}
+bytes_live() {
+  local agent="$REPO_ROOT/target/debug/rigsignal-agent" exact="$RUN_DIR/exact-cap.json" over="$RUN_DIR/one-over.out"
+  [[ -x "$agent" ]] || { printf 'ASSERT FAIL bytes-live-agent: production fixture helper is absent\n' >&2; return 1; }
+  cs_create_network; start_stack "$one" 0; build_bundle; install_current
+  "$agent" fixture-event-bytes --input "$REPO_ROOT/fixtures/diagnosis_event/v1/positive/24-event-bytes-exact-cap.input.json" \
+    --context "$REPO_ROOT/fixtures/diagnosis_event/v1/contexts/diagnosis-finding.json" >"$exact"
+  assert_equal bytes-live-exact-cap-size 1048576 "$(wc -c <"$exact")"
+  if "$agent" fixture-event-bytes --input "$REPO_ROOT/fixtures/diagnosis_event/v1/negative/24-event-bytes-one-over.input.json" \
+      --context "$REPO_ROOT/fixtures/diagnosis_event/v1/contexts/diagnosis-finding.json" >"$RUN_DIR/one-over.json" 2>"$over"; then
+    printf 'ASSERT FAIL bytes-live-one-over-local-rejection\n' >&2; return 1
+  fi
+  grep -Fx 'EventBytesLimitExceeded { limit: 1048576, actual_saturated: 1048577 }' "$over" >/dev/null || {
+    printf 'ASSERT FAIL bytes-live-one-over-error\n' >&2; return 1;
+  }
+  request bytes-live-create "$RUN_DIR/bytes-live-create.json" --header 'Content-Type: application/json' --request POST \
+    --data-binary "@$exact" "$ES_URL/$DIAGNOSIS_STREAM/_create/bytes-live-exact?refresh=wait_for"
+  assert_equal bytes-live-no-ignored false "$(jq 'has("_ignored")' "$RUN_DIR/bytes-live-create.json")"
+  assert_equal bytes-live-no-failure-store null "$(jq -r '.failure_store // "null"' "$RUN_DIR/bytes-live-create.json")"
+  request bytes-live-round-trip "$RUN_DIR/bytes-live-round-trip.json" --request GET "$ES_URL/$DIAGNOSIS_STREAM/_search?q=event.id:01890f3e-7b64-7cc7-8a3d-5e6f708192a3"
+  jq -cS '.hits.hits[0]._source' "$RUN_DIR/bytes-live-round-trip.json" >"$RUN_DIR/bytes-live-round-trip-source.json"
+  # jq writes a presentation newline; the validator's production helper does
+  # not, so remove only that transport newline before byte-for-byte comparison.
+  head -c -1 "$RUN_DIR/bytes-live-round-trip-source.json" >"$RUN_DIR/bytes-live-round-trip-source-no-lf.json"
+  mv "$RUN_DIR/bytes-live-round-trip-source-no-lf.json" "$RUN_DIR/bytes-live-round-trip-source.json"
+  cmp -s "$exact" "$RUN_DIR/bytes-live-round-trip-source.json" || { printf 'ASSERT FAIL bytes-live-exact-round-trip\n' >&2; return 1; }
+  request bytes-live-failure-store "$RUN_DIR/bytes-live-failures.json" --header 'Content-Type: application/json' --request POST \
+    --data '{"query":{"term":{"event.id":"01890f3e-7b64-7cc7-8a3d-5e6f708192a3"}},"size":1}' "$ES_URL/$DIAGNOSIS_STREAM::failures/_search"
+  assert_equal bytes-live-no-failure-document 0 "$(jq '.hits.hits|length' "$RUN_DIR/bytes-live-failures.json")"
+}
 ingest() {
   local now; now="$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
   jq --arg timestamp "$now" '. + {"@timestamp":$timestamp}' "$REPO_ROOT/fixtures/clean-stack/cpu-doc.json" >"$RUN_DIR/cpu.json"
@@ -137,11 +242,9 @@ cs_require_tools bash curl docker jq python3 sha256sum; RUN_DIR="$(mktemp -d /tm
 case "$mode" in
   fresh) cs_create_network; start_stack "$one" 0; build_bundle; install_current; ingest; asserts ;;
   idempotent-rerun) cs_create_network; start_stack "$one" 0; build_bundle; install_current; install_current; ingest; asserts ;;
-  pre-w1-refusal|uuid-mismatch|bytes-live)
-    # These legs intentionally have their own stacks/roots in CI.  Keep this
-    # dispatch explicit so evidence cannot accidentally depend on `fresh`.
-    printf 'ASSERT PASS %s-self-contained-dispatch\n' "$mode"
-    ;;
+  pre-w1-refusal) pre_w1_refusal ;;
+  uuid-mismatch) uuid_mismatch ;;
+  bytes-live) bytes_live ;;
   upgrade) cs_create_network; start_stack "$one" 0; install_previous; ingest; record; build_bundle; install_current; survival; asserts ;;
   stackupgrade) cs_create_network; cs_create_named_volumes; start_stack "$one" 1; build_bundle; install_current; ingest; cs_docker_quiet stop "$CS_KB_CONTAINER"; cs_docker_quiet rm "$CS_KB_CONTAINER"; CS_KB_CREATED=0; cs_docker_quiet stop "$CS_ES_CONTAINER"; cs_docker_quiet rm "$CS_ES_CONTAINER"; CS_ES_CREATED=0; start_stack "$two" 1; asserts ;;
 esac
