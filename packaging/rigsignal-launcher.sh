@@ -646,7 +646,33 @@ case "$subcmd" in
     setup)  cmd_setup ;;
     start)  cmd_start ;;
     stop)   cmd_stop ;;
-    status) cmd_status ;;
+    status)
+        # Reserve the durable handshake recheck surface without allowing malformed
+        # status arguments to silently fall through into ordinary status output.
+        case "$#" in
+            0) cmd_status ;;
+            2)
+                if [ "$1" = "handshake" ] && [ "$2" = "recheck" ]; then
+                    _err "handshake recheck is not yet available"
+                else
+                    _err "Invalid status arguments"
+                fi
+                exit 1
+                ;;
+            3)
+                if [ "$1" = "handshake" ] && [ "$2" = "recheck" ] \
+                    && [ "${#3}" -eq 64 ] && [ -n "$3" ] \
+                    && case "$3" in *[!0123456789abcdef]*) false ;; *) true ;; esac
+                then
+                    _err "handshake recheck is not yet available"
+                else
+                    _err "Invalid status arguments"
+                fi
+                exit 1
+                ;;
+            *) _err "Invalid status arguments"; exit 1 ;;
+        esac
+        ;;
     run)    cmd_run "$@" ;;
     "")     usage; exit 0 ;;
     *)      _err "Unknown subcommand: $subcmd"; echo; usage; exit 1 ;;

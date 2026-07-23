@@ -4,6 +4,15 @@ endpoint = "https://your-deployment.es.us-central1.gcp.elastic.cloud"
 # API key with write access to metrics-rigsignal.* data streams
 api_key = "YOUR_API_KEY_HERE"
 
+# Handshake affinity for `rigsignal-agent handshake check`. Set exactly one of
+# expected_cluster_uuid or pending_enrollment. Values are read only when this
+# file is explicitly passed with handshake check --config; Config does not read
+# these keys yet.
+#[shipping]
+# expected_cluster_uuid = "KUrXRgwRRQu-RikmIJhm0Q"
+# pending_enrollment = true
+# target_generation = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
 # Optional local NDJSON spool output. The default mode is "elasticsearch".
 #[output]
 # mode = "spool"

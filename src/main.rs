@@ -16,6 +16,7 @@ mod config;
 mod detectors;
 mod diagnose;
 mod dllscan;
+mod handshake;
 mod host;
 mod launchers_windows;
 mod profiles;
@@ -41,6 +42,11 @@ use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)] // Diagnose owns its Clap action payload.
 enum Commands {
+    /// Verify the configured Elasticsearch destination and diagnosis schema.
+    Handshake {
+        #[command(subcommand)]
+        action: handshake::HandshakeAction,
+    },
     /// Collect a bug-report snapshot: kernel, GPU driver, ES reachability, and
     /// a log of every probe step. Prints to stdout; use --output for a file.
     Diagnose {
@@ -778,6 +784,26 @@ async fn run() -> Result<ExitCode> {
         });
     }
 
+    // Handshake has its own explicit protected-config reader and must run before
+    // Config::load(), which performs legacy environment/default-path resolution.
+    if let Some(Commands::Handshake {
+        action: handshake::HandshakeAction::Check(args),
+    }) = &cli.command
+    {
+        handshake_root_telemetry_guard(&cli)?;
+        let environment = handshake::ProcessEnvironment;
+        let clock = handshake::SystemClock;
+        let mut transport = handshake::ReqwestTransport::default();
+        let report = handshake::run_check(args.clone(), &environment, &clock, &mut transport)
+            .await
+            .map_err(|_| anyhow::anyhow!("handshake invariant failure"))?;
+        print!(
+            "{}",
+            report.json_line().context("serialising handshake report")?
+        );
+        return Ok(ExitCode::from(report.exit_code()));
+    }
+
     let cfg = config::Config::load(cli.config.as_ref())?;
 
     if cli.print_config {
@@ -805,6 +831,9 @@ async fn run() -> Result<ExitCode> {
         Some(Commands::Diagnose {
             action: Some(_), ..
         }) => unreachable!("display diagnosis was dispatched before Config::load"),
+        Some(Commands::Handshake { .. }) => {
+            unreachable!("handshake was dispatched before Config::load")
+        }
         None => {}
     }
 
@@ -1243,9 +1272,92 @@ async fn run() -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
+fn handshake_has_root_telemetry_options(cli: &Cli) -> bool {
+    cli.config.is_some()
+        || cli.dry_run
+        || cli.verbose
+        || cli.log_level.is_some()
+        || cli.print_config
+        || cli.label.is_some()
+        || cli.preset.is_some()
+        || cli.upscaler.is_some()
+        || cli.frame_gen.is_some()
+        || cli.features.is_some()
+        || cli.resolution.is_some()
+        || cli.vsync.is_some()
+        || cli.notes.is_some()
+        || cli.target_pid.is_some()
+        || cli.target_name.is_some()
+}
+
+fn handshake_root_telemetry_guard(cli: &Cli) -> Result<(), clap::Error> {
+    if handshake_has_root_telemetry_options(cli) {
+        Err(clap::Error::raw(
+            clap::error::ErrorKind::ArgumentConflict,
+            "telemetry options cannot be combined with handshake check",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn handshake_clap_surface_is_subcommand_scoped() {
+        let cli = Cli::try_parse_from([
+            "rigsignal-agent",
+            "handshake",
+            "check",
+            "--endpoint",
+            "https://example.test/",
+            "--ca-file",
+            "ca.pem",
+            "--expected-cluster-uuid",
+            "KUrXRgwRRQu-RikmIJhm0Q",
+            "--target-generation",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "--credentials-file",
+            "creds.toml",
+            "--config",
+            "handshake.toml",
+        ])
+        .unwrap();
+        assert!(matches!(cli.command, Some(Commands::Handshake { .. })));
+        assert!(
+            Cli::try_parse_from(["rigsignal-agent", "handshake", "check", "--dry-run"]).is_err()
+        );
+        assert!(Cli::try_parse_from([
+            "rigsignal-agent",
+            "handshake",
+            "check",
+            "--telemetry-endpoint",
+            "x"
+        ])
+        .is_err());
+        assert!(Cli::try_parse_from([
+            "rigsignal-agent",
+            "handshake",
+            "check",
+            "--config",
+            "x",
+            "--pending-enrollment"
+        ])
+        .is_ok());
+    }
+
+    #[test]
+    fn handshake_runtime_guard_rejects_root_flag_before_subcommand() {
+        let cli =
+            Cli::try_parse_from(["rigsignal-agent", "--dry-run", "handshake", "check"]).unwrap();
+        assert_eq!(
+            handshake_root_telemetry_guard(&cli).unwrap_err().kind(),
+            clap::error::ErrorKind::ArgumentConflict
+        );
+        assert!(matches!(cli.command, Some(Commands::Handshake { .. })));
+    }
 
     #[test]
     fn test_log_level_from_cli() {
