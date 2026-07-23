@@ -1702,7 +1702,7 @@ mod tests {
 
     #[tokio::test]
     async fn real_read_body_enforces_the_cap() {
-        use tokio::io::AsyncWriteExt;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
         async fn response(body: Vec<u8>) -> Option<reqwest::Response> {
             let Ok(listener) = tokio::net::TcpListener::bind("127.0.0.1:0").await else {
                 // The restricted build sandbox prohibits listeners; CI executes this path.
@@ -1711,12 +1711,25 @@ mod tests {
             let address = listener.local_addr().unwrap();
             tokio::spawn(async move {
                 let (mut stream, _) = listener.accept().await.unwrap();
+                // Drain the request head before responding: closing a socket with
+                // unread inbound bytes raises RST, and Windows discards the buffered
+                // response on RST (WSAECONNABORTED 10053) where Linux delivers it.
+                let mut request = Vec::new();
+                let mut chunk = [0u8; 1024];
+                while !request.windows(4).any(|w| w == b"\r\n\r\n") {
+                    let n = stream.read(&mut chunk).await.unwrap();
+                    if n == 0 {
+                        break;
+                    }
+                    request.extend_from_slice(&chunk[..n]);
+                }
                 let header = format!(
                     "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
                     body.len()
                 );
                 stream.write_all(header.as_bytes()).await.unwrap();
                 stream.write_all(&body).await.unwrap();
+                stream.shutdown().await.ok();
             });
             Some(
                 reqwest::Client::new()
