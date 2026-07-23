@@ -1,0 +1,43 @@
+goal: >
+  Implement the ratified P1 handshake probe. The full authoritative contract is
+  tasks/rigsignal-p1-handshake-probe.md in this worktree; read it first and follow
+  it exactly. §16 of the cited W1 contract controls. Do not commit or bump versions.
+files_in_scope:
+  - src/handshake.rs
+  - src/main.rs
+  - src/config.rs
+  - src/Cargo.toml
+  - Cargo.lock
+  - packaging/config/rigsignal.toml.example
+  - packaging/rigsignal-launcher.sh
+  - packaging/tests/test-rigsignal-launcher.sh
+  - /home/dev/coding/Workflow/projects/Workflow/evidence/app-p1-handshake-2026-07-23/rigsignal_shipper-role.json
+acceptance_criteria:
+  - >-
+    The exact locked CI commands are green where runnable locally: cargo fmt --manifest-path
+    src/Cargo.toml -- --check; cargo check --manifest-path src/Cargo.toml --locked; cargo clippy
+    --manifest-path src/Cargo.toml --locked --all-targets -- -D warnings; cargo test
+    --manifest-path src/Cargo.toml --locked; Linux ebpf check/clippy equivalents; and bash
+    packaging/tests/test-rigsignal-launcher.sh.
+  - >-
+    Tests cover every root/template/E3 status boundary (100,199,200,201,299,300,399,400,401,
+    403,404,408,413,429, representative other 4xx,500,599), all named transport classes,
+    compound precedence, exact request sequence/path/filter_path/redirect behavior, shared
+    deadline, slow body, encoded-response rejection, and E3 only after successful E2.
+  - >-
+    Unit tests cover §16.3 known-answer vectors, alternate-framing helper KAT, grammar
+    boundaries and reorder/duplicate invariance; protected-source missing/nonregular/unreadable/
+    malformed/wrong-mode/wrong-owner/symlink negatives; scanner/body boundaries; sentinel
+    no-secret/no-body/no-auth retention; Appendix A object-plus-one-LF goldens; and the required
+    nullable-field state matrix.
+  - >-
+    Launcher table tests cover plain status equivalence, valid recheck forms, uppercase/short/
+    long/nonhex generation, missing recheck, extra arguments, and unrelated status arguments,
+    proving rejected forms never invoke cmd_status.
+  - >-
+    Windows clippy --all-targets and tests are pending CI at handoff and are reported as such.
+    The exact-role §16.1.5/§16.1.6 CAN/CANNOT proof is evidence only — Phase 5 wire gate
+    (orchestrator), outside implementer acceptance; merge is contingent on that gate passing.
+  - >-
+    Final summary maps every atomic §16 conformance row to its named implementation/test/evidence
+    artifact and calls out the provisioning-order blocker.
