@@ -1,11 +1,14 @@
 import importlib.util
+import io
 import json
 import os
 import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -62,10 +65,12 @@ class AssetToolsTests(unittest.TestCase):
         self.assertEqual(BUILD.target_generation(BUILD.read_assets())["value"], INSTALL.TARGET_GENERATION_KAT)
 
     def test_state_schema_and_phase_invariants_are_closed(self):
-        state = INSTALL.state_template("KUrXRgwRRQu-RikmIJhm0Q", INSTALL.TARGET_GENERATION_KAT, "active")
+        state = INSTALL.state_template("KUrXRgwRRQu-RikmIJhm0Q", INSTALL.TARGET_GENERATION_KAT,
+                                       "active", "/tmp/rigsignal-test-enrollment")
         self.assertEqual(INSTALL.validate_state(state)["phase"], "committed")
         for mutation in (
             lambda value: value.update(extra=True),
+            lambda value: value.pop("enrollment_root"),
             lambda value: value.update(active_key_id=None),
             lambda value: value.update(pending_revoke_ids=["b", "a"]),
             lambda value: value.update(expected_cluster_uuid="bad"),
@@ -115,6 +120,99 @@ class AssetToolsTests(unittest.TestCase):
             INSTALL.atomic_write(root, "credentials.toml", b"[elasticsearch]\napi_key = \"secret\"\n")
             self.assertEqual((root / "credentials.toml").stat().st_mode & 0o777, 0o600)
 
+    def test_enrollment_root_binding_rejects_noncanonical_and_overlong_values(self):
+        state = INSTALL.state_template("KUrXRgwRRQu-RikmIJhm0Q", INSTALL.TARGET_GENERATION_KAT,
+                                       "active", "/tmp/rigsignal-test-enrollment")
+        for binding in ("relative/enrollment", "/tmp/rigsignal-test-enrollment/",
+                        "/tmp/enrollment\0root", "/" + "x" * 4096):
+            bad = dict(state)
+            bad["enrollment_root"] = binding
+            with self.assertRaises(INSTALL.InputError):
+                INSTALL.validate_state(bad)
+
+    def test_enrollment_root_rejects_intermediate_symlinks(self):
+        with tempfile.TemporaryDirectory() as raw:
+            parent = Path(raw) / "parent"
+            parent.mkdir(mode=0o700)
+            parent.chmod(0o700)
+            link = Path(raw) / "linked-parent"
+            link.symlink_to(parent, target_is_directory=True)
+            with self.assertRaises(INSTALL.InputError):
+                INSTALL.secure_root(link / "enrollment")
+            self.assertFalse((parent / "enrollment").exists())
+
+    def test_same_root_round_trip_and_override_bind_canonical_actual_root(self):
+        with tempfile.TemporaryDirectory() as raw:
+            override = INSTALL.secure_root(Path(raw) / "override")
+            state = INSTALL.state_template("KUrXRgwRRQu-RikmIJhm0Q", INSTALL.TARGET_GENERATION_KAT,
+                                           "active", str(override))
+            INSTALL.atomic_write(override, "state.json", INSTALL.jcs(state) + b"\n")
+            self.assertEqual(INSTALL.load_state(override), state)
+            self.assertEqual(state["enrollment_root"], os.path.realpath(override))
+
+    def test_copied_state_refuses_before_installer_http_in_every_phase(self):
+        uuid_value = "KUrXRgwRRQu-RikmIJhm0Q"
+        for phase in ("committed", "mint_intent", "candidate_staged", "candidate_verified"):
+            with self.subTest(phase=phase), tempfile.TemporaryDirectory() as raw:
+                source = INSTALL.secure_root(Path(raw) / "source")
+                target = INSTALL.secure_root(Path(raw) / "target")
+                state = INSTALL.state_template(uuid_value, INSTALL.TARGET_GENERATION_KAT, "active", str(source))
+                if phase == "mint_intent":
+                    state.update(phase=phase, active_key_id=None, pending_mint_name="mint")
+                elif phase == "candidate_staged":
+                    state.update(phase=phase, pending_mint_name="mint", candidate_key_id="candidate")
+                elif phase == "candidate_verified":
+                    state.update(phase=phase, pending_mint_name="mint", candidate_key_id="candidate")
+                INSTALL.atomic_write(target, "state.json", INSTALL.jcs(state) + b"\n")
+                before = (target / "state.json").read_bytes()
+                calls = []
+                args = SimpleNamespace(bundle=Path("unused"), endpoint="https://example.invalid",
+                                       ca_file=Path("unused-ca"), kibana_endpoint="https://example.invalid",
+                                       kibana_ca_file=Path("unused-kibana-ca"),
+                                       admin_credentials_file=Path("unused-admin"), agent_binary=Path("unused-agent"),
+                                       profile="user", enrollment_root=target, dry_run=False)
+                old_parse = INSTALL.argparse.ArgumentParser.parse_args
+                old_bundle, old_role = INSTALL.load_bundle, INSTALL.role_body
+                old_configure, old_auth, old_uuid = (INSTALL.configure_https, INSTALL.admin_authorization,
+                                                     INSTALL.cluster_uuid)
+                INSTALL.argparse.ArgumentParser.parse_args = lambda _parser: args
+                INSTALL.load_bundle = lambda _path: INSTALL.Bundle("test", "test", [])
+                INSTALL.role_body = lambda _bundle: {}
+                INSTALL.configure_https = lambda _path: None
+                INSTALL.admin_authorization = lambda _path: "admin"
+                INSTALL.cluster_uuid = lambda *_args: calls.append("http")
+                stderr = io.StringIO()
+                try:
+                    with redirect_stderr(stderr):
+                        self.assertEqual(INSTALL.main(), 1)
+                finally:
+                    (INSTALL.argparse.ArgumentParser.parse_args, INSTALL.load_bundle, INSTALL.role_body,
+                     INSTALL.configure_https, INSTALL.admin_authorization, INSTALL.cluster_uuid) = (
+                        old_parse, old_bundle, old_role, old_configure, old_auth, old_uuid)
+                self.assertEqual(stderr.getvalue(),
+                                 "install refused: enrollment state is not valid for this enrollment root\n")
+                self.assertEqual(calls, [])
+                self.assertEqual((target / "state.json").read_bytes(), before)
+
+    def test_purge_refuses_copied_state_before_http_or_deletion(self):
+        with tempfile.TemporaryDirectory() as raw:
+            source = INSTALL.secure_root(Path(raw) / "source")
+            target = INSTALL.secure_root(Path(raw) / "target")
+            state = INSTALL.state_template("KUrXRgwRRQu-RikmIJhm0Q", INSTALL.TARGET_GENERATION_KAT,
+                                           "active", str(source))
+            INSTALL.atomic_write(target, "state.json", INSTALL.jcs(state) + b"\n")
+            before = (target / "state.json").read_bytes()
+            ca, admin = Path(raw) / "ca", Path(raw) / "admin.toml"
+            ca.write_text("ca"); admin.write_text('[elasticsearch]\napi_key = "key"\n')
+            ca.chmod(0o600); admin.chmod(0o600)
+            result = subprocess.run([
+                "bash", str(ROOT / "packaging/uninstall.sh"), "--purge", "--endpoint", "https://example.invalid",
+                "--ca-file", str(ca), "--admin-credentials-file", str(admin), "--enrollment-root", str(target),
+            ], text=True, capture_output=True, check=False)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.stderr, "uninstall purge failed: enrollment state validation:\n")
+            self.assertEqual((target / "state.json").read_bytes(), before)
+
     def test_publication_exchanges_all_consumer_files_as_one_generation(self):
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw) / "enrollment"; root.mkdir(mode=0o700); root.chmod(0o700)
@@ -163,7 +261,9 @@ i.atomic_publication(r, {n: ('new-' + n).encode() for n in ('credentials.toml','
 
     def test_fence_compares_every_live_backing_projection(self):
         uuid_value = "KUrXRgwRRQu-RikmIJhm0Q"
-        state = INSTALL.state_template(uuid_value, INSTALL.TARGET_GENERATION_KAT, "active")
+        root_handle = tempfile.TemporaryDirectory()
+        root = INSTALL.secure_root(Path(root_handle.name) / "enrollment")
+        state = INSTALL.state_template(uuid_value, INSTALL.TARGET_GENERATION_KAT, "active", str(root))
         projection = {
             "mappings": {
                 "properties": {
@@ -189,14 +289,15 @@ i.atomic_publication(r, {n: ('new-' + n).encode() for n in ('credentials.toml','
         INSTALL.canonical_owned_mapping_projection = lambda: projection
         INSTALL.backing_owned_mapping_projection = lambda *a: projection
         try:
-            self.assertTrue(INSTALL.existing_stream_is_compatible("https://x", "auth", state, uuid_value))
+            self.assertTrue(INSTALL.existing_stream_is_compatible("https://x", "auth", state, uuid_value, root))
             INSTALL.backing_owned_mapping_projection = lambda *a: {**projection, "settings": {
                 "index.mapping.ignore_malformed": True, "index.failure_store.enabled": False}}
-            self.assertFalse(INSTALL.existing_stream_is_compatible("https://x", "auth", state, uuid_value))
+            self.assertFalse(INSTALL.existing_stream_is_compatible("https://x", "auth", state, uuid_value, root))
         finally:
             (INSTALL.es_json, INSTALL.simulated_owned_mapping_projection,
              INSTALL.canonical_owned_mapping_projection, INSTALL.backing_owned_mapping_projection) = (
                 old_json, old_desired, old_canonical, old_backing)
+            root_handle.cleanup()
 
     def test_stream_write_rejects_ignored_or_failure_store_and_queries_failures(self):
         old_json = INSTALL.es_json

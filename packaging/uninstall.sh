@@ -43,6 +43,7 @@ done
 
 purge_fail() { printf 'uninstall purge failed: shipper API key revocation:\n' >&2; exit 1; }
 purge_output_fail() { printf 'uninstall purge failed: enrollment output:\n' >&2; exit 1; }
+purge_state_fail() { printf 'uninstall purge failed: enrollment state validation:\n' >&2; exit 1; }
 
 https_origin() {
     python3 - "$1" <<'PY'
@@ -72,7 +73,7 @@ PY
 }
 
 purge_ids() {
-    python3 - "$PURGE_ROOT/state.json" <<'PY'
+    python3 - "$PURGE_ROOT" 2>/dev/null <<'PY'
 import json, os, re, stat, sys
 def reject(pairs):
  d={}
@@ -80,11 +81,23 @@ def reject(pairs):
   if k in d: raise ValueError()
   d[k]=v
  return d
-root=os.path.dirname(sys.argv[1])
+root=sys.argv[1]
+if not isinstance(root, str) or not root or '\0' in root: raise ValueError()
+try:
+ root.encode('utf-8', 'strict')
+except UnicodeEncodeError: raise ValueError()
+lexical=os.path.abspath(root)
+current=os.path.sep
+for component in os.path.normpath(lexical).split(os.path.sep)[1:]:
+ current=os.path.join(current, component)
+ try: component_st=os.lstat(current)
+ except FileNotFoundError: continue
+ if stat.S_ISLNK(component_st.st_mode): raise ValueError()
+root=os.path.realpath(root)
 rst=os.lstat(root)
 if not stat.S_ISDIR(rst.st_mode) or stat.S_ISLNK(rst.st_mode) or rst.st_uid != os.geteuid() or rst.st_mode & 0o077: raise ValueError()
 flags=os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0)
-fd=os.open(sys.argv[1], flags)
+fd=os.open(os.path.join(root, 'state.json'), flags)
 try:
  st=os.fstat(fd)
  if not stat.S_ISREG(st.st_mode) or st.st_uid != os.geteuid() or st.st_mode & 0o077: raise ValueError()
@@ -92,9 +105,14 @@ try:
  with file as f: s=json.load(f, object_pairs_hook=reject)
 finally:
  if fd is not None: os.close(fd)
-keys={'version','phase','expected_cluster_uuid','target_generation','role_jcs_sha256','active_key_id','pending_revoke_ids','pending_mint_name','candidate_key_id'}
+keys={'version','phase','expected_cluster_uuid','target_generation','role_jcs_sha256','enrollment_root','active_key_id','pending_revoke_ids','pending_mint_name','candidate_key_id'}
 if set(s) != keys: raise ValueError()
 if type(s['version']) is not int or s['version'] != 1 or s['phase'] not in {'committed','mint_intent','candidate_staged','candidate_verified'}: raise ValueError()
+binding=s['enrollment_root']
+if not isinstance(binding,str) or not binding or '\0' in binding or not os.path.isabs(binding): raise ValueError()
+try: binding_bytes=binding.encode('utf-8', 'strict')
+except UnicodeEncodeError: raise ValueError()
+if len(binding_bytes) > 4096 or os.path.realpath(binding) != binding or binding != root: raise ValueError()
 if not isinstance(s['expected_cluster_uuid'],str) or not re.fullmatch(r'[A-Za-z0-9_-]{22}',s['expected_cluster_uuid']): raise ValueError()
 if any(not isinstance(s[k],str) or not re.fullmatch(r'[0-9a-f]{64}',s[k]) for k in ('target_generation','role_jcs_sha256')): raise ValueError()
 for k,cap in (('active_key_id',1024),('candidate_key_id',1024),('pending_mint_name',255)):
@@ -121,10 +139,11 @@ PY
 run_purge() {
     [ -n "$PURGE_ENDPOINT" ] && [ -n "$PURGE_CA_FILE" ] && [ -n "$PURGE_ADMIN_FILE" ] && [ -n "$PURGE_ROOT" ] || purge_fail
     https_origin "$PURGE_ENDPOINT" || purge_fail
+    # State binding comes before credentials, discovery, HTTP, or deletion.
+    ids_and_name="$(purge_ids)" || purge_state_fail
     protected_file "$PURGE_CA_FILE" && protected_file "$PURGE_ADMIN_FILE" || purge_fail
     [ -d "$PURGE_ROOT" ] && [ ! -L "$PURGE_ROOT" ] || purge_fail
     auth="$(purge_authorization)" || purge_fail
-    ids_and_name="$(purge_ids)" || purge_fail
     ids="$(printf '%s\n' "$ids_and_name" | sed -n '/^NAME:/!p' | sort -u)"
     mint_name="$(printf '%s\n' "$ids_and_name" | sed -n 's/^NAME://p')"
     if [ -n "$mint_name" ]; then

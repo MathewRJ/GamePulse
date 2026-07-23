@@ -44,7 +44,7 @@ TARGET_GENERATION_KAT = "a7ed20a4b4bfe0b2e5597a065e8bdaa5161b0d962e1a502d3db3bbc
 ROLE_JCS_SHA256 = "05b58b8369bc4212fcffa0ea81621ef10d6d57f1de464fbc3f562842a9cbafd7"
 DIAGNOSIS_STREAM = "logs-rigsignal.diagnosis-default"
 STATE_KEYS = frozenset(("version", "phase", "expected_cluster_uuid", "target_generation",
-                        "role_jcs_sha256", "active_key_id", "pending_revoke_ids",
+                        "role_jcs_sha256", "enrollment_root", "active_key_id", "pending_revoke_ids",
                         "pending_mint_name", "candidate_key_id"))
 STATE_PHASES = frozenset(("committed", "mint_intent", "candidate_staged", "candidate_verified"))
 UUID_RE = re.compile(r"[A-Za-z0-9_-]{22}\Z")
@@ -84,6 +84,10 @@ class ProvisionError(Exception):
     def __init__(self, prefix: str):
         self.prefix = prefix
         super().__init__(prefix)
+
+
+class StateBindingError(InputError):
+    """A persisted enrollment state does not belong to this enrollment root."""
 
 
 @dataclass(frozen=True)
@@ -424,17 +428,48 @@ def role_body(bundle: Bundle) -> dict:
     return value
 
 
-def state_template(uuid_value: str, generation: str, active: str | None = None) -> dict:
+def state_template(uuid_value: str, generation: str, active: str | None = None,
+                   enrollment_root: str | None = None) -> dict:
+    if not valid_enrollment_root(enrollment_root):
+        raise InputError("enrollment root is invalid")
     return {"version": 1, "phase": "committed", "expected_cluster_uuid": uuid_value,
             "target_generation": generation, "role_jcs_sha256": ROLE_JCS_SHA256,
-            "active_key_id": active, "pending_revoke_ids": [], "pending_mint_name": None,
+            "enrollment_root": enrollment_root, "active_key_id": active,
+            "pending_revoke_ids": [], "pending_mint_name": None,
             "candidate_key_id": None}
+
+
+def valid_enrollment_root(value: object) -> bool:
+    """Check the persisted, canonical UTF-8 root representation without I/O."""
+    if not isinstance(value, str) or not value or "\0" in value or not os.path.isabs(value):
+        return False
+    try:
+        encoded = value.encode("utf-8", "strict")
+    except UnicodeEncodeError:
+        return False
+    if len(encoded) > 4096:
+        return False
+    try:
+        return os.path.realpath(value) == value
+    except (OSError, ValueError):
+        return False
+
+
+def validate_state_binding(value: object, root: Path) -> None:
+    """Refuse state before it can establish ownership or expose key IDs."""
+    if not isinstance(value, dict) or not valid_enrollment_root(value.get("enrollment_root")):
+        raise StateBindingError("state enrollment root is invalid")
+    actual = os.path.realpath(os.fspath(root))
+    if value["enrollment_root"] != actual:
+        raise StateBindingError("state enrollment root does not match")
 
 
 def validate_state(value: object) -> dict:
     if not isinstance(value, dict) or set(value) != STATE_KEYS:
         raise InputError("state.json schema is invalid")
     if type(value["version"]) is not int or value["version"] != 1 or value["phase"] not in STATE_PHASES:
+        raise InputError("state.json schema is invalid")
+    if not valid_enrollment_root(value["enrollment_root"]):
         raise InputError("state.json schema is invalid")
     if not isinstance(value["expected_cluster_uuid"], str) or not UUID_RE.fullmatch(value["expected_cluster_uuid"]):
         raise InputError("state.json schema is invalid")
@@ -482,15 +517,49 @@ def secure_read(path: Path, missing_ok: bool = False) -> bytes | None:
 
 def load_state(root: Path) -> dict | None:
     raw = secure_read(root / "state.json", missing_ok=True)
-    return None if raw is None else validate_state(parse_json(raw, "state.json"))
+    if raw is None:
+        return None
+    value = parse_json(raw, "state.json")
+    validate_state_binding(value, root)
+    return validate_state(value)
 
 
-def secure_root(root: Path) -> None:
-    root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    st = root.lstat()
+def _reject_symlinked_path(root: Path) -> None:
+    """Reject a symlink in any existing component of the lexical root path."""
+    raw = os.fspath(root)
+    try:
+        raw.encode("utf-8", "strict")
+    except UnicodeEncodeError as error:
+        raise InputError("enrollment root is not protected") from error
+    if "\0" in raw:
+        raise InputError("enrollment root is not protected")
+    lexical = os.path.abspath(raw)
+    current = os.path.sep
+    for component in Path(lexical).parts[1:]:
+        current = os.path.join(current, component)
+        try:
+            member = os.lstat(current)
+        except FileNotFoundError:
+            continue
+        except OSError as error:
+            raise InputError("enrollment root is not protected") from error
+        if stat.S_ISLNK(member.st_mode):
+            raise InputError("enrollment root is not protected")
+
+
+def secure_root(root: Path) -> Path:
+    _reject_symlinked_path(root)
+    try:
+        root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    except (OSError, ValueError) as error:
+        raise InputError("enrollment root is not protected") from error
+    _reject_symlinked_path(root)
+    canonical = Path(os.path.realpath(os.fspath(root)))
+    st = canonical.lstat()
     if (not stat.S_ISDIR(st.st_mode) or stat.S_ISLNK(st.st_mode) or st.st_uid != os.geteuid()
             or st.st_mode & 0o077):
         raise InputError("enrollment root is not protected")
+    return canonical
 
 
 def secure_candidate_root(root: Path) -> Path:
@@ -930,7 +999,12 @@ def backing_owned_mapping_projection(es_url: str, authorization: str, index_name
     )
 
 
-def existing_stream_is_compatible(es_url: str, authorization: str, state: dict | None, uuid_value: str) -> bool:
+def existing_stream_is_compatible(es_url: str, authorization: str, state: dict | None, uuid_value: str,
+                                  root: Path | None = None) -> bool:
+    if state is not None:
+        if root is None:
+            raise InputError("enrollment root is required for state ownership")
+        validate_state_binding(state, root)
     try:
         response = es_json(es_url, "/_data_stream/" + DIAGNOSIS_STREAM, "GET", authorization)
     except RequestFailure as error:
@@ -954,9 +1028,12 @@ def existing_stream_is_compatible(es_url: str, authorization: str, state: dict |
                for item in indices)
 
 
-def fence(es_url: str, authorization: str, state: dict | None, uuid_value: str) -> None:
+def fence(es_url: str, authorization: str, state: dict | None, uuid_value: str,
+          root: Path | None = None) -> None:
     try:
-        compatible = existing_stream_is_compatible(es_url, authorization, state, uuid_value)
+        compatible = existing_stream_is_compatible(es_url, authorization, state, uuid_value, root)
+    except StateBindingError as error:
+        raise ProvisionError("install refused: enrollment state is not valid for this enrollment root") from error
     except (RequestFailure, InputError) as error:
         raise ProvisionError("install refused: existing diagnosis stream is not W1; migration is required") from error
     if not compatible:
@@ -1201,9 +1278,11 @@ def main() -> int:
         configure_https(args.ca_file)
         configure_https(args.kibana_ca_file)
         authorization = admin_authorization(args.admin_credentials_file)
-        root = args.enrollment_root or default_root()
-        secure_root(root)
-        prior = load_state(root)
+        root = secure_root(args.enrollment_root or default_root())
+        try:
+            prior = load_state(root)
+        except StateBindingError as error:
+            raise ProvisionError("install refused: enrollment state is not valid for this enrollment root") from error
 
         # Step 2: recover/pin before normal work.  Unpublished credentials are
         # never reused; their identifiers survive in state for deterministic
@@ -1229,7 +1308,8 @@ def main() -> int:
                     invalidate(es_url, authorization, prior["pending_revoke_ids"])
                 except (InputError, RequestFailure) as error:
                     raise ProvisionError("install failed: old shipper API key revocation:") from error
-                prior = state_template(uuid_value, prior["target_generation"], prior["active_key_id"])
+                prior = state_template(uuid_value, prior["target_generation"], prior["active_key_id"],
+                                       prior["enrollment_root"])
                 atomic_write(root, "state.json", jcs(prior) + b"\n")
             else:
                 # mint_intent is durable before the request.  A returned key ID
@@ -1244,7 +1324,8 @@ def main() -> int:
                 remove_candidate_root(root)
                 # Do not silently preserve an incomplete candidate as active.
                 prior = None if prior["active_key_id"] is None else state_template(
-                    uuid_value, prior["target_generation"], prior["active_key_id"])
+                    uuid_value, prior["target_generation"], prior["active_key_id"],
+                    prior["enrollment_root"])
                 if prior is not None:
                     atomic_write(root, "state.json", jcs(prior) + b"\n")
         # A pre-exchange crash leaves only this deterministic private staging
@@ -1253,7 +1334,7 @@ def main() -> int:
         remove_stale_publication_stage(root)
 
         prerequisites(es_url, kb_url, authorization)  # Step 3
-        fence(es_url, authorization, prior, uuid_value)  # Step 4, before W1 PUT
+        fence(es_url, authorization, prior, uuid_value, root)  # Step 4, before W1 PUT
 
         # Step 5: the ordered complete manifest barrier.
         for asset in bundle.assets:
@@ -1289,7 +1370,7 @@ def main() -> int:
         old_id = prior["active_key_id"] if prior else None
         if not reuse:
             mint_name = "rigsignal-provision-" + uuid.uuid4().hex
-            intent = state_template(uuid_value, generation, old_id)
+            intent = state_template(uuid_value, generation, old_id, str(root))
             intent.update(phase="mint_intent", pending_mint_name=mint_name)
             atomic_write(root, "state.json", jcs(intent) + b"\n")
             fault("before-mint-response")
@@ -1318,10 +1399,10 @@ def main() -> int:
             fault("candidate-verify")
         else:
             candidate_id = old_id
-            staged = state_template(uuid_value, generation, candidate_id)
+            staged = state_template(uuid_value, generation, candidate_id, str(root))
 
         assert encoded is not None and candidate_id is not None
-        final = state_template(uuid_value, generation, candidate_id)
+        final = state_template(uuid_value, generation, candidate_id, str(root))
         # Step 9.  During replacement the old ID is kept pending until published
         # files verify, but state is committed only after its confirmation.
         # The directory exchange publishes a coherent but deliberately
