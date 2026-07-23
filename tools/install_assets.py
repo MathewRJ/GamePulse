@@ -919,10 +919,14 @@ def backing_owned_mapping_projection(es_url: str, authorization: str, index_name
     settings_response = es_json(es_url, "/" + quoted + "/_settings?flat_settings=true", "GET", authorization)
     mappings = required_path(mapping_response, (index_name, "mappings"))
     settings = required_path(settings_response, (index_name, "settings"))
+    # failure_store is a data-stream-level option: ES materializes no index
+    # setting when it is disabled, so absence IS the required-disabled state;
+    # a present value must still be false.
+    failure_store = settings.get("index.failure_store.enabled", "false") if isinstance(settings, dict) else "false"
     return owned_mapping_projection(
         mappings,
         required_path(settings, ("index.mapping.ignore_malformed",)),
-        required_path(settings, ("index.failure_store.enabled",)),
+        failure_store,
     )
 
 
