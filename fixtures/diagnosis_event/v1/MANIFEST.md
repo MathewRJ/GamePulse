@@ -64,7 +64,7 @@ Context abbreviations: **DF** = `contexts/diagnosis-finding.json`; **NF** =
 `contexts/non-finding.json`; **MI** = `contexts/missing-detector-identity.json`;
 **MR** = `contexts/missing-detector-rule-version-identity.json`; **—** = no
 context.  Every row's expected sidecar shares its input basename with
-`.expected.json`.  The inventory contains 32 fixture cases.
+`.expected.json`.  The inventory contains 36 fixture cases.
 
 | ID | Boundary | Input files | Context | Expected result | Contract basis |
 | --- | --- | --- | --- | --- | --- |
@@ -100,6 +100,10 @@ context.  Every row's expected sidecar shares its input basename with
 | 21 both display strings = 8192 | validator | `positive/21-display-fields-at-limit.input.json` | DF | accepted; display lengths 8192/8192 | §5, §7; §13.3, §13.5 |
 | 22 evidence display = 8193 | validator | `negative/22-evidence-display-over-limit.input.json` | DF | `LimitExceeded { evidence_display, 8192 }` | §5, §7; §13.3, §13.5 |
 | 23 suggested-fixes display = 8193 | validator | `negative/23-suggested-fixes-display-over-limit.input.json` | DF | `LimitExceeded { suggested_fixes_display, 8192 }` | §5, §7; §13.3, §13.5 |
+| 24 exact serialized event byte cap | validator | `positive/24-event-bytes-exact-cap.input.json` | DF | accepted; serialized bytes 1048576 | §15.1 |
+| 24 one byte over serialized event cap | validator | `negative/24-event-bytes-one-over.input.json` | DF | `EventBytesLimitExceeded { limit: 1048576, actual_saturated: 1048577 }`; serialized bytes 1048577 | §15.1 |
+| 25 Unicode and JSON-escape serialized byte cap | validator | `positive/25-event-bytes-unicode-escape.input.json` | DF | accepted; serialized bytes 1048576; source plain-language UTF-8 bytes 1039018 | §15.1 |
+| 26 serialized-byte saturation helper | helper | `negative/26-event-bytes-saturation.input.json` | — | `actual_saturated: 4294967295`; allocation bytes max 1048576 | §15.1 |
 
 Case 01 proves source-host lowercasing and ordered evidence/fix displays.  Case 01b
 proves the diagnosis-arm `None` host fallback and lowercasing.  Case 02 proves

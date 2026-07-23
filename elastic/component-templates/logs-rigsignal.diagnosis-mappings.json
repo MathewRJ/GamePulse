@@ -1,0 +1,115 @@
+{
+  "_meta": {
+    "managed": false,
+    "managed_by": "rigsignal-asset-bundle",
+    "description": "DiagnosisEvent contract mapping — see Workflow evidence/app-p0-2026-07-22/W1-DIAGNOSISEVENT-CONTRACT.md for full rationale. Regular logs stream, NOT TSDS (APP-DESIGN.md C1a).",
+    "schema_version": 1,
+    "accepted_schema_versions": ["1"],
+    "contract_doc": "projects/Workflow/evidence/app-p0-2026-07-22/W1-DIAGNOSISEVENT-CONTRACT.md"
+  },
+  "version": 1,
+  "template": {
+    "mappings": {
+      "dynamic": "strict",
+      "properties": {
+        "@timestamp": {
+          "type": "date",
+          "ignore_malformed": false
+        },
+        "event": {
+          "properties": {
+            "id": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        "host": {
+          "properties": {
+            "name": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        "observer": {
+          "properties": {
+            "name": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        "rigsignal": {
+          "properties": {
+            "diagnosis": {
+              "dynamic": "strict",
+              "properties": {
+                "schema_version": {
+                  "type": "integer"
+                },
+                "outcome": {
+                  "type": "keyword",
+                  "ignore_above": 1024
+                },
+                "detector_id": {
+                  "type": "keyword",
+                  "ignore_above": 1024
+                },
+                "rule_version": {
+                  "type": "keyword",
+                  "ignore_above": 1024
+                },
+                "input_mode": {
+                  "type": "keyword",
+                  "ignore_above": 1024
+                },
+                "verdict": {
+                  "type": "keyword",
+                  "ignore_above": 1024
+                },
+                "disposition": {
+                  "type": "keyword",
+                  "ignore_above": 1024
+                },
+                "confidence": {
+                  "type": "double"
+                },
+                "confidence_basis": {
+                  "type": "match_only_text"
+                },
+                "evidence": {
+                  "type": "match_only_text"
+                },
+                "evidence_display": {
+                  "type": "match_only_text"
+                },
+                "plain_language": {
+                  "type": "match_only_text"
+                },
+                "suggested_fixes": {
+                  "type": "match_only_text"
+                },
+                "suggested_fixes_display": {
+                  "type": "match_only_text"
+                },
+                "falsifier": {
+                  "type": "match_only_text"
+                },
+                "supported_scope": {
+                  "type": "match_only_text"
+                },
+                "missing_evidence": {
+                  "type": "match_only_text"
+                },
+                "nearest_alternative": {
+                  "type": "match_only_text"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

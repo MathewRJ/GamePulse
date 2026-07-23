@@ -1,0 +1,7 @@
+{
+  "cluster": ["monitor"],
+  "indices": [{
+    "names": ["logs-rigsignal.diagnosis-default"],
+    "privileges": ["view_index_metadata", "create_doc"]
+  }]
+}

@@ -30,6 +30,11 @@ use chrono::Utc;
 use clap::{Parser, Subcommand};
 use collectors::Collector;
 use config::OutputMode;
+use detectors::contract::diagnosis_event::{
+    DiagnosisEvent, EventContext, InputMode, ValidationError,
+};
+use detectors::contract::{DetectorContract, Disposition, Outcome};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use session::SessionEvent;
 use shipper::SpoolWriter;
@@ -42,6 +47,14 @@ use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)] // Diagnose owns its Clap action payload.
 enum Commands {
+    /// Construct frozen fixture event bytes through the production validator.
+    #[command(hide = true)]
+    FixtureEventBytes {
+        #[arg(long, value_name = "PATH")]
+        input: PathBuf,
+        #[arg(long, value_name = "PATH")]
+        context: PathBuf,
+    },
     /// Verify the configured Elasticsearch destination and diagnosis schema.
     Handshake {
         #[command(subcommand)]
@@ -717,6 +730,57 @@ async fn write_output(
     }
 }
 
+#[derive(Deserialize)]
+struct FixtureEventContext {
+    event_id: String,
+    enqueue_timestamp: String,
+    local_host_name: String,
+    detector_contract: FixtureDetectorContract,
+}
+
+#[derive(Deserialize)]
+struct FixtureDetectorContract {
+    detector_id: String,
+    rule_version: String,
+    error_prefix: String,
+}
+
+fn fixture_event_bytes(input: &PathBuf, context: &PathBuf) -> Result<ExitCode> {
+    let outcome: Outcome =
+        serde_json::from_slice(&std::fs::read(input)?).context("fixture input")?;
+    let fixture: FixtureEventContext =
+        serde_json::from_slice(&std::fs::read(context)?).context("fixture context")?;
+    let contract = Box::leak(Box::new(DetectorContract {
+        detector_id: Box::leak(fixture.detector_contract.detector_id.into_boxed_str()),
+        rule_version: Box::leak(fixture.detector_contract.rule_version.into_boxed_str()),
+        error_prefix: Box::leak(fixture.detector_contract.error_prefix.into_boxed_str()),
+    }));
+    let event_context = EventContext {
+        event_id: fixture.event_id,
+        enqueue_timestamp: fixture.enqueue_timestamp,
+        local_host_name: fixture.local_host_name,
+        detector_contract: contract,
+        input_mode: InputMode::Fixture,
+    };
+    match DiagnosisEvent::try_from_outcome(
+        outcome.with_disposition(Disposition::Finding),
+        &event_context,
+    ) {
+        Ok(event) => {
+            use std::io::Write;
+            std::io::stdout().write_all(event.canonical_bytes())?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Err(error @ ValidationError::EventBytesLimitExceeded { .. }) => {
+            eprintln!("{error:?}");
+            Ok(ExitCode::from(1))
+        }
+        Err(error) => Err(anyhow::anyhow!(
+            "fixture event validation failed: {error:?}"
+        )),
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<ExitCode> {
     run().await
@@ -784,6 +848,10 @@ async fn run() -> Result<ExitCode> {
         });
     }
 
+    if let Some(Commands::FixtureEventBytes { input, context }) = &cli.command {
+        return fixture_event_bytes(input, context);
+    }
+
     // Handshake has its own explicit protected-config reader and must run before
     // Config::load(), which performs legacy environment/default-path resolution.
     if let Some(Commands::Handshake {
@@ -833,6 +901,9 @@ async fn run() -> Result<ExitCode> {
         }) => unreachable!("display diagnosis was dispatched before Config::load"),
         Some(Commands::Handshake { .. }) => {
             unreachable!("handshake was dispatched before Config::load")
+        }
+        Some(Commands::FixtureEventBytes { .. }) => {
+            unreachable!("fixture bytes were dispatched before Config::load")
         }
         None => {}
     }

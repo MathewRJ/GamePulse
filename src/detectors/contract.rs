@@ -198,8 +198,10 @@ impl Outcome {
         }
     }
 
-    #[cfg(test)]
-    fn with_disposition(mut self, disposition: Disposition) -> Self {
+    /// Attach the in-process disposition before the immutable event boundary.
+    /// Fixture tooling uses this same production path rather than serializing
+    /// an ad-hoc JSON document.
+    pub fn with_disposition(mut self, disposition: Disposition) -> Self {
         match &mut self {
             Self::Diagnosis(diagnosis) => diagnosis.disposition = disposition,
             Self::NotApplicable(not_applicable) => not_applicable.disposition = disposition,

@@ -2,6 +2,7 @@
 
 use super::{DetectorContract, Disposition, Outcome};
 use serde::Serialize;
+use std::sync::Arc;
 
 /// The sole compiled schema version emitted by this contract.
 pub const DIAGNOSIS_SCHEMA_VERSION: u32 = 1;
@@ -10,6 +11,9 @@ const MAX_ARRAY_ELEMENTS: usize = 50;
 const MAX_ARRAY_ELEMENT_CHARS: usize = 4096;
 const MAX_DISPLAY_CHARS: usize = 8192;
 const MAX_KEYWORD_CHARS: usize = 1024;
+/// The immutable DiagnosisEvent envelope limit, measured after RFC 8785/JCS
+/// serialization.  This is intentionally the only byte-limit authority.
+pub const MAX_DIAGNOSIS_EVENT_BYTES: u32 = 1_048_576;
 
 /// Source mode recorded with a diagnosis event.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -54,6 +58,30 @@ pub enum ValidationError {
         expected: String,
         actual: String,
     },
+    EventBytesLimitExceeded {
+        limit: u32,
+        actual_saturated: u32,
+    },
+}
+
+/// A validated envelope and the exact bytes which an outbox must persist/send.
+///
+/// `DiagnosisEvent` is kept private so a caller cannot mutate a value after the
+/// byte boundary.  Callers deliberately receive only immutable references.
+#[derive(Clone, Debug)]
+pub struct ValidatedDiagnosisEvent {
+    event: DiagnosisEvent,
+    canonical_bytes: Arc<[u8]>,
+}
+
+impl ValidatedDiagnosisEvent {
+    pub fn event(&self) -> &DiagnosisEvent {
+        &self.event
+    }
+
+    pub fn canonical_bytes(&self) -> &[u8] {
+        &self.canonical_bytes
+    }
 }
 
 /// The minimal ECS plus RigSignal envelope required by the frozen contract.
@@ -120,7 +148,7 @@ impl DiagnosisEvent {
     pub fn try_from_outcome(
         outcome: Outcome,
         event_context: &EventContext<'_>,
-    ) -> Result<Self, ValidationError> {
+    ) -> Result<ValidatedDiagnosisEvent, ValidationError> {
         validate_context(event_context)?;
 
         let contract = event_context.detector_contract;
@@ -237,15 +265,172 @@ impl DiagnosisEvent {
             }
         };
 
-        Ok(Self {
+        let event = Self {
             timestamp,
             event: EventMetadata {
                 id: event_context.event_id.clone(),
             },
             host: HostMetadata { name: host_name },
             rigsignal: RigSignalMetadata { diagnosis: payload },
+        };
+        // Serialize exactly once at the validator boundary.  The retained
+        // vector is the future outbox's wire/storage representation.
+        let canonical_bytes = serialize_diagnosis_event_jcs(&event);
+        let actual = canonical_bytes.len() as u64;
+        if actual > u64::from(MAX_DIAGNOSIS_EVENT_BYTES) {
+            return Err(ValidationError::EventBytesLimitExceeded {
+                limit: MAX_DIAGNOSIS_EVENT_BYTES,
+                actual_saturated: saturate_event_byte_count(actual),
+            });
+        }
+        Ok(ValidatedDiagnosisEvent {
+            event,
+            canonical_bytes: Arc::from(canonical_bytes),
         })
     }
+}
+
+/// Serialize a DiagnosisEvent as RFC 8785/JCS UTF-8 bytes.
+///
+/// This is the stable canonical serialization contract for the validator and
+/// future outbox.  Do not serialize a validated event a second time.
+pub fn serialize_diagnosis_event_jcs(event: &DiagnosisEvent) -> Vec<u8> {
+    let value = serde_json::to_value(event).expect("DiagnosisEvent is serializable");
+    jcs_value(&value).into_bytes()
+}
+
+/// Convert a measured byte count without permitting a test or caller to
+/// allocate a multi-gigabyte event.
+pub fn saturate_event_byte_count(actual: u64) -> u32 {
+    actual.min(u64::from(u32::MAX)) as u32
+}
+
+fn jcs_value(value: &serde_json::Value) -> String {
+    use serde_json::Value;
+    match value {
+        Value::Null => "null".into(),
+        Value::Bool(value) => value.to_string(),
+        Value::Number(value) => jcs_number(value),
+        Value::String(value) => serde_json::to_string(value).expect("string is JSON"),
+        Value::Array(values) => format!(
+            "[{}]",
+            values.iter().map(jcs_value).collect::<Vec<_>>().join(",")
+        ),
+        Value::Object(values) => {
+            let mut entries = values.iter().collect::<Vec<_>>();
+            // RFC 8785 orders member names by UTF-16 code units, rather than
+            // UTF-8 bytes/Rust scalar ordering.  The difference matters when a
+            // BMP key sorts around a supplementary-plane key.
+            entries.sort_unstable_by(|(left, _), (right, _)| {
+                left.encode_utf16().cmp(right.encode_utf16())
+            });
+            format!(
+                "{{{}}}",
+                entries
+                    .into_iter()
+                    .map(|(key, value)| format!(
+                        "{}:{}",
+                        serde_json::to_string(key).expect("key is JSON"),
+                        jcs_value(value)
+                    ))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+        }
+    }
+}
+
+fn jcs_number(value: &serde_json::Number) -> String {
+    if value.as_i64().is_some() || value.as_u64().is_some() {
+        return value.to_string();
+    }
+    let number = value
+        .as_f64()
+        .expect("serde_json Number is either an integer or finite f64");
+    if number == 0.0 {
+        return "0".into();
+    }
+    // serde_json/Ryu supplies the shortest round-tripping significand.  JCS
+    // then uses decimal notation for [1e-6, 1e21), and scientific notation
+    // outside that range (with an explicit '+' exponent sign).
+    let raw = value.to_string();
+    let magnitude = number.abs();
+    if (1e-6..1e21).contains(&magnitude) {
+        expand_jcs_decimal(&raw)
+    } else {
+        jcs_scientific(&raw)
+    }
+}
+
+fn split_number(raw: &str) -> (&str, i32) {
+    match raw.find(['e', 'E']) {
+        Some(index) => (
+            &raw[..index],
+            raw[index + 1..]
+                .parse()
+                .expect("serde_json emits a valid exponent"),
+        ),
+        None => (raw, 0),
+    }
+}
+
+fn expand_jcs_decimal(raw: &str) -> String {
+    let (mantissa, exponent) = split_number(raw);
+    let negative = mantissa.starts_with('-');
+    let digits = mantissa.trim_start_matches('-').replace('.', "");
+    let decimal_at = mantissa
+        .trim_start_matches('-')
+        .find('.')
+        .unwrap_or(digits.len()) as i32
+        + exponent;
+    let mut rendered = if decimal_at <= 0 {
+        format!("0.{}{}", "0".repeat((-decimal_at) as usize), digits)
+    } else if decimal_at as usize >= digits.len() {
+        format!(
+            "{}{}",
+            digits,
+            "0".repeat(decimal_at as usize - digits.len())
+        )
+    } else {
+        format!(
+            "{}.{}",
+            &digits[..decimal_at as usize],
+            &digits[decimal_at as usize..]
+        )
+    };
+    if rendered.contains('.') {
+        rendered = rendered
+            .trim_end_matches('0')
+            .trim_end_matches('.')
+            .to_owned();
+    }
+    if negative {
+        format!("-{rendered}")
+    } else {
+        rendered
+    }
+}
+
+fn jcs_scientific(raw: &str) -> String {
+    let (mantissa, exponent) = split_number(raw);
+    let negative = mantissa.starts_with('-');
+    let unsigned = mantissa.trim_start_matches('-');
+    let decimal_at = unsigned.find('.').unwrap_or(unsigned.len()) as i32 + exponent;
+    let digits = unsigned.replace('.', "");
+    let leading_zeroes = digits.bytes().take_while(|byte| *byte == b'0').count();
+    let significant = &digits[leading_zeroes..];
+    let exponent = decimal_at - 1 - leading_zeroes as i32;
+    let significand = if significant.len() == 1 {
+        significant.to_owned()
+    } else {
+        format!("{}.{}", &significant[..1], &significant[1..])
+    };
+    let sign = if exponent >= 0 { "+" } else { "" };
+    format!(
+        "{}{}e{sign}{exponent}",
+        if negative { "-" } else { "" },
+        significand
+    )
 }
 
 /// Return whether the compiled schema version occurs in the accepted set.
@@ -464,6 +649,20 @@ mod tests {
                 );
                 continue;
             }
+            if name.starts_with("26-event-bytes-saturation") {
+                helper_cases += 1;
+                let helper_input: Value = serde_json::from_str(&input_text).unwrap();
+                let actual = helper_input["synthetic_serialized_bytes_u64"]
+                    .as_u64()
+                    .unwrap();
+                assert_eq!(
+                    saturate_event_byte_count(actual),
+                    expected_value["actual_saturated"].as_u64().unwrap() as u32,
+                    "{name}"
+                );
+                assert_eq!(expected_value["allocation_bytes_max"], 1_048_576, "{name}");
+                continue;
+            }
 
             let fixture_context = load_context(context_file_for(name));
             let event_context = event_context_from_fixture(&fixture_context);
@@ -484,10 +683,34 @@ mod tests {
             } else {
                 validator_positive += 1;
                 let event = actual.unwrap_or_else(|error| panic!("{name} rejected: {error:?}"));
+                if let Some(serialized_bytes) = expected_value.get("serialized_bytes") {
+                    assert_eq!(
+                        event.canonical_bytes().len() as u64,
+                        serialized_bytes.as_u64().unwrap(),
+                        "{name}"
+                    );
+                    if let Some(source_bytes) =
+                        expected_value.get("source_plain_language_utf8_bytes")
+                    {
+                        let source: Value = serde_json::from_str(&input_text).unwrap();
+                        assert_eq!(
+                            source["plain_language"].as_str().unwrap().len() as u64,
+                            source_bytes.as_u64().unwrap(),
+                            "{name}"
+                        );
+                    }
+                    continue;
+                }
                 if expected_value.get("result") == Some(&Value::String("accepted".into())) {
                     assert_eq!(
                         Value::Number(
-                            (event.rigsignal.diagnosis.evidence_display.chars().count() as u64)
+                            (event
+                                .event()
+                                .rigsignal
+                                .diagnosis
+                                .evidence_display
+                                .chars()
+                                .count() as u64)
                                 .into()
                         ),
                         expected_value["evidence_display_length"],
@@ -496,6 +719,7 @@ mod tests {
                     assert_eq!(
                         Value::Number(
                             (event
+                                .event()
                                 .rigsignal
                                 .diagnosis
                                 .suggested_fixes_display
@@ -509,9 +733,12 @@ mod tests {
                         "{name}"
                     );
                 } else {
+                    // Compare through the production JCS primitive, rather
+                    // than carrying a fixture-side serializer solely to turn
+                    // f64 `0.0` into its canonical JSON spelling.
                     assert_eq!(
-                        canonical_json(&serde_json::to_value(event).unwrap()),
-                        canonical_json(&expected_value),
+                        jcs_value(&serde_json::to_value(event.event()).unwrap()),
+                        jcs_value(&expected_value),
                         "{name}"
                     );
                 }
@@ -525,7 +752,7 @@ mod tests {
                 serde_cases,
                 helper_cases
             ),
-            (9, 20, 1, 2)
+            (11, 21, 1, 3)
         );
     }
 
@@ -541,6 +768,20 @@ mod tests {
     }
 
     #[test]
+    fn jcs_uses_ecmascript_number_and_utf16_key_ordering() {
+        let number = |text: &str| serde_json::from_str::<Value>(text).unwrap();
+        assert_eq!(jcs_value(&number("0.000001")), "0.000001");
+        assert_eq!(jcs_value(&number("0.0000001")), "1e-7");
+        assert_eq!(jcs_value(&number("1000000000000000000000.0")), "1e+21");
+        assert_eq!(jcs_value(&number("-0.0")), "0");
+        // U+10000 is a high-surrogate pair and sorts before U+E000 in UTF-16.
+        assert_eq!(
+            jcs_value(&serde_json::json!({"\u{e000}": 1, "\u{10000}": 2})),
+            "{\"𐀀\":2,\"\":1}"
+        );
+    }
+
+    #[test]
     fn unicode_limits_count_scalar_values_and_rendered_display() {
         let crab = "🦀";
         let mut outcome = valid_diagnosis(0.5, Disposition::Finding);
@@ -552,7 +793,13 @@ mod tests {
 
         let event = DiagnosisEvent::try_from_outcome(outcome, &test_context()).unwrap();
         assert_eq!(
-            event.rigsignal.diagnosis.evidence_display.chars().count(),
+            event
+                .event()
+                .rigsignal
+                .diagnosis
+                .evidence_display
+                .chars()
+                .count(),
             8192
         );
 
@@ -668,7 +915,7 @@ mod tests {
             Outcome::NotApplicable(_) => unreachable!(),
         }
         let event = DiagnosisEvent::try_from_outcome(at_limit, &test_context()).unwrap();
-        assert_eq!(event.host.name.chars().count(), 1024);
+        assert_eq!(event.event().host.name.chars().count(), 1024);
 
         let mut over_limit = valid_diagnosis(0.5, Disposition::Finding);
         match &mut over_limit {
@@ -897,55 +1144,15 @@ mod tests {
             } => {
                 serde_json::json!({"variant": "DetectorContractMismatch", "field": field, "expected": expected, "actual": actual})
             }
+            ValidationError::EventBytesLimitExceeded {
+                limit,
+                actual_saturated,
+            } => serde_json::json!({
+                "variant": "EventBytesLimitExceeded",
+                "limit": limit,
+                "actual_saturated": actual_saturated,
+            }),
         }
-    }
-
-    // The corpus only uses ASCII object keys and finite JSON numbers.  This is a
-    // deliberately small RFC 8785 helper for that value domain; the integer-valued
-    // f64 branch accounts for serde_json's `0.0`/`1.0` spelling versus JCS's `0`/`1`.
-    fn canonical_json(value: &Value) -> String {
-        match value {
-            Value::Null => "null".into(),
-            Value::Bool(value) => value.to_string(),
-            Value::Number(value) => canonical_number(value),
-            Value::String(value) => serde_json::to_string(value).unwrap(),
-            Value::Array(values) => format!(
-                "[{}]",
-                values
-                    .iter()
-                    .map(canonical_json)
-                    .collect::<Vec<_>>()
-                    .join(",")
-            ),
-            Value::Object(values) => {
-                let mut entries = values.iter().collect::<Vec<_>>();
-                entries.sort_by_key(|(key, _)| *key);
-                format!(
-                    "{{{}}}",
-                    entries
-                        .into_iter()
-                        .map(|(key, value)| format!(
-                            "{}:{}",
-                            serde_json::to_string(key).unwrap(),
-                            canonical_json(value)
-                        ))
-                        .collect::<Vec<_>>()
-                        .join(",")
-                )
-            }
-        }
-    }
-
-    fn canonical_number(value: &serde_json::Number) -> String {
-        if let Some(value) = value.as_f64() {
-            if value == 0.0 {
-                return "0".into();
-            }
-            if value.fract() == 0.0 && value.abs() < 1e21 {
-                return format!("{value:.0}");
-            }
-        }
-        value.to_string()
     }
 
     fn test_contract() -> DetectorContract {
