@@ -210,7 +210,7 @@ class AssetToolsTests(unittest.TestCase):
                      INSTALL.configure_https, INSTALL.admin_authorization, INSTALL.cluster_uuid) = (
                         old_parse, old_bundle, old_role, old_configure, old_auth, old_uuid)
                 self.assertEqual(stderr.getvalue(),
-                                 "install refused: enrollment state is not valid for this enrollment root\n")
+                                 "install refused: enrollment_remediation_required\n")
                 self.assertEqual(calls, [])
                 self.assertEqual((target / "state.json").read_bytes(), before)
 
@@ -300,8 +300,20 @@ i.atomic_publication(r, {n: ('new-' + n).encode() for n in ('credentials.toml','
             "settings": {"index.mapping.ignore_malformed": False, "index.failure_store.enabled": False},
         }
         old_json = INSTALL.es_json
-        INSTALL.es_json = lambda *a, **k: {"data_streams": [{"name": INSTALL.DIAGNOSIS_STREAM,
-            "indices": [{"index_name": ".ds-one"}, {"index_name": ".ds-two"}]}]}
+        def fake_json(_base, path, *_args, **_kwargs):
+            if path.startswith("/_data_stream/"):
+                return {"data_streams": [{"name": INSTALL.DIAGNOSIS_STREAM,
+                    "failure_store": {"enabled": False}, "ilm_policy": INSTALL.W1_LIFECYCLE_POLICY,
+                    "indices": [{"index_name": ".ds-one", "index_uuid": "uuid-one"},
+                                {"index_name": ".ds-two", "index_uuid": "uuid-two"}]}]}
+            if path.startswith("/_ilm/policy/"):
+                return {INSTALL.W1_LIFECYCLE_POLICY: {"policy": {"phases": {"hot": {}}}}}
+            index = ".ds-one" if ".ds-one" in path else ".ds-two"
+            index_uuid = "uuid-one" if index == ".ds-one" else "uuid-two"
+            return {index: {"settings": {"index.uuid": index_uuid,
+                                         "index.lifecycle.name": INSTALL.W1_LIFECYCLE_POLICY}}} if "_settings" in path else {
+                "indices": {index: {"managed": True, "policy": INSTALL.W1_LIFECYCLE_POLICY}}}
+        INSTALL.es_json = fake_json
         old_desired, old_canonical, old_backing = (INSTALL.simulated_owned_mapping_projection,
                                                    INSTALL.canonical_owned_mapping_projection,
                                                    INSTALL.backing_owned_mapping_projection)
@@ -323,16 +335,25 @@ i.atomic_publication(r, {n: ('new-' + n).encode() for n in ('credentials.toml','
         old_json = INSTALL.es_json
         old_status = INSTALL.es_json_status
         calls = []
+        writes = {}
         def fake_json(_base, path, _method, _authorization, _payload=None):
             calls.append(path)
             if path.endswith("::failures/_search"):
                 return {"hits": {"hits": []}}
+            if path.endswith("/_search"):
+                event_id = _payload["query"]["ids"]["values"][0]
+                return {"hits": {"hits": [{"_id": event_id, "_source": writes[event_id]}]}}
             return {"result": "created"}
         INSTALL.es_json = fake_json
-        INSTALL.es_json_status = lambda _base, path, *_a, **_k: (
-            (400, {"error": {}}) if "provision-bad" in path or "provision-malformed" in path
-            else (201, {"result": "created"})
-        )
+        def fake_status(_base, path, _method, _authorization, payload=None):
+            if "provision-bad" in path or "provision-nested" in path:
+                return 400, {"error": {"type": "strict_dynamic_mapping_exception"}}
+            if "provision-malformed" in path:
+                return 400, {"error": {"type": "document_parsing_exception",
+                                        "caused_by": {"type": "number_format_exception"}}}
+            writes[payload["event"]["id"]] = payload
+            return 201, {"result": "created"}
+        INSTALL.es_json_status = fake_status
         try:
             INSTALL.verify_stream_behavior("https://x", "key", "admin", "clean")
             self.assertIn("/" + INSTALL.DIAGNOSIS_STREAM + "::failures/_search", calls)
