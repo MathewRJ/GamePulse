@@ -10,6 +10,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -116,19 +117,61 @@ class AssetToolsTests(unittest.TestCase):
 
     def test_recovery_discovers_all_keys_by_mint_intent_name(self):
         calls = []
+        requests = []
         old_json, old_invalidate = INSTALL.es_json, INSTALL.invalidate
-        INSTALL.es_json = lambda *_args: {"api_keys": [
-            {"name": "mint", "id": "new-a"}, {"name": "mint", "id": "new-b"},
-        ]}
+        def lookup(_url, path, *_args):
+            requests.append(path)
+            if path == "/_security/api_key?name=mint":
+                # This is the actual default lookup behavior for an invalidated
+                # key; active_only must prevent it reaching invalidate().
+                return {"api_keys": [{"name": "mint", "id": "invalidated-key"}]}
+            if path == "/_security/api_key?name=mint&active_only=true":
+                return {"api_keys": [{"name": "mint", "id": "new-a"},
+                                     {"name": "mint", "id": "new-b"}]}
+            raise AssertionError(path)
+        INSTALL.es_json = lookup
         INSTALL.invalidate = lambda _url, _auth, ids: calls.append(ids)
         try:
             INSTALL.invalidate_mint_name("https://x", "admin", "mint")
             self.assertEqual(calls, [["new-a", "new-b"]])
+            self.assertEqual(requests, ["/_security/api_key?name=mint&active_only=true"])
             INSTALL.es_json = lambda *_args: {"api_keys": [{"name": "other", "id": "new-a"}]}
             with self.assertRaises(INSTALL.InputError):
                 INSTALL.invalidate_mint_name("https://x", "admin", "mint")
         finally:
             INSTALL.es_json, INSTALL.invalidate = old_json, old_invalidate
+
+    def test_invalidate_accepts_the_es_double_invalidation_response(self):
+        responses = iter((
+            {"invalidated_api_keys": ["YeEplJ8Ba7kxd7pTgpZq"],
+             "previously_invalidated_api_keys": [], "error_count": 0},
+            {"invalidated_api_keys": [], "previously_invalidated_api_keys": [], "error_count": 0},
+        ))
+        old_json = INSTALL.es_json
+        INSTALL.es_json = lambda *_args: next(responses)
+        try:
+            INSTALL.invalidate("https://x", "admin", ["YeEplJ8Ba7kxd7pTgpZq"])
+            INSTALL.invalidate("https://x", "admin", ["YeEplJ8Ba7kxd7pTgpZq"])
+        finally:
+            INSTALL.es_json = old_json
+
+    def test_invalidate_refuses_malformed_or_error_responses(self):
+        responses = (
+            {"invalidated_api_keys": "key", "previously_invalidated_api_keys": [], "error_count": 0},
+            {"invalidated_api_keys": [], "previously_invalidated_api_keys": [], "error_count": 1},
+            {"invalidated_api_keys": [], "previously_invalidated_api_keys": [], "error_count": False},
+            {"invalidated_api_keys": [], "previously_invalidated_api_keys": [], "error_count": 0,
+             "error_details": "unexpected"},
+            {"invalidated_api_keys": [], "previously_invalidated_api_keys": [], "error_count": 0,
+             "error_details": ["key"]},
+            {"invalidated_api_keys": [], "previously_invalidated_api_keys": [], "error_count": 0,
+             "error_details": [{"id": "key"}]},
+        )
+        for response in responses:
+            with self.subTest(response=response), \
+                 patch.object(INSTALL, "es_json", return_value=response):
+                with self.assertRaises(INSTALL.InputError):
+                    INSTALL.invalidate("https://x", "admin", ["key"])
 
     def test_duplicate_state_keys_rejected_and_atomic_mode_is_private(self):
         with tempfile.TemporaryDirectory() as raw:

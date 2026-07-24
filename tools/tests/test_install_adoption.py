@@ -48,7 +48,7 @@ class InstallAdoptionTests(unittest.TestCase):
             INSTALL.secure_candidate_root(root)
             self.assertEqual(INSTALL.enrollment_condition(root), "incomplete")
 
-    def test_candidate_write_crash_retry_uses_ordinary_recovery(self):
+    def test_candidate_write_recovery_redispatches_clean_root_without_adoption(self):
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw) / "enrollment"
             INSTALL.secure_root(root)
@@ -68,34 +68,18 @@ class InstallAdoptionTests(unittest.TestCase):
                 patches.enter_context(patch.object(INSTALL, "cluster_uuid", return_value=state["expected_cluster_uuid"]))
                 invalidate_name = patches.enter_context(patch.object(INSTALL, "invalidate_mint_name"))
                 invalidate = patches.enter_context(patch.object(INSTALL, "invalidate"))
-                removed_candidate = patches.enter_context(patch.object(INSTALL, "remove_candidate_root"))
                 patches.enter_context(patch.object(INSTALL, "remove_stale_publication_stage"))
-                fence = patches.enter_context(patch.object(INSTALL, "fence"))
-                patches.enter_context(patch.object(INSTALL, "prerequisites"))
-                patches.enter_context(patch.object(INSTALL, "remote_stream_condition", side_effect=[
-                    ("compatible", snapshot), ("compatible", snapshot),
-                ]))
-                patches.enter_context(patch.object(INSTALL, "ensure_stream"))
-                patches.enter_context(patch.object(INSTALL, "simulate"))
-                patches.enter_context(patch.object(INSTALL, "recompute_target_generation", return_value="0" * 64))
-                patches.enter_context(patch.object(INSTALL, "mint_key", return_value=("replacement", "encoded")))
-                patches.enter_context(patch.object(INSTALL, "enrollment_files", return_value={}))
-                patches.enter_context(patch.object(INSTALL, "atomic_write"))
-                patches.enter_context(patch.object(INSTALL, "verify_stream_behavior"))
-                patches.enter_context(patch.object(INSTALL, "verify_role_matrix"))
-                patches.enter_context(patch.object(INSTALL, "atomic_publication"))
-                patches.enter_context(patch.object(INSTALL, "run_handshake"))
-                patches.enter_context(patch.object(INSTALL, "request"))
-                patches.enter_context(patch.object(INSTALL, "verify_asset"))
-                self.assertEqual(INSTALL.main(), 0)
+                remote = patches.enter_context(patch.object(INSTALL, "remote_stream_condition",
+                                                            return_value=("compatible", snapshot)))
+                stderr = io.StringIO()
+                with redirect_stderr(stderr):
+                    self.assertEqual(INSTALL.main(), 1)
             invalidate_name.assert_called_once_with("https://es.invalid", "admin", "unfinished")
             invalidate.assert_called_once_with("https://es.invalid", "admin", ["candidate"])
-            # Recovery removes the crashed generation; finalization removes the
-            # replacement staging directory after the ordinary transaction.
-            self.assertEqual(removed_candidate.call_count, 2)
-            for call in removed_candidate.call_args_list:
-                self.assertEqual(call.args, (root,))
-            self.assertIsNone(fence.call_args.args[2])
+            self.assertEqual(stderr.getvalue(), "install refused: adoption_required\n")
+            remote.assert_called_once_with("https://es.invalid", "admin")
+            self.assertFalse((root / "candidate").exists())
+            self.assertFalse((root / "state.json").exists())
 
     def test_candidate_document_is_the_frozen_fixture_except_runtime_fields(self):
         expected = json.loads(INSTALL.PROBE_FIXTURE.read_bytes())

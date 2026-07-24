@@ -282,12 +282,21 @@ leg_5() {
 }
 
 leg_6() {
-  local root="$RUN_DIR/crash-root" status index_name injector=''
-  seed_m1
+  local root="$RUN_DIR/crash-root" status index_name injector='' pending_mint_name
+  seed_m1; capture_m1 "$RUN_DIR/crash-m1.before"
   if RIGSIGNAL_TEST_CRASH_AT=candidate-write run_installer "$root" 1 >"$RUN_DIR/crash.out" 2>&1; then status=0; else status=$?; fi
   [[ "$status" == 99 ]] || fail 'candidate-write crash hook did not terminate installer'
-  run_installer "$root" 0 || fail 'candidate-write retry did not recover'
-  [[ ! -d "$root/candidate" ]] || fail 'retry left candidate directory'
+  pending_mint_name="$(jq -r '.pending_mint_name|@uri' "$root/state.json")"
+  if run_installer "$root" 0 >"$RUN_DIR/crash-retry.out" 2>&1; then fail 'candidate-write no-flag retry unexpectedly succeeded'; fi
+  grep -Fx 'install refused: adoption_required' "$RUN_DIR/crash-retry.out" >/dev/null || fail 'candidate-write retry did not re-dispatch adoption_required'
+  [[ ! -d "$root/candidate" ]] || fail 'recovery left candidate directory'
+  [[ ! -e "$root/state.json" ]] || fail 'recovery left null-active state'
+  api GET "/_security/api_key?name=$pending_mint_name&active_only=true" | jq -e '.api_keys == []' >/dev/null \
+    || fail 'recovery left candidate API key active'
+  run_installer "$root" 1 || fail 'candidate-write adoption retry did not complete'
+  capture_m1 "$RUN_DIR/crash-m1.after"
+  assert_file_eq 'candidate-write recovery preserved M1 documents' "$RUN_DIR/crash-m1.before.canonical" "$RUN_DIR/crash-m1.after.canonical"
+  [[ "$(proof_ids | wc -l)" == 1 ]] || fail 'candidate-write adoption retry did not retain one proof'
   # Polling candidate_verified makes the mutation occur after Step 8; the
   # loop persists it until the immediate pre-Step-9 shared predicate observes it.
   root="$RUN_DIR/drift-root"; api DELETE "/_data_stream/$DIAGNOSIS_STREAM" >/dev/null; seed_m1

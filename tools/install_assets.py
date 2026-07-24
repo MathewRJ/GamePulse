@@ -702,6 +702,28 @@ def remove_candidate_root(root: Path) -> None:
     candidate.rmdir()
 
 
+def remove_recovered_state(root: Path) -> None:
+    """Remove the validated null-active transaction record after recovery."""
+    secure_root(root)
+    path = root / "state.json"
+    try:
+        st = path.lstat()
+    except OSError as error:
+        raise InputError("recovered enrollment state is invalid") from error
+    if (not stat.S_ISREG(st.st_mode) or stat.S_ISLNK(st.st_mode) or st.st_uid != os.geteuid()
+            or st.st_mode & 0o077):
+        raise InputError("recovered enrollment state is invalid")
+    try:
+        path.unlink()
+        directory_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    except OSError as error:
+        raise InputError("cannot remove recovered enrollment state") from error
+
+
 def atomic_write(root: Path, name: str, data: bytes) -> None:
     """Publish one protected file without following an existing target."""
     secure_root(root)
@@ -1300,6 +1322,22 @@ def remote_stream_condition(es_url: str, authorization: str) -> tuple[str, froze
     return ("compatible", snapshot) if snapshot is not None else ("incompatible", None)
 
 
+def dispatch_clean_root(es_url: str, authorization: str, adopt_requested: bool) -> bool:
+    """Apply the clean-root adoption matrix and return whether adoption is enabled."""
+    remote_condition, _snapshot = remote_stream_condition(es_url, authorization)
+    if adopt_requested:
+        if remote_condition == "absent":
+            raise ProvisionError("install refused: adoption_flag_stream_absent")
+        if remote_condition != "compatible":
+            raise ProvisionError("install refused: migration_required")
+        return True
+    if remote_condition == "compatible":
+        raise ProvisionError("install refused: adoption_required")
+    if remote_condition == "incompatible":
+        raise ProvisionError("install refused: migration_required")
+    return False
+
+
 def ensure_stream(es_url: str, authorization: str) -> None:
     try:
         request(es_url, "/_data_stream/" + DIAGNOSIS_STREAM, "PUT", authorization)
@@ -1333,10 +1371,22 @@ def invalidate(es_url: str, authorization: str, ids: list[str]) -> None:
     if not ids:
         return
     response = es_json(es_url, "/_security/api_key", "DELETE", authorization, {"ids": ids})
-    invalidated = response.get("invalidated_api_keys", []) if isinstance(response, dict) else []
-    previously = response.get("previously_invalidated_api_keys", []) if isinstance(response, dict) else []
-    if not set(ids).issubset(set(invalidated) | set(previously)):
+    if not isinstance(response, dict):
         raise InputError("API key invalidation was not confirmed")
+    invalidated = response.get("invalidated_api_keys")
+    previously = response.get("previously_invalidated_api_keys")
+    error_count = response.get("error_count", 0)
+    error_details = response.get("error_details", [])
+    if (not isinstance(invalidated, list) or not all(isinstance(item, str) for item in invalidated)
+            or not isinstance(previously, list) or not all(isinstance(item, str) for item in previously)
+            or type(error_count) is not int or error_count != 0
+            or not isinstance(error_details, list) or not all(isinstance(item, dict) for item in error_details)
+            or any(item.get("id") in ids for item in error_details)):
+        raise InputError("API key invalidation was not confirmed")
+    # ES 9.4.3 returns both ID lists empty, with error_count=0, when an
+    # already-invalidated key is invalidated again.  With a valid successful
+    # response, absence from both lists is therefore affirmative inactive
+    # state, not an unconfirmed revocation.
 
 
 def invalidate_mint_name(es_url: str, authorization: str, mint_name: str) -> None:
@@ -1347,7 +1397,8 @@ def invalidate_mint_name(es_url: str, authorization: str, mint_name: str) -> Non
     diagnostic text.  Refuse a malformed lookup response rather than treating
     it as proof that no orphan exists.
     """
-    response = es_json(es_url, "/_security/api_key?name=" + urllib.parse.quote(mint_name, safe=""),
+    response = es_json(es_url, "/_security/api_key?name=" + urllib.parse.quote(mint_name, safe="")
+                       + "&active_only=true",
                        "GET", authorization)
     keys = response.get("api_keys") if isinstance(response, dict) else None
     if not isinstance(keys, list):
@@ -1588,19 +1639,8 @@ def main() -> int:
         authorization = admin_authorization(args.admin_credentials_file)
         # A clean root is the only local condition in which a remote stream can
         # be adopted.  Decide it before creating the root or running recovery.
-        adoption = False
-        if condition == "clean":
-            remote_condition, _snapshot = remote_stream_condition(es_url, authorization)
-            if adopt_requested:
-                if remote_condition == "absent":
-                    raise ProvisionError("install refused: adoption_flag_stream_absent")
-                if remote_condition != "compatible":
-                    raise ProvisionError("install refused: migration_required")
-                adoption = True
-            elif remote_condition == "compatible":
-                raise ProvisionError("install refused: adoption_required")
-            elif remote_condition == "incompatible":
-                raise ProvisionError("install refused: migration_required")
+        adoption = (dispatch_clean_root(es_url, authorization, adopt_requested)
+                     if condition == "clean" else False)
 
         root = secure_root(requested_root)
         try:
@@ -1647,15 +1687,23 @@ def main() -> int:
                     invalidate(es_url, authorization, candidates)
                 remove_candidate_root(root)
                 # Do not silently preserve an incomplete candidate as active.
-                prior = None if prior["active_key_id"] is None else state_template(
-                    uuid_value, prior["target_generation"], prior["active_key_id"],
-                    prior["enrollment_root"])
-                if prior is not None:
+                if prior["active_key_id"] is None:
+                    remove_recovered_state(root)
+                    prior = None
+                else:
+                    prior = state_template(uuid_value, prior["target_generation"], prior["active_key_id"],
+                                           prior["enrollment_root"])
                     atomic_write(root, "state.json", jcs(prior) + b"\n")
         # A pre-exchange crash leaves only this deterministic private staging
         # path.  After phase recovery revokes/finishes its key lifecycle, it is
         # safe to remove whichever old or unpublished generation remains here.
         remove_stale_publication_stage(root)
+
+        if condition == "incomplete" and prior is None:
+            # A null-active recovery restores the clean-root condition.  Apply
+            # the same remote decision matrix now that recovery side effects
+            # are durable; adoption is one-shot and was already rejected above.
+            dispatch_clean_root(es_url, authorization, False)
 
         prerequisites(es_url, kb_url, authorization)  # Step 3
         fence(es_url, authorization, prior, uuid_value, root, adoption)  # Step 4, before W1 PUT
