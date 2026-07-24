@@ -1076,6 +1076,14 @@ class TransactionJournal:
         self.value["apply_ok"] = True
         self._persist()
 
+    def record_degradation(self, kind: str, name: str, reason: str) -> None:
+        """Durably expose an accepted verify-only fallback to rollback callers."""
+        entry = {"kind": kind, "name": name, "reason": reason}
+        degradations = self.value.setdefault("degradations", [])
+        if entry not in degradations:
+            degradations.append(entry)
+            self._persist()
+
 
 def ambiguous_crash_outcome(intent: dict, live_sha256: str) -> str:
     """Apply the durable three-way rule; never consult the current manifest."""
@@ -1218,6 +1226,51 @@ def _delete_or_absent(base: str, path: str, authorization: str, headers: dict[st
             raise
 
 
+def _verify_transform_verify_only(es_url: str, authorization: str, intent: dict,
+                                  preimage: object) -> None:
+    """Accept only the documented transform ``_meta`` cosmetic rollback drift."""
+    target, path, _headers = _rollback_asset_path(intent)
+    if target != "es" or not isinstance(preimage, dict):
+        raise ProvisionError("install refused: rollback_verify_failed")
+    try:
+        live = json_response(request(es_url, path, "GET", authorization))
+        expected = asset_adapters.get_projection("transforms", preimage)
+        actual = asset_adapters.get_projection("transforms", live)
+        if not isinstance(expected, dict) or not isinstance(actual, dict):
+            raise InputError("transform verification is invalid")
+        expected = dict(expected); expected.pop("_meta", None)
+        actual = dict(actual); actual.pop("_meta", None)
+        if jcs(actual) != jcs(expected):
+            raise InputError("transform verify-only state differs")
+        stats = json_response(request(es_url, path + "/_stats", "GET", authorization))
+        transforms = stats.get("transforms") if isinstance(stats, dict) else None
+        if (not isinstance(transforms, list) or len(transforms) != 1
+                or not isinstance(transforms[0], dict) or transforms[0].get("state") != "started"):
+            raise InputError("transform state differs")
+    except (InputError, RequestFailure, ValueError) as error:
+        raise ProvisionError("install refused: rollback_verify_failed") from error
+
+
+def _restore_transform_without_pivot(es_url: str, path: str, authorization: str, body: dict) -> None:
+    """Issue the transform inverse, with a gate-only rejection injector.
+
+    ``RIGSIGNAL_TEST_TRANSFORM_META_RESTORE_REJECT=1`` is inert unless a
+    clean-stack gate explicitly requests the ES-rejection fallback rehearsal.
+    """
+    if os.environ.get("RIGSIGNAL_TEST_TRANSFORM_META_RESTORE_REJECT") == "1":
+        raise RequestFailure(400, "test transform _meta restore rejection")
+    request(es_url, path + "/_update", "POST", authorization, jcs(body))
+
+
+def _transform_meta_is_present(es_url: str, path: str, authorization: str) -> bool:
+    try:
+        projection = asset_adapters.get_projection(
+            "transforms", json_response(request(es_url, path, "GET", authorization)))
+    except (InputError, RequestFailure, ValueError) as error:
+        raise ProvisionError("install refused: rollback_verify_failed") from error
+    return isinstance(projection, dict) and "_meta" in projection
+
+
 def _fence_transaction_consumer(root: Path) -> None:
     """Make a published local consumer unable to use its key before revocation."""
     credentials = root / "credentials.toml"
@@ -1288,6 +1341,7 @@ def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Pat
     rollback_transaction_proofs(es_url, authorization, journal, deliberately_reversed=deliberately_reversed)
     if journal.value.get("proofs"):
         operations.append("proofs")
+    degraded_transforms: set[int] = set()
     for intent in sorted((item for item in actions if item not in marker),
                          key=lambda item: _ROLLBACK_ORDER.get(item.get("kind"), -1)):
         target, path, headers = _rollback_asset_path(intent)
@@ -1303,13 +1357,37 @@ def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Pat
             else:
                 if intent["kind"] == "transforms" and isinstance(body, dict):
                     body = dict(body); body.pop("pivot", None)
-                    path += "/_update"; method = "POST"
+                    degradation_reason = None
+                    try:
+                        _restore_transform_without_pivot(es_url, path, authorization, body)
+                    except RequestFailure as error:
+                        if error.status != 400 or "_meta" in preimage:
+                            raise
+                        # ROLLBACK-DESIGN.md §1.2 permits this one cosmetic
+                        # drift only: ES rejected restoring an absent _meta.
+                        degradation_reason = "meta_absent_restore_rejected_verify_only"
+                    else:
+                        # Some ES releases accept this partial update but merge
+                        # it, retaining the applied _meta.  It is the same
+                        # contract-approved cosmetic drift as a 400 rejection.
+                        if "_meta" not in preimage and _transform_meta_is_present(es_url, path, authorization):
+                            degradation_reason = "meta_absent_restore_retained_verify_only"
+                    if degradation_reason is not None:
+                        _verify_transform_verify_only(es_url, authorization, intent, preimage)
+                        journal.record_degradation("transforms", str(intent["name"]),
+                                                   degradation_reason)
+                        degraded_transforms.add(id(intent))
+                        operations.append("verify-only:transforms/" + str(intent["name"]))
+                        continue
                 else:
                     method = "PUT"
-                request(base, path, method, authorization, jcs(body), headers)
+                if intent["kind"] != "transforms":
+                    request(base, path, method, authorization, jcs(body), headers)
         operations.append("asset:" + str(intent.get("kind")) + "/" + str(intent.get("name")))
     for intent in actions:
         if intent in marker:
+            continue
+        if id(intent) in degraded_transforms:
             continue
         expected = intent.get("preimage_sha256")
         if not isinstance(expected, str) or _rollback_live_hash(es_url, kb_url, authorization, intent) != expected:
@@ -1433,6 +1511,21 @@ def fault(point: str) -> None:
     """Test-only crash hook; inert unless explicitly set by a test."""
     if os.environ.get("RIGSIGNAL_TEST_CRASH_AT") == point:
         os._exit(99)
+
+
+def test_rollover(point: str, es_url: str, authorization: str,
+                  snapshot: dict[str, object]) -> None:
+    """Inject one deterministic Fleet-stream rollover for the clean-stack gate.
+
+    ``RIGSIGNAL_TEST_ROLLOVER_AT`` has no effect unless it exactly names this
+    point.  It is deliberately not a production rollover mechanism.
+    """
+    if os.environ.get("RIGSIGNAL_TEST_ROLLOVER_AT") != point:
+        return
+    if not snapshot:
+        raise InputError("fleet rollover test stream is unavailable")
+    stream = sorted(snapshot)[0]
+    request(es_url, "/" + urllib.parse.quote(stream, safe="") + "/_rollover", "POST", authorization)
 
 
 def projection(asset: Asset, response: object) -> object:
@@ -2327,8 +2420,13 @@ def main() -> int:
             configure_https(args.ca_file)
             configure_https(args.kibana_ca_file)
             authorization = admin_authorization(args.admin_credentials_file)
-            rollback_transaction(es_url, kb_url, authorization, args.rollback, deliberately_reversed=True)
-            print("rollback completed from journaled intents")
+            operations = rollback_transaction(es_url, kb_url, authorization, args.rollback,
+                                             deliberately_reversed=True)
+            if any(item.startswith("verify-only:transforms/") for item in operations):
+                print("rollback completed from journaled intents; transform _meta absence could not be restored: "
+                      "verify-only cosmetic drift accepted")
+            else:
+                print("rollback completed from journaled intents")
             return 0
         if getattr(args, "bundle", None) is None:
             raise InputError("--bundle is required unless --rollback is used")
@@ -2469,6 +2567,7 @@ def main() -> int:
                 # This capture dynamically enumerates the active stream set;
                 # a rollover during this transaction is a fail-closed drift.
                 pre_fleet_snapshot = fleet_stream_snapshot(es_url, authorization)
+                test_rollover("after-fleet-snapshot", es_url, authorization, pre_fleet_snapshot)
                 journal = TransactionJournal(root, ownership_profile)
                 if not journal.value.get("m1_anchors"):
                     journal.pin_m1_anchors(m1_anchor_pins(es_url, authorization))

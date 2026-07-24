@@ -53,12 +53,88 @@ installer_bad_ilm() { RIGSIGNAL_TEST_ILM_DELETE_PHASE=1 installer; }
 # Dirty Fleet assets + reinstall/upgrade rehearsal.
 leg_a() { setup; installer; marker_check; seed --upgrade; installer; marker_check; }
 
-# The real transform inverse is exercised on the running version pair.  If ES
-# cannot restore absent _meta, rollback must STOP rather than silently proceed.
-leg_b() { setup; installer; rollback; api GET '/_transform/rigsignal-game-timeline' >"$RUN_DIR/transform-after.json" || true; jq -e '(.transforms[0].pivot // .pivot) != null' "$RUN_DIR/transform-after.json" >/dev/null || fail 'transform pivot was not preserved'; }
+# The real transform inverse is exercised on the running version pair.  The
+# fallback is explicitly accepted only for ES rejecting an absent-_meta restore.
+transform_get() { api GET '/_transform/rigsignal-game-timeline' >"$1"; }
+transform_stats() { api GET '/_transform/rigsignal-game-timeline/_stats' >"$1"; }
+transform_pivot_matches_bundle() { jq -e --slurpfile bundle "$RUN_DIR/transform-bundle.json" '(.transforms[0] // .).pivot == $bundle[0].pivot' "$1" >/dev/null; }
+transform_meta_absent() { jq -e '((.transforms[0] // .) | has("_meta") | not)' "$1" >/dev/null; }
+transform_meta_matches_bundle() { jq -e --slurpfile bundle "$RUN_DIR/transform-bundle.json" '(.transforms[0] // .)._meta == $bundle[0]._meta' "$1" >/dev/null; }
+transform_started() { jq -e '(.transforms[0].state // .state) == "started"' "$1" >/dev/null; }
+transform_assert_state() { transform_pivot_matches_bundle "$1" || fail "transform pivot changed: $1"; transform_stats "$2"; transform_started "$2" || fail "transform stopped: $2"; }
+leg_b() {
+  setup
+  tar -xOf "$BUNDLE" elastic/transforms/rigsignal-game-timeline.json >"$RUN_DIR/transform-bundle.json"
+  transform_get "$RUN_DIR/transform-before.json"
+  transform_meta_absent "$RUN_DIR/transform-before.json" || fail 'transform _meta was present before apply'
+  transform_assert_state "$RUN_DIR/transform-before.json" "$RUN_DIR/transform-before-stats.json"
+  installer
+  transform_get "$RUN_DIR/transform-applied.json"
+  transform_meta_matches_bundle "$RUN_DIR/transform-applied.json" || fail 'transform _meta did not match bundle after apply'
+  transform_assert_state "$RUN_DIR/transform-applied.json" "$RUN_DIR/transform-applied-stats.json"
+  rollback >"$RUN_DIR/transform-normal-rollback.out"
+  transform_get "$RUN_DIR/transform-after.json"
+  if transform_meta_absent "$RUN_DIR/transform-after.json"; then
+    transform_assert_state "$RUN_DIR/transform-after.json" "$RUN_DIR/transform-after-stats.json"
+  else
+    grep -Fx 'rollback completed from journaled intents; transform _meta absence could not be restored: verify-only cosmetic drift accepted' "$RUN_DIR/transform-normal-rollback.out" >/dev/null || fail 'transform fallback was not reported after failed absence proof'
+    transform_meta_matches_bundle "$RUN_DIR/transform-after.json" || fail 'transform fallback left non-cosmetic drift'
+    transform_assert_state "$RUN_DIR/transform-after.json" "$RUN_DIR/transform-after-stats.json"
+  fi
+
+  # Default-inert installer guard: emulate an ES validation rejection when a
+  # version cannot naturally reject the absent-_meta restore request.
+  cs_cleanup || true
+  rm -rf "$RUN_DIR/enrollment"
+  setup
+  transform_get "$RUN_DIR/transform-fallback-before.json"
+  transform_meta_absent "$RUN_DIR/transform-fallback-before.json" || fail 'transform _meta was present before fallback rehearsal'
+  transform_assert_state "$RUN_DIR/transform-fallback-before.json" "$RUN_DIR/transform-fallback-before-stats.json"
+  installer
+  RIGSIGNAL_TEST_TRANSFORM_META_RESTORE_REJECT=1 rollback >"$RUN_DIR/transform-verify-only.out"
+  grep -Fx 'rollback completed from journaled intents; transform _meta absence could not be restored: verify-only cosmetic drift accepted' "$RUN_DIR/transform-verify-only.out" >/dev/null || fail 'transform verify-only fallback was not reported'
+  transform_get "$RUN_DIR/transform-verify-only.json"
+  transform_meta_matches_bundle "$RUN_DIR/transform-verify-only.json" || fail 'transform verify-only fallback did not retain accepted _meta drift'
+  transform_assert_state "$RUN_DIR/transform-verify-only.json" "$RUN_DIR/transform-verify-only-stats.json"
+}
 
 # Each injected crash is followed by the actual journal rollback, not a unit substitute.
-leg_c() { local point rc; for point in after-write-intent dashboard-multipart before-mint-response proof-create; do cs_cleanup || true; rm -rf "$RUN_DIR/enrollment"; start_stack; build_bundle; write_admin; seed; set +e; RIGSIGNAL_TEST_CRASH_AT="$point" installer >"$RUN_DIR/crash-$point.out" 2>&1; rc=$?; set -e; [[ "$rc" == 99 ]] || fail "$point did not crash"; rollback; done; }
+leg_c() {
+  local point rc
+  for point in after-write-intent dashboard-multipart before-mint-response candidate-write candidate-verify published-state proof-create; do
+    cs_cleanup || true
+    rm -rf "$RUN_DIR/enrollment"
+    start_stack
+    build_bundle
+    write_admin
+    seed
+    set +e
+    RIGSIGNAL_TEST_CRASH_AT="$point" installer >"$RUN_DIR/crash-$point.out" 2>&1
+    rc=$?
+    set -e
+    [[ "$rc" == 99 ]] || fail "$point did not crash"
+    rollback
+  done
+
+  # Default-inert installer guard: inject a tracked-stream rollover immediately
+  # after the pre-transaction Fleet snapshot and before any publication point.
+  cs_cleanup || true
+  rm -rf "$RUN_DIR/enrollment"
+  start_stack
+  build_bundle
+  write_admin
+  seed
+  set +e
+  RIGSIGNAL_TEST_ROLLOVER_AT=after-fleet-snapshot installer >"$RUN_DIR/in-transaction-rollover.out" 2>&1
+  rc=$?
+  set -e
+  [[ "$rc" != 0 ]] || fail 'in-transaction rollover unexpectedly succeeded'
+  grep -Fx 'install failed: diagnosis stream verification:' "$RUN_DIR/in-transaction-rollover.out" >/dev/null || fail 'in-transaction rollover did not fail closed'
+  [[ ! -e "$RUN_DIR/enrollment/credentials.toml" && ! -e "$RUN_DIR/enrollment/state.json" ]] || fail 'in-transaction rollover wrote publication state'
+  if api GET '/_component_template/rigsignal-bundle-meta' >"$RUN_DIR/rollover-marker.json" 2>&1; then fail 'in-transaction rollover wrote marker'; fi
+  rollback
+  jq -e '.rollback_ok == true' "$RUN_DIR/enrollment/fleet-coexist-journal.json" >/dev/null || fail 'in-transaction rollover did not run journaled rollback'
+}
 
 # Six live refusal rows; test-only hooks only make an otherwise healthy disposable
 # stack present an unrepresentable condition and are inert without their env vars.

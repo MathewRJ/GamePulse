@@ -339,6 +339,48 @@ class InstallAdoptionTests(unittest.TestCase):
             marker_request.assert_not_called()
             self.assertNotIn("committed", {state["phase"] for state in written_states})
 
+    def test_in_transaction_fleet_rollover_snapshot_drift_fails_before_publication(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "enrollment"
+            args = self.installer_args(root, True)
+            args.ownership_profile = "fleet-coexist"
+            publication = MagicMock()
+            marker_request = MagicMock()
+            before = {"logs-rigsignal.events-default": {"backing": [(".ds-old", "old-uuid")]}}
+            after = {"logs-rigsignal.events-default": {"backing": [(".ds-new", "new-uuid")]}}
+            with ExitStack() as patches:
+                patches.enter_context(patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args))
+                patches.enter_context(patch.object(INSTALL, "load_bundle", return_value=INSTALL.Bundle("test", "test", [])))
+                patches.enter_context(patch.object(INSTALL, "role_body", return_value={}))
+                patches.enter_context(patch.object(INSTALL, "ownership_for_assets", return_value={}))
+                patches.enter_context(patch.object(INSTALL, "configure_https"))
+                patches.enter_context(patch.object(INSTALL, "admin_authorization", return_value="admin"))
+                patches.enter_context(patch.object(INSTALL, "admin_credential_kind", return_value="native_user"))
+                patches.enter_context(patch.object(INSTALL, "dispatch_clean_root", return_value=True))
+                patches.enter_context(patch.object(INSTALL, "cluster_uuid", return_value="KUrXRgwRRQu-RikmIJhm0Q"))
+                patches.enter_context(patch.object(INSTALL, "prerequisites"))
+                patches.enter_context(patch.object(INSTALL, "fence"))
+                patches.enter_context(patch.object(INSTALL, "remote_stream_condition",
+                                                   return_value=("compatible", frozenset({(".ds-old", "old-uuid")}))))
+                patches.enter_context(patch.object(INSTALL, "cluster_health_gate"))
+                snapshots = patches.enter_context(patch.object(INSTALL, "fleet_stream_snapshot",
+                                                                side_effect=[before, after]))
+                patches.enter_context(patch.object(INSTALL, "m1_anchor_pins",
+                                                   return_value={ident: "pin" for ident in INSTALL.M1_ANCHOR_IDS}))
+                patches.enter_context(patch.object(INSTALL, "ensure_stream"))
+                patches.enter_context(patch.object(INSTALL, "simulate"))
+                patches.enter_context(patch.object(INSTALL, "atomic_publication", publication))
+                patches.enter_context(patch.object(INSTALL, "request", marker_request))
+                stderr = io.StringIO()
+                with redirect_stderr(stderr):
+                    self.assertEqual(INSTALL.main(), 1)
+            self.assertEqual(stderr.getvalue(), "install failed: diagnosis stream verification:\n")
+            self.assertEqual(snapshots.call_count, 2)
+            publication.assert_not_called()
+            marker_request.assert_not_called()
+            self.assertTrue((root / INSTALL.JOURNAL_FILE).exists())
+            self.assertFalse((root / "state.json").exists())
+
     def test_proof_ids_are_unique_for_each_accepted_attempt(self):
         accepted: dict[str, dict] = {}
         def status(_url, path, _method, _authorization, document):

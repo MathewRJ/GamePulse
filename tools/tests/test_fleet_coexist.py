@@ -97,6 +97,61 @@ class FleetCoexistenceTests(unittest.TestCase):
             self.assertIn(("DELETE", "/_ingest/pipeline/journaled-only"), calls)
             self.assertFalse(any("not-journaled" in path for _method, path in calls))
 
+    def test_transform_rollback_restores_preimage_without_pivot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            preimage = {"id": "rigsignal-game-timeline", "description": "before",
+                        "pivot": {"group_by": {}}}
+            intent = journal.write_intent("transforms", "rigsignal-game-timeline", "update",
+                                          "before", "after", b'{"description":"after"}',
+                                          preimage_body=INSTALL.jcs(preimage))
+            journal.write_verified(intent, "after")
+            calls = []
+            def request(_base, path, method, _authorization, data=None, _headers=None):
+                calls.append((method, path, data))
+                return b"{}"
+            with mock.patch.object(INSTALL, "request", side_effect=request), \
+                 mock.patch.object(INSTALL, "rollback_transaction_proofs"), \
+                 mock.patch.object(INSTALL, "verify_m1_anchors"), \
+                 mock.patch.object(INSTALL, "_rollback_live_hash", return_value="before"):
+                operations = INSTALL.rollback_transaction("https://es", "https://kb", "auth", root)
+            self.assertIn(("POST", "/_transform/rigsignal-game-timeline/_update",
+                           INSTALL.jcs({"description": "before"})), calls)
+            self.assertIn("asset:transforms/rigsignal-game-timeline", operations)
+            self.assertNotIn("degradations", INSTALL.TransactionJournal(root, "fleet-coexist").value)
+
+    def test_transform_rollback_rejection_degrades_to_journaled_verify_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            preimage = {"id": "rigsignal-game-timeline", "description": "before",
+                        "pivot": {"group_by": {}}}
+            intent = journal.write_intent("transforms", "rigsignal-game-timeline", "update",
+                                          "before", "after", b'{"description":"after"}',
+                                          preimage_body=INSTALL.jcs(preimage))
+            journal.write_verified(intent, "after")
+            def request(_base, path, method, _authorization, data=None, _headers=None):
+                if path.endswith("/_update"):
+                    raise INSTALL.RequestFailure(400, "_meta cannot be removed")
+                if path.endswith("/_stats"):
+                    return b'{"transforms":[{"state":"started"}]}'
+                if method == "GET":
+                    return (b'{"transforms":[{"id":"rigsignal-game-timeline",'
+                            b'"description":"before","pivot":{"group_by":{}},'
+                            b'"_meta":{"managed_by":"rigsignal-asset-bundle"}}]}')
+                return b"{}"
+            with mock.patch.object(INSTALL, "request", side_effect=request), \
+                 mock.patch.object(INSTALL, "rollback_transaction_proofs"), \
+                 mock.patch.object(INSTALL, "verify_m1_anchors"), \
+                 mock.patch.object(INSTALL, "_rollback_live_hash", return_value="before"):
+                operations = INSTALL.rollback_transaction("https://es", "https://kb", "auth", root)
+            self.assertIn("verify-only:transforms/rigsignal-game-timeline", operations)
+            self.assertEqual(INSTALL.TransactionJournal(root, "fleet-coexist").value["degradations"], [{
+                "kind": "transforms", "name": "rigsignal-game-timeline",
+                "reason": "meta_absent_restore_rejected_verify_only",
+            }])
+
     def test_proof_deletion_refuses_completed_transaction_without_explicit_reverse(self):
         with tempfile.TemporaryDirectory() as directory:
             root = INSTALL.secure_root(Path(directory) / "transaction")
