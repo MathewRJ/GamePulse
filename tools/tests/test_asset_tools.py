@@ -4,9 +4,10 @@ import json
 import os
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -27,7 +28,8 @@ BUILD, INSTALL = load("build_asset_bundle"), load("install_assets")
 
 def tree(root, pipeline=True, component=True, name="metrics-rigsignal.cpu.json"):
     elastic = root / "elastic"
-    for directory in ("component-templates", "index-templates", "pipelines", "transforms", "security-roles"):
+    for directory in ("component-templates", "index-templates", "pipelines", "transforms", "security-roles",
+                      "kibana-spaces", "kibana-roles"):
         (elastic / directory).mkdir(parents=True)
     (elastic / "security-roles" / "rigsignal_shipper.json").write_text("{}")
     if component:
@@ -36,6 +38,24 @@ def tree(root, pipeline=True, component=True, name="metrics-rigsignal.cpu.json")
         (elastic / "pipelines" / "metrics-rigsignal.cpu-0.5.0.json").write_text("{}")
     (elastic / "index-templates" / name).write_text(json.dumps({"composed_of": ["metrics-rigsignal.cpu@package"], "template": {"settings": {"index": {"default_pipeline": "metrics-rigsignal.cpu-0.5.0"}}}}))
     return elastic
+
+
+def w2_asset(directory, name):
+    path = ROOT / "elastic" / directory / name
+    return INSTALL.path_to_asset(path.relative_to(ROOT).as_posix(), path.read_bytes())
+
+
+def rewrite_bundle(source, destination, mutate):
+    with tarfile.open(source, "r:gz") as archive:
+        contents = {member.name: archive.extractfile(member).read() for member in archive.getmembers()}
+    manifest = json.loads(contents["manifest.json"])
+    mutate(manifest)
+    contents["manifest.json"] = json.dumps(manifest, sort_keys=True).encode()
+    with tarfile.open(destination, "w:gz") as archive:
+        for name, data in contents.items():
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            archive.addfile(info, io.BytesIO(data))
 
 
 class AssetToolsTests(unittest.TestCase):
@@ -397,6 +417,201 @@ i.atomic_publication(r, {n: ('new-' + n).encode() for n in ('credentials.toml','
         try: INSTALL.fault("before-mint-response")
         finally:
             if old is not None: os.environ["RIGSIGNAL_TEST_CRASH_AT"] = old
+
+    def test_w2_a1_closed_taxonomy_bundle_round_trip_and_manifest_rejections(self):
+        with tempfile.TemporaryDirectory() as raw:
+            bundle = Path(raw) / "assets.tar.gz"
+            result = subprocess.run([
+                sys.executable, str(ROOT / "tools/build_asset_bundle.py"), "--source-commit", "test", "--output",
+                str(bundle),
+            ], cwd=ROOT, text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            loaded = INSTALL.load_bundle(bundle)
+            self.assertEqual(INSTALL.count_assets(loaded.assets)["kibana_spaces"], 1)
+            self.assertEqual(INSTALL.count_assets(loaded.assets)["kibana_roles"], 1)
+            with self.assertRaises(INSTALL.InputError):
+                INSTALL.path_to_asset("elastic/unknown/thing.json", b"{}")
+            with self.assertRaises(INSTALL.InputError):
+                INSTALL.path_to_asset("elastic/kibana-spaces/bad.json", b"{")
+            missing_count = Path(raw) / "missing-count.tar.gz"
+            rewrite_bundle(bundle, missing_count, lambda manifest: manifest["counts"].pop("kibana_spaces"))
+            with self.assertRaises(INSTALL.InputError): INSTALL.load_bundle(missing_count)
+            bad_checksum = Path(raw) / "bad-checksum.tar.gz"
+            rewrite_bundle(bundle, bad_checksum,
+                           lambda manifest: manifest["sha256"].update({
+                               "elastic/kibana-spaces/rigsignal.json": "0" * 64}))
+            with self.assertRaises(INSTALL.InputError): INSTALL.load_bundle(bad_checksum)
+
+    def test_w2_a2_extended_ordering_and_dry_run_paths(self):
+        assets = [
+            INSTALL.Asset("dashboard", "rigsignal-home.ndjson", "dashboards/v0.3.1/rigsignal-home.ndjson", b'{"type":"dashboard","id":"home"}\n'),
+            INSTALL.Asset("kibana_roles", "viewer", "elastic/kibana-roles/viewer.json", b"{}"),
+            INSTALL.Asset("transforms", "transform", "elastic/transforms/transform.json", b"{}"),
+            INSTALL.Asset("kibana_spaces", "rigsignal", "elastic/kibana-spaces/rigsignal.json", b"{}"),
+            INSTALL.Asset("security_roles", "shipper", "elastic/security-roles/shipper.json", b"{}"),
+            INSTALL.Asset("component_templates", "component", "elastic/component-templates/component.json", b"{}"),
+            INSTALL.Asset("index_templates", "index", "elastic/index-templates/index.json", b"{}"),
+            INSTALL.Asset("pipelines", "pipeline", "elastic/pipelines/pipeline.json", b"{}"),
+        ]
+        self.assertEqual([asset.kind for asset in INSTALL.ordered_assets(assets)], [
+            "component_templates", "index_templates", "security_roles", "pipelines", "transforms",
+            "kibana_spaces", "kibana_roles", "dashboard",
+        ])
+        args = SimpleNamespace(bundle=Path("unused"), endpoint="https://es.invalid", ca_file=Path("unused"),
+                               kibana_endpoint="https://kb.invalid", kibana_ca_file=Path("unused"),
+                               admin_credentials_file=Path("unused"), agent_binary=Path("unused"), profile="user",
+                               enrollment_root=None, dry_run=True)
+        old_parse, old_bundle, old_role = (INSTALL.argparse.ArgumentParser.parse_args, INSTALL.load_bundle,
+                                           INSTALL.role_body)
+        INSTALL.argparse.ArgumentParser.parse_args = lambda _parser: args
+        INSTALL.load_bundle = lambda _path: INSTALL.Bundle("test", "test", INSTALL.ordered_assets(assets))
+        INSTALL.role_body = lambda _bundle: {}
+        output = io.StringIO()
+        try:
+            with redirect_stdout(output): self.assertEqual(INSTALL.main(), 0)
+        finally:
+            INSTALL.argparse.ArgumentParser.parse_args, INSTALL.load_bundle, INSTALL.role_body = (
+                old_parse, old_bundle, old_role)
+        self.assertIn("kibana-space rigsignal -> GET /api/spaces/space/rigsignal; POST /api/spaces/space; PUT /api/spaces/space/rigsignal", output.getvalue())
+        self.assertIn("kibana-role viewer -> PUT/GET /api/security/role/viewer", output.getvalue())
+        self.assertIn("dashboard rigsignal-home.ndjson -> POST /s/rigsignal/api/saved_objects/_import?overwrite=true", output.getvalue())
+
+    def test_w2_a3_space_first_apply_and_reapply_verify_variant_a(self):
+        asset = w2_asset("kibana-spaces", "rigsignal.json")
+        expected = json.loads(asset.data)
+        calls, statuses = [], iter((404, 200))
+        old_request, old_response = INSTALL.request, INSTALL.request_response
+        def fake_response(_base, path, method, _auth, data=None, headers=None):
+            calls.append((method, path, data, headers))
+            status = next(statuses)
+            if status == 404: raise INSTALL.RequestFailure(404, "HTTP 404")
+            return status, b"{}"
+        def fake_request(_base, path, method, _auth, data=None, headers=None):
+            calls.append((method, path, data, headers))
+            return json.dumps(expected).encode() if method == "GET" else b"{}"
+        INSTALL.request, INSTALL.request_response = fake_request, fake_response
+        try:
+            INSTALL.install_asset("https://es", "https://kb", "auth", asset)
+            INSTALL.install_asset("https://es", "https://kb", "auth", asset)
+        finally:
+            INSTALL.request, INSTALL.request_response = old_request, old_response
+        self.assertNotIn("solution", expected)
+        self.assertEqual(expected["id"], "rigsignal")
+        self.assertEqual(sum(method == "POST" and path == "/api/spaces/space" for method, path, *_ in calls), 1)
+        self.assertEqual(sum(method == "PUT" and path == "/api/spaces/space/rigsignal" for method, path, *_ in calls), 1)
+        self.assertEqual(sum(method == "GET" and path == "/api/spaces/space/rigsignal" for method, path, *_ in calls), 4)
+        self.assertTrue(all(headers == {"kbn-xsrf": "true"} for _method, _path, _data, headers in calls))
+
+    def test_w2_space_preflight_unexpected_status_hard_fails_before_mutation(self):
+        asset = w2_asset("kibana-spaces", "rigsignal.json")
+        old_request, old_response = INSTALL.request, INSTALL.request_response
+        try:
+            for status in (500, 201):
+                with self.subTest(status=status):
+                    calls = []
+                    def fake_response(_base, path, method, _auth, data=None, headers=None):
+                        calls.append((method, path, data, headers))
+                        if status == 500:
+                            raise INSTALL.RequestFailure(status, f"HTTP {status}")
+                        return status, b"{}"
+                    INSTALL.request_response = fake_response
+                    with self.assertRaises((INSTALL.RequestFailure, INSTALL.InputError)):
+                        INSTALL.install_asset("https://es", "https://kb", "auth", asset)
+                    self.assertEqual([(method, path) for method, path, _data, _headers in calls], [
+                        ("GET", "/api/spaces/space/rigsignal"),
+                    ])
+        finally:
+            INSTALL.request, INSTALL.request_response = old_request, old_response
+
+    def test_w2_a4_kibana_role_and_native_security_role_routes_and_projections(self):
+        viewer = w2_asset("kibana-roles", "rigsignal_viewer.json")
+        expected = json.loads(viewer.data)
+        calls = []
+        old_request = INSTALL.request
+        def fake_request(_base, path, method, _auth, data=None, headers=None):
+            calls.append((method, path, data, headers))
+            if method == "GET":
+                return json.dumps({"name": "rigsignal_viewer", **expected, "metadata": {}}).encode()
+            return b"{}"
+        INSTALL.request = fake_request
+        try: INSTALL.install_asset("https://es", "https://kb", "auth", viewer)
+        finally: INSTALL.request = old_request
+        self.assertEqual([(method, path) for method, path, _data, _headers in calls], [
+            ("PUT", "/api/security/role/rigsignal_viewer"), ("GET", "/api/security/role/rigsignal_viewer"),
+        ])
+        self.assertEqual(INSTALL.es_path(INSTALL.Asset("security_roles", "shipper", "x", b"{}")),
+                         "/_security/role/shipper")
+
+    def test_w2_a5_product_dashboards_use_space_import_and_reject_bad_results(self):
+        assets = [INSTALL.path_to_asset("dashboards/v0.3.1/" + name,
+                                        (ROOT / "dashboards/v0.3.1" / name).read_bytes())
+                  for name in sorted(INSTALL.PRODUCT_DASHBOARDS)]
+        calls = []
+        old_request = INSTALL.request
+        def fake_request(_base, path, method, _auth, data=None, headers=None):
+            calls.append((method, path))
+            if method == "POST":
+                asset = next(item for item in assets if item.name.encode() in data)
+                objects = INSTALL.dashboard_objects(asset.data)
+                return json.dumps({"success": True, "successCount": len(objects),
+                                   "successResults": [{"type": kind, "id": name} for kind, name in objects]}).encode()
+            return b"{}"
+        INSTALL.request = fake_request
+        try:
+            for asset in assets: INSTALL.install_asset("https://es", "https://kb", "auth", asset)
+        finally: INSTALL.request = old_request
+        imports = [path for method, path in calls if method == "POST"]
+        self.assertEqual(imports, ["/s/rigsignal/api/saved_objects/_import?overwrite=true"] * 6)
+        with self.assertRaises(INSTALL.InputError):
+            INSTALL.assert_dashboard_import_result(assets[0], {"success": True, "successCount": 0,
+                                                                "successResults": []})
+
+    def test_w2_a6_repeat_installation_repeats_space_role_and_dashboard_checks(self):
+        space, role = w2_asset("kibana-spaces", "rigsignal.json"), w2_asset("kibana-roles", "rigsignal_viewer.json")
+        dashboards = [INSTALL.path_to_asset("dashboards/v0.3.1/" + name,
+                                             (ROOT / "dashboards/v0.3.1" / name).read_bytes())
+                      for name in sorted(INSTALL.PRODUCT_DASHBOARDS)]
+        space_body, role_body, calls = json.loads(space.data), json.loads(role.data), []
+        old_request, old_response = INSTALL.request, INSTALL.request_response
+        INSTALL.request_response = lambda *_args, **_kwargs: (200, b"{}")
+        def fake_request(_base, path, method, _auth, data=None, headers=None):
+            calls.append((method, path))
+            if method == "GET" and path == "/api/spaces/space/rigsignal": return json.dumps(space_body).encode()
+            if method == "GET" and path == "/api/security/role/rigsignal_viewer": return json.dumps(role_body).encode()
+            if method == "POST":
+                for asset in dashboards:
+                    if asset.name.encode() in data:
+                        objects = INSTALL.dashboard_objects(asset.data)
+                        return json.dumps({"success": True, "successCount": len(objects),
+                                           "successResults": [{"type": kind, "id": name} for kind, name in objects]}).encode()
+            return b"{}"
+        INSTALL.request = fake_request
+        try:
+            for _run in range(2):
+                for asset in [space, role, *dashboards]: INSTALL.install_asset("https://es", "https://kb", "auth", asset)
+        finally:
+            INSTALL.request, INSTALL.request_response = old_request, old_response
+        self.assertEqual(calls.count(("PUT", "/api/spaces/space/rigsignal")), 2)
+        self.assertEqual(calls.count(("PUT", "/api/security/role/rigsignal_viewer")), 2)
+        self.assertEqual(calls.count(("POST", "/s/rigsignal/api/saved_objects/_import?overwrite=true")), 12)
+
+    def test_w2_a7_streaming_lab_keeps_default_space_handling(self):
+        asset = INSTALL.path_to_asset("dashboards/v0.3.1/rigsignal-streaming-lab.ndjson",
+                                      (ROOT / "dashboards/v0.3.1/rigsignal-streaming-lab.ndjson").read_bytes())
+        calls = []
+        old_request = INSTALL.request
+        def fake_request(_base, path, method, _auth, data=None, headers=None):
+            calls.append((method, path))
+            if method == "POST":
+                objects = INSTALL.dashboard_objects(asset.data)
+                return json.dumps({"success": True, "successCount": len(objects),
+                                   "successResults": [{"type": kind, "id": name} for kind, name in objects]}).encode()
+            return b"{}"
+        INSTALL.request = fake_request
+        try: INSTALL.install_asset("https://es", "https://kb", "auth", asset)
+        finally: INSTALL.request = old_request
+        self.assertIn(("POST", "/api/saved_objects/_import?overwrite=true"), calls)
+        self.assertFalse(any("/s/rigsignal/" in path for _method, path in calls))
 
 
 if __name__ == "__main__":

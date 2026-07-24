@@ -32,8 +32,19 @@ ASSET_TYPES = {
     "pipelines": "pipelines",
     "transforms": "transforms",
     "security-roles": "security_roles",
+    "kibana-spaces": "kibana_spaces",
+    "kibana-roles": "kibana_roles",
 }
 ASSET_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._@-]*\.json\Z")
+PRODUCT_DASHBOARDS = frozenset((
+    "rigsignal-engine.ndjson",
+    "rigsignal-flamegraph-dashboard.ndjson",
+    "rigsignal-game-perf.ndjson",
+    "rigsignal-home.ndjson",
+    "rigsignal-software.ndjson",
+    "rigsignal-system-health.ndjson",
+))
+STREAMING_LAB_DASHBOARD = "rigsignal-streaming-lab.ndjson"
 W1_RAW_SHA256 = {
     "elastic/component-templates/logs-rigsignal.diagnosis-mappings.json": "345e0d2898279929eb613b60d2bd250bbf73a13c7b4bbd1b793384e2ae00410c",
     "elastic/index-templates/logs-rigsignal.diagnosis.json": "5f4d4f403fc17a1096b2d2b1c8a43bad94efa52b05c3b117961333b2f3d52199",
@@ -239,7 +250,8 @@ def load_bundle(bundle_path: Path) -> Bundle:
 
 def ordered_assets(assets: list[Asset]) -> list[Asset]:
     order = {"component_templates": 0, "index_templates": 1, "security_roles": 2,
-             "pipelines": 3, "transforms": 4, "dashboard": 5}
+             "pipelines": 3, "transforms": 4, "kibana_spaces": 5,
+             "kibana_roles": 6, "dashboard": 7}
     return sorted(assets, key=lambda asset: (order[asset.kind], asset.name))
 
 
@@ -372,12 +384,56 @@ def es_path(asset: Asset) -> str:
     return paths[asset.kind]
 
 
+def kibana_path(asset: Asset) -> str:
+    name = urllib.parse.quote(asset.name, safe="")
+    paths = {
+        "kibana_spaces": f"/api/spaces/space/{name}",
+        "kibana_roles": f"/api/security/role/{name}",
+    }
+    return paths[asset.kind]
+
+
 def multipart_dashboard(asset: Asset) -> tuple[bytes, str]:
     boundary = f"----rigsignal-{uuid.uuid4().hex}"
     head = (f"--{boundary}\r\n"
             f"Content-Disposition: form-data; name=\"file\"; filename=\"{asset.name}\"\r\n"
             "Content-Type: application/ndjson\r\n\r\n").encode("utf-8")
     return head + asset.data + f"\r\n--{boundary}--\r\n".encode("utf-8"), boundary
+
+
+def dashboard_import_path(asset: Asset) -> str:
+    if asset.name in PRODUCT_DASHBOARDS:
+        return "/s/rigsignal/api/saved_objects/_import?overwrite=true"
+    if asset.name == STREAMING_LAB_DASHBOARD:
+        return "/api/saved_objects/_import?overwrite=true"
+    raise InputError("dashboard is not authorized for installation")
+
+
+def dashboard_object_path(asset: Asset, object_type: str, object_id: str) -> str:
+    prefix = "/s/rigsignal" if asset.name in PRODUCT_DASHBOARDS else ""
+    return (prefix + "/api/saved_objects/" + urllib.parse.quote(object_type, safe="") + "/"
+            + urllib.parse.quote(object_id, safe=""))
+
+
+def assert_dashboard_import_result(asset: Asset, response: object) -> None:
+    expected = dashboard_objects(asset.data)
+    if not isinstance(response, dict) or response.get("success") is not True:
+        raise InputError("dashboard import did not report success")
+    if response.get("successCount") != len(expected):
+        raise InputError("dashboard import success count differs")
+    if response.get("errors") not in (None, False, []):
+        raise InputError("dashboard import reported errors")
+    results = response.get("successResults")
+    if not isinstance(results, list) or len(results) != len(expected):
+        raise InputError("dashboard import result count differs")
+    actual = []
+    for result in results:
+        if (not isinstance(result, dict) or result.get("error") not in (None, False)
+                or not isinstance(result.get("type"), str) or not isinstance(result.get("id"), str)):
+            raise InputError("dashboard import reported an object error")
+        actual.append((result["type"], result["id"]))
+    if sorted(actual) != sorted(expected):
+        raise InputError("dashboard import result differs from submitted objects")
 
 
 def marker_body(bundle: Bundle) -> bytes:
@@ -806,6 +862,24 @@ def verify_asset(base: str, authorization: str, asset: Asset) -> None:
             raise InputError("canonical asset GET differs")
 
 
+def verify_kibana_asset(base: str, authorization: str, asset: Asset) -> None:
+    response = json_response(request(base, kibana_path(asset), "GET", authorization,
+                                     headers={"kbn-xsrf": "true"}))
+    expected = parse_json(asset.data, asset.path)
+    if asset.kind == "kibana_spaces":
+        got = response
+        want = expected
+    elif asset.kind == "kibana_roles":
+        if not isinstance(response, dict) or not isinstance(expected, dict):
+            raise InputError("canonical Kibana role GET projection is missing")
+        got = {key: response.get(key) for key in ("elasticsearch", "kibana")}
+        want = {key: expected.get(key) for key in ("elasticsearch", "kibana")}
+    else:
+        raise InputError("canonical Kibana asset GET projection is unsupported")
+    if jcs(got) != jcs(want):
+        raise InputError("canonical Kibana asset GET differs")
+
+
 def es_json(base: str, path: str, method: str, authorization: str, payload: object | None = None) -> object:
     data = None if payload is None else jcs(payload)
     return json_response(request(base, path, method, authorization, data))
@@ -838,12 +912,33 @@ def response_status(base: str, path: str, method: str, authorization: str, paylo
 def install_asset(es_url: str, kb_url: str, authorization: str, asset: Asset) -> None:
     if asset.kind == "dashboard":
         body, boundary = multipart_dashboard(asset)
-        request(kb_url, "/api/saved_objects/_import?overwrite=true", "POST", authorization, body,
-                {"Content-Type": f"multipart/form-data; boundary={boundary}", "kbn-xsrf": "true"})
+        response = json_response(request(
+            kb_url, dashboard_import_path(asset), "POST", authorization, body,
+            {"Content-Type": f"multipart/form-data; boundary={boundary}", "kbn-xsrf": "true"},
+        ))
+        assert_dashboard_import_result(asset, response)
         for object_type, object_id in dashboard_objects(asset.data):
-            request(kb_url, "/api/saved_objects/" + urllib.parse.quote(object_type, safe="") + "/"
-                    + urllib.parse.quote(object_id, safe=""), "GET", authorization,
+            request(kb_url, dashboard_object_path(asset, object_type, object_id), "GET", authorization,
                     headers={"kbn-xsrf": "true"})
+        return
+    if asset.kind == "kibana_spaces":
+        headers = {"kbn-xsrf": "true"}
+        try:
+            status, _body = request_response(kb_url, kibana_path(asset), "GET", authorization,
+                                             headers=headers)
+        except RequestFailure as error:
+            if error.status != 404:
+                raise
+            request(kb_url, "/api/spaces/space", "POST", authorization, asset.data, headers)
+        else:
+            if status != 200:
+                raise InputError("Kibana space preflight returned an unexpected status")
+            request(kb_url, kibana_path(asset), "PUT", authorization, asset.data, headers)
+        verify_kibana_asset(kb_url, authorization, asset)
+        return
+    if asset.kind == "kibana_roles":
+        request(kb_url, kibana_path(asset), "PUT", authorization, asset.data, {"kbn-xsrf": "true"})
+        verify_kibana_asset(kb_url, authorization, asset)
         return
     path = es_path(asset)
     if asset.kind == "transforms":
@@ -1265,7 +1360,12 @@ def main() -> int:
     if args.dry_run:
         for asset in bundle.assets:
             if asset.kind == "dashboard":
-                print(f"dashboard {asset.name} -> POST /api/saved_objects/_import?overwrite=true")
+                print(f"dashboard {asset.name} -> POST {dashboard_import_path(asset)}")
+            elif asset.kind == "kibana_spaces":
+                print(f"kibana-space {asset.name} -> GET {kibana_path(asset)}; "
+                      f"POST /api/spaces/space; PUT {kibana_path(asset)}")
+            elif asset.kind == "kibana_roles":
+                print(f"kibana-role {asset.name} -> PUT/GET {kibana_path(asset)}")
             elif asset.kind == "transforms":
                 print(f"transform {asset.name} -> PUT/POST {es_path(asset)}")
             else:
@@ -1341,7 +1441,12 @@ def main() -> int:
             try:
                 install_asset(es_url, kb_url, authorization, asset)
             except (RequestFailure, InputError) as error:
-                category = "shipper role verification:" if asset.kind == "security_roles" else "W1 asset verification:"
+                if asset.kind == "security_roles":
+                    category = "shipper role verification:"
+                elif asset.kind in {"kibana_spaces", "kibana_roles", "dashboard"}:
+                    category = "Kibana asset verification:"
+                else:
+                    category = "W1 asset verification:"
                 raise ProvisionError("install failed: " + category) from error
         try:
             ensure_stream(es_url, authorization)
