@@ -63,6 +63,13 @@ def _body_from_envelope(kind: str, live_body: object) -> object:
         if len(live_body) != 1:
             raise AdapterError("role GET did not return exactly one role")
         return next(iter(live_body.values()))
+    elif kind == "transforms":
+        if "transforms" not in live_body:
+            return live_body
+        transforms = live_body.get("transforms")
+        if not isinstance(transforms, list) or len(transforms) != 1 or not isinstance(transforms[0], dict):
+            raise AdapterError("transform GET did not return exactly one transform")
+        return transforms[0]
     elif kind == "dashboard":
         # Saved-object GETs include identity/server fields beside the only
         # fields an import can restore.  The caller performs one GET per ID.

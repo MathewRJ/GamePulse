@@ -72,3 +72,48 @@ class FleetCoexistenceTests(unittest.TestCase):
                                  INSTALL.jcs({"profile": "fleet-coexist", "table_version": INSTALL.OWNERSHIP_TABLE_VERSION}) + b"\n")
             with self.assertRaises(INSTALL.ProvisionError):
                 INSTALL.bind_ownership_profile(root, "default")
+
+    def test_rollback_order_deletes_absent_preimage_and_only_journaled_intents(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            marker = journal.write_intent("component_templates", "rigsignal-bundle-meta", "create",
+                                          INSTALL.asset_adapters.dashboard_absent_hash(), "marker-after", b"{}")
+            asset = journal.write_intent("pipelines", "journaled-only", "create",
+                                         INSTALL.asset_adapters.dashboard_absent_hash(), "asset-after", b"{}")
+            journal.write_verified(marker, "marker-after")
+            journal.write_verified(asset, "asset-after")
+            calls = []
+            def request(base, path, method, authorization, data=None, headers=None):
+                calls.append((method, path)); return b"{}"
+            with mock.patch.object(INSTALL, "request", side_effect=request), \
+                 mock.patch.object(INSTALL, "invalidate"), \
+                 mock.patch.object(INSTALL, "rollback_transaction_proofs"), \
+                 mock.patch.object(INSTALL, "verify_m1_anchors"), \
+                 mock.patch.object(INSTALL, "_rollback_live_hash", side_effect=lambda *_args: INSTALL.asset_adapters.dashboard_absent_hash()):
+                order = INSTALL.rollback_transaction("https://es", "https://kb", "auth", root)
+            self.assertEqual(order[:2], ["marker", "fence"])
+            self.assertEqual(calls[0], ("DELETE", "/_component_template/rigsignal-bundle-meta"))
+            self.assertIn(("DELETE", "/_ingest/pipeline/journaled-only"), calls)
+            self.assertFalse(any("not-journaled" in path for _method, path in calls))
+
+    def test_proof_deletion_refuses_completed_transaction_without_explicit_reverse(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            journal.apply_ok()
+            with self.assertRaisesRegex(INSTALL.ProvisionError, "transaction_proof_delete_not_authorized"):
+                INSTALL.rollback_transaction_proofs("https://es", "auth", journal)
+            journal.value["proofs"] = [{"event_id": None, "created_index": None}]
+            journal.value["apply_ok"] = False
+            with self.assertRaisesRegex(INSTALL.ProvisionError, "transaction_proof_ambiguous"):
+                INSTALL.rollback_transaction_proofs("https://es", "auth", journal)
+
+    def test_m1_anchor_oracle_passes_and_stops_for_break_glass(self):
+        pins = {ident: "p-" + str(index) for index, ident in enumerate(INSTALL.M1_ANCHOR_IDS)}
+        with mock.patch.object(INSTALL, "m1_anchor_pins", return_value=pins):
+            INSTALL.verify_m1_anchors("https://es", "auth", pins)
+        changed = dict(pins); changed[INSTALL.M1_ANCHOR_IDS[0]] = "changed"
+        with mock.patch.object(INSTALL, "m1_anchor_pins", return_value=changed):
+            with self.assertRaisesRegex(INSTALL.ProvisionError, "m1_anchor_mismatch_break_glass"):
+                INSTALL.verify_m1_anchors("https://es", "auth", pins)

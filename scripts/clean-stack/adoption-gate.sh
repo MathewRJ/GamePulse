@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Manual clean-stack gate for Amendment 7/A4 adoption.  It deliberately has no
 # CI entry point: run one or more numbered legs while investigating a version.
+# shellcheck disable=SC2329
 set -euo pipefail
 
 SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
