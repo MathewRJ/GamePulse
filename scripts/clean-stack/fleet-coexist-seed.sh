@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Seed precisely the 39 Fleet-owned assets used by the coexistence gate.
+# The bundle-owned transform baseline is intentionally seeded locally by leg_b.
 set -euo pipefail
 REPO_ROOT="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
 : "${ES_URL:?ES_URL is required}"; : "${ELASTIC_PASSWORD:?ELASTIC_PASSWORD is required}"

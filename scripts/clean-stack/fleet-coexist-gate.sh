@@ -29,6 +29,9 @@ trap cleanup EXIT
 start_stack() {
   CS_RUN_DIR="$RUN_DIR"; export CS_RUN_DIR
   cs_init_names "fleet-coexist-$(cs_new_suffix)"
+  # Fresh TLS material per stack: container names change on every start and
+  # cs_prepare_tls's mkdir is not idempotent (leg_c restarts in a loop).
+  rm -rf "$RUN_DIR/tls"
   cs_prepare_tls "$RUN_DIR"
   cs_create_network
   cs_start_elasticsearch "docker.elastic.co/elasticsearch/elasticsearch:$ES_VERSION" "$(cs_port_mapping '' 9200)"
@@ -48,7 +51,13 @@ seed() { ES_URL="$ES_URL" ELASTIC_PASSWORD="$ELASTIC_PASSWORD" "$SCRIPT_DIR/flee
 setup() { start_stack; build_bundle; write_admin; seed; }
 marker_check() { api GET '/_component_template/rigsignal-bundle-meta' >"$RUN_DIR/marker.json"; jq -e '[.component_templates[0].component_template._meta.applied_owned_assets[]|[.kind,.name]] as $a | [.component_templates[0].component_template._meta.verified_external_assets[]|[.kind,.name]] as $e | ($a|length)==16 and ($e|length)==39 and (($a+$e)|unique|length)==55' "$RUN_DIR/marker.json" >/dev/null; }
 expect_refusal() { local code="$1"; shift; if "$@" >"$RUN_DIR/refusal.out" 2>&1; then fail "$code unexpectedly succeeded"; fi; grep -Fx "install refused: $code" "$RUN_DIR/refusal.out" >/dev/null || { cat "$RUN_DIR/refusal.out" >&2; fail "$code wrong refusal"; }; }
-external_audit_clean() { local log="$1"; ! grep -E '^(PUT|POST|DELETE) /(_component_template|_index_template|_ingest/pipeline)/(metrics-rigsignal|logs-rigsignal\.events)' "$log"; }
+# Exactly the 39 external asset paths (13 components @package, 13 stream index
+# templates, 13 pipelines -0.5.0). Owned assets that share the metrics- prefix
+# (metrics-rigsignal.profiles) or logs- prefix (logs-rigsignal.stream,
+# diagnosis chain) must NOT match: the installer legitimately writes them.
+EXTERNAL_STREAMS='(logs-rigsignal\.events|metrics-rigsignal\.(audio|cpu|ebpf|ebpf_thread|frame|gpu|memory|network|power|session|storage|stream_client))'
+EXTERNAL_WRITE_RE="^(PUT|POST|DELETE) (/_component_template/${EXTERNAL_STREAMS}@package|/_index_template/${EXTERNAL_STREAMS}|/_ingest/pipeline/${EXTERNAL_STREAMS}-0\.5\.0)\$"
+external_audit_clean() { local log="$1"; ! grep -E "$EXTERNAL_WRITE_RE" "$log"; }
 installer_unresolved() { RIGSIGNAL_TEST_UNRESOLVED_ASSET=1 installer; }
 installer_bad_health() { RIGSIGNAL_TEST_CLUSTER_HEALTH=red installer; }
 installer_bad_ilm() { RIGSIGNAL_TEST_ILM_DELETE_PHASE=1 installer; }
@@ -65,8 +74,26 @@ transform_meta_absent() { jq -e '((.transforms[0] // .) | has("_meta") | not)' "
 transform_meta_matches_bundle() { jq -e --slurpfile bundle "$RUN_DIR/transform-bundle.json" '(.transforms[0] // .)._meta == $bundle[0]._meta' "$1" >/dev/null; }
 transform_started() { jq -e '(.transforms[0].state // .state) == "started"' "$1" >/dev/null; }
 transform_assert_state() { transform_pivot_matches_bundle "$1" || fail "transform pivot changed: $1"; transform_stats "$2"; transform_started "$2" || fail "transform stopped: $2"; }
+seed_owned_transform_baseline() {
+  local body="$RUN_DIR/owned-transform-baseline.json" stats="$RUN_DIR/owned-transform-baseline-stats.json" attempt
+  # This transform is bundle-owned, so its owner-cluster baseline belongs to
+  # leg_b rather than the 39-external-asset Fleet seeder.
+  api PUT '/_data_stream/metrics-rigsignal.session-default' >/dev/null
+  jq 'del(._meta)' "$REPO_ROOT/elastic/transforms/rigsignal-game-timeline.json" >"$body"
+  api PUT '/_transform/rigsignal-game-timeline' --data-binary "@$body" >/dev/null
+  api POST '/_transform/rigsignal-game-timeline/_start' >/dev/null
+  for ((attempt = 0; attempt < 30; attempt++)); do
+    transform_stats "$stats"
+    if transform_started "$stats"; then
+      return 0
+    fi
+    sleep 1
+  done
+  fail 'owner transform did not reach started state'
+}
 leg_b() {
   setup
+  seed_owned_transform_baseline
   tar -xOf "$BUNDLE" elastic/transforms/rigsignal-game-timeline.json >"$RUN_DIR/transform-bundle.json"
   transform_get "$RUN_DIR/transform-before.json"
   transform_meta_absent "$RUN_DIR/transform-before.json" || fail 'transform _meta was present before apply'
@@ -90,6 +117,7 @@ leg_b() {
   cs_cleanup || true
   rm -rf "$RUN_DIR/enrollment"
   setup
+  seed_owned_transform_baseline
   transform_get "$RUN_DIR/transform-fallback-before.json"
   transform_meta_absent "$RUN_DIR/transform-fallback-before.json" || fail 'transform _meta was present before fallback rehearsal'
   transform_assert_state "$RUN_DIR/transform-fallback-before.json" "$RUN_DIR/transform-fallback-before-stats.json"
@@ -127,6 +155,9 @@ leg_c() {
   build_bundle
   write_admin
   seed
+  # The injector rolls over a stream from the PRE-transaction snapshot; a fresh
+  # stack has none, so seed one (the owner cluster always has all 16).
+  api PUT '/_data_stream/metrics-rigsignal.session-default' >/dev/null
   set +e
   RIGSIGNAL_TEST_ROLLOVER_AT=after-fleet-snapshot installer >"$RUN_DIR/in-transaction-rollover.out" 2>&1
   rc=$?
@@ -146,7 +177,7 @@ leg_d() { setup; installer; expect_refusal omitted_profile_on_coexist env -u RIG
 leg_e() { setup; installer; api POST '/logs-rigsignal.events-default/_rollover' >/dev/null || true; installer; marker_check; }
 
 # Recording transport audit and its mandatory identical-body external PUT negative control.
-leg_f() { setup; : >"$RUN_DIR/audit.log"; RIGSIGNAL_HTTP_AUDIT_LOG="$RUN_DIR/audit.log" installer; external_audit_clean "$RUN_DIR/audit.log" || fail 'external write audit saw a write'; : >"$RUN_DIR/audit-negative.log"; RIGSIGNAL_HTTP_AUDIT_LOG="$RUN_DIR/audit-negative.log" RIGSIGNAL_TEST_EXTERNAL_WRITE=1 installer || true; grep -E '^(PUT|POST|DELETE) /(_component_template|_index_template|_ingest/pipeline)/(metrics-rigsignal|logs-rigsignal\.events)' "$RUN_DIR/audit-negative.log" >/dev/null || fail 'external write audit negative control did not fire'; }
+leg_f() { setup; : >"$RUN_DIR/audit.log"; RIGSIGNAL_HTTP_AUDIT_LOG="$RUN_DIR/audit.log" installer; external_audit_clean "$RUN_DIR/audit.log" || fail 'external write audit saw a write'; : >"$RUN_DIR/audit-negative.log"; RIGSIGNAL_HTTP_AUDIT_LOG="$RUN_DIR/audit-negative.log" RIGSIGNAL_TEST_EXTERNAL_WRITE=1 installer || true; grep -E "$EXTERNAL_WRITE_RE" "$RUN_DIR/audit-negative.log" >/dev/null || fail 'external write audit negative control did not fire'; }
 
 leg_g() { setup; installer; marker_check; jq -e '[.component_templates[0].component_template._meta|has("installed_assets")|not]' "$RUN_DIR/marker.json" >/dev/null; }
 leg_h() { build_bundle; printf 'GATE ARTIFACT commit=%s bundle_sha256=%s\n' "$IMPLEMENTING_COMMIT" "$BUNDLE_SHA256"; }

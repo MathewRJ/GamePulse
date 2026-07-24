@@ -1109,15 +1109,24 @@ def journal_recovery_actions(journal: TransactionJournal, live_hash_for) -> list
 
     ``live_hash_for`` is supplied by the class-specific GET adapter.  This
     deliberately has no manifest argument: recovery cannot invent a mutation
-    for an asset the interrupted transaction never journaled.
+    for an asset the interrupted transaction never journaled.  The durable
+    three-way test applies to *every* asset intent, including a verified one:
+    a retry may be resuming after a prior rollback already restored its
+    preimage.  In particular, ``_rollback_live_hash`` maps a GET 404 to the
+    absent preimage hash, so a never-created object is a converged no-op, not
+    a restore request that can fail with another 404.
     """
     actions = []
     for intent in journal.value.get("intents", []):
         if intent.get("event") != "write_intent" or intent.get("kind") == "api_key":
             continue
-        if intent.get("write_verified"):
-            actions.append(intent)
-        elif ambiguous_crash_outcome(intent, live_hash_for(intent)) == "restore":
+        # Test preimage first because a journaled ``noop`` has equal before
+        # and after pins.  It must remain a no-op rather than issue a needless
+        # restore write.
+        live_hash = live_hash_for(intent)
+        if live_hash == intent.get("preimage_sha256"):
+            continue
+        if ambiguous_crash_outcome(intent, live_hash) == "restore":
             actions.append(intent)
     return actions
 
@@ -2180,15 +2189,15 @@ def fleet_stream_snapshot(es_url: str, authorization: str) -> dict[str, object]:
         # lifecycle oracle, not merely a composed_of textual comparison.
         simulated = es_json(es_url, "/_index_template/_simulate_index/" + urllib.parse.quote(name, safe=""),
                             "POST", authorization, None)
-        template = simulated.get("template", simulated) if isinstance(simulated, dict) else None
-        if not isinstance(template, dict):
-            raise InputError("fleet index simulation is invalid")
-        settings = template.get("settings", {})
-        if not isinstance(settings, dict):
-            raise InputError("fleet index simulation is invalid")
-        snapshot[name] = {"backing": sorted(pairs), "mappings": template.get("mappings", {}),
-                          "settings": settings, "default_pipeline": settings.get("index.default_pipeline"),
-                          "lifecycle": settings.get("index.lifecycle.name")}
+        try:
+            # This is the single ratified normalization for simulate results.
+            # In particular, ES generates TSDB start/end boundaries from the
+            # wall clock, so raw settings would make an unchanged stream look
+            # different if the two Step-5 captures straddle a second.
+            outcome = asset_adapters.simulation_outcome(simulated)
+        except ValueError as error:
+            raise InputError("fleet index simulation is invalid") from error
+        snapshot[name] = {"backing": sorted(pairs), **outcome}
     return snapshot
 
 

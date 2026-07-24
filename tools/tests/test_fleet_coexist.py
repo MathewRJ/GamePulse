@@ -109,6 +109,22 @@ class FleetCoexistenceTests(unittest.TestCase):
         with self.assertRaises(INSTALL.ProvisionError):
             INSTALL.ambiguous_crash_outcome(intent, "concurrent")
 
+    def test_recovery_actions_three_way_check_verified_and_absent_intents(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            intent = journal.write_intent("pipelines", "created", "create",
+                                          INSTALL.asset_adapters.dashboard_absent_hash(), "after", b"{}")
+            journal.write_verified(intent, "after")
+            self.assertEqual(INSTALL.journal_recovery_actions(journal, lambda _intent: "after"), [intent])
+            # A GET 404 is normalized by _rollback_live_hash to this sentinel;
+            # recovery must recognize the never-created/already-deleted object
+            # as converged and issue no inverse request.
+            self.assertEqual(INSTALL.journal_recovery_actions(
+                journal, lambda _intent: INSTALL.asset_adapters.dashboard_absent_hash()), [])
+            with self.assertRaisesRegex(INSTALL.ProvisionError, "transaction_concurrent_drift"):
+                INSTALL.journal_recovery_actions(journal, lambda _intent: "third-party")
+
     def test_exact_proof_recovery_is_exact_id_and_zero_or_one_hit(self):
         calls = []
         def response(*args):
@@ -147,7 +163,7 @@ class FleetCoexistenceTests(unittest.TestCase):
                  mock.patch.object(INSTALL, "invalidate"), \
                  mock.patch.object(INSTALL, "rollback_transaction_proofs"), \
                  mock.patch.object(INSTALL, "verify_m1_anchors"), \
-                 mock.patch.object(INSTALL, "_rollback_live_hash", side_effect=lambda *_args: INSTALL.asset_adapters.dashboard_absent_hash()):
+                 mock.patch.object(INSTALL, "_rollback_live_hash", side_effect=["marker-after", "asset-after", INSTALL.asset_adapters.dashboard_absent_hash()]):
                 order = INSTALL.rollback_transaction("https://es", "https://kb", "auth", root)
             self.assertEqual(order[:2], ["marker", "fence"])
             self.assertEqual(calls[0], ("DELETE", "/_component_template/rigsignal-bundle-meta"))
@@ -171,7 +187,7 @@ class FleetCoexistenceTests(unittest.TestCase):
             with mock.patch.object(INSTALL, "request", side_effect=request), \
                  mock.patch.object(INSTALL, "rollback_transaction_proofs"), \
                  mock.patch.object(INSTALL, "verify_m1_anchors"), \
-                 mock.patch.object(INSTALL, "_rollback_live_hash", return_value="before"):
+                 mock.patch.object(INSTALL, "_rollback_live_hash", side_effect=["after", "before"]):
                 operations = INSTALL.rollback_transaction("https://es", "https://kb", "auth", root)
             self.assertIn(("POST", "/_transform/rigsignal-game-timeline/_update",
                            INSTALL.jcs({"description": "before"})), calls)
@@ -201,13 +217,77 @@ class FleetCoexistenceTests(unittest.TestCase):
             with mock.patch.object(INSTALL, "request", side_effect=request), \
                  mock.patch.object(INSTALL, "rollback_transaction_proofs"), \
                  mock.patch.object(INSTALL, "verify_m1_anchors"), \
-                 mock.patch.object(INSTALL, "_rollback_live_hash", return_value="before"):
+                 mock.patch.object(INSTALL, "_rollback_live_hash", side_effect=["after", "before"]):
                 operations = INSTALL.rollback_transaction("https://es", "https://kb", "auth", root)
             self.assertIn("verify-only:transforms/rigsignal-game-timeline", operations)
             self.assertEqual(INSTALL.TransactionJournal(root, "fleet-coexist").value["degradations"], [{
                 "kind": "transforms", "name": "rigsignal-game-timeline",
                 "reason": "meta_absent_restore_rejected_verify_only",
             }])
+
+    def test_rollback_absent_preimage_never_created_skips_inverse(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            journal.write_intent("pipelines", "never-created", "create",
+                                 INSTALL.asset_adapters.dashboard_absent_hash(), "after", b"{}")
+            with mock.patch.object(INSTALL, "request",
+                                   side_effect=INSTALL.RequestFailure(404, "not found")) as request, \
+                 mock.patch.object(INSTALL, "rollback_transaction_proofs"), \
+                 mock.patch.object(INSTALL, "verify_m1_anchors"):
+                operations = INSTALL.rollback_transaction("https://es", "https://kb", "auth", root)
+            self.assertNotIn("asset:pipelines/never-created", operations)
+            self.assertEqual(request.call_args.args[2], "GET")
+
+    def test_rollback_absent_marker_publication_and_key_are_idempotent_pre_marker(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            # This is the durable mint intent left by a crash before the mint
+            # response.  No marker or consumer publication was ever created.
+            journal.write_intent("api_key", "mint-never-created", "create", "absent", "after", b"{}")
+            with mock.patch.object(INSTALL, "invalidate_mint_name") as revoke, \
+                 mock.patch.object(INSTALL, "rollback_transaction_proofs"), \
+                 mock.patch.object(INSTALL, "verify_m1_anchors"):
+                operations = INSTALL.rollback_transaction("https://es", "https://kb", "auth", root)
+            self.assertEqual(operations, ["fence", "revoke", "publication"])
+            revoke.assert_called_once_with("https://es", "auth", "mint-never-created")
+
+    def test_delete_or_absent_accepts_race_to_absence(self):
+        with mock.patch.object(INSTALL, "request", side_effect=INSTALL.RequestFailure(404, "gone")):
+            INSTALL._delete_or_absent("https://es", "/_ingest/pipeline/never-created", "auth")
+
+    def test_fleet_stream_snapshot_normalizes_tsdb_boundaries_but_detects_real_drift(self):
+        stream = {"name": "metrics-rigsignal.session-default", "indices": [
+            {"index_name": ".ds-metrics-rigsignal.session-default-000001", "index_uuid": "uuid-1"},
+        ]}
+
+        def capture(*, start="2026-07-24T12:00:00Z", end="2026-07-24T12:01:00Z",
+                    setting="30m", mapping="keyword", pipeline="pipe-a", lifecycle="ilm-a", backing=None):
+            current = dict(stream)
+            if backing is not None:
+                current["indices"] = backing
+            simulated = {"template": {"mappings": {"properties": {"sample": {"type": mapping}}},
+                                        "aliases": {}, "settings": {
+                                            "index.mode": "time_series",
+                                            "index.time_series.start_time": start,
+                                            "index.time_series.end_time": end,
+                                            "index.time_series.look_ahead_time": setting,
+                                            "index.default_pipeline": pipeline,
+                                            "index.lifecycle.name": lifecycle,
+                                        }}}
+            with mock.patch.object(INSTALL, "es_json", side_effect=[{"data_streams": [current]}, simulated]):
+                return INSTALL.fleet_stream_snapshot("https://es", "auth")
+
+        baseline = capture()
+        self.assertEqual(baseline, capture(start="2026-07-24T12:00:01Z", end="2026-07-24T12:01:01Z"))
+        self.assertNotEqual(baseline, capture(setting="45m"))
+        self.assertNotEqual(baseline, capture(mapping="text"))
+        self.assertNotEqual(baseline, capture(pipeline="pipe-b"))
+        self.assertNotEqual(baseline, capture(lifecycle="ilm-b"))
+        self.assertNotEqual(baseline, capture(backing=[{
+            "index_name": ".ds-metrics-rigsignal.session-default-000002", "index_uuid": "uuid-2",
+        }]))
 
     def test_proof_deletion_refuses_completed_transaction_without_explicit_reverse(self):
         with tempfile.TemporaryDirectory() as directory:
