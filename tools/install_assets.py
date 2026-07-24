@@ -4,10 +4,12 @@
 import argparse
 import base64
 import ctypes
+import datetime
 import hashlib
 import json
 import os
 import re
+import socket
 import ssl
 import stat
 import subprocess
@@ -54,6 +56,8 @@ TARGET_GENERATION_SCHEME = "rigsignal:target-generation:w1-assets:v1"
 TARGET_GENERATION_KAT = "a7ed20a4b4bfe0b2e5597a065e8bdaa5161b0d962e1a502d3db3bbcc97e8ee7a"
 ROLE_JCS_SHA256 = "05b58b8369bc4212fcffa0ea81621ef10d6d57f1de464fbc3f562842a9cbafd7"
 DIAGNOSIS_STREAM = "logs-rigsignal.diagnosis-default"
+W1_LIFECYCLE_POLICY = "logs@lifecycle"
+PROBE_FIXTURE = ROOT / "fixtures/diagnosis_event/v1/positive/15-diagnosis-non-finding-conditional.expected.json"
 STATE_KEYS = frozenset(("version", "phase", "expected_cluster_uuid", "target_generation",
                         "role_jcs_sha256", "enrollment_root", "active_key_id", "pending_revoke_ids",
                         "pending_mint_name", "candidate_key_id"))
@@ -580,6 +584,60 @@ def load_state(root: Path) -> dict | None:
     return validate_state(value)
 
 
+def enrollment_condition(root: Path) -> str:
+    """Classify local enrollment ownership without creating or repairing it.
+
+    This is intentionally read-only: adoption refusals must not turn a missing
+    root into a newly owned root, nor clean up a recoverable candidate.
+    """
+    try:
+        _reject_symlinked_path(root)
+        if not root.exists():
+            return "clean"
+        st = root.lstat()
+        if (not stat.S_ISDIR(st.st_mode) or stat.S_ISLNK(st.st_mode) or st.st_uid != os.geteuid()
+                or st.st_mode & 0o077):
+            return "remediation"
+        stage = _publication_stage(root)
+        if stage.exists():
+            return "remediation"
+        entries = {entry.name for entry in root.iterdir()}
+        allowed = {"state.json", "credentials.toml", "handshake.toml", "shipping-policy-v1.toml", "candidate"}
+        if not entries.issubset(allowed):
+            return "remediation"
+        if "state.json" not in entries:
+            return "clean" if not entries else "remediation"
+        state = load_state(root)
+        if state is None:
+            return "remediation"
+        if "candidate" in entries:
+            # A candidate directory is normally an orphaned staging artifact.
+            # The one exception is the durable, valid incomplete transaction
+            # state left by a crash after candidate staging: ordinary recovery
+            # must revoke it and remove the private tree before re-evaluating.
+            # Inspect it without creating or changing anything so malformed
+            # staging remains a remediation refusal.
+            candidate = root / "candidate"
+            candidate_st = candidate.lstat()
+            if (not stat.S_ISDIR(candidate_st.st_mode) or stat.S_ISLNK(candidate_st.st_mode)
+                    or candidate_st.st_uid != os.geteuid() or candidate_st.st_mode & 0o077):
+                return "remediation"
+            candidate_entries = {entry.name for entry in candidate.iterdir()}
+            candidate_allowed = {"credentials.toml", "handshake.toml", "shipping-policy-v1.toml", "state.json"}
+            if not candidate_entries.issubset(candidate_allowed):
+                return "remediation"
+            for entry in candidate.iterdir():
+                item_st = entry.lstat()
+                if (not stat.S_ISREG(item_st.st_mode) or stat.S_ISLNK(item_st.st_mode)
+                        or item_st.st_uid != os.geteuid() or item_st.st_mode & 0o077):
+                    return "remediation"
+            if state["phase"] == "committed":
+                return "remediation"
+        return "committed" if state["phase"] == "committed" else "incomplete"
+    except (InputError, OSError, ValueError):
+        return "remediation"
+
+
 def _reject_symlinked_path(root: Path) -> None:
     """Reject a symlink in any existing component of the lexical root path."""
     raw = os.fspath(root)
@@ -642,6 +700,28 @@ def remove_candidate_root(root: Path) -> None:
                 raise InputError("candidate enrollment output is invalid")
             path.unlink()
     candidate.rmdir()
+
+
+def remove_recovered_state(root: Path) -> None:
+    """Remove the validated null-active transaction record after recovery."""
+    secure_root(root)
+    path = root / "state.json"
+    try:
+        st = path.lstat()
+    except OSError as error:
+        raise InputError("recovered enrollment state is invalid") from error
+    if (not stat.S_ISREG(st.st_mode) or stat.S_ISLNK(st.st_mode) or st.st_uid != os.geteuid()
+            or st.st_mode & 0o077):
+        raise InputError("recovered enrollment state is invalid")
+    try:
+        path.unlink()
+        directory_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    except OSError as error:
+        raise InputError("cannot remove recovered enrollment state") from error
 
 
 def atomic_write(root: Path, name: str, data: bytes) -> None:
@@ -1129,8 +1209,72 @@ def backing_owned_mapping_projection(es_url: str, authorization: str, index_name
     )
 
 
+def _stream_backing_pairs(stream: object) -> frozenset[tuple[str, str]] | None:
+    """Return the exact, unique backing-index identity set from a stream body."""
+    if not isinstance(stream, dict) or stream.get("name") != DIAGNOSIS_STREAM:
+        return None
+    failure_store = required_path(stream, ("failure_store", "enabled"))
+    if type(failure_store) is not bool or failure_store:
+        return None
+    indices = stream.get("indices")
+    if not isinstance(indices, list) or not indices:
+        return None
+    pairs: set[tuple[str, str]] = set()
+    for item in indices:
+        if not isinstance(item, dict):
+            return None
+        name, index_uuid = item.get("index_name"), item.get("index_uuid")
+        if not isinstance(name, str) or not name or not isinstance(index_uuid, str) or not index_uuid:
+            return None
+        pairs.add((name, index_uuid))
+    return frozenset(pairs) if len(pairs) == len(indices) else None
+
+
+def _index_lifecycle_is_compatible(es_url: str, authorization: str, index_name: str,
+                                   expected_uuid: str) -> bool:
+    quoted = urllib.parse.quote(index_name, safe="")
+    settings_response = es_json(es_url, "/" + quoted + "/_settings?flat_settings=true", "GET", authorization)
+    settings = required_path(settings_response, (index_name, "settings"))
+    if (required_path(settings, ("index.uuid",)) != expected_uuid
+            or required_path(settings, ("index.lifecycle.name",)) != W1_LIFECYCLE_POLICY):
+        return False
+    explain = es_json(es_url, "/" + quoted + "/_ilm/explain", "GET", authorization)
+    explained = required_path(explain, ("indices", index_name))
+    return isinstance(explained, dict) and explained.get("managed") is True and explained.get("policy") == W1_LIFECYCLE_POLICY
+
+
+def stream_compatibility_snapshot(es_url: str, authorization: str, response: object) -> frozenset[tuple[str, str]] | None:
+    """Validate the remote W1 shape and return its immutable backing snapshot.
+
+    ``None`` deliberately covers every malformed or incompatible response.  The
+    caller turns it into the stable migration refusal without exposing remote
+    cluster details.
+    """
+    try:
+        streams = response.get("data_streams") if isinstance(response, dict) else None
+        if not isinstance(streams, list) or len(streams) != 1:
+            return None
+        pairs = _stream_backing_pairs(streams[0])
+        if pairs is None or streams[0].get("ilm_policy") != W1_LIFECYCLE_POLICY:
+            return None
+        policy = es_json(es_url, "/_ilm/policy/" + urllib.parse.quote(W1_LIFECYCLE_POLICY, safe=""), "GET", authorization)
+        policy_body = policy.get(W1_LIFECYCLE_POLICY) if isinstance(policy, dict) else None
+        phases = policy_body.get("policy", {}).get("phases") if isinstance(policy_body, dict) else None
+        if not isinstance(phases, dict) or "delete" in phases:
+            return None
+        desired = canonical_owned_mapping_projection()
+        for index_name, index_uuid in pairs:
+            if not _index_lifecycle_is_compatible(es_url, authorization, index_name, index_uuid):
+                return None
+            if jcs(backing_owned_mapping_projection(es_url, authorization, index_name)) != jcs(desired):
+                return None
+        return pairs
+    except InputError:
+        return None
+
+
 def existing_stream_is_compatible(es_url: str, authorization: str, state: dict | None, uuid_value: str,
-                                  root: Path | None = None) -> bool:
+                                  root: Path | None = None, adopt_existing: bool = False) -> bool:
     if state is not None:
         if root is None:
             raise InputError("enrollment root is required for state ownership")
@@ -1139,35 +1283,59 @@ def existing_stream_is_compatible(es_url: str, authorization: str, state: dict |
         response = es_json(es_url, "/_data_stream/" + DIAGNOSIS_STREAM, "GET", authorization)
     except RequestFailure as error:
         if error.status == 404:
+            # A committed-state rerun may find that an operator removed the
+            # stream between runs.  Preserve the established Step-5
+            # self-healing path: compatibility here lets ensure_stream()
+            # recreate it.  The flag-present/stream-absent refusal is decided
+            # earlier, in main()'s clean-root dispatch.
             return True
         raise
-    streams = response.get("data_streams") if isinstance(response, dict) else None
-    if (not isinstance(streams, list) or len(streams) != 1 or not isinstance(streams[0], dict)
-            or streams[0].get("name") != DIAGNOSIS_STREAM or not isinstance(streams[0].get("indices"), list)
-            or state is None or state["phase"] != "committed" or state["expected_cluster_uuid"] != uuid_value):
+    # Adoption replaces only the committed-state ownership conjunct.  All
+    # remote shape checks remain identical for adoption and ordinary reruns.
+    if not adopt_existing and (state is None or state["phase"] != "committed"
+                               or state["expected_cluster_uuid"] != uuid_value):
         return False
-    indices = streams[0]["indices"]
-    if not indices or not all(isinstance(item, dict) and isinstance(item.get("index_name"), str)
-                              for item in indices):
-        return False
-    # state.json establishes installation ownership, but cannot prove that a
-    # template change retrofitted every concrete backing index.  Compare every
-    # live backing mapping and flat settings with the live desired simulation.
-    desired = canonical_owned_mapping_projection()
-    return all(jcs(backing_owned_mapping_projection(es_url, authorization, item["index_name"])) == jcs(desired)
-               for item in indices)
+    return stream_compatibility_snapshot(es_url, authorization, response) is not None
 
 
 def fence(es_url: str, authorization: str, state: dict | None, uuid_value: str,
-          root: Path | None = None) -> None:
+          root: Path | None = None, adopt_existing: bool = False) -> None:
     try:
-        compatible = existing_stream_is_compatible(es_url, authorization, state, uuid_value, root)
+        compatible = existing_stream_is_compatible(es_url, authorization, state, uuid_value, root, adopt_existing)
     except StateBindingError as error:
-        raise ProvisionError("install refused: enrollment state is not valid for this enrollment root") from error
+        raise ProvisionError("install refused: enrollment_remediation_required") from error
     except (RequestFailure, InputError) as error:
         raise ProvisionError("install refused: existing diagnosis stream is not W1; migration is required") from error
     if not compatible:
         raise ProvisionError("install refused: existing diagnosis stream is not W1; migration is required")
+
+
+def remote_stream_condition(es_url: str, authorization: str) -> tuple[str, frozenset[tuple[str, str]] | None]:
+    """Return absent, compatible, or incompatible without mutating the cluster."""
+    try:
+        response = es_json(es_url, "/_data_stream/" + DIAGNOSIS_STREAM, "GET", authorization)
+    except RequestFailure as error:
+        if error.status == 404:
+            return "absent", None
+        raise
+    snapshot = stream_compatibility_snapshot(es_url, authorization, response)
+    return ("compatible", snapshot) if snapshot is not None else ("incompatible", None)
+
+
+def dispatch_clean_root(es_url: str, authorization: str, adopt_requested: bool) -> bool:
+    """Apply the clean-root adoption matrix and return whether adoption is enabled."""
+    remote_condition, _snapshot = remote_stream_condition(es_url, authorization)
+    if adopt_requested:
+        if remote_condition == "absent":
+            raise ProvisionError("install refused: adoption_flag_stream_absent")
+        if remote_condition != "compatible":
+            raise ProvisionError("install refused: migration_required")
+        return True
+    if remote_condition == "compatible":
+        raise ProvisionError("install refused: adoption_required")
+    if remote_condition == "incompatible":
+        raise ProvisionError("install refused: migration_required")
+    return False
 
 
 def ensure_stream(es_url: str, authorization: str) -> None:
@@ -1203,10 +1371,22 @@ def invalidate(es_url: str, authorization: str, ids: list[str]) -> None:
     if not ids:
         return
     response = es_json(es_url, "/_security/api_key", "DELETE", authorization, {"ids": ids})
-    invalidated = response.get("invalidated_api_keys", []) if isinstance(response, dict) else []
-    previously = response.get("previously_invalidated_api_keys", []) if isinstance(response, dict) else []
-    if not set(ids).issubset(set(invalidated) | set(previously)):
+    if not isinstance(response, dict):
         raise InputError("API key invalidation was not confirmed")
+    invalidated = response.get("invalidated_api_keys")
+    previously = response.get("previously_invalidated_api_keys")
+    error_count = response.get("error_count", 0)
+    error_details = response.get("error_details", [])
+    if (not isinstance(invalidated, list) or not all(isinstance(item, str) for item in invalidated)
+            or not isinstance(previously, list) or not all(isinstance(item, str) for item in previously)
+            or type(error_count) is not int or error_count != 0
+            or not isinstance(error_details, list) or not all(isinstance(item, dict) for item in error_details)
+            or any(item.get("id") in ids for item in error_details)):
+        raise InputError("API key invalidation was not confirmed")
+    # ES 9.4.3 returns both ID lists empty, with error_count=0, when an
+    # already-invalidated key is invalidated again.  With a valid successful
+    # response, absence from both lists is therefore affirmative inactive
+    # state, not an unconfirmed revocation.
 
 
 def invalidate_mint_name(es_url: str, authorization: str, mint_name: str) -> None:
@@ -1217,7 +1397,8 @@ def invalidate_mint_name(es_url: str, authorization: str, mint_name: str) -> Non
     diagnostic text.  Refuse a malformed lookup response rather than treating
     it as proof that no orphan exists.
     """
-    response = es_json(es_url, "/_security/api_key?name=" + urllib.parse.quote(mint_name, safe=""),
+    response = es_json(es_url, "/_security/api_key?name=" + urllib.parse.quote(mint_name, safe="")
+                       + "&active_only=true",
                        "GET", authorization)
     keys = response.get("api_keys") if isinstance(response, dict) else None
     if not isinstance(keys, list):
@@ -1233,11 +1414,15 @@ def invalidate_mint_name(es_url: str, authorization: str, mint_name: str) -> Non
 
 
 def candidate_document(suffix: str) -> dict:
-    return {"@timestamp": "2026-07-23T00:00:00.000Z", "event": {"id": "provision-" + suffix},
-            "rigsignal": {"diagnosis": {"schema_version": 1, "outcome": "finding",
-            "detector_id": "provision", "rule_version": "1", "input_mode": "test",
-            "verdict": "ok", "disposition": "report", "confidence": 1.0,
-            "confidence_basis": "provision", "evidence": [], "plain_language": "provision"}}}
+    document = parse_json(PROBE_FIXTURE.read_bytes(), "provision proof fixture")
+    if not isinstance(document, dict):
+        raise InputError("provision proof fixture is invalid")
+    event_id = "provision-" + suffix
+    document["@timestamp"] = datetime.datetime.now(datetime.timezone.utc).isoformat(
+        timespec="milliseconds").replace("+00:00", "Z")
+    document["event"] = {"id": event_id}
+    document["host"] = {"name": socket.gethostname().lower()}
+    return document
 
 
 def assert_write_has_no_artifacts(response: object) -> None:
@@ -1267,30 +1452,60 @@ def assert_no_failure_store_document(es_url: str, authorization: str, event_id: 
         raise InputError("failure-store document exists after candidate write")
 
 
+def assert_exact_probe_refetch(es_url: str, authorization: str, event_id: str, document: dict) -> None:
+    result = es_json(es_url, "/" + DIAGNOSIS_STREAM + "/_search", "POST", authorization, {
+        "query": {"ids": {"values": [event_id]}}, "size": 2,
+    })
+    hits = required_path(result, ("hits", "hits"))
+    if (not isinstance(hits, list) or len(hits) != 1 or not isinstance(hits[0], dict)
+            or hits[0].get("_id") != event_id or "_ignored" in hits[0]
+            or jcs(hits[0].get("_source")) != jcs(document)):
+        raise InputError("candidate exact-stream refetch failed")
+
+
+def assert_mapping_rejection(status: int, response: object, error_type: str,
+                             caused_by: str | None = None) -> None:
+    error = response.get("error") if isinstance(response, dict) else None
+    if status != 400 or not isinstance(error, dict) or error.get("type") != error_type:
+        raise InputError("candidate mapping rejection proof failed")
+    if caused_by is not None:
+        cause = error.get("caused_by")
+        if not isinstance(cause, dict) or cause.get("type") != caused_by:
+            raise InputError("candidate mapping rejection proof failed")
+
+
 def verify_stream_behavior(es_url: str, authorization: str, admin_authorization: str, suffix: str) -> None:
     document = candidate_document(suffix)
-    path = "/" + DIAGNOSIS_STREAM + "/_create/provision-" + suffix
+    event_id = document["event"]["id"]
+    path = "/" + DIAGNOSIS_STREAM + "/_create/" + event_id + "?refresh=wait_for"
     status, response = es_json_status(es_url, path, "POST", authorization, document)
     if status != 201 or not isinstance(response, dict) or response.get("result") != "created":
         raise InputError("candidate exact-stream create failed")
     assert_accepted_write_clean(response)
-    assert_no_failure_store_document(es_url, admin_authorization, "provision-" + suffix)
+    assert_exact_probe_refetch(es_url, admin_authorization, event_id, document)
+    assert_no_failure_store_document(es_url, admin_authorization, event_id)
     # Real strictness proof; do not infer it from _simulate_index.
-    bad = dict(document); bad["unknown_root"] = True
+    bad = json.loads(json.dumps(document)); bad["unknown_root"] = True
     bad_id = "provision-bad-" + suffix
     status, response = es_json_status(es_url, "/" + DIAGNOSIS_STREAM + "/_create/" + bad_id,
                                       "POST", authorization, bad)
-    if status < 400:
-        raise InputError("unknown field was accepted")
+    assert_mapping_rejection(status, response, "strict_dynamic_mapping_exception")
     assert_write_has_no_artifacts(response)
     assert_no_failure_store_document(es_url, admin_authorization, bad_id)
-    malformed = candidate_document("malformed-" + suffix)
+    nested = json.loads(json.dumps(document))
+    nested["rigsignal"]["diagnosis"]["unknown_probe_field"] = True
+    nested_id = "provision-nested-" + suffix
+    status, response = es_json_status(es_url, "/" + DIAGNOSIS_STREAM + "/_create/" + nested_id,
+                                      "POST", authorization, nested)
+    assert_mapping_rejection(status, response, "strict_dynamic_mapping_exception")
+    assert_write_has_no_artifacts(response)
+    assert_no_failure_store_document(es_url, admin_authorization, nested_id)
+    malformed = json.loads(json.dumps(document))
     malformed["rigsignal"]["diagnosis"]["confidence"] = "not-a-number"
     malformed_id = "provision-malformed-" + suffix
     status, response = es_json_status(es_url, "/" + DIAGNOSIS_STREAM + "/_create/" + malformed_id,
                                       "POST", authorization, malformed)
-    if status < 400:
-        raise InputError("malformed scalar was accepted")
+    assert_mapping_rejection(status, response, "document_parsing_exception", "number_format_exception")
     assert_write_has_no_artifacts(response)
     assert_no_failure_store_document(es_url, admin_authorization, malformed_id)
 
@@ -1378,6 +1593,8 @@ def main() -> int:
     parser.add_argument("--agent-binary", type=Path, required=True)
     parser.add_argument("--profile", choices=("user", "system"), required=True)
     parser.add_argument("--enrollment-root", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--adopt-existing-w1-stream", action="store_true",
+                        help="one-shot adoption of a compatible pre-existing W1 diagnosis stream")
     parser.add_argument("--dry-run", action="store_true", help="list API calls without network access")
     args = parser.parse_args()
     try:
@@ -1410,14 +1627,26 @@ def main() -> int:
         return 0
 
     try:
+        requested_root = args.enrollment_root or default_root()
+        condition = enrollment_condition(requested_root)
+        if condition == "remediation":
+            raise ProvisionError("install refused: enrollment_remediation_required")
+        adopt_requested = getattr(args, "adopt_existing_w1_stream", False)
+        if adopt_requested and condition in {"committed", "incomplete"}:
+            raise ProvisionError("install refused: adoption_flag_state_present")
         configure_https(args.ca_file)
         configure_https(args.kibana_ca_file)
         authorization = admin_authorization(args.admin_credentials_file)
-        root = secure_root(args.enrollment_root or default_root())
+        # A clean root is the only local condition in which a remote stream can
+        # be adopted.  Decide it before creating the root or running recovery.
+        adoption = (dispatch_clean_root(es_url, authorization, adopt_requested)
+                     if condition == "clean" else False)
+
+        root = secure_root(requested_root)
         try:
             prior = load_state(root)
         except StateBindingError as error:
-            raise ProvisionError("install refused: enrollment state is not valid for this enrollment root") from error
+            raise ProvisionError("install refused: enrollment_remediation_required") from error
 
         # Step 2: recover/pin before normal work.  Unpublished credentials are
         # never reused; their identifiers survive in state for deterministic
@@ -1458,18 +1687,31 @@ def main() -> int:
                     invalidate(es_url, authorization, candidates)
                 remove_candidate_root(root)
                 # Do not silently preserve an incomplete candidate as active.
-                prior = None if prior["active_key_id"] is None else state_template(
-                    uuid_value, prior["target_generation"], prior["active_key_id"],
-                    prior["enrollment_root"])
-                if prior is not None:
+                if prior["active_key_id"] is None:
+                    remove_recovered_state(root)
+                    prior = None
+                else:
+                    prior = state_template(uuid_value, prior["target_generation"], prior["active_key_id"],
+                                           prior["enrollment_root"])
                     atomic_write(root, "state.json", jcs(prior) + b"\n")
         # A pre-exchange crash leaves only this deterministic private staging
         # path.  After phase recovery revokes/finishes its key lifecycle, it is
         # safe to remove whichever old or unpublished generation remains here.
         remove_stale_publication_stage(root)
 
+        if condition == "incomplete" and prior is None:
+            # A null-active recovery restores the clean-root condition.  Apply
+            # the same remote decision matrix now that recovery side effects
+            # are durable; adoption is one-shot and was already rejected above.
+            dispatch_clean_root(es_url, authorization, False)
+
         prerequisites(es_url, kb_url, authorization)  # Step 3
-        fence(es_url, authorization, prior, uuid_value, root)  # Step 4, before W1 PUT
+        fence(es_url, authorization, prior, uuid_value, root, adoption)  # Step 4, before W1 PUT
+        pre_put_condition, pre_put_snapshot = remote_stream_condition(es_url, authorization)
+        if pre_put_condition == "absent":
+            pre_put_snapshot = None
+        elif pre_put_condition != "compatible":
+            raise ProvisionError("install refused: migration_required")
 
         # Step 5: the ordered complete manifest barrier.
         for asset in bundle.assets:
@@ -1488,6 +1730,12 @@ def main() -> int:
             simulate(es_url, authorization)
         except (RequestFailure, InputError) as error:
             raise ProvisionError("install failed: diagnosis stream verification:") from error
+        if pre_put_snapshot is None:
+            # Fresh installation has no stream to snapshot before its W1
+            # creates; from here on it receives the same drift protection.
+            _, pre_put_snapshot = remote_stream_condition(es_url, authorization)
+            if pre_put_snapshot is None:
+                raise ProvisionError("install failed: diagnosis stream verification:")
 
         generation = recompute_target_generation({asset.path: asset.data for asset in bundle.assets})
         # A current key is only retained after a fresh proof.  Reading its secret
@@ -1502,8 +1750,9 @@ def main() -> int:
                 encoded = tomllib.loads((secure_read(root / "credentials.toml") or b"").decode())["elasticsearch"]["api_key"]
                 if not isinstance(encoded, str):
                     raise ValueError()
-                verify_stream_behavior(es_url, "ApiKey " + encoded, authorization, "active-proof")
-                verify_role_matrix(es_url, "ApiKey " + encoded, "active-proof")
+                proof_suffix = uuid.uuid4().hex
+                verify_stream_behavior(es_url, "ApiKey " + encoded, authorization, proof_suffix)
+                verify_role_matrix(es_url, "ApiKey " + encoded, proof_suffix)
             except (InputError, ValueError, KeyError, TypeError, RequestFailure):
                 reuse = False
                 encoded = None
@@ -1525,12 +1774,13 @@ def main() -> int:
                 atomic_write(candidate_root, name, contents)
             fault("candidate-write")
             try:
-                verify_stream_behavior(es_url, "ApiKey " + encoded, authorization, candidate_id[-12:])  # Step 7
+                proof_suffix = uuid.uuid4().hex
+                verify_stream_behavior(es_url, "ApiKey " + encoded, authorization, proof_suffix)  # Step 7
             except (InputError, RequestFailure):
                 invalidate(es_url, authorization, [candidate_id])
                 raise ProvisionError("install failed: diagnosis stream verification:")
             try:
-                verify_role_matrix(es_url, "ApiKey " + encoded, candidate_id[-12:])  # Step 8
+                verify_role_matrix(es_url, "ApiKey " + encoded, proof_suffix)  # Step 8
             except (InputError, RequestFailure):
                 invalidate(es_url, authorization, [candidate_id])
                 raise ProvisionError("install failed: shipper credential verification:")
@@ -1542,6 +1792,24 @@ def main() -> int:
             staged = state_template(uuid_value, generation, candidate_id, str(root))
 
         assert encoded is not None and candidate_id is not None
+        try:
+            # The asset writes, candidate checks, and publication are separated
+            # by a final read-only fence.  It closes the period in which a
+            # rollover or template mutation could otherwise be published over.
+            for asset in bundle.assets:
+                if asset.kind in {"component_templates", "index_templates", "security_roles"}:
+                    verify_asset(es_url, authorization, asset)
+                elif asset.kind in {"kibana_spaces", "kibana_roles"}:
+                    verify_kibana_asset(kb_url, authorization, asset)
+            simulate(es_url, authorization)
+            post_condition, post_snapshot = remote_stream_condition(es_url, authorization)
+            if post_condition != "compatible" or post_snapshot != pre_put_snapshot:
+                raise InputError("pre-publication stream snapshot drifted")
+        except (InputError, RequestFailure) as error:
+            # The durable candidate state is deliberately retained for the
+            # established recovery path; no consumer publication or marker can
+            # occur after this fence fails.
+            raise ProvisionError("install failed: pre-publication fence:") from error
         final = state_template(uuid_value, generation, candidate_id, str(root))
         # Step 9.  During replacement the old ID is kept pending until published
         # files verify, but state is committed only after its confirmation.
