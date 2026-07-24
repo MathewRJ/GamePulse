@@ -873,6 +873,18 @@ def verify_kibana_asset(base: str, authorization: str, asset: Asset) -> None:
         if not isinstance(response, dict) or not isinstance(expected, dict):
             raise InputError("canonical Kibana role GET projection is missing")
         got = {key: response.get(key) for key in ("elasticsearch", "kibana")}
+        elasticsearch = got.get("elasticsearch")
+        if isinstance(elasticsearch, dict) and isinstance(elasticsearch.get("indices"), list):
+            # Kibana GET injects allow_restricted_indices into each grant;
+            # false is the server default and is stripped, while true remains
+            # an escalation that must fail the exact equality comparison.
+            elasticsearch = dict(elasticsearch)
+            elasticsearch["indices"] = [
+                {k: v for k, v in entry.items() if not (k == "allow_restricted_indices" and v is False)}
+                if isinstance(entry, dict) else entry
+                for entry in elasticsearch["indices"]
+            ]
+            got["elasticsearch"] = elasticsearch
         want = {key: expected.get(key) for key in ("elasticsearch", "kibana")}
     else:
         raise InputError("canonical Kibana asset GET projection is unsupported")

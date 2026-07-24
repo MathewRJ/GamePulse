@@ -118,3 +118,11 @@ The final handoff must identify the resolved values for all OPEN items, list eve
 3. **streaming-lab**: NO new behavior — it keeps exactly its current default-space handling in
    the existing tooling, and this task only guarantees it is never sent to `/s/rigsignal`
    (acceptance A7 as written). Any relocation is out of scope.
+
+## Erratum E1 (2026-07-24, wire-forced — Contract Amendment A2)
+
+- T12/T13: normative assertion is zero-content (no ids/titles/attributes); observed live
+  status on 9.4.3/9.4.4 is 200-with-zero-results, recorded informationally. 403/404
+  expectations in the rows above are superseded.
+- Requirement 6-adjacent: kibana-role GET verification strips server-injected
+  `allow_restricted_indices: false` (known-defaults stripping only, no subset matching).

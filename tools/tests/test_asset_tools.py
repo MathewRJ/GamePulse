@@ -527,17 +527,28 @@ i.atomic_publication(r, {n: ('new-' + n).encode() for n in ('credentials.toml','
         viewer = w2_asset("kibana-roles", "rigsignal_viewer.json")
         expected = json.loads(viewer.data)
         calls = []
+        add_extra_index_pattern = False
         old_request = INSTALL.request
         def fake_request(_base, path, method, _auth, data=None, headers=None):
             calls.append((method, path, data, headers))
             if method == "GET":
-                return json.dumps({"name": "rigsignal_viewer", **expected, "metadata": {}}).encode()
+                response = json.loads(json.dumps(expected))
+                for grant in response["elasticsearch"]["indices"]:
+                    grant["allow_restricted_indices"] = False
+                if add_extra_index_pattern:
+                    response["elasticsearch"]["indices"][0]["names"].append("logs-other.*")
+                return json.dumps({"name": "rigsignal_viewer", **response, "metadata": {}}).encode()
             return b"{}"
         INSTALL.request = fake_request
-        try: INSTALL.install_asset("https://es", "https://kb", "auth", viewer)
+        try:
+            INSTALL.install_asset("https://es", "https://kb", "auth", viewer)
+            add_extra_index_pattern = True
+            with self.assertRaises(INSTALL.InputError):
+                INSTALL.verify_kibana_asset("https://kb", "auth", viewer)
         finally: INSTALL.request = old_request
         self.assertEqual([(method, path) for method, path, _data, _headers in calls], [
             ("PUT", "/api/security/role/rigsignal_viewer"), ("GET", "/api/security/role/rigsignal_viewer"),
+            ("GET", "/api/security/role/rigsignal_viewer"),
         ])
         self.assertEqual(INSTALL.es_path(INSTALL.Asset("security_roles", "shipper", "x", b"{}")),
                          "/_security/role/shipper")
