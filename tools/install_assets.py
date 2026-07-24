@@ -1240,7 +1240,12 @@ def existing_stream_is_compatible(es_url: str, authorization: str, state: dict |
         response = es_json(es_url, "/_data_stream/" + DIAGNOSIS_STREAM, "GET", authorization)
     except RequestFailure as error:
         if error.status == 404:
-            return state is None and not adopt_existing
+            # A committed-state rerun may find that an operator removed the
+            # stream between runs.  Preserve the established Step-5
+            # self-healing path: compatibility here lets ensure_stream()
+            # recreate it.  The flag-present/stream-absent refusal is decided
+            # earlier, in main()'s clean-root dispatch.
+            return True
         raise
     # Adoption replaces only the committed-state ownership conjunct.  All
     # remote shape checks remain identical for adoption and ordinary reruns.
@@ -1255,7 +1260,7 @@ def fence(es_url: str, authorization: str, state: dict | None, uuid_value: str,
     try:
         compatible = existing_stream_is_compatible(es_url, authorization, state, uuid_value, root, adopt_existing)
     except StateBindingError as error:
-        raise ProvisionError("install refused: enrollment state is not valid for this enrollment root") from error
+        raise ProvisionError("install refused: enrollment_remediation_required") from error
     except (RequestFailure, InputError) as error:
         raise ProvisionError("install refused: existing diagnosis stream is not W1; migration is required") from error
     if not compatible:

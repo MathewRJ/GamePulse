@@ -3,9 +3,10 @@ import io
 import json
 import tempfile
 import unittest
-from contextlib import redirect_stderr
+from contextlib import ExitStack, redirect_stderr
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -16,6 +17,14 @@ SPEC.loader.exec_module(INSTALL)
 
 
 class InstallAdoptionTests(unittest.TestCase):
+    def installer_args(self, root: Path, adopt: bool = False) -> SimpleNamespace:
+        return SimpleNamespace(
+            bundle=Path("unused"), endpoint="https://es.invalid", ca_file=Path("unused"),
+            kibana_endpoint="https://kb.invalid", kibana_ca_file=Path("unused"),
+            admin_credentials_file=Path("unused"), agent_binary=Path("unused"), profile="user",
+            enrollment_root=root, dry_run=False, adopt_existing_w1_stream=adopt,
+        )
+
     def test_enrollment_condition_keeps_adoption_path_narrow(self):
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw) / "enrollment"
@@ -84,6 +93,192 @@ class InstallAdoptionTests(unittest.TestCase):
             (INSTALL.argparse.ArgumentParser.parse_args, INSTALL.load_bundle, INSTALL.role_body,
              INSTALL.configure_https, INSTALL.admin_authorization, INSTALL.remote_stream_condition) = (
                 old_parse, old_bundle, old_role, old_configure, old_auth, old_remote)
+
+    def test_committed_rerun_remote_404_remains_compatible_for_self_healing(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "enrollment"
+            INSTALL.secure_root(root)
+            state = INSTALL.state_template("KUrXRgwRRQu-RikmIJhm0Q", INSTALL.TARGET_GENERATION_KAT,
+                                           "active", str(root))
+            with patch.object(INSTALL, "es_json", side_effect=INSTALL.RequestFailure(404, "missing")):
+                self.assertTrue(INSTALL.existing_stream_is_compatible(
+                    "https://es.invalid", "admin", state, state["expected_cluster_uuid"], root))
+                # fence acceptance is what allows Step 5 ensure_stream() to
+                # recreate the deleted stream on the ordinary rerun path.
+                INSTALL.fence("https://es.invalid", "admin", state, state["expected_cluster_uuid"], root)
+            # The ordinary clean/fresh path has the same established 404
+            # behavior, while main() separately rejects flag+absent.
+            with patch.object(INSTALL, "es_json", side_effect=INSTALL.RequestFailure(404, "missing")):
+                self.assertTrue(INSTALL.existing_stream_is_compatible(
+                    "https://es.invalid", "admin", None, "KUrXRgwRRQu-RikmIJhm0Q"))
+                INSTALL.fence("https://es.invalid", "admin", None, "KUrXRgwRRQu-RikmIJhm0Q")
+
+    def test_flag_with_incomplete_state_refuses_before_recovery_or_secure_root(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "enrollment"
+            INSTALL.secure_root(root)
+            state = INSTALL.state_template("KUrXRgwRRQu-RikmIJhm0Q", INSTALL.TARGET_GENERATION_KAT,
+                                           None, str(root))
+            state.update(phase="mint_intent", pending_mint_name="unfinished")
+            INSTALL.atomic_write(root, "state.json", INSTALL.jcs(state) + b"\n")
+            secure_root = MagicMock(side_effect=AssertionError("secure_root must not run"))
+            recovery = MagicMock(side_effect=AssertionError("recovery must not run"))
+            with patch.object(INSTALL.argparse.ArgumentParser, "parse_args",
+                              return_value=self.installer_args(root, True)), \
+                 patch.object(INSTALL, "load_bundle", return_value=INSTALL.Bundle("test", "test", [])), \
+                 patch.object(INSTALL, "role_body", return_value={}), \
+                 patch.object(INSTALL, "secure_root", secure_root), \
+                 patch.object(INSTALL, "invalidate_mint_name", recovery), \
+                 patch.object(INSTALL, "invalidate", recovery):
+                stderr = io.StringIO()
+                with redirect_stderr(stderr):
+                    self.assertEqual(INSTALL.main(), 1)
+            self.assertEqual(stderr.getvalue(), "install refused: adoption_flag_state_present\n")
+            secure_root.assert_not_called()
+            recovery.assert_not_called()
+
+    def test_main_dispatch_refuses_flag_with_committed_or_remediation_root(self):
+        for condition, code in (("committed", "adoption_flag_state_present"),
+                                ("remediation", "enrollment_remediation_required")):
+            with self.subTest(condition=condition), tempfile.TemporaryDirectory() as raw:
+                root = Path(raw) / "enrollment"
+                remote = MagicMock(side_effect=AssertionError("remote inspection must not run"))
+                secure_root = MagicMock(side_effect=AssertionError("secure_root must not run"))
+                with patch.object(INSTALL.argparse.ArgumentParser, "parse_args",
+                                  return_value=self.installer_args(root, True)), \
+                     patch.object(INSTALL, "load_bundle", return_value=INSTALL.Bundle("test", "test", [])), \
+                     patch.object(INSTALL, "role_body", return_value={}), \
+                     patch.object(INSTALL, "enrollment_condition", return_value=condition), \
+                     patch.object(INSTALL, "remote_stream_condition", remote), \
+                     patch.object(INSTALL, "secure_root", secure_root):
+                    stderr = io.StringIO()
+                    with redirect_stderr(stderr):
+                        self.assertEqual(INSTALL.main(), 1)
+                self.assertEqual(stderr.getvalue(), f"install refused: {code}\n")
+                remote.assert_not_called()
+                secure_root.assert_not_called()
+
+    def test_fence_state_binding_uses_stable_remediation_code(self):
+        with patch.object(INSTALL, "existing_stream_is_compatible",
+                          side_effect=INSTALL.StateBindingError("wrong root")):
+            with self.assertRaisesRegex(INSTALL.ProvisionError, "enrollment_remediation_required"):
+                INSTALL.fence("https://es.invalid", "admin", None, "KUrXRgwRRQu-RikmIJhm0Q")
+
+    def test_adoption_main_runs_full_transaction_without_adopted_phase(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "enrollment"
+            written_states: list[dict] = []
+            def capture_write(_root, name, data):
+                if name == "state.json":
+                    written_states.append(json.loads(data))
+            with ExitStack() as patches:
+                patches.enter_context(patch.object(INSTALL.argparse.ArgumentParser, "parse_args",
+                                                   return_value=self.installer_args(root, True)))
+                patches.enter_context(patch.object(INSTALL, "load_bundle", return_value=INSTALL.Bundle("test", "test", [])))
+                patches.enter_context(patch.object(INSTALL, "role_body", return_value={}))
+                patches.enter_context(patch.object(INSTALL, "configure_https"))
+                patches.enter_context(patch.object(INSTALL, "admin_authorization", return_value="admin"))
+                patches.enter_context(patch.object(INSTALL, "cluster_uuid", return_value="KUrXRgwRRQu-RikmIJhm0Q"))
+                patches.enter_context(patch.object(INSTALL, "prerequisites"))
+                fence = patches.enter_context(patch.object(INSTALL, "fence"))
+                patches.enter_context(patch.object(INSTALL, "remote_stream_condition", side_effect=[
+                    ("compatible", frozenset({(".ds-old", "old-uuid")})),
+                    ("compatible", frozenset({(".ds-old", "old-uuid")})),
+                    ("compatible", frozenset({(".ds-old", "old-uuid")})),
+                ]))
+                ensure_stream = patches.enter_context(patch.object(INSTALL, "ensure_stream"))
+                simulate = patches.enter_context(patch.object(INSTALL, "simulate"))
+                patches.enter_context(patch.object(INSTALL, "recompute_target_generation", return_value="0" * 64))
+                mint_key = patches.enter_context(patch.object(INSTALL, "mint_key", return_value=("candidate", "encoded")))
+                patches.enter_context(patch.object(INSTALL, "enrollment_files", return_value={}))
+                patches.enter_context(patch.object(INSTALL, "atomic_write", side_effect=capture_write))
+                stream_proof = patches.enter_context(patch.object(INSTALL, "verify_stream_behavior"))
+                role_proof = patches.enter_context(patch.object(INSTALL, "verify_role_matrix"))
+                publication = patches.enter_context(patch.object(INSTALL, "atomic_publication"))
+                handshake = patches.enter_context(patch.object(INSTALL, "run_handshake"))
+                patches.enter_context(patch.object(INSTALL, "request"))
+                marker_verify = patches.enter_context(patch.object(INSTALL, "verify_asset"))
+                self.assertEqual(INSTALL.main(), 0)
+            fence.assert_called_once()
+            self.assertTrue(fence.call_args.args[-1])
+            ensure_stream.assert_called_once()
+            simulate.assert_called()
+            mint_key.assert_called_once()
+            stream_proof.assert_called_once()
+            role_proof.assert_called_once()
+            publication.assert_called_once()
+            handshake.assert_called_once()
+            marker_verify.assert_called_once()
+            self.assertTrue(written_states)
+            self.assertNotIn("adopted", {state["phase"] for state in written_states})
+            self.assertIn("mint_intent", {state["phase"] for state in written_states})
+            self.assertIn("candidate_verified", {state["phase"] for state in written_states})
+            self.assertIn("committed", {state["phase"] for state in written_states})
+
+    def test_prepublication_drift_fails_closed_without_publication_or_marker(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "enrollment"
+            written_states: list[dict] = []
+            def capture_write(_root, name, data):
+                if name == "state.json":
+                    written_states.append(json.loads(data))
+            publication = MagicMock()
+            marker_request = MagicMock()
+            with ExitStack() as patches:
+                patches.enter_context(patch.object(INSTALL.argparse.ArgumentParser, "parse_args",
+                                                   return_value=self.installer_args(root, True)))
+                patches.enter_context(patch.object(INSTALL, "load_bundle", return_value=INSTALL.Bundle("test", "test", [])))
+                patches.enter_context(patch.object(INSTALL, "role_body", return_value={}))
+                patches.enter_context(patch.object(INSTALL, "configure_https"))
+                patches.enter_context(patch.object(INSTALL, "admin_authorization", return_value="admin"))
+                patches.enter_context(patch.object(INSTALL, "cluster_uuid", return_value="KUrXRgwRRQu-RikmIJhm0Q"))
+                patches.enter_context(patch.object(INSTALL, "prerequisites"))
+                patches.enter_context(patch.object(INSTALL, "fence"))
+                patches.enter_context(patch.object(INSTALL, "remote_stream_condition", side_effect=[
+                    ("compatible", frozenset({(".ds-old", "old-uuid")})),
+                    ("compatible", frozenset({(".ds-old", "old-uuid")})),
+                    ("compatible", frozenset({(".ds-new", "new-uuid")})),
+                ]))
+                patches.enter_context(patch.object(INSTALL, "ensure_stream"))
+                patches.enter_context(patch.object(INSTALL, "simulate"))
+                patches.enter_context(patch.object(INSTALL, "recompute_target_generation", return_value="0" * 64))
+                patches.enter_context(patch.object(INSTALL, "mint_key", return_value=("candidate", "encoded")))
+                patches.enter_context(patch.object(INSTALL, "enrollment_files", return_value={}))
+                patches.enter_context(patch.object(INSTALL, "atomic_write", side_effect=capture_write))
+                patches.enter_context(patch.object(INSTALL, "verify_stream_behavior"))
+                patches.enter_context(patch.object(INSTALL, "verify_role_matrix"))
+                patches.enter_context(patch.object(INSTALL, "atomic_publication", publication))
+                patches.enter_context(patch.object(INSTALL, "request", marker_request))
+                stderr = io.StringIO()
+                with redirect_stderr(stderr):
+                    self.assertEqual(INSTALL.main(), 1)
+            self.assertEqual(stderr.getvalue(), "install failed: pre-publication fence:\n")
+            publication.assert_not_called()
+            marker_request.assert_not_called()
+            self.assertNotIn("committed", {state["phase"] for state in written_states})
+
+    def test_proof_ids_are_unique_for_each_accepted_attempt(self):
+        accepted: dict[str, dict] = {}
+        def status(_url, path, _method, _authorization, document):
+            event_id = path.split("/_create/", 1)[1].split("?", 1)[0]
+            if event_id.startswith("provision-bad-") or event_id.startswith("provision-nested-"):
+                return 400, {"error": {"type": "strict_dynamic_mapping_exception"}}
+            if event_id.startswith("provision-malformed-"):
+                return 400, {"error": {"type": "document_parsing_exception",
+                                        "caused_by": {"type": "number_format_exception"}}}
+            accepted[event_id] = document
+            return 201, {"result": "created"}
+        def get(_url, path, _method, _authorization, body=None):
+            if "::failures" in path:
+                raise INSTALL.RequestFailure(404, "failure store disabled")
+            event_id = body["query"]["ids"]["values"][0]
+            return {"hits": {"hits": [{"_id": event_id, "_source": accepted[event_id]}]}}
+        with patch.object(INSTALL, "es_json_status", side_effect=status), \
+             patch.object(INSTALL, "es_json", side_effect=get):
+            INSTALL.verify_stream_behavior("https://es.invalid", "shipper", "admin", "first")
+            INSTALL.verify_stream_behavior("https://es.invalid", "shipper", "admin", "second")
+        self.assertEqual(set(accepted), {"provision-first", "provision-second"})
+        self.assertTrue(all(doc["event"]["id"] == event_id for event_id, doc in accepted.items()))
 
 
 if __name__ == "__main__":
