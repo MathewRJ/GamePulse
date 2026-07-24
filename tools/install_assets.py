@@ -24,6 +24,11 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+TOOLS_DIR = Path(__file__).resolve().parent
+if str(TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(TOOLS_DIR))
+import asset_adapters
+
 
 ROOT = Path(__file__).resolve().parent.parent
 ASSET_DIR = ROOT / "elastic"
@@ -62,8 +67,53 @@ STATE_KEYS = frozenset(("version", "phase", "expected_cluster_uuid", "target_gen
                         "role_jcs_sha256", "enrollment_root", "active_key_id", "pending_revoke_ids",
                         "pending_mint_name", "candidate_key_id"))
 STATE_PHASES = frozenset(("committed", "mint_intent", "candidate_staged", "candidate_verified"))
+OWNERSHIP_PROFILE_FILE = "ownership-profile.json"
 UUID_RE = re.compile(r"[A-Za-z0-9_-]{22}\Z")
 HEX_RE = re.compile(r"[0-9a-f]{64}\Z")
+OWNERSHIP_TABLE_VERSION = "fleet-coexist-v1"
+
+# This is deliberately an identity table, rather than a live `_meta` heuristic.
+# A bundle addition has no safe default under the coexistence profile.
+_OWNED_ASSET_KEYS = frozenset((
+    ("component_templates", "logs-rigsignal.diagnosis-mappings"),
+    ("index_templates", "logs-rigsignal.diagnosis"),
+    ("index_templates", "logs-rigsignal.stream"),
+    ("index_templates", "metrics-rigsignal.profiles"),
+    ("pipelines", "logs-rigsignal.stream@pipeline"),
+    ("security_roles", "rigsignal_shipper"),
+    ("transforms", "rigsignal-game-timeline"),
+    ("kibana_spaces", "rigsignal"),
+    ("kibana_roles", "rigsignal_viewer"),
+    *( ("dashboard", name) for name in PRODUCT_DASHBOARDS ),
+    ("dashboard", STREAMING_LAB_DASHBOARD),
+))
+_EXTERNAL_ASSET_KEYS = frozenset((
+    *( ("component_templates", name) for name in (
+        "metrics-rigsignal.audio@package", "metrics-rigsignal.cpu@package",
+        "metrics-rigsignal.ebpf@package", "metrics-rigsignal.ebpf_thread@package",
+        "metrics-rigsignal.frame@package", "metrics-rigsignal.gpu@package",
+        "metrics-rigsignal.memory@package", "metrics-rigsignal.network@package",
+        "metrics-rigsignal.power@package", "metrics-rigsignal.session@package",
+        "metrics-rigsignal.storage@package", "metrics-rigsignal.stream_client@package",
+        "logs-rigsignal.events@package",
+    )),
+    *( ("index_templates", name) for name in (
+        "logs-rigsignal.events", "metrics-rigsignal.audio", "metrics-rigsignal.cpu",
+        "metrics-rigsignal.ebpf", "metrics-rigsignal.ebpf_thread", "metrics-rigsignal.frame",
+        "metrics-rigsignal.gpu", "metrics-rigsignal.memory", "metrics-rigsignal.network",
+        "metrics-rigsignal.power", "metrics-rigsignal.session", "metrics-rigsignal.storage",
+        "metrics-rigsignal.stream_client",
+    )),
+    *( ("pipelines", name) for name in (
+        "logs-rigsignal.events-0.5.0", "metrics-rigsignal.audio-0.5.0",
+        "metrics-rigsignal.cpu-0.5.0", "metrics-rigsignal.ebpf-0.5.0",
+        "metrics-rigsignal.ebpf_thread-0.5.0", "metrics-rigsignal.frame-0.5.0",
+        "metrics-rigsignal.gpu-0.5.0", "metrics-rigsignal.memory-0.5.0",
+        "metrics-rigsignal.network-0.5.0", "metrics-rigsignal.power-0.5.0",
+        "metrics-rigsignal.session-0.5.0", "metrics-rigsignal.storage-0.5.0",
+        "metrics-rigsignal.stream_client-0.5.0",
+    )),
+))
 
 
 class InputError(Exception):
@@ -118,6 +168,93 @@ class Bundle:
     version: str
     source_commit: str
     assets: list[Asset]
+
+
+def ownership_for_assets(bundle: Bundle, profile: str) -> dict[tuple[str, str], str]:
+    """Resolve every manifest member before the first network operation."""
+    keys = {(asset.kind, asset.name) for asset in bundle.assets}
+    if len(keys) != len(bundle.assets):
+        raise InputError("bundle contains duplicate asset identities")
+    if profile == "default":
+        return {key: "bundle-owned" for key in keys}
+    if profile != "fleet-coexist":
+        raise InputError("ownership profile is invalid")
+    known = _OWNED_ASSET_KEYS | _EXTERNAL_ASSET_KEYS
+    unresolved = sorted(keys - known)
+    stale = sorted(known - keys)
+    if unresolved or stale or _OWNED_ASSET_KEYS & _EXTERNAL_ASSET_KEYS:
+        name = unresolved[0] if unresolved else stale[0]
+        raise InputError(f"fleet coexist ownership is unresolved: {name[0]}/{name[1]}")
+    if len(_OWNED_ASSET_KEYS) != 16 or len(_EXTERNAL_ASSET_KEYS) != 39 or len(keys) != 55:
+        raise InputError("fleet coexist ownership table cardinality is invalid")
+    return {key: ("bundle-owned" if key in _OWNED_ASSET_KEYS else "external") for key in keys}
+
+
+def verify_external_asset(es_url: str, authorization: str, asset: Asset) -> dict:
+    """Read and verify an external object without issuing any mutation request."""
+    response = json_response(request(es_url, es_path(asset), "GET", authorization))
+    expected = parse_json(asset.data, asset.path)
+    try:
+        live_compatibility = asset_adapters.compatibility_projection(asset.kind, response)
+        expected_compatibility = asset_adapters.compatibility_projection(asset.kind, expected)
+    except asset_adapters.AdapterError as error:
+        raise InputError("external asset projection is invalid") from error
+    if asset_adapters.canonical_json(live_compatibility) != asset_adapters.canonical_json(expected_compatibility):
+        raise InputError("external asset compatibility differs")
+    if asset.kind == "index_templates":
+        # Textual composed_of tolerance is not sufficient for Fleet index
+        # templates.  Compare their effective simulation outcomes too.
+        expected_simulation = es_json(es_url, "/_index_template/_simulate", "POST", authorization, expected)
+        live_simulation = es_json(es_url, "/_index_template/_simulate_index/" +
+                                  urllib.parse.quote(asset.name, safe=""), "POST", authorization, {})
+        def outcome(value: object) -> object:
+            template = value.get("template", value) if isinstance(value, dict) else None
+            if not isinstance(template, dict):
+                raise InputError("Fleet index simulation is invalid")
+            settings = template.get("settings", {})
+            if not isinstance(settings, dict):
+                raise InputError("Fleet index simulation is invalid")
+            return {"mappings": template.get("mappings", {}), "settings": settings,
+                    "default_pipeline": settings.get("index.default_pipeline"),
+                    "lifecycle": settings.get("index.lifecycle.name")}
+        if jcs(outcome(expected_simulation)) != jcs(outcome(live_simulation)):
+            raise InputError("external index template simulation differs")
+    live = asset_adapters.get_projection(asset.kind, response)
+    metadata = live.get("_meta") if isinstance(live, dict) and isinstance(live.get("_meta"), dict) else {}
+    return {"kind": asset.kind, "name": asset.name,
+            "live_body_sha256": asset_adapters.sha256(live),
+            "compatibility_projection_sha256": asset_adapters.sha256(live_compatibility),
+            "owner_metadata": metadata}
+
+
+def owned_action(es_url: str, kb_url: str, authorization: str, asset: Asset) -> str:
+    """Classify an owned asset so the coexistence marker describes reruns honestly."""
+    if asset.kind == "dashboard":
+        return "import"
+    base = kb_url if asset.kind in {"kibana_spaces", "kibana_roles"} else es_url
+    path = kibana_path(asset) if base == kb_url else es_path(asset)
+    headers = {"kbn-xsrf": "true"} if base == kb_url else None
+    try:
+        response = json_response(request(base, path, "GET", authorization, headers=headers))
+    except RequestFailure as error:
+        if error.status == 404:
+            return "create"
+        raise
+    if asset.kind in {"kibana_spaces", "kibana_roles"}:
+        try:
+            verify_kibana_asset(kb_url, authorization, asset)
+            return "noop"
+        except InputError:
+            return "update"
+    expected = parse_json(asset.data, asset.path)
+    try:
+        current = asset_adapters.get_projection(asset.kind, response)
+        wanted = asset_adapters.get_projection(asset.kind, expected)
+        if asset_adapters.canonical_json(current) == asset_adapters.canonical_json(wanted):
+            return "noop"
+    except asset_adapters.AdapterError as error:
+        raise InputError("owned asset projection is invalid") from error
+    return "update"
 
 
 def cargo_version() -> str:
@@ -334,6 +471,46 @@ def admin_authorization(path: Path) -> str:
     raise InputError("administrator credential file is invalid")
 
 
+def admin_credential_kind(path: Path) -> str:
+    """Classify credential source without widening the accepted TOML grammar."""
+    try:
+        import tomllib
+        values = tomllib.loads(protected_regular_file(path).decode("utf-8"))["elasticsearch"]
+        if set(values) == {"api_key"} and isinstance(values["api_key"], str):
+            return "api_key"
+        if set(values) == {"username", "password"} and all(isinstance(values[key], str)
+                                                               for key in values):
+            return "native_user"
+    except (KeyError, UnicodeDecodeError, ValueError, TypeError):
+        pass
+    raise InputError("administrator credential file is invalid")
+
+
+def cluster_health_gate(es_url: str, authorization: str) -> None:
+    """Permit green, or explained yellow with neither primaries nor tasks pending."""
+    response = es_json(es_url, "/_cluster/health", "GET", authorization)
+    if not isinstance(response, dict):
+        raise ProvisionError("install refused: cluster_health")
+    status = response.get("status")
+    if status == "green":
+        return
+    if (status == "yellow" and response.get("unassigned_primary_shards") == 0
+            and response.get("number_of_pending_tasks") == 0):
+        return
+    raise ProvisionError("install refused: cluster_health")
+
+
+def lifecycle_delete_phase_free(es_url: str, authorization: str) -> None:
+    """Re-read both policy identities immediately before the lifecycle PUT."""
+    for policy_name in ("logs-rigsignal-stream-30d", "logs@lifecycle"):
+        response = es_json(es_url, "/_ilm/policy/" + urllib.parse.quote(policy_name, safe=""),
+                           "GET", authorization)
+        policy = response.get(policy_name) if isinstance(response, dict) else None
+        phases = policy.get("policy", {}).get("phases") if isinstance(policy, dict) else None
+        if not isinstance(phases, dict) or "delete" in phases:
+            raise ProvisionError("install refused: ilm_delete_phase")
+
+
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         raise urllib.error.HTTPError(req.full_url, code, "redirect refused", headers, fp)
@@ -440,10 +617,22 @@ def assert_dashboard_import_result(asset: Asset, response: object) -> None:
         raise InputError("dashboard import result differs from submitted objects")
 
 
-def marker_body(bundle: Bundle) -> bytes:
-    return json.dumps({"_meta": {"bundle_version": bundle.version,
-                                  "source_commit": bundle.source_commit,
-                                  "installed_at_field": "set by server"},
+def marker_body(bundle: Bundle, ownership_profile: str = "default",
+                applied_owned_assets: list[dict] | None = None,
+                verified_external_assets: list[dict] | None = None) -> bytes:
+    meta = {"bundle_version": bundle.version, "source_commit": bundle.source_commit,
+            "installed_at_field": "set by server", "ownership_profile": ownership_profile}
+    if ownership_profile == "fleet-coexist":
+        owned = applied_owned_assets or []
+        external = verified_external_assets or []
+        if len(owned) != 16 or len(external) != 39:
+            raise InputError("fleet coexist marker accounting is incomplete")
+        identities = {(item.get("kind"), item.get("name")) for item in owned + external}
+        if len(identities) != 55 or any(not isinstance(item, dict) for item in owned + external):
+            raise InputError("fleet coexist marker accounting is invalid")
+        meta.update({"ownership_table_version": OWNERSHIP_TABLE_VERSION,
+                     "applied_owned_assets": owned, "verified_external_assets": external})
+    return json.dumps({"_meta": meta,
                        "template": {}}, sort_keys=True).encode("utf-8")
 
 
@@ -584,6 +773,30 @@ def load_state(root: Path) -> dict | None:
     return validate_state(value)
 
 
+def load_ownership_profile(root: Path) -> str | None:
+    raw = secure_read(root / OWNERSHIP_PROFILE_FILE, missing_ok=True)
+    if raw is None:
+        return None
+    value = parse_json(raw, OWNERSHIP_PROFILE_FILE)
+    if (not isinstance(value, dict) or set(value) != {"profile", "table_version"}
+            or value.get("profile") != "fleet-coexist"
+            or value.get("table_version") != OWNERSHIP_TABLE_VERSION):
+        raise InputError("ownership profile state is invalid")
+    return value["profile"]
+
+
+def bind_ownership_profile(root: Path, requested: str) -> None:
+    """Fence profile changes in protected enrollment state before remote work."""
+    persisted = load_ownership_profile(root)
+    if persisted is not None and persisted != requested:
+        raise ProvisionError("install refused: ownership_profile_mismatch")
+    if requested == "default" and persisted is None:
+        return
+    if persisted is None:
+        atomic_write(root, OWNERSHIP_PROFILE_FILE,
+                     jcs({"profile": "fleet-coexist", "table_version": OWNERSHIP_TABLE_VERSION}) + b"\n")
+
+
 def enrollment_condition(root: Path) -> str:
     """Classify local enrollment ownership without creating or repairing it.
 
@@ -602,7 +815,8 @@ def enrollment_condition(root: Path) -> str:
         if stage.exists():
             return "remediation"
         entries = {entry.name for entry in root.iterdir()}
-        allowed = {"state.json", "credentials.toml", "handshake.toml", "shipping-policy-v1.toml", "candidate"}
+        allowed = {"state.json", "credentials.toml", "handshake.toml", "shipping-policy-v1.toml",
+                   OWNERSHIP_PROFILE_FILE, "candidate"}
         if not entries.issubset(allowed):
             return "remediation"
         if "state.json" not in entries:
@@ -756,6 +970,130 @@ def atomic_write(root: Path, name: str, data: bytes) -> None:
         raise InputError("cannot publish enrollment output") from error
 
 
+JOURNAL_FILE = "fleet-coexist-journal.json"
+
+
+class TransactionJournal:
+    """Protected, per-object mutation authority for Fleet coexistence."""
+    def __init__(self, root: Path, profile: str):
+        self.root, self.profile = root, profile
+        raw = secure_read(root / JOURNAL_FILE, missing_ok=True)
+        if raw is None:
+            self.value = {"version": 1, "ownership_profile": profile,
+                          "ownership_table_version": OWNERSHIP_TABLE_VERSION,
+                          "apply_ok": False, "intents": [], "proofs": []}
+            self._persist()
+        else:
+            self.value = parse_json(raw, JOURNAL_FILE)
+            if (not isinstance(self.value, dict) or self.value.get("ownership_profile") != profile
+                    or self.value.get("ownership_table_version") != OWNERSHIP_TABLE_VERSION
+                    or not isinstance(self.value.get("intents"), list)):
+                raise ProvisionError("install refused: ownership_profile_mismatch")
+
+    def _persist(self) -> None:
+        atomic_write(self.root, JOURNAL_FILE, jcs(self.value) + b"\n")
+
+    def _body_ref(self, key: str, body: bytes) -> dict:
+        digest = hashlib.sha256(body).hexdigest()
+        # atomic_write is deliberately single-directory/no-slash; this is a
+        # durable protected request-body path relative to the journal root.
+        name = "fleet-coexist-body-" + hashlib.sha256(key.encode("utf-8")).hexdigest()
+        atomic_write(self.root, name, body)
+        return {"path": name, "sha256": digest}
+
+    def write_intent(self, kind: str, name: str, action: str, preimage_sha256: str,
+                     intended_after_sha256: str, request_body: bytes, *, object_id: str | None = None) -> dict:
+        """Persist intent, after-pin and request reference together before I/O."""
+        key = f"{kind}:{name}:{object_id or ''}:{len(self.value['intents'])}"
+        record = {"event": "write_intent", "kind": kind, "name": name, "action": action,
+                  "preimage_sha256": preimage_sha256,
+                  "intended_after_sha256": intended_after_sha256,
+                  "request_body": self._body_ref(key, request_body)}
+        if object_id is not None:
+            record["object_id"] = object_id
+        self.value["intents"].append(record)
+        self._persist()
+        return record
+
+    def write_verified(self, record: dict, after_sha256: str) -> None:
+        record["write_verified"] = True
+        record["after_sha256"] = after_sha256
+        self._persist()
+
+    def proof_intent(self, event_id: str) -> dict:
+        record = {"event_id": event_id, "created_index": None}
+        self.value["proofs"].append(record)
+        self._persist()
+        return record
+
+    def proof_index(self, record: dict, index: str) -> None:
+        record["created_index"] = index
+        self._persist()
+
+    def apply_ok(self) -> None:
+        self.value["apply_ok"] = True
+        self._persist()
+
+
+def ambiguous_crash_outcome(intent: dict, live_sha256: str) -> str:
+    """Apply the durable three-way rule; never consult the current manifest."""
+    if live_sha256 == intent.get("intended_after_sha256"):
+        return "restore"
+    if live_sha256 == intent.get("preimage_sha256"):
+        return "untouched"
+    raise ProvisionError("install refused: transaction_concurrent_drift")
+
+
+def journal_recovery_actions(journal: TransactionJournal, live_hash_for) -> list[dict]:
+    """Select inverse operations from journaled intents only.
+
+    ``live_hash_for`` is supplied by the class-specific GET adapter.  This
+    deliberately has no manifest argument: recovery cannot invent a mutation
+    for an asset the interrupted transaction never journaled.
+    """
+    actions = []
+    for intent in journal.value.get("intents", []):
+        if intent.get("event") != "write_intent" or intent.get("kind") == "api_key":
+            continue
+        if intent.get("write_verified"):
+            actions.append(intent)
+        elif ambiguous_crash_outcome(intent, live_hash_for(intent)) == "restore":
+            actions.append(intent)
+    return actions
+
+
+def exact_proof_recovery_hit(es_url: str, authorization: str, event_id: str) -> dict | None:
+    """One exact ID query, zero-or-one result; never wildcard/delete-by-query."""
+    result = es_json(es_url, "/" + DIAGNOSIS_STREAM + "/_search", "POST", authorization,
+                     {"query": {"ids": {"values": [event_id]}}, "size": 2})
+    hits = required_path(result, ("hits", "hits"))
+    if not isinstance(hits, list) or len(hits) > 1:
+        raise ProvisionError("install refused: transaction_proof_ambiguous")
+    if not hits:
+        return None
+    hit = hits[0]
+    if not isinstance(hit, dict) or hit.get("_id") != event_id or not isinstance(hit.get("_index"), str):
+        raise ProvisionError("install refused: transaction_proof_ambiguous")
+    return hit
+
+
+def rollback_transaction_proofs(es_url: str, authorization: str, journal: TransactionJournal,
+                                deliberately_reversed: bool = False) -> None:
+    if journal.value.get("apply_ok") and not deliberately_reversed:
+        return
+    for proof in journal.value.get("proofs", []):
+        event_id, index = proof.get("event_id"), proof.get("created_index")
+        if not isinstance(event_id, str):
+            raise ProvisionError("install refused: transaction_proof_ambiguous")
+        if index is None:
+            hit = exact_proof_recovery_hit(es_url, authorization, event_id)
+            if hit is None:
+                continue
+            index = hit["_index"]
+        request(es_url, "/" + urllib.parse.quote(index, safe="") + "/_doc/" +
+                urllib.parse.quote(event_id, safe="") + "?refresh=wait_for", "DELETE", authorization)
+
+
 def atomic_publication(root: Path, files: dict[str, bytes]) -> None:
     """Atomically exchange the whole consumer-visible enrollment generation.
 
@@ -783,6 +1121,12 @@ def atomic_publication(root: Path, files: dict[str, bytes]) -> None:
         for name in ("credentials.toml", "handshake.toml", "shipping-policy-v1.toml", "state.json"):
             atomic_write(stage, name, files[name])
             fault("publication-" + name)
+        # Fleet coexistence makes profile selection a durable property of this
+        # enrollment root.  Preserve the protected fence through the directory
+        # exchange rather than leaving it behind in the old generation.
+        ownership = secure_read(root / OWNERSHIP_PROFILE_FILE, missing_ok=True)
+        if ownership is not None:
+            atomic_write(stage, OWNERSHIP_PROFILE_FILE, ownership)
         _rename_exchange(root, stage)
         exchanged = True
         fault("publication-exchange")
@@ -831,11 +1175,13 @@ def _rename_exchange(left: Path, right: Path) -> None:
 def _remove_old_enrollment_generation(root: Path) -> None:
     """Remove the exchange's old private tree without traversing unexpected files."""
     secure_root(root)
-    allowed = {"credentials.toml", "handshake.toml", "shipping-policy-v1.toml", "state.json", "candidate"}
+    allowed = {"credentials.toml", "handshake.toml", "shipping-policy-v1.toml", "state.json",
+               OWNERSHIP_PROFILE_FILE, "candidate"}
     entries = {entry.name for entry in root.iterdir()}
     if not entries.issubset(allowed):
         raise InputError("old enrollment generation is invalid")
-    for name in ("credentials.toml", "handshake.toml", "shipping-policy-v1.toml", "state.json"):
+    for name in ("credentials.toml", "handshake.toml", "shipping-policy-v1.toml", "state.json",
+                 OWNERSHIP_PROFILE_FILE):
         path = root / name
         if path.exists():
             st = path.lstat()
@@ -1070,6 +1416,88 @@ def install_asset(es_url: str, kb_url: str, authorization: str, asset: Asset) ->
         return
     request(es_url, path, "PUT", authorization, asset.data)
     verify_asset(es_url, authorization, asset)
+
+
+def _dashboard_expected_objects(asset: Asset) -> list[tuple[str, str, dict]]:
+    values = []
+    for line in asset.data.decode("utf-8").splitlines():
+        if not line.strip():
+            continue
+        value = parse_json(line.encode("utf-8"), asset.path)
+        if not isinstance(value, dict) or not isinstance(value.get("type"), str) or not isinstance(value.get("id"), str):
+            raise InputError("dashboard object is invalid")
+        body = {"attributes": value.get("attributes", {})}
+        if "references" in value:
+            body["references"] = value["references"]
+        values.append((value["type"], value["id"], body))
+    return values
+
+
+def journal_owned_asset(journal: TransactionJournal, es_url: str, kb_url: str, authorization: str,
+                        asset: Asset, action: str) -> list[dict]:
+    """Capture all intent records before an owned asset can issue a write."""
+    if asset.kind == "dashboard":
+        records = []
+        for object_type, object_id, expected in _dashboard_expected_objects(asset):
+            try:
+                live = json_response(request(kb_url, dashboard_object_path(asset, object_type, object_id), "GET",
+                                             authorization, headers={"kbn-xsrf": "true"}))
+                preimage = asset_adapters.sha256(asset_adapters.get_projection("dashboard", live))
+            except RequestFailure as error:
+                if error.status != 404:
+                    raise
+                preimage = asset_adapters.dashboard_absent_hash()
+            records.append(journal.write_intent("dashboard", asset.name, action, preimage,
+                                                 asset_adapters.sha256(expected), jcs(expected),
+                                                 object_id=f"{object_type}/{object_id}"))
+        return records
+    base = kb_url if asset.kind in {"kibana_spaces", "kibana_roles"} else es_url
+    headers = {"kbn-xsrf": "true"} if base == kb_url else None
+    path = kibana_path(asset) if base == kb_url else es_path(asset)
+    try:
+        live = json_response(request(base, path, "GET", authorization, headers=headers))
+        preimage = asset_adapters.sha256(asset_adapters.get_projection(asset.kind, live))
+    except RequestFailure as error:
+        if error.status != 404:
+            raise
+        preimage = asset_adapters.dashboard_absent_hash()
+    expected = parse_json(asset.data, asset.path)
+    intended = asset_adapters.sha256(asset_adapters.get_projection(asset.kind, expected))
+    return [journal.write_intent(asset.kind, asset.name, action, preimage, intended, asset.data)]
+
+
+def journal_verify_owned_asset(journal: TransactionJournal, records: list[dict], es_url: str, kb_url: str,
+                               authorization: str, asset: Asset) -> None:
+    if asset.kind == "dashboard":
+        expected = {f"{kind}/{ident}": body for kind, ident, body in _dashboard_expected_objects(asset)}
+        for record in records:
+            object_id = record["object_id"]
+            kind, ident = object_id.split("/", 1)
+            live = json_response(request(kb_url, dashboard_object_path(asset, kind, ident), "GET", authorization,
+                                         headers={"kbn-xsrf": "true"}))
+            after = asset_adapters.sha256(asset_adapters.get_projection("dashboard", live))
+            if after != record["intended_after_sha256"] or after != asset_adapters.sha256(expected[object_id]):
+                raise InputError("dashboard saved-object verification differs")
+            journal.write_verified(record, after)
+        return
+    # Existing installer verification remains the authoritative class-specific
+    # check; the journal immediately pins the same canonical after state.
+    if asset.kind in {"component_templates", "index_templates", "security_roles"}:
+        verify_asset(es_url, authorization, asset)
+    elif asset.kind in {"kibana_spaces", "kibana_roles"}:
+        verify_kibana_asset(kb_url, authorization, asset)
+        # Kibana's role/space GET envelopes carry endpoint-specific defaults;
+        # verify_kibana_asset is the pinned installer projection for them.
+        journal.write_verified(records[0], records[0]["intended_after_sha256"])
+        return
+    base = kb_url if asset.kind in {"kibana_spaces", "kibana_roles"} else es_url
+    path = kibana_path(asset) if base == kb_url else es_path(asset)
+    headers = {"kbn-xsrf": "true"} if base == kb_url else None
+    live = json_response(request(base, path, "GET", authorization, headers=headers))
+    after = asset_adapters.sha256(asset_adapters.get_projection(asset.kind, live))
+    if after != records[0]["intended_after_sha256"]:
+        raise InputError("journal verification differs")
+    journal.write_verified(records[0], after)
 
 
 def cluster_uuid(es_url: str, authorization: str) -> str:
@@ -1359,6 +1787,38 @@ def simulate(es_url: str, authorization: str) -> None:
         raise InputError("W1 index simulation differs")
 
 
+def fleet_stream_snapshot(es_url: str, authorization: str) -> dict[str, object]:
+    """Capture all current RigSignal streams dynamically for the Step-5 fence."""
+    response = es_json(es_url, "/_data_stream/*rigsignal*", "GET", authorization)
+    streams = response.get("data_streams") if isinstance(response, dict) else None
+    if not isinstance(streams, list):
+        raise InputError("fleet stream enumeration is invalid")
+    snapshot: dict[str, object] = {}
+    for stream in streams:
+        if not isinstance(stream, dict) or not isinstance(stream.get("name"), str):
+            raise InputError("fleet stream enumeration is invalid")
+        name = stream["name"]
+        pairs = []
+        for index in stream.get("indices", []):
+            if not isinstance(index, dict) or not isinstance(index.get("index_name"), str) or not isinstance(index.get("index_uuid"), str):
+                raise InputError("fleet backing index is invalid")
+            pairs.append((index["index_name"], index["index_uuid"]))
+        # `_simulate_index` is the effective mappings/settings/default-pipeline/
+        # lifecycle oracle, not merely a composed_of textual comparison.
+        simulated = es_json(es_url, "/_index_template/_simulate_index/" + urllib.parse.quote(name, safe=""),
+                            "POST", authorization, {})
+        template = simulated.get("template", simulated) if isinstance(simulated, dict) else None
+        if not isinstance(template, dict):
+            raise InputError("fleet index simulation is invalid")
+        settings = template.get("settings", {})
+        if not isinstance(settings, dict):
+            raise InputError("fleet index simulation is invalid")
+        snapshot[name] = {"backing": sorted(pairs), "mappings": template.get("mappings", {}),
+                          "settings": settings, "default_pipeline": settings.get("index.default_pipeline"),
+                          "lifecycle": settings.get("index.lifecycle.name")}
+    return snapshot
+
+
 def mint_key(es_url: str, authorization: str, role: dict, name: str) -> tuple[str, str]:
     response = es_json(es_url, "/_security/api_key", "POST", authorization,
                        {"name": name, "role_descriptors": {"rigsignal_shipper": role}})
@@ -1474,13 +1934,20 @@ def assert_mapping_rejection(status: int, response: object, error_type: str,
             raise InputError("candidate mapping rejection proof failed")
 
 
-def verify_stream_behavior(es_url: str, authorization: str, admin_authorization: str, suffix: str) -> None:
+def verify_stream_behavior(es_url: str, authorization: str, admin_authorization: str, suffix: str,
+                           journal: TransactionJournal | None = None) -> None:
     document = candidate_document(suffix)
     event_id = document["event"]["id"]
     path = "/" + DIAGNOSIS_STREAM + "/_create/" + event_id + "?refresh=wait_for"
+    proof_record = journal.proof_intent(event_id) if journal is not None else None
     status, response = es_json_status(es_url, path, "POST", authorization, document)
     if status != 201 or not isinstance(response, dict) or response.get("result") != "created":
         raise InputError("candidate exact-stream create failed")
+    if proof_record is not None:
+        index = response.get("_index")
+        if not isinstance(index, str):
+            raise InputError("candidate exact-stream create failed")
+        journal.proof_index(proof_record, index)
     assert_accepted_write_clean(response)
     assert_exact_probe_refetch(es_url, admin_authorization, event_id, document)
     assert_no_failure_store_document(es_url, admin_authorization, event_id)
@@ -1595,8 +2062,11 @@ def main() -> int:
     parser.add_argument("--enrollment-root", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--adopt-existing-w1-stream", action="store_true",
                         help="one-shot adoption of a compatible pre-existing W1 diagnosis stream")
+    parser.add_argument("--ownership-profile", choices=("default", "fleet-coexist"), default="default",
+                        help="ownership policy for a Fleet-coexisting cluster")
     parser.add_argument("--dry-run", action="store_true", help="list API calls without network access")
     args = parser.parse_args()
+    ownership_profile = getattr(args, "ownership_profile", "default")
     try:
         if args.profile != "user":
             raise InputError("profile system is unsupported/broker-required")
@@ -1604,6 +2074,7 @@ def main() -> int:
         kb_url = https_origin(args.kibana_endpoint, "--kibana-endpoint")
         bundle = load_bundle(args.bundle)  # Step 1: no HTTP before this line succeeds.
         role = role_body(bundle)
+        ownership = ownership_for_assets(bundle, ownership_profile)
     except InputError as error:
         print(f"install failed: bundle validation:", file=sys.stderr)
         return 1
@@ -1611,6 +2082,9 @@ def main() -> int:
     total = len(bundle.assets)
     if args.dry_run:
         for asset in bundle.assets:
+            if ownership[(asset.kind, asset.name)] == "external":
+                print(f"external {asset.kind} {asset.name} -> GET {es_path(asset)} (verify-only)")
+                continue
             if asset.kind == "dashboard":
                 print(f"dashboard {asset.name} -> POST {dashboard_import_path(asset)}")
             elif asset.kind == "kibana_spaces":
@@ -1623,6 +2097,7 @@ def main() -> int:
             else:
                 print(f"{asset.kind} {asset.name} -> PUT {es_path(asset)}")
         print("bundle marker rigsignal-bundle-meta -> PUT /_component_template/rigsignal-bundle-meta")
+        print(f"ownership profile: {ownership_profile}")
         print(f"source assets: {total}")
         return 0
 
@@ -1637,6 +2112,10 @@ def main() -> int:
         configure_https(args.ca_file)
         configure_https(args.kibana_ca_file)
         authorization = admin_authorization(args.admin_credentials_file)
+        if ownership_profile == "fleet-coexist" and admin_credential_kind(args.admin_credentials_file) != "native_user":
+            # API keys may still parse for dry-run/read-only tooling, but this
+            # invocation will mint a descriptor-bearing shipper key.
+            raise ProvisionError("install refused: admin_credential_api_key")
         # A clean root is the only local condition in which a remote stream can
         # be adopted.  Decide it before creating the root or running recovery.
         adoption = (dispatch_clean_root(es_url, authorization, adopt_requested)
@@ -1647,6 +2126,7 @@ def main() -> int:
             prior = load_state(root)
         except StateBindingError as error:
             raise ProvisionError("install refused: enrollment_remediation_required") from error
+        bind_ownership_profile(root, ownership_profile)
 
         # Step 2: recover/pin before normal work.  Unpublished credentials are
         # never reused; their identifiers survive in state for deterministic
@@ -1713,10 +2193,43 @@ def main() -> int:
         elif pre_put_condition != "compatible":
             raise ProvisionError("install refused: migration_required")
 
-        # Step 5: the ordered complete manifest barrier.
-        for asset in bundle.assets:
+        # Step 5: external members are verified as one no-write barrier before
+        # any bundle-owned mutation.  The default profile deliberately retains
+        # the established PUT-everything path.
+        applied_owned_assets: list[dict] = []
+        verified_external_assets: list[dict] = []
+        journal: TransactionJournal | None = None
+        pre_fleet_snapshot: dict[str, object] | None = None
+        if ownership_profile == "fleet-coexist":
             try:
-                install_asset(es_url, kb_url, authorization, asset)
+                cluster_health_gate(es_url, authorization)
+                # This capture dynamically enumerates the active stream set;
+                # a rollover during this transaction is a fail-closed drift.
+                pre_fleet_snapshot = fleet_stream_snapshot(es_url, authorization)
+                journal = TransactionJournal(root, ownership_profile)
+                for asset in bundle.assets:
+                    if ownership[(asset.kind, asset.name)] == "external":
+                        verified_external_assets.append(verify_external_asset(es_url, authorization, asset))
+            except (RequestFailure, InputError) as error:
+                raise ProvisionError("install refused: external asset compatibility:") from error
+        for asset in bundle.assets:
+            if ownership[(asset.kind, asset.name)] == "external":
+                continue
+            try:
+                action = (owned_action(es_url, kb_url, authorization, asset)
+                          if ownership_profile == "fleet-coexist" else "update")
+                records: list[dict] = []
+                if journal is not None:
+                    if asset.kind == "index_templates" and asset.name == "logs-rigsignal.stream" and action != "noop":
+                        lifecycle_delete_phase_free(es_url, authorization)
+                    records = journal_owned_asset(journal, es_url, kb_url, authorization, asset, action)
+                if action != "noop":
+                    install_asset(es_url, kb_url, authorization, asset)
+                if journal is not None:
+                    journal_verify_owned_asset(journal, records, es_url, kb_url, authorization, asset)
+                if ownership_profile == "fleet-coexist":
+                    applied_owned_assets.append({"kind": asset.kind, "name": asset.name, "action": action,
+                                                 "request_body_sha256": hashlib.sha256(asset.data).hexdigest()})
             except (RequestFailure, InputError) as error:
                 if asset.kind == "security_roles":
                     category = "shipper role verification:"
@@ -1728,6 +2241,16 @@ def main() -> int:
         try:
             ensure_stream(es_url, authorization)
             simulate(es_url, authorization)
+            if ownership_profile == "fleet-coexist":
+                post_fleet_snapshot = fleet_stream_snapshot(es_url, authorization)
+                # A fresh transaction may legitimately create the diagnosis
+                # stream after the pre-Step-5 capture.  Every stream that was
+                # active when the transaction started must nevertheless be
+                # byte-for-byte invariant; a changed/missing member is an
+                # in-transaction rollover or drift and fails closed.
+                if any(post_fleet_snapshot.get(name) != value
+                       for name, value in (pre_fleet_snapshot or {}).items()):
+                    raise InputError("fleet stream snapshot drifted")
         except (RequestFailure, InputError) as error:
             raise ProvisionError("install failed: diagnosis stream verification:") from error
         if pre_put_snapshot is None:
@@ -1751,7 +2274,7 @@ def main() -> int:
                 if not isinstance(encoded, str):
                     raise ValueError()
                 proof_suffix = uuid.uuid4().hex
-                verify_stream_behavior(es_url, "ApiKey " + encoded, authorization, proof_suffix)
+                verify_stream_behavior(es_url, "ApiKey " + encoded, authorization, proof_suffix, journal)
                 verify_role_matrix(es_url, "ApiKey " + encoded, proof_suffix)
             except (InputError, ValueError, KeyError, TypeError, RequestFailure):
                 reuse = False
@@ -1762,8 +2285,19 @@ def main() -> int:
             intent = state_template(uuid_value, generation, old_id, str(root))
             intent.update(phase="mint_intent", pending_mint_name=mint_name)
             atomic_write(root, "state.json", jcs(intent) + b"\n")
+            mint_journal = None
+            if journal is not None:
+                mint_request = jcs({"name": mint_name, "role_descriptors": {"rigsignal_shipper": role}})
+                mint_journal = journal.write_intent("api_key", mint_name, "create",
+                                                    asset_adapters.dashboard_absent_hash(),
+                                                    hashlib.sha256(mint_request).hexdigest(), mint_request)
             fault("before-mint-response")
             candidate_id, encoded = mint_key(es_url, authorization, role, mint_name)
+            if mint_journal is not None:
+                # The exact request pin is the durable recovery discriminator;
+                # the returned opaque key ID is persisted by the existing state
+                # transition immediately after this verification record.
+                journal.write_verified(mint_journal, mint_journal["intended_after_sha256"])
             fault("after-mint-response")
             staged = dict(intent)
             staged.update(phase="candidate_staged", candidate_key_id=candidate_id)
@@ -1775,7 +2309,7 @@ def main() -> int:
             fault("candidate-write")
             try:
                 proof_suffix = uuid.uuid4().hex
-                verify_stream_behavior(es_url, "ApiKey " + encoded, authorization, proof_suffix)  # Step 7
+                verify_stream_behavior(es_url, "ApiKey " + encoded, authorization, proof_suffix, journal)  # Step 7
             except (InputError, RequestFailure):
                 invalidate(es_url, authorization, [candidate_id])
                 raise ProvisionError("install failed: diagnosis stream verification:")
@@ -1846,13 +2380,23 @@ def main() -> int:
         remove_candidate_root(root)
 
         # Step 11 and only step 11: marker is never an early partial-success bit.
-        marker = Asset("component_templates", "rigsignal-bundle-meta", "", marker_body(bundle))
+        marker = Asset("component_templates", "rigsignal-bundle-meta", "", marker_body(
+            bundle, ownership_profile, applied_owned_assets, verified_external_assets))
         try:
+            if journal is not None:
+                marker_records = journal_owned_asset(journal, es_url, kb_url, authorization, marker, "create")
             request(es_url, es_path(marker), "PUT", authorization, marker.data)
             verify_asset(es_url, authorization, marker)
+            if journal is not None:
+                journal_verify_owned_asset(journal, marker_records, es_url, kb_url, authorization, marker)
+                journal.apply_ok()
         except (InputError, RequestFailure) as error:
             raise ProvisionError("install failed: bundle marker:") from error
-        print(f"installed {total}/{total} assets")
+        if ownership_profile == "fleet-coexist":
+            print(f"applied {len(applied_owned_assets)} owned assets; verified "
+                  f"{len(verified_external_assets)} external assets")
+        else:
+            print(f"installed {total}/{total} assets")
         return 0
     except ProvisionError as error:
         print(error.prefix, file=sys.stderr)
