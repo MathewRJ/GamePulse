@@ -1,5 +1,6 @@
 import importlib.util
 import hashlib
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -14,6 +15,62 @@ SPEC.loader.exec_module(INSTALL)
 
 
 class FleetCoexistenceTests(unittest.TestCase):
+    def test_coexist_fence_accepts_cosmetic_external_drift_and_refuses_operational_drift(self):
+        asset = INSTALL.Asset(
+            "component_templates", "metrics-rigsignal.audio@package", "fixture.json",
+            b'{"_meta":{"managed_by":"rigsignal-asset-bundle"},"template":{"mappings":{"properties":{"sample":{"type":"keyword"}}}}}',
+        )
+        bundle = INSTALL.Bundle("test", "test", [asset])
+        ownership = {(asset.kind, asset.name): "external"}
+
+        def transport_for(body):
+            return json.dumps({"component_templates": [{
+                "name": asset.name, "component_template": body,
+            }]}).encode("utf-8")
+
+        cosmetic_live = json.loads(asset.data)
+        cosmetic_live["_meta"]["managed_by"] = "fleet"
+        with mock.patch.object(INSTALL, "request", return_value=transport_for(cosmetic_live)):
+            INSTALL.prepublication_asset_fence("https://es", "https://kb", "auth", bundle,
+                                               "fleet-coexist", ownership)
+
+        operational_live = json.loads(asset.data)
+        operational_live["_meta"]["managed_by"] = "fleet"
+        operational_live["template"]["mappings"]["properties"]["sample"]["type"] = "text"
+        with mock.patch.object(INSTALL, "request", return_value=transport_for(operational_live)), \
+             self.assertRaisesRegex(INSTALL.ProvisionError, r"^install failed: pre-publication fence:$"):
+            INSTALL.prepublication_asset_fence("https://es", "https://kb", "auth", bundle,
+                                               "fleet-coexist", ownership)
+
+    def test_coexist_fence_uses_pinned_verification_only_for_owned_assets(self):
+        external = INSTALL.Asset("component_templates", "metrics-rigsignal.audio@package", "external", b"{}")
+        owned = INSTALL.Asset("component_templates", "logs-rigsignal.diagnosis-mappings", "owned", b"{}")
+        bundle = INSTALL.Bundle("test", "test", [external, owned])
+        ownership = {(external.kind, external.name): "external", (owned.kind, owned.name): "bundle-owned"}
+        with mock.patch.object(INSTALL, "verify_external_asset") as external_verify, \
+             mock.patch.object(INSTALL, "verify_asset") as pinned_verify:
+            INSTALL.prepublication_asset_fence("https://es", "https://kb", "auth", bundle,
+                                               "fleet-coexist", ownership)
+        external_verify.assert_called_once_with("https://es", "auth", external)
+        pinned_verify.assert_called_once_with("https://es", "auth", owned)
+
+    def test_default_fence_retains_pinned_verification_for_every_fenced_asset(self):
+        assets = [
+            INSTALL.Asset("component_templates", "component", "component", b"{}"),
+            INSTALL.Asset("index_templates", "index", "index", b"{}"),
+            INSTALL.Asset("security_roles", "role", "role", b"{}"),
+        ]
+        bundle = INSTALL.Bundle("test", "test", assets)
+        ownership = {(asset.kind, asset.name): "external" for asset in assets}
+        with mock.patch.object(INSTALL, "verify_external_asset") as external_verify, \
+             mock.patch.object(INSTALL, "verify_asset") as pinned_verify:
+            INSTALL.prepublication_asset_fence("https://es", "https://kb", "auth", bundle,
+                                               "default", ownership)
+        external_verify.assert_not_called()
+        self.assertEqual(pinned_verify.call_args_list, [
+            mock.call("https://es", "auth", asset) for asset in assets
+        ])
+
     def test_compiled_identity_table_covers_the_current_manifest(self):
         bundle = INSTALL.load_source()
         ownership = INSTALL.ownership_for_assets(bundle, "fleet-coexist")

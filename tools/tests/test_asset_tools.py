@@ -60,6 +60,49 @@ def rewrite_bundle(source, destination, mutate):
 
 
 class AssetToolsTests(unittest.TestCase):
+    def test_lifecycle_delete_phase_free_handles_policy_absence_and_delete_phase(self):
+        old_json = INSTALL.es_json
+        calls = []
+        def responses(_base, path, _method, _authorization):
+            calls.append(path)
+            if path.endswith("logs-rigsignal-stream-30d"):
+                raise INSTALL.RequestFailure(404, "HTTP 404")
+            return {"logs@lifecycle": {"policy": {"phases": {"hot": {}}}}}
+        INSTALL.es_json = responses
+        try:
+            INSTALL.lifecycle_delete_phase_free("https://es", "auth")
+        finally:
+            INSTALL.es_json = old_json
+        self.assertEqual(len(calls), 2)
+
+        def missing_builtin(_base, path, _method, _authorization):
+            if path.endswith("logs-rigsignal-stream-30d"):
+                return {"logs-rigsignal-stream-30d": {"policy": {"phases": {"hot": {}}}}}
+            raise INSTALL.RequestFailure(404, "HTTP 404")
+        INSTALL.es_json = missing_builtin
+        try:
+            with self.assertRaises(INSTALL.RequestFailure):
+                INSTALL.lifecycle_delete_phase_free("https://es", "auth")
+        finally:
+            INSTALL.es_json = old_json
+
+        def delete_present(_base, path, _method, _authorization):
+            policy = path.rsplit("/", 1)[-1]
+            return {policy: {"policy": {"phases": {"delete": {}}}}}
+        INSTALL.es_json = delete_present
+        try:
+            with self.assertRaises(INSTALL.ProvisionError) as error:
+                INSTALL.lifecycle_delete_phase_free("https://es", "auth")
+        finally:
+            INSTALL.es_json = old_json
+        self.assertEqual(error.exception.prefix, "install refused: ilm_delete_phase")
+
+    def test_lifecycle_delete_phase_free_test_injector_remains_first(self):
+        with patch.dict(os.environ, {"RIGSIGNAL_TEST_ILM_DELETE_PHASE": "1"}):
+            with self.assertRaises(INSTALL.ProvisionError) as error:
+                INSTALL.lifecycle_delete_phase_free("https://es", "auth")
+        self.assertEqual(error.exception.prefix, "install refused: ilm_delete_phase")
+
     def test_missing_referenced_pipeline_fails_build(self):
         with tempfile.TemporaryDirectory() as raw:
             elastic = tree(Path(raw), pipeline=False)
@@ -314,6 +357,23 @@ i.atomic_publication(r, {n: ('new-' + n).encode() for n in ('credentials.toml','
         with self.assertRaises(INSTALL.InputError): INSTALL.projection(asset, {asset.name: body, "other": body})
         component = INSTALL.Asset("component_templates", "name", "x", b"{}")
         with self.assertRaises(INSTALL.InputError): INSTALL.projection(component, {"component_templates": []})
+
+    def test_external_index_template_simulation_difference_names_asset(self):
+        expected = {"index_patterns": ["logs-rigsignal.events-*"], "data_stream": {},
+                    "template": {"mappings": {}, "settings": {}}}
+        asset = INSTALL.Asset("index_templates", "logs-rigsignal.events", "x",
+                              json.dumps(expected).encode("utf-8"))
+        response = {"index_templates": [{"name": asset.name, "index_template": expected}]}
+
+        def simulated(_url, _path, _method, _authorization, payload):
+            settings = {} if payload is not None else {"index.mode": "logsdb"}
+            return {"template": {"mappings": {}, "settings": settings, "aliases": {}}}
+
+        with patch.object(INSTALL, "request", return_value=json.dumps(response).encode("utf-8")), \
+             patch.object(INSTALL, "es_json", side_effect=simulated), \
+             self.assertRaisesRegex(INSTALL.InputError,
+                                    r"^external index template simulation differs: index_templates/logs-rigsignal\.events$"):
+            INSTALL.verify_external_asset("https://example.invalid", "auth", asset)
 
     def test_fence_refuses_existing_stream_without_committed_matching_state(self):
         old = INSTALL.es_json

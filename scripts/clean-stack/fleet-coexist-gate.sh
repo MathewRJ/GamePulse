@@ -23,10 +23,13 @@ version "$ES_VERSION" && version "$KB_VERSION" && [[ "$ES_VERSION" == "$KB_VERSI
 : "${ELASTIC_PASSWORD:?ELASTIC_PASSWORD must be set}"; : "${ELASTICSEARCH_PASSWORD:?ELASTICSEARCH_PASSWORD must be set}"; : "${CLEAN_STACK_AGENT_BINARY:?CLEAN_STACK_AGENT_BINARY must be set}"
 cs_require_tools bash curl docker jq openssl python3 sha256sum
 RUN_DIR="$(mktemp -d)"
-cleanup() { local rc="$?"; cs_cleanup || true; [[ "$KEEP" == 1 ]] || rm -rf "$RUN_DIR"; return "$rc"; }
+cleanup() { local rc="$?"; if [[ "$KEEP" != 1 ]]; then cs_cleanup || true; rm -rf "$RUN_DIR"; else printf 'KEEP: stack alive, RUN_DIR=%s\n' "$RUN_DIR" >&2; fi; return "$rc"; }
 trap cleanup EXIT
 
 start_stack() {
+  CS_RUN_DIR="$RUN_DIR"; export CS_RUN_DIR
+  cs_init_names "fleet-coexist-$(cs_new_suffix)"
+  cs_prepare_tls "$RUN_DIR"
   cs_create_network
   cs_start_elasticsearch "docker.elastic.co/elasticsearch/elasticsearch:$ES_VERSION" "$(cs_port_mapping '' 9200)"
   ES_URL="https://localhost:$(cs_published_port "$CS_ES_CONTAINER" 9200/tcp)"

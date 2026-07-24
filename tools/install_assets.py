@@ -202,25 +202,26 @@ def verify_external_asset(es_url: str, authorization: str, asset: Asset) -> dict
     except asset_adapters.AdapterError as error:
         raise InputError("external asset projection is invalid") from error
     if asset_adapters.canonical_json(live_compatibility) != asset_adapters.canonical_json(expected_compatibility):
-        raise InputError("external asset compatibility differs")
+        raise InputError(f"external asset compatibility differs: {asset.kind}/{asset.name}")
     if asset.kind == "index_templates":
         # Textual composed_of tolerance is not sufficient for Fleet index
-        # templates.  Compare their effective simulation outcomes too.
-        expected_simulation = es_json(es_url, "/_index_template/_simulate", "POST", authorization, expected)
-        live_simulation = es_json(es_url, "/_index_template/_simulate_index/" +
-                                  urllib.parse.quote(asset.name, safe=""), "POST", authorization, {})
-        def outcome(value: object) -> object:
-            template = value.get("template", value) if isinstance(value, dict) else None
-            if not isinstance(template, dict):
-                raise InputError("Fleet index simulation is invalid")
-            settings = template.get("settings", {})
-            if not isinstance(settings, dict):
-                raise InputError("Fleet index simulation is invalid")
-            return {"mappings": template.get("mappings", {}), "settings": settings,
-                    "default_pipeline": settings.get("index.default_pipeline"),
-                    "lifecycle": settings.get("index.lifecycle.name")}
-        if jcs(outcome(expected_simulation)) != jcs(outcome(live_simulation)):
-            raise InputError("external index template simulation differs")
+        # templates.  Simulate the expected body only after replacing its real
+        # index pattern: ES rejects an inline body that collides with the live
+        # template at the same priority.  The live request uses a concrete
+        # matching index and *no* body; {} is an invalid inline template.
+        try:
+            uniqueness = hashlib.sha256(asset.name.encode("utf-8")).hexdigest()[:16]
+            expected_body, expected_index = asset_adapters.synthetic_simulation_template(expected, uniqueness)
+            live_index = asset_adapters.concrete_index_name(expected.get("index_patterns"), "rigsignal-a5-probe")
+            expected_path = "/_index_template/_simulate_index/" + urllib.parse.quote(expected_index, safe="")
+            live_path = "/_index_template/_simulate_index/" + urllib.parse.quote(live_index, safe="")
+            equivalent = asset_adapters.simulate_index_equivalent(
+                lambda path, body: es_json(es_url, path, "POST", authorization, body),
+                expected_path, expected_body, live_path)
+        except asset_adapters.AdapterError as error:
+            raise InputError("Fleet index simulation is invalid") from error
+        if not equivalent:
+            raise InputError(f"external index template simulation differs: {asset.kind}/{asset.name}")
     live = asset_adapters.get_projection(asset.kind, response)
     metadata = live.get("_meta") if isinstance(live, dict) and isinstance(live.get("_meta"), dict) else {}
     return {"kind": asset.kind, "name": asset.name,
@@ -513,8 +514,17 @@ def lifecycle_delete_phase_free(es_url: str, authorization: str) -> None:
     if os.environ.get("RIGSIGNAL_TEST_ILM_DELETE_PHASE") == "1":
         raise ProvisionError("install refused: ilm_delete_phase")
     for policy_name in ("logs-rigsignal-stream-30d", "logs@lifecycle"):
-        response = es_json(es_url, "/_ilm/policy/" + urllib.parse.quote(policy_name, safe=""),
-                           "GET", authorization)
+        try:
+            response = es_json(es_url, "/_ilm/policy/" + urllib.parse.quote(policy_name, safe=""),
+                               "GET", authorization)
+        except RequestFailure as error:
+            # §3.4 guards against a policy having GAINED a delete phase since
+            # baseline. The owner-specific 30d policy may legitimately not
+            # exist on other clusters — absence is trivially delete-phase-free.
+            # logs@lifecycle is an ES builtin: its absence means a broken stack.
+            if error.status == 404 and policy_name == "logs-rigsignal-stream-30d":
+                continue
+            raise
         policy = response.get(policy_name) if isinstance(response, dict) else None
         phases = policy.get("policy", {}).get("phases") if isinstance(policy, dict) else None
         if not isinstance(phases, dict) or "delete" in phases:
@@ -1671,6 +1681,31 @@ def verify_kibana_asset(base: str, authorization: str, asset: Asset) -> None:
         raise InputError("canonical Kibana asset GET differs")
 
 
+def verify_prepublication_assets(es_url: str, kb_url: str, authorization: str, bundle: Bundle,
+                                 ownership_profile: str, ownership: dict[tuple[str, str], str]) -> None:
+    """Recheck assets after candidate proof and before consumer publication."""
+    for asset in bundle.assets:
+        if (ownership_profile == "fleet-coexist"
+                and ownership[(asset.kind, asset.name)] == "external"):
+            # The external pre-write barrier is intentionally repeated here:
+            # another Fleet change before publication is uncoordinated drift.
+            verify_external_asset(es_url, authorization, asset)
+        elif asset.kind in {"component_templates", "index_templates", "security_roles"}:
+            verify_asset(es_url, authorization, asset)
+        elif asset.kind in {"kibana_spaces", "kibana_roles"}:
+            verify_kibana_asset(kb_url, authorization, asset)
+
+
+def prepublication_asset_fence(es_url: str, kb_url: str, authorization: str, bundle: Bundle,
+                               ownership_profile: str, ownership: dict[tuple[str, str], str]) -> None:
+    """Expose every late asset drift through the stable publication-fence category."""
+    try:
+        verify_prepublication_assets(es_url, kb_url, authorization, bundle,
+                                     ownership_profile, ownership)
+    except (InputError, RequestFailure) as error:
+        raise ProvisionError("install failed: pre-publication fence:") from error
+
+
 def es_json(base: str, path: str, method: str, authorization: str, payload: object | None = None) -> object:
     data = None if payload is None else jcs(payload)
     return json_response(request(base, path, method, authorization, data))
@@ -2144,7 +2179,7 @@ def fleet_stream_snapshot(es_url: str, authorization: str) -> dict[str, object]:
         # `_simulate_index` is the effective mappings/settings/default-pipeline/
         # lifecycle oracle, not merely a composed_of textual comparison.
         simulated = es_json(es_url, "/_index_template/_simulate_index/" + urllib.parse.quote(name, safe=""),
-                            "POST", authorization, {})
+                            "POST", authorization, None)
         template = simulated.get("template", simulated) if isinstance(simulated, dict) else None
         if not isinstance(template, dict):
             raise InputError("fleet index simulation is invalid")
@@ -2580,7 +2615,7 @@ def main() -> int:
                             request(es_url, es_path(asset), "PUT", authorization, asset.data)
                         verified_external_assets.append(verify_external_asset(es_url, authorization, asset))
             except (RequestFailure, InputError) as error:
-                raise ProvisionError("install refused: external asset compatibility:") from error
+                raise ProvisionError(f"install refused: external asset compatibility: {error}") from error
         for asset in bundle.assets:
             if ownership[(asset.kind, asset.name)] == "external":
                 continue
@@ -2705,11 +2740,8 @@ def main() -> int:
             # The asset writes, candidate checks, and publication are separated
             # by a final read-only fence.  It closes the period in which a
             # rollover or template mutation could otherwise be published over.
-            for asset in bundle.assets:
-                if asset.kind in {"component_templates", "index_templates", "security_roles"}:
-                    verify_asset(es_url, authorization, asset)
-                elif asset.kind in {"kibana_spaces", "kibana_roles"}:
-                    verify_kibana_asset(kb_url, authorization, asset)
+            prepublication_asset_fence(es_url, kb_url, authorization, bundle,
+                                       ownership_profile, ownership)
             simulate(es_url, authorization)
             post_condition, post_snapshot = remote_stream_condition(es_url, authorization)
             if post_condition != "compatible" or post_snapshot != pre_put_snapshot:

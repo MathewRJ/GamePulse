@@ -17,8 +17,26 @@ ADAPTER_VERSION = "fleet-coexist-v1"
 SERVER_TIMESTAMPS = frozenset((
     "created_date", "created_date_millis", "modified_date", "modified_date_millis",
 ))
+ROLE_EMPTY_DEFAULT_KEYS = frozenset((
+    "applications", "run_as", "metadata", "remote_indices", "remote_cluster", "global",
+))
+TRANSFORM_SERVER_FIELDS = frozenset((
+    "id", "version", "create_time", "authorization", "state", "stats", "checkpointing",
+))
 FLEET_COMPOSITION_COMPONENTS = frozenset((
     ".fleet_globals-1", ".fleet_agent_id_verification-1",
+))
+# These are generated for the index being simulated, rather than resolved from
+# an index template.  A synthetic expected index and a real live index must not
+# differ merely because their names (or ES-generated creation identity) differ.
+SIMULATION_PATTERN_DERIVED_SETTINGS = frozenset((
+    "index.provided_name", "index.uuid", "index.creation_date",
+    "index.creation_date_string",
+    # TSDB boundaries are generated from the wall clock at simulation time
+    # (second resolution): two otherwise-identical simulations straddling a
+    # second boundary would falsely differ. The templates' declared
+    # look_ahead/look_back settings, if any, remain comparison-significant.
+    "index.time_series.start_time", "index.time_series.end_time",
 ))
 # A saved-object 404 is a meaningful preimage, not an empty JSON object.  Keep
 # this public singleton so callers can distinguish it from a legitimate body.
@@ -43,7 +61,7 @@ def _body_from_envelope(kind: str, live_body: object) -> object:
         return ABSENT
     if not isinstance(live_body, dict):
         raise AdapterError("live response is not an object")
-    if kind == "component_templates":
+    if kind in {"component_templates", "install_marker"}:
         if "component_templates" not in live_body:
             return live_body
         items, member = live_body.get("component_templates"), "component_template"
@@ -93,11 +111,90 @@ def _strip_server_metadata(body: object) -> object:
     if not isinstance(body, dict):
         return body
     value = {key: deepcopy(member) for key, member in body.items() if key not in SERVER_TIMESTAMPS}
-    if "id" in value and "pivot" in value:  # Transform GET-only identity field.
-        value.pop("id", None)
-    for key in ("version", "create_time", "authorization"):
-        value.pop(key, None)
     return value
+
+
+def _strip_empty_defaults(body: object, keys: frozenset[str]) -> object:
+    """Drop only known, empty endpoint defaults; retain every real grant."""
+    if not isinstance(body, dict):
+        return body
+    return {key: deepcopy(value) for key, value in body.items()
+            if not (key in keys and value in ([], {}, None))}
+
+
+def _strip_false_allow_restricted_indices(body: object) -> object:
+    if not isinstance(body, dict):
+        return body
+    value = deepcopy(body)
+    for key in ("indices", "remote_indices"):
+        entries = value.get(key)
+        if isinstance(entries, list):
+            value[key] = [
+                {name: member for name, member in entry.items()
+                 if not (name == "allow_restricted_indices" and member is False)}
+                if isinstance(entry, dict) else entry
+                for entry in entries
+            ]
+    return value
+
+
+def _normalise_security_role(body: object) -> object:
+    """Mirror the installer's role GET projection, including 9.4 defaults."""
+    if not isinstance(body, dict):
+        return body
+    value = {key: deepcopy(member) for key, member in body.items()
+             if key != "transient_metadata"}
+    return _strip_false_allow_restricted_indices(_strip_empty_defaults(value, ROLE_EMPTY_DEFAULT_KEYS))
+
+
+def _normalise_kibana_role(body: object) -> object:
+    """Project the Kibana Role API's owned privilege shape.
+
+    The installer deliberately ignores role identity/diagnostic fields and
+    compares the Elasticsearch and Kibana privileges.  Keep that same boundary
+    here, while removing only empty native-role defaults.
+    """
+    if not isinstance(body, dict):
+        return body
+    value = {key: deepcopy(body.get(key)) for key in ("elasticsearch", "kibana")}
+    for key in ROLE_EMPTY_DEFAULT_KEYS:
+        if key in body:
+            value[key] = deepcopy(body[key])
+    value = _strip_empty_defaults(value, ROLE_EMPTY_DEFAULT_KEYS)
+    elasticsearch = value.get("elasticsearch")
+    if isinstance(elasticsearch, dict):
+        value["elasticsearch"] = _strip_false_allow_restricted_indices(
+            _strip_empty_defaults(elasticsearch, ROLE_EMPTY_DEFAULT_KEYS))
+    return value
+
+
+def _normalise_kibana_space(body: object) -> object:
+    """Remove the empty space defaults returned by Kibana's GET endpoint."""
+    if not isinstance(body, dict):
+        return body
+    value = deepcopy(body)
+    # A request that omits these values is returned with these endpoint
+    # defaults on 9.4.x.  An explicit non-default solution/color/etc. remains
+    # significant.  ``_reserved`` is server-owned and false for a created
+    # ordinary space.
+    for key, default in (("color", None), ("imageUrl", ""), ("solution", "classic"),
+                         ("_reserved", False)):
+        if value.get(key) == default:
+            value.pop(key, None)
+    return value
+
+
+def _normalise_kind(kind: str, body: object) -> object:
+    if kind == "security_roles":
+        return _normalise_security_role(body)
+    if kind == "kibana_roles":
+        return _normalise_kibana_role(body)
+    if kind == "kibana_spaces":
+        return _normalise_kibana_space(body)
+    if kind == "transforms" and isinstance(body, dict):
+        return {key: deepcopy(member) for key, member in body.items()
+                if key not in TRANSFORM_SERVER_FIELDS}
+    return body
 
 
 def _normalise_settings(body: object) -> object:
@@ -128,7 +225,7 @@ def get_projection(kind: str, live_body: object) -> object:
     body = _body_from_envelope(kind, live_body)
     if body is ABSENT:
         return ABSENT
-    return _normalise_settings(_strip_server_metadata(body))
+    return _normalise_settings(_normalise_kind(kind, _strip_server_metadata(body)))
 
 
 def request_body_from_preimage(kind: str, preimage: object) -> object | None:
@@ -184,26 +281,101 @@ def dashboard_absent_hash() -> str:
     return sha256({"state": "ABSENT"})
 
 
-def simulate_index_equivalent(request_fn, before_path: str, after_path: str) -> bool:
-    """Compare the contract-relevant `_simulate_index` outcomes.
+def concrete_index_name(index_patterns: object, suffix: str) -> str:
+    """Derive a concrete, matching index name from the first template pattern."""
+    if not isinstance(index_patterns, list) or not index_patterns or not isinstance(suffix, str) or not suffix:
+        raise AdapterError("index template index_patterns are invalid")
+    pattern = index_patterns[0]
+    if not isinstance(pattern, str) or not pattern:
+        raise AdapterError("index template index_patterns are invalid")
+    # ES wildcard patterns used by the bundle are simple ``*`` suffix
+    # patterns.  Supporting ``?`` too keeps this helper concrete for a valid
+    # alternate template pattern without inventing a request body.
+    return pattern.replace("*", suffix).replace("?", "x")
 
-    ``request_fn`` is intentionally injected: production uses the installer
-    transport while unit tests can prove this Fleet-specific rule without a
-    cluster.  Paths are supplied separately to make it impossible to silently
-    compare a cached body with itself.
+
+def synthetic_simulation_template(template: object, uniqueness: str) -> tuple[dict, str]:
+    """Clone a template with a class-preserving, collision-free probe pattern.
+
+    Elasticsearch derives some settings from an index's leading name class
+    (for example ``logs-`` and ``metrics-``).  The synthetic pattern retains
+    that class but replaces the remainder with the unique ``a5sim`` namespace.
+    The active RigSignal patterns all continue with ``rigsignal`` after their
+    class token, so this cannot match one of them at the same priority.
     """
-    def outcome(value: object) -> object:
-        if not isinstance(value, dict):
-            raise AdapterError("simulate index response is not an object")
-        template = value.get("template", value)
-        if not isinstance(template, dict):
-            raise AdapterError("simulate index template is missing")
-        settings = template.get("settings", {})
-        mappings = template.get("mappings", {})
-        return {
-            "mappings": mappings,
-            "settings": settings,
-            "default_pipeline": settings.get("index.default_pipeline") if isinstance(settings, dict) else None,
-            "lifecycle": settings.get("index.lifecycle.name") if isinstance(settings, dict) else None,
-        }
-    return canonical_json(outcome(request_fn(before_path))) == canonical_json(outcome(request_fn(after_path)))
+    if not isinstance(template, dict) or not isinstance(uniqueness, str) or not uniqueness:
+        raise AdapterError("index template simulation input is invalid")
+    index_patterns = template.get("index_patterns")
+    if not isinstance(index_patterns, list) or not index_patterns or not isinstance(index_patterns[0], str):
+        raise AdapterError("index template index_patterns are invalid")
+    name_class, separator, _remainder = index_patterns[0].partition("-")
+    if not separator or not name_class or "*" in name_class or "?" in name_class:
+        raise AdapterError("index template simulation name class is invalid")
+    synthetic_pattern = f"{name_class}-a5sim{uniqueness}-*"
+    synthetic = deepcopy(template)
+    synthetic["index_patterns"] = [synthetic_pattern]
+    return synthetic, concrete_index_name(synthetic["index_patterns"], "probe")
+
+
+def _simulation_settings(settings: object) -> dict:
+    if not isinstance(settings, dict):
+        raise AdapterError("simulate index settings are invalid")
+    value = deepcopy(settings)
+    # ES may render settings in either flattened or nested form.  Strip only
+    # the four generated identity/name fields listed above; all resolved
+    # template settings remain comparison-significant.
+    for key in SIMULATION_PATTERN_DERIVED_SETTINGS:
+        value.pop(key, None)
+        cursor = value
+        parts = key.split(".")
+        for part in parts[:-1]:
+            child = cursor.get(part)
+            if not isinstance(child, dict):
+                cursor = None
+                break
+            cursor = child
+        if isinstance(cursor, dict):
+            cursor.pop(parts[-1], None)
+    return value
+
+
+def simulation_outcome(value: object) -> dict:
+    """Normalize an ES simulation to its resolved semantic template result.
+
+    Deliberately discarded: response wrappers (including ``overlapping``),
+    ``index_patterns``/priority (not part of the resolved template), and the
+    four generated index identity/name settings in
+    ``SIMULATION_PATTERN_DERIVED_SETTINGS``.  Mappings, all other settings,
+    aliases, and the resolved default pipeline/lifecycle remain significant.
+    """
+    if not isinstance(value, dict):
+        raise AdapterError("simulate index response is not an object")
+    template = value.get("template", value)
+    if not isinstance(template, dict):
+        raise AdapterError("simulate index template is missing")
+    mappings = template.get("mappings", {})
+    aliases = template.get("aliases", {})
+    settings = _simulation_settings(template.get("settings", {}))
+    if not isinstance(mappings, dict) or not isinstance(aliases, dict):
+        raise AdapterError("simulate index template is invalid")
+    return {
+        "mappings": mappings,
+        "settings": settings,
+        "aliases": aliases,
+        "default_pipeline": settings.get("index.default_pipeline"),
+        "lifecycle": settings.get("index.lifecycle.name"),
+    }
+
+
+def simulate_index_equivalent(request_fn, expected_path: str, expected_body: object,
+                              live_path: str) -> bool:
+    """Compare inline expected and named live `_simulate_index` outcomes.
+
+    ``request_fn(path, body)`` receives ``None`` for the named live request,
+    which is essential: even ``{}`` is interpreted by ES as an inline template
+    definition.  The expected body is required to contain only the synthetic
+    index pattern created by ``synthetic_simulation_template``.
+    """
+    expected = request_fn(expected_path, expected_body)
+    live = request_fn(live_path, None)
+    return canonical_json(simulation_outcome(expected)) == canonical_json(simulation_outcome(live))
