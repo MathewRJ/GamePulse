@@ -23,7 +23,7 @@ usage() {
 Usage: adoption-gate.sh --es-version VERSION --kb-version VERSION [options] --leg NAME [--leg NAME ...]
 
 Leg names: 1/refusal, 2/adopt, 3/rerun, 4/shape-negative, 5/flag-misuse,
-           6/crash-toctou, 7/m1-shape, 8/proof-set, 9/upgrade, 10/fresh.
+           6/crash-toctou, 7/m1-shape, 8/fresh, 9/upgrade, 10/proof-set.
 Options: --bundle PATH, --keep, --all,
          --upgrade-es-version VERSION --upgrade-kb-version VERSION (leg 9 only).
 
@@ -33,7 +33,8 @@ EOF
 }
 
 version() { [[ "$1" =~ ^9\.4\.(3|4)$ ]]; }
-fail() { printf 'error: %s\n' "$1" >&2; return 1; }
+LEG_RC=0
+fail() { LEG_RC=1; printf 'error: %s\n' "$1" >&2; return 1; }
 assert_eq() { [[ "$2" == "$3" ]] || fail "$1: expected=$2 actual=$3"; }
 assert_file_eq() { cmp -s "$2" "$3" || fail "$1 changed"; }
 verdict() { printf 'VERDICT %-16s %s %s\n' "$1" "$2" "$3"; }
@@ -303,7 +304,7 @@ leg_6() {
 
 leg_7() { seed_m1; run_installer "$RUN_DIR/enrollment" 1; api GET "/_data_stream/$DIAGNOSIS_STREAM" | jq -e '.data_streams[0].failure_store.enabled == false' >/dev/null; }
 
-leg_8() {
+leg_10() {
   seed_m1; run_installer "$RUN_DIR/enrollment" 1; proof_ids >"$RUN_DIR/adoption-proof"
   run_installer "$RUN_DIR/enrollment" 0; proof_ids >"$RUN_DIR/all-proofs"
   comm -13 "$RUN_DIR/adoption-proof" "$RUN_DIR/all-proofs" >"$RUN_DIR/rerun-proof"
@@ -330,13 +331,13 @@ leg_9() {
   [[ -n "$(backing_uuid)" ]] || fail 'rollover did not expose new backing UUID'
 }
 
-leg_10() { run_installer "$RUN_DIR/enrollment" 0; [[ -f "$RUN_DIR/enrollment/state.json" ]] || fail 'fresh install did not commit enrollment'; }
+leg_8() { run_installer "$RUN_DIR/enrollment" 0; [[ -f "$RUN_DIR/enrollment/state.json" ]] || fail 'fresh install did not commit enrollment'; }
 
 canonical_leg() {
   case "$1" in
     1|refusal) printf 1 ;; 2|adopt) printf 2 ;; 3|rerun) printf 3 ;; 4|shape-negative) printf 4 ;;
     5|flag-misuse) printf 5 ;; 6|crash-toctou) printf 6 ;; 7|m1-shape) printf 7 ;;
-    8|proof-set) printf 8 ;; 9|upgrade) printf 9 ;; 10|fresh) printf 10 ;;
+    8|fresh) printf 8 ;; 9|upgrade) printf 9 ;; 10|proof-set) printf 10 ;;
     *) return 1 ;;
   esac
 }
@@ -348,8 +349,9 @@ run_leg() {
   CS_RUN_DIR="$RUN_DIR"; export CS_RUN_DIR
   cs_init_names "adoption-$leg-$(cs_new_suffix)"; cs_prepare_tls "$RUN_DIR"; cs_create_network
   if [[ "$leg" == 9 ]]; then cs_create_named_volumes; start_stack "$ES_VERSION" "$KB_VERSION" 1; else start_stack "$ES_VERSION" "$KB_VERSION"; fi
-  build_bundle; write_admin_credentials; function_name="leg_$leg"
+  build_bundle; write_admin_credentials; function_name="leg_$leg"; LEG_RC=0
   set +e; "$function_name"; status=$?; set -e
+  (( LEG_RC == 0 )) || status=1
   if [[ "$status" == 0 ]]; then verdict "$leg" PASS 'contract assertions satisfied'; else verdict "$leg" FAIL 'see run directory and assertion above'; fi
   cs_cleanup || true
   if [[ "$KEEP" == 1 || "$status" != 0 ]]; then printf 'RUN_DIR %s\n' "$RUN_DIR"; else rm -rf "$RUN_DIR"; fi

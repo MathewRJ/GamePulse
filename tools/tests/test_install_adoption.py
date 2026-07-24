@@ -71,6 +71,7 @@ class InstallAdoptionTests(unittest.TestCase):
             INSTALL.admin_authorization = lambda _path: "admin"
             for adopt, remote, code in (
                 (False, "compatible", "adoption_required"),
+                (False, "incompatible", "migration_required"),
                 (True, "absent", "adoption_flag_stream_absent"),
                 (True, "incompatible", "migration_required"),
             ):
@@ -214,6 +215,47 @@ class InstallAdoptionTests(unittest.TestCase):
             self.assertIn("mint_intent", {state["phase"] for state in written_states})
             self.assertIn("candidate_verified", {state["phase"] for state in written_states})
             self.assertIn("committed", {state["phase"] for state in written_states})
+
+    def test_fresh_main_dispatch_runs_full_transaction_after_absent_stream(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "enrollment"
+            snapshot = frozenset({(".ds-fresh", "fresh-uuid")})
+            with ExitStack() as patches:
+                patches.enter_context(patch.object(INSTALL.argparse.ArgumentParser, "parse_args",
+                                                   return_value=self.installer_args(root)))
+                patches.enter_context(patch.object(INSTALL, "load_bundle", return_value=INSTALL.Bundle("test", "test", [])))
+                patches.enter_context(patch.object(INSTALL, "role_body", return_value={}))
+                patches.enter_context(patch.object(INSTALL, "configure_https"))
+                patches.enter_context(patch.object(INSTALL, "admin_authorization", return_value="admin"))
+                patches.enter_context(patch.object(INSTALL, "cluster_uuid", return_value="KUrXRgwRRQu-RikmIJhm0Q"))
+                patches.enter_context(patch.object(INSTALL, "prerequisites"))
+                fence = patches.enter_context(patch.object(INSTALL, "fence"))
+                remote = patches.enter_context(patch.object(INSTALL, "remote_stream_condition", side_effect=[
+                    ("absent", None),
+                    ("absent", None),
+                    ("compatible", snapshot),
+                    ("compatible", snapshot),
+                ]))
+                ensure_stream = patches.enter_context(patch.object(INSTALL, "ensure_stream"))
+                patches.enter_context(patch.object(INSTALL, "simulate"))
+                patches.enter_context(patch.object(INSTALL, "recompute_target_generation", return_value="0" * 64))
+                patches.enter_context(patch.object(INSTALL, "mint_key", return_value=("candidate", "encoded")))
+                patches.enter_context(patch.object(INSTALL, "enrollment_files", return_value={}))
+                patches.enter_context(patch.object(INSTALL, "atomic_write"))
+                patches.enter_context(patch.object(INSTALL, "verify_stream_behavior"))
+                patches.enter_context(patch.object(INSTALL, "verify_role_matrix"))
+                publication = patches.enter_context(patch.object(INSTALL, "atomic_publication"))
+                handshake = patches.enter_context(patch.object(INSTALL, "run_handshake"))
+                patches.enter_context(patch.object(INSTALL, "request"))
+                marker_verify = patches.enter_context(patch.object(INSTALL, "verify_asset"))
+                self.assertEqual(INSTALL.main(), 0)
+            self.assertEqual(remote.call_count, 4)
+            fence.assert_called_once()
+            self.assertFalse(fence.call_args.args[-1])
+            ensure_stream.assert_called_once()
+            publication.assert_called_once()
+            handshake.assert_called_once()
+            marker_verify.assert_called_once()
 
     def test_prepublication_drift_fails_closed_without_publication_or_marker(self):
         with tempfile.TemporaryDirectory() as raw:
