@@ -21,6 +21,8 @@ ASSET_TYPES = {
     "pipelines": "pipelines",
     "transforms": "transforms",
     "security-roles": "security_roles",
+    "kibana-spaces": "kibana_spaces",
+    "kibana-roles": "kibana_roles",
 }
 ASSET_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._@-]*\.json\Z")
 W1_ASSET_PATHS = (

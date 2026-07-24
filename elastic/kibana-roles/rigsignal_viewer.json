@@ -1,0 +1,31 @@
+{
+  "description": "RigSignal read-only dashboard viewer. Read + view_index_metadata on the rigsignal namespace only; feature reads scoped to the rigsignal space only. No cluster privileges, no write/delete, no other Kibana feature.",
+  "elasticsearch": {
+    "cluster": [],
+    "indices": [
+      {
+        "names": [
+          "logs-rigsignal.*",
+          "metrics-rigsignal.*"
+        ],
+        "privileges": [
+          "read",
+          "view_index_metadata"
+        ]
+      }
+    ]
+  },
+  "kibana": [
+    {
+      "base": [],
+      "feature": {
+        "dashboard_v2": [
+          "read"
+        ]
+      },
+      "spaces": [
+        "rigsignal"
+      ]
+    }
+  ]
+}
