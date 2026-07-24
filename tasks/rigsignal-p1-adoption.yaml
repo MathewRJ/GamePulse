@@ -1,0 +1,74 @@
+goal: >
+  Implement the RATIFIED installer migration-adoption amendment (Amendment 7 / A4). The full
+  authoritative contract is tasks/rigsignal-p1-adoption.md in this worktree; read it first and
+  follow it exactly — its refusal truth-table (§2), Step-4-only transaction change (§3), shared
+  compatibility predicate (§4), probe/proof rules (§5, incl. the pre-Step-9 TOCTOU fence §5.6),
+  and the 10 live-gate legs (§6) are all normative. Where this YAML and the contract disagree,
+  the contract controls. Session id for any STM notes: 2026-07-24c-installer-adoption. Do not
+  commit version bumps; commit your work on the worktree branch only.
+files_in_scope:
+  - tools/install_assets.py
+  - tools/tests/test_asset_tools.py
+  - tools/tests/test_install_adoption.py
+  - scripts/clean-stack/adoption-gate.sh
+  - scripts/clean-stack/lib.sh
+  - tasks/rigsignal-p1-adoption.md
+acceptance_criteria:
+  - >-
+    The --adopt-existing-w1-stream one-shot flag implements the §2 truth table exactly: every
+    row returns the stable error code named in the contract (adoption_flag_stream_absent,
+    adoption_required, migration_required, adoption_flag_state_present,
+    enrollment_remediation_required), refusals are nonzero-exit, read-only-inspection-only
+    (no enrollment root or staging dir creation, no recovery, no key invalidation, no owned
+    local or remote mutation, no marker writes), and the flag-present incomplete-state row
+    refuses BEFORE recovery runs.
+  - >-
+    Adoption changes only Step 4's local committed-state ownership conjunct; in the single
+    adoptable matrix cell the shared §4 remote predicate substitutes for that conjunct and
+    Steps 1-3/5-11 (mint_intent, candidate_staged, candidate_verified, publication, handshake,
+    committed state, recovery, marker ordering) are byte-for-byte unchanged. No "adopted"
+    phase or new state value exists anywhere in the diff.
+  - >-
+    The §4 compatibility predicate is one shared code path used by explicit adoption AND
+    ordinary committed-state reruns: exact JCS equality per backing index over the enumerated
+    owned projection (no subset matching); data-stream-level failure_store.enabled present,
+    Boolean, false; per-backing _settings index.uuid match; per-backing _ilm/explain
+    managed:true with the lifecycle RESOLVED from the shipped W1 template composition
+    (logs@lifecycle) and the resolved policy containing no delete phase; missing, malformed,
+    contradictory, or UUID-mismatched evidence refuses. The strengthened checks intentionally
+    apply to the fresh-install path as well.
+  - >-
+    candidate_document() is replaced per §5: envelope copied verbatim from
+    fixtures/diagnosis_event/v1/positive/15-diagnosis-non-finding-conditional.expected.json
+    with ONLY @timestamp, lowercased runtime host.name, and event.id substituted; request
+    _id == _source.event.id == provision-<fresh-id> unique per invocation (and per accepted
+    attempt); detector_id "D6" and input_mode "fixture" retained verbatim; the three exact
+    negative-probe oracles asserted (unknown root -> 400 strict_dynamic_mapping_exception;
+    unknown rigsignal.diagnosis field -> 400 strict_dynamic_mapping_exception; string
+    confidence -> 400 document_parsing_exception caused by number_format_exception); accepted
+    doc refetched with refresh=wait_for by exact ID, JCS _source equality, _ignored absent;
+    accepted proofs never deleted or overwritten.
+  - >-
+    The §5.6 TOCTOU fence runs after Steps 7-8 and immediately before Step 9 publication:
+    full shared predicate rerun, canonical asset/role GET comparisons and simulation, exact
+    (index_name,index_uuid) set equality with the pre-PUT snapshot; any drift fails closed
+    with no publication, committed state, or marker.
+  - >-
+    python3 -m unittest discover -s tools/tests is green and the new tests cover: all six
+    truth-table rows (both flag columns where distinct); zero-mutation refusal assertions;
+    probe envelope fidelity vs the fixture (byte-level except the three substituted fields);
+    unique proof IDs across >=2 simulated invocations; the three negative-probe oracles and
+    the refetch/JCS/_ignored logic (mocked transport); TOCTOU fence ordering (fence runs
+    after asset PUTs and before publication, drift aborts); shared-predicate use on the
+    fresh-install path (regression).
+  - >-
+    scripts/clean-stack/adoption-gate.sh implements the ten §6 legs as selectable scenarios
+    (per-leg functions or flags), parameterized by ES/Kibana version pair, reusing lib.sh
+    helpers (cs_prepare_tls, https polls) and the matrix.sh owned_snapshot/zero-delta
+    machinery; legs 1-8 and 10 runnable on either version pair, leg 9 scripted as the
+    9.4.3->9.4.4 upgrade path; T18-style proof assertions query the exact expected proof-ID
+    set (M1 legacy documents excluded from the count). The script is NOT wired into CI.
+  - >-
+    No Rust source is touched; cargo fmt --check, cargo check --locked, cargo clippy --locked
+    --all-targets -- -D warnings, and cargo test --locked (all with --manifest-path
+    src/Cargo.toml) remain green where runnable locally.
