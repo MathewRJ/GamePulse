@@ -237,7 +237,7 @@ seed_with_shape() {
 }
 
 leg_4() {
-  local shape root before after index_name policy
+  local shape root before after index_name policy status
   for shape in confidence-float missing-diagnosis extra-diagnosis non-strict ignore-malformed failure-store wrong-lifecycle; do
     api DELETE "/_data_stream/$DIAGNOSIS_STREAM" >/dev/null 2>&1 || true
     seed_with_shape "$shape"; root="$RUN_DIR/$shape-root"; before="$(owned_snapshot "$RUN_DIR/$shape.before" "$root")"
@@ -253,9 +253,11 @@ leg_4() {
   # Correct policy name but a delete phase must also fail.
   api DELETE "/_data_stream/$DIAGNOSIS_STREAM" >/dev/null 2>&1 || true; seed_m1
   api_to "$RUN_DIR/policy.json" GET '/_ilm/policy/logs@lifecycle'
-  policy="$(jq '."logs@lifecycle".policy.phases.delete={"min_age":"1d","actions":{"delete":{}}}' "$RUN_DIR/policy.json")"
-  printf '%s' "$policy" >"$RUN_DIR/delete-policy.json"; api PUT '/_ilm/policy/logs@lifecycle' "$RUN_DIR/delete-policy.json" >/dev/null
-  expect_refusal delete-lifecycle "$RUN_DIR/delete-lifecycle-root" 1 migration_required
+  policy="$(jq '{"policy": (."logs@lifecycle".policy | .phases.delete = {"min_age":"1d","actions":{"delete":{}}})}' "$RUN_DIR/policy.json")"
+  printf '%s' "$policy" >"$RUN_DIR/delete-policy.json"
+  status="$(api_status "$RUN_DIR/delete-policy-put.out" PUT '/_ilm/policy/logs@lifecycle' "$RUN_DIR/delete-policy.json")"
+  assert_eq 'delete-lifecycle policy PUT' 200 "$status"
+  [[ "$status" != 200 ]] || expect_refusal delete-lifecycle "$RUN_DIR/delete-lifecycle-root" 1 migration_required
 }
 
 make_incomplete_state() {
@@ -280,11 +282,11 @@ leg_5() {
 }
 
 leg_6() {
-  local root="$RUN_DIR/crash-root" status index_name
+  local root="$RUN_DIR/crash-root" status index_name injector=''
   seed_m1
-  set +e; RIGSIGNAL_TEST_CRASH_AT=candidate-write run_installer "$root" 1 >"$RUN_DIR/crash.out" 2>&1; status=$?; set -e
+  if RIGSIGNAL_TEST_CRASH_AT=candidate-write run_installer "$root" 1 >"$RUN_DIR/crash.out" 2>&1; then status=0; else status=$?; fi
   [[ "$status" == 99 ]] || fail 'candidate-write crash hook did not terminate installer'
-  run_installer "$root" 0
+  run_installer "$root" 0 || fail 'candidate-write retry did not recover'
   [[ ! -d "$root/candidate" ]] || fail 'retry left candidate directory'
   # Polling candidate_verified makes the mutation occur after Step 8; the
   # loop persists it until the immediate pre-Step-9 shared predicate observes it.
@@ -294,9 +296,19 @@ leg_6() {
     printf '%s' '{"properties":{"rigsignal":{"properties":{"diagnosis":{"properties":{"toctou_gate":{"type":"keyword"}}}}}}}' >"$RUN_DIR/toctou.json"
     api PUT "/$index_name/_mapping" "$RUN_DIR/toctou.json" >/dev/null
   ) &
-  local injector=$!
-  if run_installer "$root" 1 >"$RUN_DIR/toctou.out" 2>&1; then kill "$injector" 2>/dev/null || true; fail 'TOCTOU installer unexpectedly succeeded'; fi
-  wait "$injector" || true
+  injector=$!
+  if run_installer "$root" 1 >"$RUN_DIR/toctou.out" 2>&1; then
+    kill "$injector" 2>/dev/null || true
+    wait "$injector" || true
+    injector=''
+    fail 'TOCTOU installer unexpectedly succeeded'
+  else
+    # The injector may still be polling if the installer failed before Step 8.
+    # Always reap it before making the fence assertions.
+    kill "$injector" 2>/dev/null || true
+    wait "$injector" || true
+    injector=''
+  fi
   grep -Fx 'install failed: pre-publication fence:' "$RUN_DIR/toctou.out" >/dev/null || fail 'TOCTOU did not fail at fence'
   [[ ! -e "$root/credentials.toml" ]] || fail 'TOCTOU published credentials'
   [[ ! -e "$root/handshake.toml" ]] || fail 'TOCTOU published configuration'
@@ -350,7 +362,9 @@ run_leg() {
   cs_init_names "adoption-$leg-$(cs_new_suffix)"; cs_prepare_tls "$RUN_DIR"; cs_create_network
   if [[ "$leg" == 9 ]]; then cs_create_named_volumes; start_stack "$ES_VERSION" "$KB_VERSION" 1; else start_stack "$ES_VERSION" "$KB_VERSION"; fi
   build_bundle; write_admin_credentials; function_name="leg_$leg"; LEG_RC=0
-  set +e; "$function_name"; status=$?; set -e
+  # Invoke the leg through a conditional so an assertion/helper failure cannot
+  # escape this runner before it emits the leg's verdict.
+  if "$function_name"; then status=0; else status=$?; fi
   (( LEG_RC == 0 )) || status=1
   if [[ "$status" == 0 ]]; then verdict "$leg" PASS 'contract assertions satisfied'; else verdict "$leg" FAIL 'see run directory and assertion above'; fi
   cs_cleanup || true
@@ -359,4 +373,8 @@ run_leg() {
 }
 
 cs_require_tools bash curl docker jq openssl python3 sha256sum cmp grep sort wc
-for requested in "${LEGS[@]}"; do run_leg "$requested"; done
+overall=0
+for requested in "${LEGS[@]}"; do
+  if run_leg "$requested"; then :; else overall=1; fi
+done
+exit "$overall"

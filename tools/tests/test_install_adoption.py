@@ -41,6 +41,62 @@ class InstallAdoptionTests(unittest.TestCase):
             INSTALL.secure_candidate_root(root)
             self.assertEqual(INSTALL.enrollment_condition(root), "remediation")
 
+            (root / "candidate").rmdir()
+            state.update(phase="candidate_staged", active_key_id=None, pending_mint_name="unfinished",
+                         candidate_key_id="candidate")
+            INSTALL.atomic_write(root, "state.json", INSTALL.jcs(state) + b"\n")
+            INSTALL.secure_candidate_root(root)
+            self.assertEqual(INSTALL.enrollment_condition(root), "incomplete")
+
+    def test_candidate_write_crash_retry_uses_ordinary_recovery(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "enrollment"
+            INSTALL.secure_root(root)
+            state = INSTALL.state_template("KUrXRgwRRQu-RikmIJhm0Q", INSTALL.TARGET_GENERATION_KAT,
+                                           None, str(root))
+            state.update(phase="candidate_staged", pending_mint_name="unfinished", candidate_key_id="candidate")
+            INSTALL.atomic_write(root, "state.json", INSTALL.jcs(state) + b"\n")
+            INSTALL.secure_candidate_root(root)
+            snapshot = frozenset({(".ds-recovered", "recovered-uuid")})
+            with ExitStack() as patches:
+                patches.enter_context(patch.object(INSTALL.argparse.ArgumentParser, "parse_args",
+                                                   return_value=self.installer_args(root)))
+                patches.enter_context(patch.object(INSTALL, "load_bundle", return_value=INSTALL.Bundle("test", "test", [])))
+                patches.enter_context(patch.object(INSTALL, "role_body", return_value={}))
+                patches.enter_context(patch.object(INSTALL, "configure_https"))
+                patches.enter_context(patch.object(INSTALL, "admin_authorization", return_value="admin"))
+                patches.enter_context(patch.object(INSTALL, "cluster_uuid", return_value=state["expected_cluster_uuid"]))
+                invalidate_name = patches.enter_context(patch.object(INSTALL, "invalidate_mint_name"))
+                invalidate = patches.enter_context(patch.object(INSTALL, "invalidate"))
+                removed_candidate = patches.enter_context(patch.object(INSTALL, "remove_candidate_root"))
+                patches.enter_context(patch.object(INSTALL, "remove_stale_publication_stage"))
+                fence = patches.enter_context(patch.object(INSTALL, "fence"))
+                patches.enter_context(patch.object(INSTALL, "prerequisites"))
+                patches.enter_context(patch.object(INSTALL, "remote_stream_condition", side_effect=[
+                    ("compatible", snapshot), ("compatible", snapshot),
+                ]))
+                patches.enter_context(patch.object(INSTALL, "ensure_stream"))
+                patches.enter_context(patch.object(INSTALL, "simulate"))
+                patches.enter_context(patch.object(INSTALL, "recompute_target_generation", return_value="0" * 64))
+                patches.enter_context(patch.object(INSTALL, "mint_key", return_value=("replacement", "encoded")))
+                patches.enter_context(patch.object(INSTALL, "enrollment_files", return_value={}))
+                patches.enter_context(patch.object(INSTALL, "atomic_write"))
+                patches.enter_context(patch.object(INSTALL, "verify_stream_behavior"))
+                patches.enter_context(patch.object(INSTALL, "verify_role_matrix"))
+                patches.enter_context(patch.object(INSTALL, "atomic_publication"))
+                patches.enter_context(patch.object(INSTALL, "run_handshake"))
+                patches.enter_context(patch.object(INSTALL, "request"))
+                patches.enter_context(patch.object(INSTALL, "verify_asset"))
+                self.assertEqual(INSTALL.main(), 0)
+            invalidate_name.assert_called_once_with("https://es.invalid", "admin", "unfinished")
+            invalidate.assert_called_once_with("https://es.invalid", "admin", ["candidate"])
+            # Recovery removes the crashed generation; finalization removes the
+            # replacement staging directory after the ordinary transaction.
+            self.assertEqual(removed_candidate.call_count, 2)
+            for call in removed_candidate.call_args_list:
+                self.assertEqual(call.args, (root,))
+            self.assertIsNone(fence.call_args.args[2])
+
     def test_candidate_document_is_the_frozen_fixture_except_runtime_fields(self):
         expected = json.loads(INSTALL.PROBE_FIXTURE.read_bytes())
         document = INSTALL.candidate_document("fresh")

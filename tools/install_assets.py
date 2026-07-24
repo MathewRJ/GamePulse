@@ -605,13 +605,34 @@ def enrollment_condition(root: Path) -> str:
         allowed = {"state.json", "credentials.toml", "handshake.toml", "shipping-policy-v1.toml", "candidate"}
         if not entries.issubset(allowed):
             return "remediation"
-        if "candidate" in entries:
-            return "remediation"
         if "state.json" not in entries:
             return "clean" if not entries else "remediation"
         state = load_state(root)
         if state is None:
             return "remediation"
+        if "candidate" in entries:
+            # A candidate directory is normally an orphaned staging artifact.
+            # The one exception is the durable, valid incomplete transaction
+            # state left by a crash after candidate staging: ordinary recovery
+            # must revoke it and remove the private tree before re-evaluating.
+            # Inspect it without creating or changing anything so malformed
+            # staging remains a remediation refusal.
+            candidate = root / "candidate"
+            candidate_st = candidate.lstat()
+            if (not stat.S_ISDIR(candidate_st.st_mode) or stat.S_ISLNK(candidate_st.st_mode)
+                    or candidate_st.st_uid != os.geteuid() or candidate_st.st_mode & 0o077):
+                return "remediation"
+            candidate_entries = {entry.name for entry in candidate.iterdir()}
+            candidate_allowed = {"credentials.toml", "handshake.toml", "shipping-policy-v1.toml", "state.json"}
+            if not candidate_entries.issubset(candidate_allowed):
+                return "remediation"
+            for entry in candidate.iterdir():
+                item_st = entry.lstat()
+                if (not stat.S_ISREG(item_st.st_mode) or stat.S_ISLNK(item_st.st_mode)
+                        or item_st.st_uid != os.geteuid() or item_st.st_mode & 0o077):
+                    return "remediation"
+            if state["phase"] == "committed":
+                return "remediation"
         return "committed" if state["phase"] == "committed" else "incomplete"
     except (InputError, OSError, ValueError):
         return "remediation"
