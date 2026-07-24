@@ -1,0 +1,215 @@
+goal: >
+  Implement the RATIFIED Amendment A5 `--ownership-profile fleet-coexist` installer mode. The
+  full authoritative contracts are tasks/a5/FLEET-COEXISTENCE-AMENDMENT.md (the amendment,
+  ratified DRAFT v3 — ownership table §1, flag/mode spec §2, verification additions §3, gate
+  requirements §4, transport addendum §5 — OUT OF SCOPE for this task, see Non-goals below,
+  credential restriction §6, cluster-health gate §7, A4 proof-deletion exception §8, all
+  RATIFIED per the doc's own Ratification block) and tasks/a5/ROLLBACK-DESIGN.md (the v3 apply/
+  rollback design — class adapter module §1, rollback scope §2, deferred/verify-only classes §3,
+  logs-rigsignal.stream disposition §4, transaction journal §5, phase-gated runbook §6). Read
+  both fully before writing any code; where this YAML and the contracts disagree, the contracts
+  control. Base SHA for this work is current main HEAD
+  0d427d37c277ae7fdc8df35503cbedab8a25692f (bundle sha256
+  aa57aade36993ea143717c62366942ea736c1bf4235f0952c3cd86c49ece323a per BINARY-PROVENANCE.md —
+  this task's own diff produces a NEW code SHA and a NEW bundle hash, per the amendment §4.3;
+  do not claim the base hash as your own artifact's hash). Session id for any STM notes:
+  2026-07-24e-a5-impl. Commit your work on the worktree branch only; do not commit outside this
+  worktree, do not bump cargo/package version, and do not touch Rust source (see the Rust
+  acceptance criterion below).
+
+  Scope note: this task implements the installer mode, the class-adapter module, the journal,
+  the marker, and the clean-stack gate script's scenario legs. It does NOT implement or touch
+  the §5 transport addendum (TLS loopback proxy, `:5601` block) — that is a separate,
+  owner-host deployment task, explicitly out of scope here (see Non-goals). It also does NOT
+  perform any live invocation against the owner cluster `192.168.50.174` — all new legs run
+  against ephemeral clean-stack Docker containers, exactly like the existing adoption-gate.sh
+  pattern.
+
+files_in_scope:
+  - tools/install_assets.py
+  - tools/asset_adapters.py
+  - tools/tests/test_asset_tools.py
+  - tools/tests/test_install_adoption.py
+  - tools/tests/test_asset_adapters.py
+  - tools/tests/test_fleet_coexist.py
+  - scripts/clean-stack/fleet-coexist-gate.sh
+  - scripts/clean-stack/lib.sh
+  - tasks/a5/FLEET-COEXISTENCE-AMENDMENT.md
+  - tasks/a5/ROLLBACK-DESIGN.md
+
+acceptance_criteria:
+  - >-
+    A new `tools/asset_adapters.py` module (ROLLBACK-DESIGN §1, axiom 9) provides, per class
+    (`component_templates`, `index_templates`, `security_roles`, `pipelines`, `transforms`,
+    `kibana_spaces`, `kibana_roles`, `dashboard`, `install_marker`), the four named functions
+    `get_projection()`, `request_body_from_preimage()`, `compatibility_projection()`, and
+    `verify()`. For the classes where `install_assets.py`'s own `projection()`,
+    `_strip_server_metadata()`, `_normalize_settings_scalars()`, `es_path()`/`kibana_path()`
+    already produce correct behavior, these are thin wrappers around those existing functions
+    (never a divergent reimplementation); for `pipelines` and `transforms` — which
+    `install_assets.py`'s `projection()` explicitly rejects — the module supplies new logic per
+    the exact per-class compatibility-projection rules in §1.1 (component templates strip the
+    four server timestamps + ratified `_meta.managed_by`; Fleet index templates additionally
+    permit exactly `.fleet_globals-1`/`.fleet_agent_id_verification-1` in `composed_of` then
+    check `_simulate_index` outcome-equivalence per amendment §3.2; pipelines extract
+    `response[name]`, strip the four server timestamps, permit only `_meta.managed_by`, require
+    `processors`/`on_failure`/other operational content equal).
+  - >-
+    The dashboard/saved-object class adapter (ROLLBACK-DESIGN §1.3) is fully specified, not
+    bypassed: `get_projection()` GETs each manifest saved-object ID individually (never the
+    ndjson blob as a whole), projecting a 404 to sentinel `ABSENT`; `request_body_from_preimage()`
+    reconstructs a real restore body when the preimage is non-`ABSENT` and is a pure deletion
+    inverse when `ABSENT`; `compatibility_projection()` is a defined no-op (dashboards are always
+    bundle-owned, never external) kept only for interface uniformity; `verify()` checks
+    existence + canonicalized-hash match post-apply, or exact 404 post-rollback.
+  - >-
+    `--ownership-profile fleet-coexist` (amendment §2) resolves every manifest asset's ownership
+    from a compiled table keyed by `(kind, name)` (amendment §1's 16 bundle-owned / 39 external
+    split — diagnosis chain, `rigsignal_shipper` role, Kibana space/viewer-role/7 dashboard
+    bundles, transform, `logs-rigsignal.stream` template+pipeline, `metrics-rigsignal.profiles`
+    = 16 owned; 13 Fleet index templates + 13 Fleet pipelines + 13 Fleet component templates = 39
+    external), never a live heuristic. Omitting the flag preserves exactly today's PUT-everything
+    behavior. The flag is NOT one-shot: it MUST be supplied on every invocation against a
+    Fleet-coexisting cluster including reruns, and its absence on a rerun where persisted
+    `ownership_profile` state says otherwise MUST refuse (amendment §2.1, §2.5). Any manifest
+    asset absent from the table under the flag MUST refuse the entire invocation before any
+    mutation with a distinct stable error naming the unresolved asset (amendment §2.2). Routing
+    order: for `component_templates`/`index_templates`, ownership resolution runs BEFORE
+    class-adapter selection — the 13 Fleet-owned members of each never reach the class-adapter
+    row at all (ROLLBACK-DESIGN §1.2 routing note).
+  - >-
+    `external` assets get zero mutation: no PUT, no DELETE, no dry-run PUT, no partial/"safe
+    subset" write (amendment §2.4). Verify-only failure of any external asset's
+    `compatibility_projection()` MUST refuse the entire invocation before any mutation — never a
+    warning-and-proceed (amendment §2.3 closing paragraph).
+  - >-
+    The crash-safe per-object transaction journal (ROLLBACK-DESIGN §5) replaces phase-only
+    mutation authority: `write_intent` persisted atomically before every remote mutation,
+    carrying `intended_after_sha256` and a durable `{path, sha256}` request-body reference in the
+    same atomic persist (not a follow-up write); `write_verified` + after-hash persisted
+    immediately after `verify()` succeeds; rollback acts only on journaled intents, never the
+    full manifest. The ambiguous-crash three-way rule compares live state against the intent's
+    persisted `intended_after_sha256` first, then the preimage hash, then STOPs on a match to
+    neither — never re-deriving an expected hash from the manifest at recovery time. Dashboard
+    intents enumerate every saved-object ID individually, each with its own
+    `intended_after_sha256`, so partial import is recoverable per object.
+  - >-
+    Every bundle-owned manifest asset — including ones the adapter finds already canonically
+    equal to the bundle body (diagnosis chain, `logs-rigsignal.stream@pipeline` post gate-round-1
+    reclassification) — is always journaled with an explicit `noop` action rather than skipped
+    (amendment §2.5, ROLLBACK-DESIGN §5/§6 apply phase), so `applied_owned_assets` unconditionally
+    contains all 16 rows on every successful invocation regardless of how many needed an actual
+    write.
+  - >-
+    The install marker (`rigsignal-bundle-meta`) records `ownership_profile` (exact profile name
+    or `"default"`) and `ownership_table_version`, and two disjoint manifest-level lists whose
+    union is all 55 manifest assets: `applied_owned_assets` (renamed from any `installed_assets`
+    naming — do not reintroduce the old name) as `{kind, name, action, request_body_sha256}` for
+    all 16 bundle-owned assets with `action` one of `create`/`update`/`import`/`noop`, and a
+    `noop` entry still records `request_body_sha256` as the hash of the bundle body that would
+    have been sent; `verified_external_assets` as `{kind, name, live_body_sha256,
+    compatibility_projection_sha256, owner_metadata}` for all 39 external assets. No aggregate
+    "N assets installed" count sums the two lists. `ownership_profile`/`ownership_table_version`
+    are additionally persisted in protected transaction/enrollment state (not only the marker)
+    and are mismatch-fenced: a supplied profile differing from persisted state refuses before any
+    mutation (amendment §2.5).
+  - >-
+    §8's narrowly-scoped, RATIFIED A4 §5.4 exception is implemented exactly as drafted:
+    transaction-scoped, exact-`event.id`-and-exact-backing-index proof deletion, available ONLY
+    on an explicit rollback invocation of a transaction that did not reach `APPLY_OK` or is being
+    deliberately reversed; crash-safe intent persisted before `_create`, `_index` persisted once
+    available; recovery searches for that one exact ID (zero-or-one-hit requirement), never
+    wildcard search or `_delete_by_query`; a proof belonging to any other transaction, or whose
+    owning transaction reached `APPLY_OK` and was not subsequently rolled back, MUST NOT be
+    deleted.
+  - >-
+    Refusal semantics and the phase machine: the §6 credential-source restriction (native-user
+    `{username, password}` required at any non-dry-run invocation reaching the mint step,
+    `{api_key: str}` refused before Step 5 otherwise); the §7 cluster-health gate (refuse before
+    Step 5's barrier unless health is green, or yellow with zero unassigned primaries and zero
+    pending tasks); the §3.4 same-day `logs-rigsignal-stream-30d`/`logs@lifecycle`
+    delete-phase-free re-read immediately pre-PUT, refusing the identity-changing PUT if either
+    policy has gained a delete phase; the §3.2/§3.3 pre/post `_simulate_index` equivalence and
+    `(index_name, index_uuid)` invariance across all 16 streams/18 backing indices (dynamically
+    enumerated via `GET /_data_stream/*rigsignal*`, never hardcoded), generalizing the existing
+    TOCTOU fence from the diagnosis stream to every active stream under this profile; and the
+    three-way rollover handling (in-transaction = fail-closed + journaled rollback;
+    between-invocation = rebaseline, not a defect; external Fleet upgrade = verify current
+    compatibility, never restore an obsolete external preimage) — are all implemented per
+    ROLLBACK-DESIGN §5/§6 and amendment §3.
+  - >-
+    Existing Steps 1-11 phase machine and Amendment 7/A4's adoption flag/matrix/fence are
+    byte-for-byte unchanged by this diff — this amendment composes with A4, it does not rewrite
+    it (amendment "What this amends" + Non-goals), except for the one explicit §8 A4 exception
+    above.
+
+acceptance_criteria_gate_script: >-
+  scripts/clean-stack/fleet-coexist-gate.sh implements the following as selectable scenario
+  legs (per-leg functions/flags, following the existing scripts/clean-stack/adoption-gate.sh
+  pattern: reuse scripts/clean-stack/lib.sh's cs_prepare_tls/https-poll helpers and
+  scripts/clean-stack/matrix.sh's owned_snapshot/zero-delta machinery where applicable). It is
+  NOT wired into CI. These are normative gate-scope requirements distilled from the Sol plan
+  review, additive to (not replacing) amendment §4's own 3 named legs:
+  a. Every leg runs on both (ES 9.4.3, Kibana 9.4.3) and (ES 9.4.4, Kibana 9.4.4): dirty-seeded
+     Fleet stack (real Fleet-shaped bodies for all 13+13+13 external assets, both verification
+     components present in composed_of), a Fleet reinstall/upgrade rehearsal leg, and rollover
+     legs (in-transaction and between-invocation cases). The existing 19/19 clean-stack matrix
+     from Amendment 7/A4 is retained unchanged and MUST continue to pass with
+     `--ownership-profile` omitted or `default`.
+  b. A transform `_meta` absent→apply→rollback→absent proof leg on both version pairs (pivot
+     preserved throughout, `_stats.state` == started preserved); if the proof does not hold on
+     either version, assert the transform falls back to verify-only (apply skipped, cosmetic
+     `_meta`-only diff left as documented accepted drift) rather than assuming restoration works.
+  c. Crash injection at every intent/mutation/verify boundary — at minimum: dashboard partial
+     import (mid-multipart-call crash, recoverable per saved-object ID), key mint (crash between
+     mint_intent and candidate_staged/candidate_verified/committed), and proof `_create`
+     specifically (crash between event.id intent persistence and the returned `_index` being
+     recorded) — each asserting the ambiguous-crash three-way rule resolves correctly on
+     recovery.
+  d. Refusal legs, each asserting a distinct stable error and zero mutation: profile/table
+     mismatch (supplied profile differs from persisted state), omitted-profile-on-coexist
+     (flag absent on a rerun against a table-persisted coexist cluster), unresolved-manifest-asset
+     (a manifest asset with no ownership-table row), bad cluster health (red, or yellow with an
+     unassigned primary or a pending task), API-key-admin credential (credentials file resolves
+     to `{api_key: str}` at a non-dry-run invocation), ILM-delete-phase (either
+     `logs-rigsignal-stream-30d` or `logs@lifecycle` has gained a delete phase since baseline).
+  e. A between-invocation rollover leg asserting a successful rerun: rollover fires after one
+     successful invocation completes and before the next runs; the rerun rebaselines the new
+     backing (name, UUID) set and preserves the prior invocation's anchors, and this is asserted
+     as a PASS, not a defect.
+  f. An HTTP-write audit leg proving zero write requests were sent to all 39 external assets —
+     instrument or intercept the outbound request stream (e.g. a recording proxy/mock transport
+     layer) and assert no PUT/POST/DELETE method was ever issued against any of the 39 external
+     asset paths. Hash-unchanged-after is explicitly insufficient for this leg: construct a
+     negative case where an identical-body PUT is issued against an external asset (e.g. by
+     temporarily wiring a test-only code path that would send it) and confirm the audit
+     instrumentation flags it as a violation — the leg must prove the write-detection mechanism
+     itself works, not just that no write happened to occur.
+  g. A marker/status/dashboard-reader validation leg: confirm `applied_owned_assets` and
+     `verified_external_assets` are disjoint, their union is exactly the 55 manifest assets, no
+     consumer (rigsignal status output, any dashboard-reader tooling touched by this diff) sums
+     them into one aggregate count, and any updated consumer reads the two lists separately.
+  h. The bundle used for every leg above MUST be hashed (sha256) before the gate runs, the gate
+     MUST run against that exact bundle hash (no rebuild mid-gate-run), and the final report MUST
+     record both the implementing commit SHA and the bundle hash used, so the gate result is
+     reproducibly tied to one exact artifact pair.
+
+python_test_criteria: >-
+  python3 -m unittest discover -s tools/tests is green, mirroring the rigsignal-p1-adoption
+  pattern (importlib.util.spec_from_file_location loading of tools/install_assets.py and the
+  new tools/asset_adapters.py, per the existing test_asset_tools.py/test_install_adoption.py
+  style). New/expanded tests cover: each class adapter's four functions in
+  tools/tests/test_asset_adapters.py (including the pipeline/transform compatibility-projection
+  rules of §1.1, the dashboard ABSENT-preimage case, and Fleet-index-template
+  `_simulate_index`-equivalence with a mocked transport); the fleet-coexist ownership resolution,
+  unresolved-asset refusal, flag-persistence mismatch refusal, journal write_intent/write_verified
+  atomicity and the ambiguous-crash three-way rule, marker two-list disjointness/union, and the
+  §8 A4 proof-deletion exception's exact-ID/zero-or-one-hit/no-wildcard behavior in
+  tools/tests/test_fleet_coexist.py (mocked transport throughout, no live cluster needed for the
+  unit-test tier).
+
+rust_criteria: >-
+  No Rust source is touched by this diff. cargo fmt --check, cargo check --locked, cargo clippy
+  --locked --all-targets -- -D warnings, and cargo test --locked (all with --manifest-path
+  src/Cargo.toml) remain green where runnable locally, matching the rigsignal-p1-adoption
+  pattern's own Rust criterion.
