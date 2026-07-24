@@ -126,3 +126,11 @@ The final handoff must identify the resolved values for all OPEN items, list eve
   expectations in the rows above are superseded.
 - Requirement 6-adjacent: kibana-role GET verification strips server-injected
   `allow_restricted_indices: false` (known-defaults stripping only, no subset matching).
+
+## Erratum E2 (2026-07-24, wire-forced — Contract Amendment A3)
+
+- T9: normative = six dashboards present in /s/rigsignal (streaming-lab absent), each opens
+  with NO authz/permission errors; panel data errors from nonexistent streams are expected on
+  bundle-only ephemeral stacks. Full-render of the five moves to the owner-stack gate.
+- T18: normative = 200 + exactly the installer's 2 self-proof docs, not 403. Zero-hits
+  wording superseded (incompatible with genuine successful provisioning).
