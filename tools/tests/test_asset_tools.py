@@ -525,19 +525,37 @@ i.atomic_publication(r, {n: ('new-' + n).encode() for n in ('credentials.toml','
 
     def test_w2_a4_kibana_role_and_native_security_role_routes_and_projections(self):
         viewer = w2_asset("kibana-roles", "rigsignal_viewer.json")
-        expected = json.loads(viewer.data)
         calls = []
         add_extra_index_pattern = False
+        add_run_as_user = False
+        live_get_response = {
+            "name": "rigsignal_viewer",
+            "description": "RigSignal read-only dashboard viewer. Read + view_index_metadata on the rigsignal namespace only; feature reads scoped to the rigsignal space only. No cluster privileges, no write/delete, no other Kibana feature.",
+            "metadata": {},
+            "transient_metadata": {"enabled": True},
+            "elasticsearch": {
+                "cluster": [],
+                "indices": [{
+                    "names": ["logs-rigsignal.*", "metrics-rigsignal.*"],
+                    "privileges": ["read", "view_index_metadata"],
+                    "allow_restricted_indices": False,
+                }],
+                "run_as": [],
+            },
+            "kibana": [{"base": [], "feature": {"dashboard_v2": ["read"]}, "spaces": ["rigsignal"]}],
+            "_transform_error": [],
+            "_unrecognized_applications": [],
+        }
         old_request = INSTALL.request
         def fake_request(_base, path, method, _auth, data=None, headers=None):
             calls.append((method, path, data, headers))
             if method == "GET":
-                response = json.loads(json.dumps(expected))
-                for grant in response["elasticsearch"]["indices"]:
-                    grant["allow_restricted_indices"] = False
+                response = json.loads(json.dumps(live_get_response))
                 if add_extra_index_pattern:
                     response["elasticsearch"]["indices"][0]["names"].append("logs-other.*")
-                return json.dumps({"name": "rigsignal_viewer", **response, "metadata": {}}).encode()
+                if add_run_as_user:
+                    response["elasticsearch"]["run_as"] = ["someuser"]
+                return json.dumps(response).encode()
             return b"{}"
         INSTALL.request = fake_request
         try:
@@ -545,10 +563,14 @@ i.atomic_publication(r, {n: ('new-' + n).encode() for n in ('credentials.toml','
             add_extra_index_pattern = True
             with self.assertRaises(INSTALL.InputError):
                 INSTALL.verify_kibana_asset("https://kb", "auth", viewer)
+            add_extra_index_pattern = False
+            add_run_as_user = True
+            with self.assertRaises(INSTALL.InputError):
+                INSTALL.verify_kibana_asset("https://kb", "auth", viewer)
         finally: INSTALL.request = old_request
         self.assertEqual([(method, path) for method, path, _data, _headers in calls], [
             ("PUT", "/api/security/role/rigsignal_viewer"), ("GET", "/api/security/role/rigsignal_viewer"),
-            ("GET", "/api/security/role/rigsignal_viewer"),
+            ("GET", "/api/security/role/rigsignal_viewer"), ("GET", "/api/security/role/rigsignal_viewer"),
         ])
         self.assertEqual(INSTALL.es_path(INSTALL.Asset("security_roles", "shipper", "x", b"{}")),
                          "/_security/role/shipper")

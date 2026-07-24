@@ -828,6 +828,17 @@ def _strip_server_metadata(body: object, drop: tuple, drop_if_empty: tuple) -> o
     return projected
 
 
+def _strip_empty_defaults_omitted_by_expected(body: object, expected: object) -> object:
+    """Remove known server defaults only when the packaged role omits them."""
+    if not isinstance(body, dict):
+        return body
+    expected_keys = expected if isinstance(expected, dict) else {}
+    return {
+        key: value for key, value in body.items()
+        if not (key in _ROLE_EMPTY_DEFAULT_KEYS and key not in expected_keys and value in ([], {}, None))
+    }
+
+
 def _normalize_settings_scalars(body: object) -> object:
     """ES stores index settings as strings and returns them so on GET; render
     both sides' template.settings scalars in ES string form before equality."""
@@ -873,7 +884,19 @@ def verify_kibana_asset(base: str, authorization: str, asset: Asset) -> None:
         if not isinstance(response, dict) or not isinstance(expected, dict):
             raise InputError("canonical Kibana role GET projection is missing")
         got = {key: response.get(key) for key in ("elasticsearch", "kibana")}
+        want = {key: expected.get(key) for key in ("elasticsearch", "kibana")}
+        # Kibana can inject the native role API's empty defaults both beside
+        # elasticsearch/kibana and within elasticsearch.  Include those keys
+        # in the projection first so a non-empty injected privilege remains a
+        # verification failure, then remove only omitted empty defaults.
+        for key in _ROLE_EMPTY_DEFAULT_KEYS:
+            if key in response:
+                got[key] = response[key]
+            if key in expected:
+                want[key] = expected[key]
+        got = _strip_empty_defaults_omitted_by_expected(got, want)
         elasticsearch = got.get("elasticsearch")
+        expected_elasticsearch = want.get("elasticsearch")
         if isinstance(elasticsearch, dict) and isinstance(elasticsearch.get("indices"), list):
             # Kibana GET injects allow_restricted_indices into each grant;
             # false is the server default and is stripped, while true remains
@@ -884,8 +907,8 @@ def verify_kibana_asset(base: str, authorization: str, asset: Asset) -> None:
                 if isinstance(entry, dict) else entry
                 for entry in elasticsearch["indices"]
             ]
-            got["elasticsearch"] = elasticsearch
-        want = {key: expected.get(key) for key in ("elasticsearch", "kibana")}
+        got["elasticsearch"] = _strip_empty_defaults_omitted_by_expected(
+            elasticsearch, expected_elasticsearch)
     else:
         raise InputError("canonical Kibana asset GET projection is unsupported")
     if jcs(got) != jcs(want):
