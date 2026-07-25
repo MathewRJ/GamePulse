@@ -127,6 +127,9 @@ write_admin_credentials() {
 
 run_installer() {
   local root="$1" adopt="${2:-0}"
+  # Settle transient cluster tasks from seeding before the installer's §7
+  # point-in-time health gate reads them (harness race, not a product concern).
+  api GET '/_cluster/health?wait_for_events=languid&wait_for_no_initializing_shards=true&timeout=30s' >/dev/null || true
   local args=(--bundle "$BUNDLE" --endpoint "$ES_URL" --ca-file "$CS_CA_FILE"
     --kibana-endpoint "$KB_URL" --kibana-ca-file "$CS_CA_FILE"
     --admin-credentials-file "$RUN_DIR/admin-credentials.toml" --agent-binary "$CLEAN_STACK_AGENT_BINARY"
