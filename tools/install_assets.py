@@ -1417,6 +1417,24 @@ def transform_preapply_restore_proven(es_url: str, authorization: str, asset: As
         return False
 
 
+def transform_preapply_requires_verify_only(journal: TransactionJournal, record: dict, es_url: str,
+                                            authorization: str, asset: Asset) -> bool:
+    """Return whether an existing transform lacks a proven absent-_meta restore.
+
+    A journaled absent preimage represents a transform that did not exist at
+    all.  It has no state or body to rehearse, and must continue through the
+    ordinary create and post-create verification path.
+    """
+    if record.get("preimage_absent") is True:
+        return False
+    preimage_body = record.get("preimage_body")
+    preimage = (parse_json(_journal_body(journal, preimage_body), "journal preimage")
+                if isinstance(preimage_body, dict) else None)
+    state = record.get("preimage_stats_state")
+    return (not isinstance(preimage, dict) or not isinstance(state, str)
+            or not transform_preapply_restore_proven(es_url, authorization, asset, preimage, state))
+
+
 def _fence_transaction_consumer(root: Path) -> None:
     """Make a published local consumer unable to use its key before revocation."""
     credentials = root / "credentials.toml"
@@ -2029,7 +2047,9 @@ def journal_verify_owned_asset(journal: TransactionJournal, records: list[dict],
         raise InputError("journal verification differs")
     if asset.kind == "transforms":
         expected_state = records[0].get("preimage_stats_state")
-        if not isinstance(expected_state, str) or _transform_stats_state(es_url, path, authorization) != expected_state:
+        if (records[0].get("preimage_absent") is not True
+                and (not isinstance(expected_state, str)
+                     or _transform_stats_state(es_url, path, authorization) != expected_state)):
             raise InputError("transform state differs")
     journal.write_verified(records[0], after)
 
@@ -2796,17 +2816,12 @@ def main() -> int:
                     if asset.kind == "index_templates" and asset.name == "logs-rigsignal.stream" and action != "noop":
                         lifecycle_delete_phase_free(es_url, authorization)
                     records = journal_owned_asset(journal, es_url, kb_url, authorization, asset, action)
-                    if asset.kind == "transforms" and action != "noop":
-                        preimage_body = records[0].get("preimage_body")
-                        preimage = (parse_json(_journal_body(journal, preimage_body), "journal preimage")
-                                    if isinstance(preimage_body, dict) else None)
-                        state = records[0].get("preimage_stats_state")
-                        if (not isinstance(preimage, dict) or not isinstance(state, str)
-                                or not transform_preapply_restore_proven(
-                                    es_url, authorization, asset, preimage, state)):
-                            journal.mark_transform_verify_only(
-                                records[0], "meta_absent_restore_unproven_preapply")
-                            action = "noop"
+                    if (asset.kind == "transforms" and action != "noop"
+                            and transform_preapply_requires_verify_only(
+                                journal, records[0], es_url, authorization, asset)):
+                        journal.mark_transform_verify_only(
+                            records[0], "meta_absent_restore_unproven_preapply")
+                        action = "noop"
                     fault("after-write-intent")
                 if action != "noop":
                     if asset.kind == "dashboard":

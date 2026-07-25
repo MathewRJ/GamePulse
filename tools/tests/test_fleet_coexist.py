@@ -274,6 +274,71 @@ class FleetCoexistenceTests(unittest.TestCase):
                 {"description": "before", "pivot": {"group_by": {}}}, "started"))
         self.assertEqual(len(calls), 1)  # desired rehearsal write; no normal apply follows this false gate
 
+    def test_fresh_transform_skips_preapply_gate_creates_and_journal_verifies(self):
+        asset = INSTALL.Asset("transforms", "rigsignal-game-timeline", "fixture",
+                              b'{"description":"after","pivot":{"group_by":{}}}')
+        live = (b'{"transforms":[{"id":"rigsignal-game-timeline",'
+                b'"description":"after","pivot":{"group_by":{}},"state":"started"}]}')
+        created = False
+        calls = []
+
+        def request(_base, path, method, _authorization, data=None, headers=None):
+            nonlocal created
+            calls.append((method, path, data))
+            if path == "/_transform/rigsignal-game-timeline" and method == "GET":
+                if not created:
+                    raise INSTALL.RequestFailure(404, "missing")
+                return live
+            if path == "/_transform/rigsignal-game-timeline" and method == "PUT":
+                created = True
+                return b"{}"
+            raise AssertionError(f"unexpected request: {method} {path}")
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            with mock.patch.object(INSTALL, "request", side_effect=request), \
+                 mock.patch.object(INSTALL, "transform_preapply_restore_proven") as rehearsal:
+                records = INSTALL.journal_owned_asset(journal, "https://es", "https://kb", "auth", asset,
+                                                      "create")
+                self.assertFalse(INSTALL.transform_preapply_requires_verify_only(
+                    journal, records[0], "https://es", "auth", asset))
+                rehearsal.assert_not_called()
+                INSTALL.install_asset("https://es", "https://kb", "auth", asset)
+                INSTALL.journal_verify_owned_asset(journal, records, "https://es", "https://kb", "auth", asset)
+
+            self.assertTrue(created)
+            self.assertNotIn("verify_only", records[0])
+            self.assertTrue(records[0]["write_verified"])
+            self.assertIn(("PUT", "/_transform/rigsignal-game-timeline", asset.data), calls)
+
+    def test_existing_transform_unproven_preapply_is_journaled_verify_only_before_apply(self):
+        asset = INSTALL.Asset("transforms", "rigsignal-game-timeline", "fixture",
+                              b'{"description":"after","pivot":{"group_by":{}}}')
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            record = journal.write_intent(
+                "transforms", asset.name, "update", "before", "after", asset.data,
+                preimage_body=INSTALL.jcs({"description": "before", "pivot": {"group_by": {}}}),
+                preimage_stats_state="started")
+            apply = mock.Mock()
+            action = "update"
+            with mock.patch.object(INSTALL, "transform_preapply_restore_proven", return_value=False) as rehearsal:
+                if INSTALL.transform_preapply_requires_verify_only(journal, record, "https://es", "auth", asset):
+                    journal.mark_transform_verify_only(record, "meta_absent_restore_unproven_preapply")
+                    action = "noop"
+                if action != "noop":
+                    apply("https://es", "https://kb", "auth", asset)
+
+            rehearsal.assert_called_once_with(
+                "https://es", "auth", asset,
+                {"description": "before", "pivot": {"group_by": {}}}, "started")
+            apply.assert_not_called()
+            self.assertTrue(record["verify_only"])
+            self.assertEqual(record["verify_only_reason"], "meta_absent_restore_unproven_preapply")
+            self.assertEqual(record["action"], "noop")
+
     def test_second_rollback_is_refused_before_any_external_or_restore_call(self):
         with tempfile.TemporaryDirectory() as directory:
             root = INSTALL.secure_root(Path(directory) / "transaction")
