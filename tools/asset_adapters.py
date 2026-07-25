@@ -384,6 +384,16 @@ def _owned_value_dominates(expected: object, live: object, path: tuple[str, ...]
     if isinstance(expected, list):
         if not isinstance(live, list):
             return False
+        if path == ("settings", "index", "dimensions"):
+            # ES may resolve TSDB dimensions in a different order for inline
+            # and named-template simulations.  Dimensions are semantic set
+            # membership, however, so neither side may add or omit one.
+            try:
+                return set(expected) == set(live)
+            except TypeError:
+                # A malformed non-scalar dimensions entry cannot be compared
+                # as a dimension name and must not be treated as equivalent.
+                return False
         if path == ("mappings", "dynamic_templates"):
             def named(items: list[object]) -> dict[str, object] | None:
                 result: dict[str, object] = {}

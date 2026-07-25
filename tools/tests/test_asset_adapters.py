@@ -164,6 +164,22 @@ class AssetAdapterTests(unittest.TestCase):
         after["template"]["settings"]["index.time_series.look_ahead_time"] = "45m"
         self.assertNotEqual(ADAPTERS.simulation_outcome(before), ADAPTERS.simulation_outcome(after))
 
+    def test_simulation_dominance_compares_tsdb_dimensions_as_exact_set(self):
+        expected = {"template": {"mappings": {}, "aliases": {}, "settings": {
+            "index": {"dimensions": ["host.name", "service.name", "data_stream.dataset"]}}}}
+        reordered = deepcopy(expected)
+        reordered["template"]["settings"]["index"]["dimensions"] = [
+            "data_stream.dataset", "host.name", "service.name"]
+        self.assertTrue(ADAPTERS.simulation_outcome_dominates(expected, reordered))
+
+        missing = deepcopy(expected)
+        missing["template"]["settings"]["index"]["dimensions"] = ["host.name", "service.name"]
+        self.assertFalse(ADAPTERS.simulation_outcome_dominates(expected, missing))
+
+        extra = deepcopy(expected)
+        extra["template"]["settings"]["index"]["dimensions"].append("container.id")
+        self.assertFalse(ADAPTERS.simulation_outcome_dominates(expected, extra))
+
     def test_simulation_dominance_tolerates_real_fleet_additions_but_not_owned_conflicts(self):
         expected = {"template": {"mappings": {"_meta": {"managed_by": "rigsignal"},
                                                "properties": {"event": {"properties": {"id": {"type": "keyword"}}}}},
