@@ -359,15 +359,18 @@ i.atomic_publication(r, {n: ('new-' + n).encode() for n in ('credentials.toml','
         with self.assertRaises(INSTALL.InputError): INSTALL.projection(component, {"component_templates": []})
 
     def test_external_index_template_simulation_difference_names_asset(self):
-        expected = {"index_patterns": ["logs-rigsignal.events-*"], "data_stream": {},
-                    "template": {"mappings": {}, "settings": {}}}
+        expected = {"index_patterns": ["logs-rigsignal.events-*"], "data_stream": {}, "composed_of": [],
+                    "template": {"mappings": {"dynamic": "strict"}, "settings": {}}}
         asset = INSTALL.Asset("index_templates", "logs-rigsignal.events", "x",
                               json.dumps(expected).encode("utf-8"))
-        response = {"index_templates": [{"name": asset.name, "index_template": expected}]}
+        response_body = dict(expected)
+        response_body["composed_of"] = [".fleet_globals-1", ".fleet_agent_id_verification-1"]
+        response = {"index_templates": [{"name": asset.name, "index_template": response_body}]}
 
         def simulated(_url, _path, _method, _authorization, payload):
             settings = {} if payload is not None else {"index.mode": "logsdb"}
-            return {"template": {"mappings": {}, "settings": settings, "aliases": {}}}
+            mappings = {"dynamic": "strict"} if payload is not None else {"dynamic": "true"}
+            return {"template": {"mappings": mappings, "settings": settings, "aliases": {}}}
 
         with patch.object(INSTALL, "request", return_value=json.dumps(response).encode("utf-8")), \
              patch.object(INSTALL, "es_json", side_effect=simulated), \

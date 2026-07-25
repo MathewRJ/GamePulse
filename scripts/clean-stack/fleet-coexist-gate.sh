@@ -9,13 +9,13 @@ source "$SCRIPT_DIR/lib.sh"
 
 ES_VERSION='' KB_VERSION='' BUNDLE='' KEEP=0
 declare -a LEGS=()
-usage() { printf '%s\n' 'Usage: fleet-coexist-gate.sh --es-version 9.4.3|9.4.4 [--kb-version VERSION] --leg a..h [--bundle PATH] [--all]' >&2; }
+usage() { printf '%s\n' 'Usage: fleet-coexist-gate.sh --es-version 9.4.3|9.4.4 [--kb-version VERSION] --leg a..i [--bundle PATH] [--all]' >&2; }
 version() { [[ "$1" =~ ^9\.4\.[34]$ ]]; }
 fail() { printf 'ASSERT FAIL %s\n' "$*" >&2; return 1; }
 while (($#)); do case "$1" in
   --es-version) ES_VERSION="${2:-}"; shift 2 ;; --kb-version) KB_VERSION="${2:-}"; shift 2 ;;
   --bundle) BUNDLE="${2:-}"; shift 2 ;; --leg) LEGS+=("${2:-}"); shift 2 ;;
-  --all) LEGS=(a b c d e f g h); shift ;; --keep) KEEP=1; shift ;;
+  --all) LEGS=(a b c d e f g h i); shift ;; --keep) KEEP=1; shift ;;
   -h|--help) usage; exit 0 ;; *) usage; exit 2 ;; esac; done
 [[ -n "$ES_VERSION" ]] || { usage; exit 2; }; KB_VERSION="${KB_VERSION:-$ES_VERSION}"
 version "$ES_VERSION" && version "$KB_VERSION" && [[ "$ES_VERSION" == "$KB_VERSION" ]] || { usage; exit 2; }
@@ -49,21 +49,66 @@ installer() { python3 "${CLEAN_STACK_INSTALLER:-$REPO_ROOT/tools/install_assets.
 rollback() { python3 "${CLEAN_STACK_INSTALLER:-$REPO_ROOT/tools/install_assets.py}" --endpoint "$ES_URL" --ca-file "$CS_CA_FILE" --kibana-endpoint "$KB_URL" --kibana-ca-file "$CS_CA_FILE" --admin-credentials-file "$RUN_DIR/admin.toml" --agent-binary "$CLEAN_STACK_AGENT_BINARY" --profile user --rollback "$RUN_DIR/enrollment"; }
 seed() { ES_URL="$ES_URL" ELASTIC_PASSWORD="$ELASTIC_PASSWORD" "$SCRIPT_DIR/fleet-coexist-seed.sh" "$@"; }
 setup() { start_stack; build_bundle; write_admin; seed; }
-marker_check() { api GET '/_component_template/rigsignal-bundle-meta' >"$RUN_DIR/marker.json"; jq -e '[.component_templates[0].component_template._meta.applied_owned_assets[]|[.kind,.name]] as $a | [.component_templates[0].component_template._meta.verified_external_assets[]|[.kind,.name]] as $e | ($a|length)==16 and ($e|length)==39 and (($a+$e)|unique|length)==55' "$RUN_DIR/marker.json" >/dev/null; }
-expect_refusal() { local code="$1"; shift; if "$@" >"$RUN_DIR/refusal.out" 2>&1; then fail "$code unexpectedly succeeded"; fi; grep -Fx "install refused: $code" "$RUN_DIR/refusal.out" >/dev/null || { cat "$RUN_DIR/refusal.out" >&2; fail "$code wrong refusal"; }; }
+marker_check() { api GET '/_component_template/rigsignal-bundle-meta' >"$RUN_DIR/marker.json"; jq -e '[.component_templates[0].component_template._meta.applied_owned_assets[]|[.kind,.name]] as $a | [.component_templates[0].component_template._meta.verified_external_assets[]|[.kind,.name]] as $e | ($a|length)==16 and ($e|length)==39 and (($a+$e)|unique|length)==55 and ([.component_templates[0].component_template._meta.applied_owned_assets[].action] | all(. == "create" or . == "update" or . == "import" or . == "noop")) and ([.component_templates[0].component_template._meta.verified_external_assets[].compatibility_projection_sha256] | all(type == "string" and test("^[0-9a-f]{64}$")))' "$RUN_DIR/marker.json" >/dev/null; }
+expect_refusal() { local code="$1"; shift; if "$@" >"$RUN_DIR/refusal.out" 2>&1; then fail "$code unexpectedly succeeded"; fi; grep -E "^install refused: ${code}(:|$)" "$RUN_DIR/refusal.out" >/dev/null || { cat "$RUN_DIR/refusal.out" >&2; fail "$code wrong refusal"; }; }
+simulation_canary() {
+  tar -xOf "$BUNDLE" elastic/index-templates/metrics-rigsignal.cpu.json >"$RUN_DIR/canary-template.json"
+  python3 - "$REPO_ROOT" "$RUN_DIR/canary-template.json" "$RUN_DIR/canary-body.json" "$RUN_DIR/canary-index" <<'PY'
+import json, pathlib, sys
+sys.path.insert(0, sys.argv[1] + "/tools")
+import asset_adapters
+template = json.load(open(sys.argv[2]))
+body, index = asset_adapters.synthetic_simulation_template(template, "gate-canary")
+json.dump(body, open(sys.argv[3], "w"), sort_keys=True)
+pathlib.Path(sys.argv[4]).write_text(index)
+PY
+  api POST "/_index_template/_simulate_index/$(<"$RUN_DIR/canary-index")" --data-binary "@$RUN_DIR/canary-body.json" >"$RUN_DIR/canary-bundle-outcome.json"
+  api POST '/_index_template/_simulate_index/metrics-rigsignal.cpu-rigsignal-a5-probe' >"$RUN_DIR/canary-live-outcome.json"
+  python3 - "$REPO_ROOT" "$RUN_DIR/canary-bundle-outcome.json" "$RUN_DIR/canary-live-outcome.json" <<'PY'
+import json, sys
+sys.path.insert(0, sys.argv[1] + "/tools")
+import asset_adapters
+bundle = asset_adapters.simulation_outcome(json.load(open(sys.argv[2])))
+live = asset_adapters.simulation_outcome(json.load(open(sys.argv[3])))
+if bundle == live:
+    raise SystemExit("simulate canary did not differ; equality oracle regression is undetected")
+PY
+}
+external_hashes_check() {
+  local kind name path n=0 list="$RUN_DIR/external-hash-inputs.tsv"
+  : >"$list"
+  while IFS=$'\t' read -r kind name; do
+    case "$kind" in component_templates) path="/_component_template/$name";; index_templates) path="/_index_template/$name";; pipelines) path="/_ingest/pipeline/$name";; *) fail "unknown external kind $kind";; esac
+    api GET "$path" >"$RUN_DIR/external-body-$n.json"
+    printf '%s\t%s\t%s\n' "$kind" "$name" "$RUN_DIR/external-body-$n.json" >>"$list"
+    n=$((n + 1))
+  done < <(jq -r '.component_templates[0].component_template._meta.verified_external_assets[] | [.kind,.name] | @tsv' "$RUN_DIR/marker.json")
+  python3 - "$REPO_ROOT" "$RUN_DIR/marker.json" "$list" <<'PY'
+import json, sys
+sys.path.insert(0, sys.argv[1] + "/tools")
+import asset_adapters
+marker = json.load(open(sys.argv[2]))["component_templates"][0]["component_template"]["_meta"]
+pins = {(x["kind"], x["name"]): x["compatibility_projection_sha256"] for x in marker["verified_external_assets"]}
+for line in open(sys.argv[3]):
+    kind, name, path = line.rstrip("\n").split("\t")
+    actual = asset_adapters.sha256(asset_adapters.compatibility_projection(kind, json.load(open(path))))
+    if pins[(kind, name)] != actual:
+        raise SystemExit("marker external hash mismatch: " + kind + "/" + name)
+PY
+}
 # Exactly the 39 external asset paths (13 components @package, 13 stream index
 # templates, 13 pipelines -0.5.0). Owned assets that share the metrics- prefix
 # (metrics-rigsignal.profiles) or logs- prefix (logs-rigsignal.stream,
 # diagnosis chain) must NOT match: the installer legitimately writes them.
 EXTERNAL_STREAMS='(logs-rigsignal\.events|metrics-rigsignal\.(audio|cpu|ebpf|ebpf_thread|frame|gpu|memory|network|power|session|storage|stream_client))'
-EXTERNAL_WRITE_RE="^(PUT|POST|DELETE) (/_component_template/${EXTERNAL_STREAMS}@package|/_index_template/${EXTERNAL_STREAMS}|/_ingest/pipeline/${EXTERNAL_STREAMS}-0\.5\.0)\$"
+EXTERNAL_WRITE_RE="^(PUT|POST|DELETE) (/_component_template/${EXTERNAL_STREAMS}(@|%40)package|/_index_template/${EXTERNAL_STREAMS}|/_ingest/pipeline/${EXTERNAL_STREAMS}-0\.5\.0)\$"
 external_audit_clean() { local log="$1"; ! grep -E "$EXTERNAL_WRITE_RE" "$log"; }
 installer_unresolved() { RIGSIGNAL_TEST_UNRESOLVED_ASSET=1 installer; }
 installer_bad_health() { RIGSIGNAL_TEST_CLUSTER_HEALTH=red installer; }
 installer_bad_ilm() { RIGSIGNAL_TEST_ILM_DELETE_PHASE=1 installer; }
 
 # Dirty Fleet assets + reinstall/upgrade rehearsal.
-leg_a() { setup; installer; marker_check; seed --upgrade; installer; marker_check; }
+leg_a() { setup; installer; marker_check; simulation_canary; external_hashes_check; jq -e '[.component_templates[0].component_template._meta.applied_owned_assets[].action] | all(. == "create" or . == "update" or . == "import")' "$RUN_DIR/marker.json" >/dev/null; seed --upgrade; installer; marker_check; external_hashes_check; jq -e '[.component_templates[0].component_template._meta.applied_owned_assets[].action] | all(. == "noop")' "$RUN_DIR/marker.json" >/dev/null; }
 
 # The real transform inverse is exercised on the running version pair.  The
 # fallback is explicitly accepted only for ES rejecting an absent-_meta restore.
@@ -102,7 +147,7 @@ leg_b() {
   transform_get "$RUN_DIR/transform-applied.json"
   transform_meta_matches_bundle "$RUN_DIR/transform-applied.json" || fail 'transform _meta did not match bundle after apply'
   transform_assert_state "$RUN_DIR/transform-applied.json" "$RUN_DIR/transform-applied-stats.json"
-  rollback >"$RUN_DIR/transform-normal-rollback.out"
+  rollback 2>&1 | tee -a "$RUN_DIR/leg-b-transform-rollback.log" >"$RUN_DIR/transform-normal-rollback.out"
   transform_get "$RUN_DIR/transform-after.json"
   if transform_meta_absent "$RUN_DIR/transform-after.json"; then
     transform_assert_state "$RUN_DIR/transform-after.json" "$RUN_DIR/transform-after-stats.json"
@@ -121,9 +166,9 @@ leg_b() {
   transform_get "$RUN_DIR/transform-fallback-before.json"
   transform_meta_absent "$RUN_DIR/transform-fallback-before.json" || fail 'transform _meta was present before fallback rehearsal'
   transform_assert_state "$RUN_DIR/transform-fallback-before.json" "$RUN_DIR/transform-fallback-before-stats.json"
-  installer
-  RIGSIGNAL_TEST_TRANSFORM_META_RESTORE_REJECT=1 rollback >"$RUN_DIR/transform-verify-only.out"
-  grep -Fx 'rollback completed from journaled intents; transform _meta absence could not be restored: verify-only cosmetic drift accepted' "$RUN_DIR/transform-verify-only.out" >/dev/null || fail 'transform verify-only fallback was not reported'
+  RIGSIGNAL_TEST_TRANSFORM_META_RESTORE_REJECT=1 installer
+  jq -e '.intents[] | select(.kind == "transforms") | .verify_only == true and .verify_only_reason == "meta_absent_restore_unproven_preapply"' "$RUN_DIR/enrollment/fleet-coexist-journal.json" >/dev/null || fail 'transform pre-apply proof gate did not choose verify-only'
+  rollback 2>&1 | tee -a "$RUN_DIR/leg-b-transform-rollback.log" >"$RUN_DIR/transform-verify-only.out"
   transform_get "$RUN_DIR/transform-verify-only.json"
   transform_meta_matches_bundle "$RUN_DIR/transform-verify-only.json" || fail 'transform verify-only fallback did not retain accepted _meta drift'
   transform_assert_state "$RUN_DIR/transform-verify-only.json" "$RUN_DIR/transform-verify-only-stats.json"
@@ -174,11 +219,15 @@ leg_c() {
 # stack present an unrepresentable condition and are inert without their env vars.
 leg_d() { setup; installer; expect_refusal omitted_profile_on_coexist env -u RIGSIGNAL_HTTP_AUDIT_LOG python3 "$REPO_ROOT/tools/install_assets.py" --bundle "$BUNDLE" --endpoint "$ES_URL" --ca-file "$CS_CA_FILE" --kibana-endpoint "$KB_URL" --kibana-ca-file "$CS_CA_FILE" --admin-credentials-file "$RUN_DIR/admin.toml" --agent-binary "$CLEAN_STACK_AGENT_BINARY" --profile user --enrollment-root "$RUN_DIR/enrollment"; expect_refusal ownership_profile_mismatch env python3 "$REPO_ROOT/tools/install_assets.py" --bundle "$BUNDLE" --endpoint "$ES_URL" --ca-file "$CS_CA_FILE" --kibana-endpoint "$KB_URL" --kibana-ca-file "$CS_CA_FILE" --admin-credentials-file "$RUN_DIR/admin.toml" --agent-binary "$CLEAN_STACK_AGENT_BINARY" --profile user --enrollment-root "$RUN_DIR/enrollment" --ownership-profile default; expect_refusal ownership_table_unresolved installer_unresolved; expect_refusal cluster_health installer_bad_health; expect_refusal ilm_delete_phase installer_bad_ilm; printf '[elasticsearch]\napi_key = "x"\n' >"$RUN_DIR/api-key.toml"; chmod 600 "$RUN_DIR/api-key.toml"; expect_refusal admin_credential_api_key env CLEAN_STACK_INSTALLER="$REPO_ROOT/tools/install_assets.py" python3 "$REPO_ROOT/tools/install_assets.py" --bundle "$BUNDLE" --endpoint "$ES_URL" --ca-file "$CS_CA_FILE" --kibana-endpoint "$KB_URL" --kibana-ca-file "$CS_CA_FILE" --admin-credentials-file "$RUN_DIR/api-key.toml" --agent-binary "$CLEAN_STACK_AGENT_BINARY" --profile user --enrollment-root "$RUN_DIR/api-key-root" --ownership-profile fleet-coexist; }
 
-leg_e() { setup; installer; api POST '/logs-rigsignal.events-default/_rollover' >/dev/null || true; installer; marker_check; }
+leg_e() { setup; api PUT '/_data_stream/logs-rigsignal.events-default' >/dev/null; api GET '/_data_stream/logs-rigsignal.events-default' >"$RUN_DIR/rollover-before.json"; installer; api POST '/logs-rigsignal.events-default/_rollover' >/dev/null; api GET '/_data_stream/logs-rigsignal.events-default' >"$RUN_DIR/rollover-after.json"; jq -e '(.data_streams[0].indices|length) > 1' "$RUN_DIR/rollover-after.json" >/dev/null; installer; marker_check; }
+
+# Two completed transactions share one root.  Rolling back N=2 must retain
+# N=1's archived proofs and restore N=1's marker rather than deleting it.
+leg_i() { setup; installer; marker_check; cp "$RUN_DIR/enrollment/fleet-coexist-journal.json" "$RUN_DIR/transaction-1.json"; cp "$RUN_DIR/marker.json" "$RUN_DIR/marker-1.json"; seed --upgrade; installer; rollback; jq -e '.transactions|length == 1 and .transactions[0].apply_ok == true' "$RUN_DIR/enrollment/fleet-coexist-journal.json" >/dev/null; while read -r event_id; do jq -n --arg id "$event_id" '{query:{ids:{values:[$id]}},size:2}' >"$RUN_DIR/proof-query.json"; api POST '/logs-rigsignal.diagnosis-default/_search' --data-binary "@$RUN_DIR/proof-query.json" >"$RUN_DIR/proof-$event_id.json"; jq -e --arg id "$event_id" '.hits.hits | length == 1 and .[0]._id == $id' "$RUN_DIR/proof-$event_id.json" >/dev/null || fail "transaction-1 proof missing: $event_id"; done < <(jq -r '.proofs[].event_id' "$RUN_DIR/transaction-1.json"); api GET '/_component_template/rigsignal-bundle-meta' >"$RUN_DIR/marker-restored.json"; jq -e '.component_templates[0].component_template._meta.ownership_profile == "fleet-coexist"' "$RUN_DIR/marker-restored.json" >/dev/null; expect_refusal transaction_already_rolled_back rollback; }
 
 # Recording transport audit and its mandatory identical-body external PUT negative control.
 leg_f() { setup; : >"$RUN_DIR/audit.log"; RIGSIGNAL_HTTP_AUDIT_LOG="$RUN_DIR/audit.log" installer; external_audit_clean "$RUN_DIR/audit.log" || fail 'external write audit saw a write'; : >"$RUN_DIR/audit-negative.log"; RIGSIGNAL_HTTP_AUDIT_LOG="$RUN_DIR/audit-negative.log" RIGSIGNAL_TEST_EXTERNAL_WRITE=1 installer || true; grep -E "$EXTERNAL_WRITE_RE" "$RUN_DIR/audit-negative.log" >/dev/null || fail 'external write audit negative control did not fire'; }
 
 leg_g() { setup; installer; marker_check; jq -e '[.component_templates[0].component_template._meta|has("installed_assets")|not]' "$RUN_DIR/marker.json" >/dev/null; }
 leg_h() { build_bundle; printf 'GATE ARTIFACT commit=%s bundle_sha256=%s\n' "$IMPLEMENTING_COMMIT" "$BUNDLE_SHA256"; }
-for leg in "${LEGS[@]}"; do case "$leg" in a|b|c|d|e|f|g|h) "leg_$leg" ;; *) fail "unknown leg: $leg"; exit 2 ;; esac; done
+for leg in "${LEGS[@]}"; do case "$leg" in a|b|c|d|e|f|g|h|i) "leg_$leg" ;; *) fail "unknown leg: $leg"; exit 2 ;; esac; done

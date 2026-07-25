@@ -253,14 +253,11 @@ def compatibility_projection(kind: str, live_body: object) -> object:
     if not isinstance(body, dict):
         raise AdapterError("asset body is not an object")
     body = deepcopy(body)
-    meta = body.get("_meta")
-    if isinstance(meta, dict):
-        meta = dict(meta)
-        meta.pop("managed_by", None)
-        if meta:
-            body["_meta"] = meta
-        else:
-            body.pop("_meta", None)
+    # Fleet owns template metadata.  In particular a reinstall can add
+    # ``_meta.package.version`` between invocations.  Metadata is not an
+    # operational template contribution, so compare the non-meta body only.
+    # (Do not apply this relaxation to bundle-owned verification.)
+    body.pop("_meta", None)
     if kind == "index_templates":
         composed = body.get("composed_of")
         if isinstance(composed, list):
@@ -362,9 +359,58 @@ def simulation_outcome(value: object) -> dict:
         "mappings": mappings,
         "settings": settings,
         "aliases": aliases,
-        "default_pipeline": settings.get("index.default_pipeline"),
-        "lifecycle": settings.get("index.lifecycle.name"),
     }
+
+
+def _owned_value_dominates(expected: object, live: object, path: tuple[str, ...] = ()) -> bool:
+    """Return whether every bundle-declared resolved path survives in live.
+
+    Fleet may add resolved paths through its two verification components.  It
+    must never override a bundle declaration.  Dynamic templates are an ES
+    list but semantically keyed by their single template name, so matching by
+    position would make a harmless Fleet insertion look like a conflict.
+    """
+    if path == ("mappings", "_meta", "managed_by"):
+        # Binding owner-cluster probe: Fleet intentionally overrides this
+        # ownership label.  It is not an owned mapping contribution.
+        return True
+    if isinstance(expected, dict):
+        if not isinstance(live, dict):
+            return False
+        for key, member in expected.items():
+            if key not in live or not _owned_value_dominates(member, live[key], path + (key,)):
+                return False
+        return True
+    if isinstance(expected, list):
+        if not isinstance(live, list):
+            return False
+        if path == ("mappings", "dynamic_templates"):
+            def named(items: list[object]) -> dict[str, object] | None:
+                result: dict[str, object] = {}
+                for item in items:
+                    if not isinstance(item, dict) or len(item) != 1:
+                        return None
+                    name, body = next(iter(item.items()))
+                    if not isinstance(name, str) or name in result:
+                        return None
+                    result[name] = body
+                return result
+            expected_named, live_named = named(expected), named(live)
+            if expected_named is None or live_named is None:
+                return False
+            return all(name in live_named and _owned_value_dominates(body, live_named[name], path + (name,))
+                       for name, body in expected_named.items())
+        # No other resolved list is a Fleet extension point; preserve exact
+        # list semantics for aliases and mapping constructs.
+        return len(expected) == len(live) and all(
+            _owned_value_dominates(member, live[index], path + (str(index),))
+            for index, member in enumerate(expected))
+    return expected == live
+
+
+def simulation_outcome_dominates(expected: object, live: object) -> bool:
+    """Owned-scoped `_simulate_index` oracle for Fleet index templates."""
+    return _owned_value_dominates(simulation_outcome(expected), simulation_outcome(live))
 
 
 def simulate_index_equivalent(request_fn, expected_path: str, expected_body: object,
@@ -378,4 +424,4 @@ def simulate_index_equivalent(request_fn, expected_path: str, expected_body: obj
     """
     expected = request_fn(expected_path, expected_body)
     live = request_fn(live_path, None)
-    return canonical_json(simulation_outcome(expected)) == canonical_json(simulation_outcome(live))
+    return simulation_outcome_dominates(expected, live)

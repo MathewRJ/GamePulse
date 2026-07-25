@@ -163,3 +163,16 @@ class AssetAdapterTests(unittest.TestCase):
         self.assertEqual(ADAPTERS.simulation_outcome(before), ADAPTERS.simulation_outcome(after))
         after["template"]["settings"]["index.time_series.look_ahead_time"] = "45m"
         self.assertNotEqual(ADAPTERS.simulation_outcome(before), ADAPTERS.simulation_outcome(after))
+
+    def test_simulation_dominance_tolerates_real_fleet_additions_but_not_owned_conflicts(self):
+        expected = {"template": {"mappings": {"_meta": {"managed_by": "rigsignal"},
+                                               "properties": {"event": {"properties": {"id": {"type": "keyword"}}}}},
+                                  "settings": {}, "aliases": {}}}
+        live = deepcopy(expected)
+        live["template"]["mappings"].update({"date_detection": False, "dynamic_templates": [
+            {"strings_as_keyword": {"match_mapping_type": "string", "mapping": {"type": "keyword"}}}]})
+        live["template"]["mappings"]["_meta"]["managed_by"] = "fleet"
+        live["template"]["settings"] = {"index": {"final_pipeline": ".fleet_final_pipeline-1"}}
+        self.assertTrue(ADAPTERS.simulation_outcome_dominates(expected, live))
+        live["template"]["mappings"]["properties"]["event"]["properties"]["id"]["type"] = "text"
+        self.assertFalse(ADAPTERS.simulation_outcome_dominates(expected, live))

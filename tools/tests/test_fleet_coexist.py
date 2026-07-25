@@ -84,6 +84,18 @@ class FleetCoexistenceTests(unittest.TestCase):
         with self.assertRaises(INSTALL.InputError):
             INSTALL.ownership_for_assets(bundle, "fleet-coexist")
 
+    def test_ownership_refusals_name_assets_and_cardinality_has_its_own_code(self):
+        bundle = INSTALL.load_source()
+        bundle.assets.append(INSTALL.Asset("pipelines", "unclassified", "", b"{}"))
+        with self.assertRaisesRegex(INSTALL.OwnershipTableError,
+                                    r"ownership_table_unresolved: pipelines/unclassified"):
+            INSTALL.ownership_for_assets(bundle, "fleet-coexist")
+        moved = next(iter(INSTALL._OWNED_ASSET_KEYS))
+        with mock.patch.object(INSTALL, "_OWNED_ASSET_KEYS", INSTALL._OWNED_ASSET_KEYS - {moved}), \
+             mock.patch.object(INSTALL, "_EXTERNAL_ASSET_KEYS", INSTALL._EXTERNAL_ASSET_KEYS | {moved}):
+            with self.assertRaisesRegex(INSTALL.OwnershipTableError, "ownership_table_cardinality"):
+                INSTALL.ownership_for_assets(INSTALL.load_source(), "fleet-coexist")
+
     def test_marker_requires_complete_disjoint_accounting(self):
         bundle = INSTALL.load_source()
         with self.assertRaises(INSTALL.InputError):
@@ -101,6 +113,33 @@ class FleetCoexistenceTests(unittest.TestCase):
             self.assertNotIn("write_verified", loaded["intents"][0])
             journal.write_verified(record, "after")
             self.assertTrue(INSTALL.parse_json((root / INSTALL.JOURNAL_FILE).read_bytes(), "journal")["intents"][0]["write_verified"])
+
+    def test_new_transaction_archives_prior_proofs_and_opens_empty_scope(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "state")
+            first = INSTALL.TransactionJournal(root, "fleet-coexist")
+            first.proof_intent("provision-one")
+            first.apply_ok()
+            second = INSTALL.TransactionJournal(root, "fleet-coexist", new_transaction=True)
+            self.assertEqual(second.value["proofs"], [])
+            self.assertFalse(second.value["apply_ok"])
+            self.assertEqual(second.value["transactions"][0]["proofs"][0]["event_id"], "provision-one")
+
+    def test_remote_profile_fence_refuses_default_against_coexist_marker(self):
+        marker = {"component_templates": [{"component_template": {
+            "_meta": {"ownership_profile": "fleet-coexist"}, "template": {}}}]}
+        with mock.patch.object(INSTALL, "request", return_value=json.dumps(marker).encode()):
+            with self.assertRaisesRegex(INSTALL.ProvisionError, "omitted_profile_on_coexist"):
+                INSTALL.fence_remote_ownership_profile("https://es", "auth", "default", True)
+
+    def test_external_index_template_requires_both_fleet_components(self):
+        asset = INSTALL.Asset("index_templates", "metrics-rigsignal.cpu", "fixture",
+                              b'{"index_patterns":["metrics-rigsignal.cpu-*"],"composed_of":[],"template":{}}')
+        live = {"index_templates": [{"name": asset.name, "index_template": {
+            "index_patterns": ["metrics-rigsignal.cpu-*"], "composed_of": [".fleet_globals-1"], "template": {}}}]}
+        with mock.patch.object(INSTALL, "request", return_value=json.dumps(live).encode()):
+            with self.assertRaisesRegex(INSTALL.InputError, "external Fleet composition differs"):
+                INSTALL.verify_external_asset("https://es", "auth", asset)
 
     def test_ambiguous_crash_uses_only_persisted_three_way_pins(self):
         intent = {"preimage_sha256": "before", "intended_after_sha256": "after"}
@@ -218,12 +257,33 @@ class FleetCoexistenceTests(unittest.TestCase):
                  mock.patch.object(INSTALL, "rollback_transaction_proofs"), \
                  mock.patch.object(INSTALL, "verify_m1_anchors"), \
                  mock.patch.object(INSTALL, "_rollback_live_hash", side_effect=["after", "before"]):
-                operations = INSTALL.rollback_transaction("https://es", "https://kb", "auth", root)
-            self.assertIn("verify-only:transforms/rigsignal-game-timeline", operations)
-            self.assertEqual(INSTALL.TransactionJournal(root, "fleet-coexist").value["degradations"], [{
-                "kind": "transforms", "name": "rigsignal-game-timeline",
-                "reason": "meta_absent_restore_rejected_verify_only",
-            }])
+                with self.assertRaises(INSTALL.RequestFailure):
+                    INSTALL.rollback_transaction("https://es", "https://kb", "auth", root)
+
+    def test_transform_preapply_gate_falls_back_before_apply_on_unproven_restore(self):
+        asset = INSTALL.Asset("transforms", "rigsignal-game-timeline", "fixture",
+                              b'{"description":"after","pivot":{"group_by":{}}}')
+        calls = []
+        def request(*args, **kwargs):
+            calls.append(args)
+            return b"{}"
+        with mock.patch.dict("os.environ", {"RIGSIGNAL_TEST_TRANSFORM_META_RESTORE_REJECT": "1"}), \
+             mock.patch.object(INSTALL, "request", side_effect=request):
+            self.assertFalse(INSTALL.transform_preapply_restore_proven(
+                "https://es", "auth", asset,
+                {"description": "before", "pivot": {"group_by": {}}}, "started"))
+        self.assertEqual(len(calls), 1)  # desired rehearsal write; no normal apply follows this false gate
+
+    def test_second_rollback_is_refused_before_any_external_or_restore_call(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            journal.value["rollback_ok"] = True
+            journal._persist()
+            with mock.patch.object(INSTALL, "verify_rollback_external_baselines") as baselines:
+                with self.assertRaisesRegex(INSTALL.ProvisionError, "transaction_already_rolled_back"):
+                    INSTALL.rollback_transaction("https://es", "https://kb", "auth", root)
+            baselines.assert_not_called()
 
     def test_rollback_absent_preimage_never_created_skips_inverse(self):
         with tempfile.TemporaryDirectory() as directory:

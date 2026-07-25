@@ -377,7 +377,8 @@ class InstallAdoptionTests(unittest.TestCase):
             self.assertEqual(stderr.getvalue(), "install failed: diagnosis stream verification:\n")
             self.assertEqual(snapshots.call_count, 2)
             publication.assert_not_called()
-            marker_request.assert_not_called()
+            marker_request.assert_called_once_with(
+                "https://es.invalid", "/_component_template/rigsignal-bundle-meta", "GET", "admin")
             self.assertTrue((root / INSTALL.JOURNAL_FILE).exists())
             self.assertFalse((root / "state.json").exists())
 

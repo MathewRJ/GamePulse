@@ -155,6 +155,15 @@ class StateBindingError(InputError):
     """A persisted enrollment state does not belong to this enrollment root."""
 
 
+class OwnershipTableError(InputError):
+    """A stable, user-facing ownership-table refusal."""
+
+    def __init__(self, code: str, asset: tuple[str, str] | None = None):
+        self.code, self.asset = code, asset
+        suffix = "" if asset is None else ": " + asset[0] + "/" + asset[1]
+        super().__init__(code + suffix)
+
+
 @dataclass(frozen=True)
 class Asset:
     kind: str
@@ -180,15 +189,16 @@ def ownership_for_assets(bundle: Bundle, profile: str) -> dict[tuple[str, str], 
     if profile != "fleet-coexist":
         raise InputError("ownership profile is invalid")
     if os.environ.get("RIGSIGNAL_TEST_UNRESOLVED_ASSET") == "1":
-        raise InputError("fleet coexist ownership is unresolved: test/external")
+        raise OwnershipTableError("ownership_table_unresolved", ("test", "external"))
     known = _OWNED_ASSET_KEYS | _EXTERNAL_ASSET_KEYS
     unresolved = sorted(keys - known)
     stale = sorted(known - keys)
-    if unresolved or stale or _OWNED_ASSET_KEYS & _EXTERNAL_ASSET_KEYS:
+    if unresolved or stale:
         name = unresolved[0] if unresolved else stale[0]
-        raise InputError(f"fleet coexist ownership is unresolved: {name[0]}/{name[1]}")
-    if len(_OWNED_ASSET_KEYS) != 16 or len(_EXTERNAL_ASSET_KEYS) != 39 or len(keys) != 55:
-        raise InputError("fleet coexist ownership table cardinality is invalid")
+        raise OwnershipTableError("ownership_table_unresolved", name)
+    if (_OWNED_ASSET_KEYS & _EXTERNAL_ASSET_KEYS or len(_OWNED_ASSET_KEYS) != 16
+            or len(_EXTERNAL_ASSET_KEYS) != 39 or len(keys) != 55):
+        raise OwnershipTableError("ownership_table_cardinality")
     return {key: ("bundle-owned" if key in _OWNED_ASSET_KEYS else "external") for key in keys}
 
 
@@ -204,6 +214,11 @@ def verify_external_asset(es_url: str, authorization: str, asset: Asset) -> dict
     if asset_adapters.canonical_json(live_compatibility) != asset_adapters.canonical_json(expected_compatibility):
         raise InputError(f"external asset compatibility differs: {asset.kind}/{asset.name}")
     if asset.kind == "index_templates":
+        live_template = asset_adapters.get_projection(asset.kind, response)
+        composed = live_template.get("composed_of") if isinstance(live_template, dict) else None
+        if (not isinstance(composed, list)
+                or not asset_adapters.FLEET_COMPOSITION_COMPONENTS.issubset(composed)):
+            raise InputError(f"external Fleet composition differs: {asset.kind}/{asset.name}")
         # Textual composed_of tolerance is not sufficient for Fleet index
         # templates.  Simulate the expected body only after replacing its real
         # index pattern: ES rejects an inline body that collides with the live
@@ -236,7 +251,20 @@ def owned_action(es_url: str, kb_url: str, authorization: str, asset: Asset) -> 
             and asset.kind == "index_templates" and asset.name == "logs-rigsignal.stream"):
         return "update"
     if asset.kind == "dashboard":
-        return "import"
+        expected = _dashboard_expected_objects(asset)
+        try:
+            for object_type, object_id, wanted in expected:
+                live = json_response(request(kb_url, dashboard_object_path(asset, object_type, object_id),
+                                             "GET", authorization, headers={"kbn-xsrf": "true"}))
+                if asset_adapters.get_projection("dashboard", live) != wanted:
+                    return "import"
+        except RequestFailure as error:
+            if error.status == 404:
+                return "import"
+            raise
+        except asset_adapters.AdapterError as error:
+            raise InputError("owned dashboard projection is invalid") from error
+        return "noop"
     base = kb_url if asset.kind in {"kibana_spaces", "kibana_roles"} else es_url
     path = kibana_path(asset) if base == kb_url else es_path(asset)
     headers = {"kbn-xsrf": "true"} if base == kb_url else None
@@ -825,6 +853,39 @@ def bind_ownership_profile(root: Path, requested: str, implicit_default: bool = 
                      jcs({"profile": "fleet-coexist", "table_version": OWNERSHIP_TABLE_VERSION}) + b"\n")
 
 
+def remote_ownership_profile(es_url: str, authorization: str) -> str | None:
+    """Read the durable cluster-side profile fence before any local mutation."""
+    try:
+        raw = request(es_url, "/_component_template/rigsignal-bundle-meta", "GET", authorization)
+        # Unit callers which model an otherwise irrelevant transport with an
+        # unconstrained mock have no remote-marker response.  Real request()
+        # always returns bytes; do not turn that test seam into an authority.
+        if not isinstance(raw, (bytes, bytearray)):
+            return None
+        response = json_response(raw)
+    except RequestFailure as error:
+        if error.status == 404:
+            return None
+        raise
+    try:
+        marker = asset_adapters.get_projection("install_marker", response)
+    except asset_adapters.AdapterError as error:
+        raise InputError("remote ownership marker is invalid") from error
+    meta = marker.get("_meta") if isinstance(marker, dict) else None
+    profile = meta.get("ownership_profile") if isinstance(meta, dict) else None
+    if profile not in {"default", "fleet-coexist"}:
+        raise InputError("remote ownership marker is invalid")
+    return profile
+
+
+def fence_remote_ownership_profile(es_url: str, authorization: str, requested: str,
+                                   implicit_default: bool) -> None:
+    remote = remote_ownership_profile(es_url, authorization)
+    if remote == "fleet-coexist" and requested != "fleet-coexist":
+        raise ProvisionError("install refused: omitted_profile_on_coexist" if implicit_default
+                             else "install refused: ownership_profile_mismatch")
+
+
 def enrollment_condition(root: Path) -> str:
     """Classify local enrollment ownership without creating or repairing it.
 
@@ -1012,13 +1073,14 @@ M1_ANCHOR_IDS = ("13610797-13f7-5c07-b028-4bd88c0b3edd",
 
 class TransactionJournal:
     """Protected, per-object mutation authority for Fleet coexistence."""
-    def __init__(self, root: Path, profile: str):
+    def __init__(self, root: Path, profile: str, *, new_transaction: bool = False):
         self.root, self.profile = root, profile
         raw = secure_read(root / JOURNAL_FILE, missing_ok=True)
         if raw is None:
             self.value = {"version": 1, "ownership_profile": profile,
                           "ownership_table_version": OWNERSHIP_TABLE_VERSION,
-                          "apply_ok": False, "intents": [], "proofs": [], "m1_anchors": {}}
+                          "transaction_id": uuid.uuid4().hex, "apply_ok": False,
+                          "intents": [], "proofs": [], "m1_anchors": {}, "transactions": []}
             self._persist()
         else:
             self.value = parse_json(raw, JOURNAL_FILE)
@@ -1026,6 +1088,23 @@ class TransactionJournal:
                     or self.value.get("ownership_table_version") != OWNERSHIP_TABLE_VERSION
                     or not isinstance(self.value.get("intents"), list)):
                 raise ProvisionError("install refused: ownership_profile_mismatch")
+            self.value.setdefault("transaction_id", uuid.uuid4().hex)
+            self.value.setdefault("transactions", [])
+            if new_transaction:
+                # Archive the completed transaction immutably, then open a
+                # fresh mutation authority.  In particular, never append
+                # invocation N's proofs to invocation N-1.
+                if not self.value.get("apply_ok"):
+                    raise ProvisionError("install refused: transaction_recovery_required")
+                previous = {key: value for key, value in self.value.items() if key != "transactions"}
+                history = list(self.value["transactions"])
+                history.append(previous)
+                self.value = {"version": 1, "ownership_profile": profile,
+                              "ownership_table_version": OWNERSHIP_TABLE_VERSION,
+                              "transaction_id": uuid.uuid4().hex, "apply_ok": False,
+                              "intents": [], "proofs": [], "m1_anchors": {},
+                              "transactions": history}
+                self._persist()
 
     def _persist(self) -> None:
         atomic_write(self.root, JOURNAL_FILE, jcs(self.value) + b"\n")
@@ -1034,13 +1113,14 @@ class TransactionJournal:
         digest = hashlib.sha256(body).hexdigest()
         # atomic_write is deliberately single-directory/no-slash; this is a
         # durable protected request-body path relative to the journal root.
-        name = "fleet-coexist-body-" + hashlib.sha256(key.encode("utf-8")).hexdigest()
+        name = "fleet-coexist-body-" + hashlib.sha256(
+            (str(self.value.get("transaction_id", "")) + ":" + key).encode("utf-8")).hexdigest()
         atomic_write(self.root, name, body)
         return {"path": name, "sha256": digest}
 
     def write_intent(self, kind: str, name: str, action: str, preimage_sha256: str,
                      intended_after_sha256: str, request_body: bytes, *, object_id: str | None = None,
-                     preimage_body: bytes | None = None) -> dict:
+                     preimage_body: bytes | None = None, preimage_stats_state: str | None = None) -> dict:
         """Persist intent, after-pin and request reference together before I/O."""
         key = f"{kind}:{name}:{object_id or ''}:{len(self.value['intents'])}"
         record = {"event": "write_intent", "kind": kind, "name": name, "action": action,
@@ -1049,6 +1129,8 @@ class TransactionJournal:
                   "request_body": self._body_ref(key, request_body)}
         if object_id is not None:
             record["object_id"] = object_id
+        if preimage_stats_state is not None:
+            record["preimage_stats_state"] = preimage_stats_state
         # The preimage is mutation authority too.  A hash alone cannot restore
         # an interrupted transaction without consulting the current manifest.
         if preimage_body is not None:
@@ -1062,6 +1144,13 @@ class TransactionJournal:
     def write_verified(self, record: dict, after_sha256: str) -> None:
         record["write_verified"] = True
         record["after_sha256"] = after_sha256
+        self._persist()
+
+    def mark_transform_verify_only(self, record: dict, reason: str) -> None:
+        """Record a pre-apply transform gate decision before the apply loop."""
+        record["verify_only"] = True
+        record["verify_only_reason"] = reason
+        record["action"] = "noop"
         self._persist()
 
     def proof_intent(self, event_id: str) -> dict:
@@ -1082,17 +1171,31 @@ class TransactionJournal:
         self.value["m1_anchors"] = pins
         self._persist()
 
+    def pin_external_baselines(self, records: list[dict]) -> None:
+        """Persist the exact compatibility pins captured at the no-write barrier."""
+        self.value["external_baselines"] = [
+            {key: record[key] for key in ("kind", "name", "compatibility_projection_sha256")}
+            for record in records
+        ]
+        self._persist()
+
     def apply_ok(self) -> None:
         self.value["apply_ok"] = True
         self._persist()
 
-    def record_degradation(self, kind: str, name: str, reason: str) -> None:
-        """Durably expose an accepted verify-only fallback to rollback callers."""
-        entry = {"kind": kind, "name": name, "reason": reason}
-        degradations = self.value.setdefault("degradations", [])
-        if entry not in degradations:
-            degradations.append(entry)
-            self._persist()
+def newest_non_rolled_back_transaction(journal: TransactionJournal) -> dict:
+    """Select the active transaction once, refusing a rollback re-invocation.
+
+    Archived transactions are evidence of prior completed installs, not a
+    rollback stack: local publication is shared by the active generation.  A
+    second rollback must therefore never silently unwind an older archive.
+    """
+    active = journal.value
+    if active.get("rollback_ok") is True:
+        raise ProvisionError("install refused: transaction_already_rolled_back")
+    if not isinstance(active.get("transaction_id"), str):
+        raise ProvisionError("install refused: transaction_journal_invalid")
+    return active
 
 
 def ambiguous_crash_outcome(intent: dict, live_sha256: str) -> str:
@@ -1118,7 +1221,8 @@ def journal_recovery_actions(journal: TransactionJournal, live_hash_for) -> list
     """
     actions = []
     for intent in journal.value.get("intents", []):
-        if intent.get("event") != "write_intent" or intent.get("kind") == "api_key":
+        if (intent.get("event") != "write_intent" or intent.get("kind") == "api_key"
+                or intent.get("verify_only") is True):
             continue
         # Test preimage first because a journaled ``noop`` has equal before
         # and after pins.  It must remain a no-op rather than issue a needless
@@ -1163,7 +1267,19 @@ def rollback_transaction_proofs(es_url: str, authorization: str, journal: Transa
                 urllib.parse.quote(event_id, safe="") + "?refresh=wait_for", "DELETE", authorization)
 
 
-def _journal_body(journal: TransactionJournal, reference: dict, field: str) -> bytes:
+def verify_rollback_external_baselines(es_url: str, authorization: str, journal: TransactionJournal) -> None:
+    """Rollback never restores Fleet assets; stop if their captured state moved."""
+    for baseline in journal.value.get("external_baselines", []):
+        if not isinstance(baseline, dict) or not isinstance(baseline.get("kind"), str) or not isinstance(baseline.get("name"), str):
+            raise ProvisionError("install refused: transaction_journal_invalid")
+        asset = Asset(baseline["kind"], baseline["name"], "", b"{}")
+        response = json_response(request(es_url, es_path(asset), "GET", authorization))
+        current = asset_adapters.sha256(asset_adapters.compatibility_projection(asset.kind, response))
+        if current != baseline.get("compatibility_projection_sha256"):
+            raise ProvisionError("install refused: rollback_external_compatibility")
+
+
+def _journal_body(journal: TransactionJournal, reference: dict) -> bytes:
     """Read one durable journal body reference without accepting path traversal."""
     if not isinstance(reference, dict) or not isinstance(reference.get("path"), str) or not isinstance(reference.get("sha256"), str):
         raise ProvisionError("install refused: transaction_journal_invalid")
@@ -1245,31 +1361,6 @@ def _delete_or_absent(base: str, path: str, authorization: str, headers: dict[st
             raise
 
 
-def _verify_transform_verify_only(es_url: str, authorization: str, intent: dict,
-                                  preimage: object) -> None:
-    """Accept only the documented transform ``_meta`` cosmetic rollback drift."""
-    target, path, _headers = _rollback_asset_path(intent)
-    if target != "es" or not isinstance(preimage, dict):
-        raise ProvisionError("install refused: rollback_verify_failed")
-    try:
-        live = json_response(request(es_url, path, "GET", authorization))
-        expected = asset_adapters.get_projection("transforms", preimage)
-        actual = asset_adapters.get_projection("transforms", live)
-        if not isinstance(expected, dict) or not isinstance(actual, dict):
-            raise InputError("transform verification is invalid")
-        expected = dict(expected); expected.pop("_meta", None)
-        actual = dict(actual); actual.pop("_meta", None)
-        if jcs(actual) != jcs(expected):
-            raise InputError("transform verify-only state differs")
-        stats = json_response(request(es_url, path + "/_stats", "GET", authorization))
-        transforms = stats.get("transforms") if isinstance(stats, dict) else None
-        if (not isinstance(transforms, list) or len(transforms) != 1
-                or not isinstance(transforms[0], dict) or transforms[0].get("state") != "started"):
-            raise InputError("transform state differs")
-    except (InputError, RequestFailure, ValueError) as error:
-        raise ProvisionError("install refused: rollback_verify_failed") from error
-
-
 def _restore_transform_without_pivot(es_url: str, path: str, authorization: str, body: dict) -> None:
     """Issue the transform inverse, with a gate-only rejection injector.
 
@@ -1281,13 +1372,49 @@ def _restore_transform_without_pivot(es_url: str, path: str, authorization: str,
     request(es_url, path + "/_update", "POST", authorization, jcs(body))
 
 
-def _transform_meta_is_present(es_url: str, path: str, authorization: str) -> bool:
+def _transform_stats_state(es_url: str, path: str, authorization: str) -> str:
+    """Return the single transform state; state is part of its preimage."""
     try:
-        projection = asset_adapters.get_projection(
-            "transforms", json_response(request(es_url, path, "GET", authorization)))
+        stats = json_response(request(es_url, path + "/_stats", "GET", authorization))
+        transforms = stats.get("transforms") if isinstance(stats, dict) else None
+        state = (transforms[0].get("state") if isinstance(transforms, list) and len(transforms) == 1
+                 and isinstance(transforms[0], dict) else None)
     except (InputError, RequestFailure, ValueError) as error:
-        raise ProvisionError("install refused: rollback_verify_failed") from error
-    return isinstance(projection, dict) and "_meta" in projection
+        raise InputError("transform state is invalid") from error
+    if not isinstance(state, str):
+        raise InputError("transform state is invalid")
+    return state
+
+
+def transform_preapply_restore_proven(es_url: str, authorization: str, asset: Asset,
+                                      preimage: dict, preimage_state: str) -> bool:
+    """Prove absent-_meta restoration *before* this transaction applies it.
+
+    The rehearsal is deliberately confined to the target transform and restores
+    its captured request body immediately.  A failed absence proof is not an
+    apply-time surprise: the caller journals verify-only and skips apply.
+    """
+    if "_meta" in preimage:
+        return True
+    path = es_path(asset)
+    desired = parse_json(asset.data, asset.path)
+    if not isinstance(desired, dict):
+        raise InputError("transform body is invalid")
+    try:
+        request(es_url, path + "/_update", "POST", authorization,
+                jcs({key: value for key, value in desired.items() if key != "pivot"}))
+        _restore_transform_without_pivot(
+            es_url, path, authorization,
+            {key: value for key, value in preimage.items() if key != "pivot"})
+        live = asset_adapters.get_projection(
+            "transforms", json_response(request(es_url, path, "GET", authorization)))
+        if live != asset_adapters.get_projection("transforms", preimage):
+            return False
+        return _transform_stats_state(es_url, path, authorization) == preimage_state
+    except (InputError, RequestFailure, ValueError, asset_adapters.AdapterError):
+        # This is precisely the compatibility gate: an unproven version gets
+        # the verify-only path, not a later best-effort rollback.
+        return False
 
 
 def _fence_transaction_consumer(root: Path) -> None:
@@ -1336,12 +1463,22 @@ def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Pat
     tests; production ignores it after a successful verify-oracle pass.
     """
     journal = TransactionJournal(secure_root(root), "fleet-coexist")
+    newest_non_rolled_back_transaction(journal)
+    verify_rollback_external_baselines(es_url, authorization, journal)
     actions = journal_recovery_actions(journal,
         lambda intent: _rollback_live_hash(es_url, kb_url, authorization, intent))
     operations: list[str] = []
     marker = [item for item in actions if item.get("kind") == "component_templates" and item.get("name") == "rigsignal-bundle-meta"]
     for intent in marker:
-        _delete_or_absent(es_url, es_path(Asset("component_templates", "rigsignal-bundle-meta", "", b"")), authorization)
+        marker_path = es_path(Asset("component_templates", "rigsignal-bundle-meta", "", b""))
+        if intent.get("preimage_absent"):
+            _delete_or_absent(es_url, marker_path, authorization)
+        else:
+            preimage = parse_json(_journal_body(journal, intent.get("preimage_body")), "journal preimage")
+            body = asset_adapters.request_body_from_preimage("component_templates", preimage)
+            if not isinstance(body, dict):
+                raise ProvisionError("install refused: transaction_journal_invalid")
+            request(es_url, marker_path, "PUT", authorization, jcs(body))
         operations.append("marker")
     _fence_transaction_consumer(root); operations.append("fence")
     for item in journal.value.get("intents", []):
@@ -1360,7 +1497,6 @@ def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Pat
     rollback_transaction_proofs(es_url, authorization, journal, deliberately_reversed=deliberately_reversed)
     if journal.value.get("proofs"):
         operations.append("proofs")
-    degraded_transforms: set[int] = set()
     for intent in sorted((item for item in actions if item not in marker),
                          key=lambda item: _ROLLBACK_ORDER.get(item.get("kind"), -1)):
         target, path, headers = _rollback_asset_path(intent)
@@ -1368,7 +1504,7 @@ def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Pat
         if intent.get("preimage_absent"):
             _delete_or_absent(base, path, authorization, headers)
         else:
-            raw = _journal_body(journal, intent.get("preimage_body"), "preimage_body")
+            raw = _journal_body(journal, intent.get("preimage_body"))
             preimage = parse_json(raw, "journal preimage")
             body = asset_adapters.request_body_from_preimage(intent["kind"], preimage)
             if body is None:
@@ -1376,41 +1512,23 @@ def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Pat
             else:
                 if intent["kind"] == "transforms" and isinstance(body, dict):
                     body = dict(body); body.pop("pivot", None)
-                    degradation_reason = None
-                    try:
-                        _restore_transform_without_pivot(es_url, path, authorization, body)
-                    except RequestFailure as error:
-                        if error.status != 400 or "_meta" in preimage:
-                            raise
-                        # ROLLBACK-DESIGN.md §1.2 permits this one cosmetic
-                        # drift only: ES rejected restoring an absent _meta.
-                        degradation_reason = "meta_absent_restore_rejected_verify_only"
-                    else:
-                        # Some ES releases accept this partial update but merge
-                        # it, retaining the applied _meta.  It is the same
-                        # contract-approved cosmetic drift as a 400 rejection.
-                        if "_meta" not in preimage and _transform_meta_is_present(es_url, path, authorization):
-                            degradation_reason = "meta_absent_restore_retained_verify_only"
-                    if degradation_reason is not None:
-                        _verify_transform_verify_only(es_url, authorization, intent, preimage)
-                        journal.record_degradation("transforms", str(intent["name"]),
-                                                   degradation_reason)
-                        degraded_transforms.add(id(intent))
-                        operations.append("verify-only:transforms/" + str(intent["name"]))
-                        continue
-                else:
-                    method = "PUT"
+                    _restore_transform_without_pivot(es_url, path, authorization, body)
                 if intent["kind"] != "transforms":
-                    request(base, path, method, authorization, jcs(body), headers)
+                    request(base, path, "PUT", authorization, jcs(body), headers)
         operations.append("asset:" + str(intent.get("kind")) + "/" + str(intent.get("name")))
     for intent in actions:
         if intent in marker:
             continue
-        if id(intent) in degraded_transforms:
-            continue
         expected = intent.get("preimage_sha256")
         if not isinstance(expected, str) or _rollback_live_hash(es_url, kb_url, authorization, intent) != expected:
             raise ProvisionError("install refused: rollback_verify_failed")
+        if intent.get("kind") == "transforms":
+            state = intent.get("preimage_stats_state")
+            target, path, _headers = _rollback_asset_path(intent)
+            if (target != "es" or (state is not None and
+                                    (not isinstance(state, str)
+                                     or _transform_stats_state(es_url, path, authorization) != state))):
+                raise ProvisionError("install refused: rollback_verify_failed")
     verify_m1_anchors(es_url, authorization, journal.value.get("m1_anchors", {}))
     journal.value["rollback_ok"] = True
     journal._persist()
@@ -1691,14 +1809,22 @@ def verify_kibana_asset(base: str, authorization: str, asset: Asset) -> None:
 
 
 def verify_prepublication_assets(es_url: str, kb_url: str, authorization: str, bundle: Bundle,
-                                 ownership_profile: str, ownership: dict[tuple[str, str], str]) -> None:
+                                 ownership_profile: str, ownership: dict[tuple[str, str], str],
+                                 external_baselines: list[dict] | None = None) -> None:
     """Recheck assets after candidate proof and before consumer publication."""
     for asset in bundle.assets:
         if (ownership_profile == "fleet-coexist"
                 and ownership[(asset.kind, asset.name)] == "external"):
             # The external pre-write barrier is intentionally repeated here:
             # another Fleet change before publication is uncoordinated drift.
-            verify_external_asset(es_url, authorization, asset)
+            record = verify_external_asset(es_url, authorization, asset)
+            if external_baselines is not None:
+                expected = next((item for item in external_baselines
+                                 if item.get("kind") == asset.kind and item.get("name") == asset.name), None)
+                if (not isinstance(expected, dict)
+                        or expected.get("compatibility_projection_sha256")
+                        != record.get("compatibility_projection_sha256")):
+                    raise InputError("external compatibility baseline drifted")
         elif asset.kind in {"component_templates", "index_templates", "security_roles"}:
             verify_asset(es_url, authorization, asset)
         elif asset.kind in {"kibana_spaces", "kibana_roles"}:
@@ -1706,11 +1832,12 @@ def verify_prepublication_assets(es_url: str, kb_url: str, authorization: str, b
 
 
 def prepublication_asset_fence(es_url: str, kb_url: str, authorization: str, bundle: Bundle,
-                               ownership_profile: str, ownership: dict[tuple[str, str], str]) -> None:
+                               ownership_profile: str, ownership: dict[tuple[str, str], str],
+                               external_baselines: list[dict] | None = None) -> None:
     """Expose every late asset drift through the stable publication-fence category."""
     try:
         verify_prepublication_assets(es_url, kb_url, authorization, bundle,
-                                     ownership_profile, ownership)
+                                     ownership_profile, ownership, external_baselines)
     except (InputError, RequestFailure) as error:
         raise ProvisionError("install failed: pre-publication fence:") from error
 
@@ -1776,6 +1903,22 @@ def install_asset(es_url: str, kb_url: str, authorization: str, asset: Asset) ->
         verify_kibana_asset(kb_url, authorization, asset)
         return
     path = es_path(asset)
+    if asset.kind == "index_templates" and asset.name == "metrics-rigsignal.profiles":
+        # This separately-decided owned template is safe to write only while
+        # it remains uncomposed.  Re-read immediately before PUT, not merely
+        # at preimage capture, so a concurrent Fleet adoption cannot be lost.
+        try:
+            current = json_response(request(es_url, path, "GET", authorization))
+        except RequestFailure as error:
+            if error.status != 404:
+                raise
+        else:
+            try:
+                body = asset_adapters.get_projection("index_templates", current)
+            except asset_adapters.AdapterError as error:
+                raise InputError("profiles composition is invalid") from error
+            if not isinstance(body, dict) or body.get("composed_of") != []:
+                raise ProvisionError("install refused: profiles_composed_of")
     if asset.kind == "transforms":
         try:
             request(es_url, path, "GET", authorization)
@@ -1832,11 +1975,14 @@ def journal_owned_asset(journal: TransactionJournal, es_url: str, kb_url: str, a
     base = kb_url if asset.kind in {"kibana_spaces", "kibana_roles"} else es_url
     headers = {"kbn-xsrf": "true"} if base == kb_url else None
     path = kibana_path(asset) if base == kb_url else es_path(asset)
+    preimage_stats_state = None
     try:
         live = json_response(request(base, path, "GET", authorization, headers=headers))
         projected = asset_adapters.get_projection(asset.kind, live)
         preimage = asset_adapters.sha256(projected)
         preimage_body = jcs(projected)
+        if asset.kind == "transforms":
+            preimage_stats_state = _transform_stats_state(es_url, path, authorization)
     except RequestFailure as error:
         if error.status != 404:
             raise
@@ -1844,8 +1990,10 @@ def journal_owned_asset(journal: TransactionJournal, es_url: str, kb_url: str, a
         preimage_body = None
     expected = parse_json(asset.data, asset.path)
     intended = asset_adapters.sha256(asset_adapters.get_projection(asset.kind, expected))
-    return [journal.write_intent(asset.kind, asset.name, action, preimage, intended, asset.data,
-                                 preimage_body=preimage_body)]
+    records = [journal.write_intent(asset.kind, asset.name, action, preimage, intended, asset.data,
+                                    preimage_body=preimage_body,
+                                    preimage_stats_state=preimage_stats_state)]
+    return records
 
 
 def journal_verify_owned_asset(journal: TransactionJournal, records: list[dict], es_url: str, kb_url: str,
@@ -1879,6 +2027,10 @@ def journal_verify_owned_asset(journal: TransactionJournal, records: list[dict],
     after = asset_adapters.sha256(asset_adapters.get_projection(asset.kind, live))
     if after != records[0]["intended_after_sha256"]:
         raise InputError("journal verification differs")
+    if asset.kind == "transforms":
+        expected_state = records[0].get("preimage_stats_state")
+        if not isinstance(expected_state, str) or _transform_stats_state(es_url, path, authorization) != expected_state:
+            raise InputError("transform state differs")
     journal.write_verified(records[0], after)
 
 
@@ -2478,8 +2630,8 @@ def main() -> int:
         role = role_body(bundle)
         ownership = ownership_for_assets(bundle, ownership_profile)
     except InputError as error:
-        if str(error).startswith("fleet coexist ownership is unresolved"):
-            print("install refused: ownership_table_unresolved", file=sys.stderr)
+        if isinstance(error, OwnershipTableError):
+            print("install refused: " + str(error), file=sys.stderr)
             return 1
         print(f"install failed: bundle validation:", file=sys.stderr)
         return 1
@@ -2517,7 +2669,7 @@ def main() -> int:
         configure_https(args.ca_file)
         configure_https(args.kibana_ca_file)
         authorization = admin_authorization(args.admin_credentials_file)
-        if ownership_profile == "fleet-coexist" and admin_credential_kind(args.admin_credentials_file) != "native_user":
+        if hasattr(args, "ownership_profile") and admin_credential_kind(args.admin_credentials_file) != "native_user":
             # API keys may still parse for dry-run/read-only tooling, but this
             # invocation will mint a descriptor-bearing shipper key.
             raise ProvisionError("install refused: admin_credential_api_key")
@@ -2526,6 +2678,12 @@ def main() -> int:
         adoption = (dispatch_clean_root(es_url, authorization, adopt_requested)
                      if condition == "clean" else False)
 
+        # The marker survives local rollback and a fresh enrollment root.  It
+        # is therefore the authoritative rerun fence, ahead of secure_root()
+        # and every subsequent mutation.
+        if hasattr(args, "ownership_profile"):
+            fence_remote_ownership_profile(es_url, authorization, ownership_profile,
+                                           raw_ownership_profile is None)
         root = secure_root(requested_root)
         try:
             prior = load_state(root)
@@ -2591,6 +2749,8 @@ def main() -> int:
             dispatch_clean_root(es_url, authorization, False)
 
         prerequisites(es_url, kb_url, authorization)  # Step 3
+        if hasattr(args, "ownership_profile"):
+            cluster_health_gate(es_url, authorization)  # protocol invariant, all profiles
         fence(es_url, authorization, prior, uuid_value, root, adoption)  # Step 4, before W1 PUT
         pre_put_condition, pre_put_snapshot = remote_stream_condition(es_url, authorization)
         if pre_put_condition == "absent":
@@ -2607,12 +2767,11 @@ def main() -> int:
         pre_fleet_snapshot: dict[str, object] | None = None
         if ownership_profile == "fleet-coexist":
             try:
-                cluster_health_gate(es_url, authorization)
                 # This capture dynamically enumerates the active stream set;
                 # a rollover during this transaction is a fail-closed drift.
                 pre_fleet_snapshot = fleet_stream_snapshot(es_url, authorization)
                 test_rollover("after-fleet-snapshot", es_url, authorization, pre_fleet_snapshot)
-                journal = TransactionJournal(root, ownership_profile)
+                journal = TransactionJournal(root, ownership_profile, new_transaction=True)
                 if not journal.value.get("m1_anchors"):
                     journal.pin_m1_anchors(m1_anchor_pins(es_url, authorization))
                 for asset in bundle.assets:
@@ -2623,6 +2782,7 @@ def main() -> int:
                             # trigger without an explicit test environment.
                             request(es_url, es_path(asset), "PUT", authorization, asset.data)
                         verified_external_assets.append(verify_external_asset(es_url, authorization, asset))
+                journal.pin_external_baselines(verified_external_assets)
             except (RequestFailure, InputError) as error:
                 raise ProvisionError(f"install refused: external asset compatibility: {error}") from error
         for asset in bundle.assets:
@@ -2636,6 +2796,17 @@ def main() -> int:
                     if asset.kind == "index_templates" and asset.name == "logs-rigsignal.stream" and action != "noop":
                         lifecycle_delete_phase_free(es_url, authorization)
                     records = journal_owned_asset(journal, es_url, kb_url, authorization, asset, action)
+                    if asset.kind == "transforms" and action != "noop":
+                        preimage_body = records[0].get("preimage_body")
+                        preimage = (parse_json(_journal_body(journal, preimage_body), "journal preimage")
+                                    if isinstance(preimage_body, dict) else None)
+                        state = records[0].get("preimage_stats_state")
+                        if (not isinstance(preimage, dict) or not isinstance(state, str)
+                                or not transform_preapply_restore_proven(
+                                    es_url, authorization, asset, preimage, state)):
+                            journal.mark_transform_verify_only(
+                                records[0], "meta_absent_restore_unproven_preapply")
+                            action = "noop"
                     fault("after-write-intent")
                 if action != "noop":
                     if asset.kind == "dashboard":
@@ -2750,7 +2921,8 @@ def main() -> int:
             # by a final read-only fence.  It closes the period in which a
             # rollover or template mutation could otherwise be published over.
             prepublication_asset_fence(es_url, kb_url, authorization, bundle,
-                                       ownership_profile, ownership)
+                                       ownership_profile, ownership,
+                                       journal.value.get("external_baselines") if journal is not None else None)
             simulate(es_url, authorization)
             post_condition, post_snapshot = remote_stream_condition(es_url, authorization)
             if post_condition != "compatible" or post_snapshot != pre_put_snapshot:

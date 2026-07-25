@@ -1,0 +1,57 @@
+{
+ "index_templates": [
+  {
+   "name": "metrics-rigsignal.cpu",
+   "index_template": {
+    "index_patterns": [
+     "metrics-rigsignal.cpu-*"
+    ],
+    "template": {
+     "settings": {
+      "index": {
+       "mode": "time_series"
+      }
+     },
+     "mappings": {
+      "_meta": {
+       "package": {
+        "name": "rigsignal"
+       },
+       "managed_by": "fleet",
+       "managed": true
+      }
+     }
+    },
+    "composed_of": [
+     "metrics@tsdb-settings",
+     "metrics-rigsignal.cpu@package",
+     "metrics@custom",
+     "rigsignal@custom",
+     "metrics-rigsignal.cpu@custom",
+     "ecs@mappings",
+     ".fleet_globals-1",
+     ".fleet_agent_id_verification-1"
+    ],
+    "priority": 200,
+    "_meta": {
+     "package": {
+      "name": "rigsignal"
+     },
+     "managed_by": "fleet",
+     "managed": true
+    },
+    "data_stream": {
+     "hidden": false,
+     "allow_custom_routing": false
+    },
+    "ignore_missing_component_templates": [
+     "metrics@custom",
+     "rigsignal@custom",
+     "metrics-rigsignal.cpu@custom"
+    ],
+    "created_date_millis": 1783589333792,
+    "modified_date_millis": 1783589333792
+   }
+  }
+ ]
+}
