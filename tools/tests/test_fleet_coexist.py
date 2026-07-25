@@ -4,7 +4,7 @@ import io
 import json
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -374,6 +374,24 @@ class FleetCoexistenceTests(unittest.TestCase):
         self.assertEqual(output.getvalue(),
                          "rollback completed from journaled intents; transform _meta absence could not be restored: "
                          "verify-only cosmetic drift accepted\n")
+
+    def test_main_prints_clean_refusal_for_already_rolled_back_transaction(self):
+        args = type("Args", (), {
+            "bundle": None, "endpoint": "https://es.invalid", "ca_file": Path("ca"),
+            "kibana_endpoint": "https://kb.invalid", "kibana_ca_file": Path("kb-ca"),
+            "admin_credentials_file": Path("admin"), "agent_binary": Path("agent"),
+            "profile": "user", "rollback": Path("transaction"), "dry_run": False,
+        })()
+        errors = io.StringIO()
+        with mock.patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args), \
+             mock.patch.object(INSTALL, "configure_https"), \
+             mock.patch.object(INSTALL, "admin_authorization", return_value="auth"), \
+             mock.patch.object(INSTALL, "rollback_transaction",
+                               side_effect=INSTALL.ProvisionError(
+                                   "install refused: transaction_already_rolled_back")), \
+             redirect_stderr(errors):
+            self.assertEqual(INSTALL.main(), 1)
+        self.assertEqual(errors.getvalue(), "install refused: transaction_already_rolled_back\n")
 
     def test_second_rollback_is_refused_before_any_external_or_restore_call(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -2652,6 +2652,9 @@ def main() -> int:
         bundle = load_bundle(args.bundle)  # Step 1: no HTTP before this line succeeds.
         role = role_body(bundle)
         ownership = ownership_for_assets(bundle, ownership_profile)
+    except ProvisionError as error:
+        print(error.prefix, file=sys.stderr)
+        return 1
     except InputError as error:
         if isinstance(error, OwnershipTableError):
             print("install refused: " + str(error), file=sys.stderr)
