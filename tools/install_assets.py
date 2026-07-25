@@ -1753,14 +1753,15 @@ def test_rollover(point: str, es_url: str, authorization: str,
                   snapshot: dict[str, object]) -> None:
     """Inject one deterministic Fleet-stream rollover for the clean-stack gate.
 
-    ``RIGSIGNAL_TEST_ROLLOVER_AT`` has no effect unless it exactly names this
-    point.  It is deliberately not a production rollover mechanism.
+    ``RIGSIGNAL_TEST_ROLLOVER_AT`` has no effect unless its point name (before
+    an optional ``:stream`` suffix) exactly names this point.  It is
+    deliberately not a production rollover mechanism.
     """
-    if os.environ.get("RIGSIGNAL_TEST_ROLLOVER_AT") != point:
+    trigger, _, requested = os.environ.get("RIGSIGNAL_TEST_ROLLOVER_AT", "").partition(":")
+    if trigger != point:
         return
     if not snapshot:
         raise InputError("fleet rollover test stream is unavailable")
-    requested = os.environ.get("RIGSIGNAL_TEST_ROLLOVER_AT", "").partition(":")[2]
     stream = requested or sorted(snapshot)[0]
     if stream not in snapshot:
         raise InputError("fleet rollover test stream is unavailable")

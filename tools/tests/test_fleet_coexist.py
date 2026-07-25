@@ -591,3 +591,24 @@ class FleetCoexistenceTests(unittest.TestCase):
             mock.call("https://es", "/_cluster/health?wait_for_events=languid&timeout=30s", "GET", "auth"),
             mock.call("https://es", "/_cluster/health", "GET", "auth"),
         ])
+
+    def test_rollover_injection_fires_for_point_with_stream_suffix(self):
+        calls = []
+        with mock.patch.object(INSTALL, "request",
+                               side_effect=lambda *args, **kwargs: calls.append(args)):
+            with mock.patch.dict(INSTALL.os.environ,
+                                 {"RIGSIGNAL_TEST_ROLLOVER_AT": "after-fleet-snapshot:logs-x-default"}):
+                INSTALL.test_rollover("after-fleet-snapshot", "https://es", "auth",
+                                      {"logs-x-default": {}})
+            self.assertEqual(len(calls), 1)
+            self.assertIn("logs-x-default", calls[0][1])
+            with mock.patch.dict(INSTALL.os.environ,
+                                 {"RIGSIGNAL_TEST_ROLLOVER_AT": "after-fleet-snapshot"}):
+                INSTALL.test_rollover("after-fleet-snapshot", "https://es", "auth",
+                                      {"logs-y-default": {}})
+            self.assertEqual(len(calls), 2)
+            with mock.patch.dict(INSTALL.os.environ,
+                                 {"RIGSIGNAL_TEST_ROLLOVER_AT": "other-point:logs-x-default"}):
+                INSTALL.test_rollover("after-fleet-snapshot", "https://es", "auth",
+                                      {"logs-x-default": {}})
+            self.assertEqual(len(calls), 2)
