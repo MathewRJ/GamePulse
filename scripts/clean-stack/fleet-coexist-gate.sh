@@ -235,6 +235,10 @@ leg_c() {
   write_admin
   seed
   for stream in metrics-rigsignal.session-default logs-rigsignal.diagnosis-default; do
+    # Fresh root per iteration: the prior iteration's correct mid-flight abort
+    # leaves a non-apply_ok journal that refuses transaction_recovery_required
+    # before the drift check could even run.
+    rm -rf "$RUN_DIR/enrollment"
     set +e
     RIGSIGNAL_TEST_ROLLOVER_AT="after-fleet-snapshot:$stream" _installer >"$RUN_DIR/in-transaction-rollover-$stream.out" 2>&1
     rc=$?
