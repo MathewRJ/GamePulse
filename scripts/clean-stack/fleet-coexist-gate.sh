@@ -219,7 +219,7 @@ leg_c() {
     write_admin
     seed
     set +e
-    RIGSIGNAL_TEST_CRASH_AT="$point" installer >"$RUN_DIR/crash-$point.out" 2>&1
+    RIGSIGNAL_TEST_CRASH_AT="$point" _installer >"$RUN_DIR/crash-$point.out" 2>&1
     rc=$?
     set -e
     [[ "$rc" == 99 ]] || fail "$point did not crash"
@@ -236,7 +236,7 @@ leg_c() {
   seed
   for stream in metrics-rigsignal.session-default logs-rigsignal.diagnosis-default; do
     set +e
-    RIGSIGNAL_TEST_ROLLOVER_AT="after-fleet-snapshot:$stream" installer >"$RUN_DIR/in-transaction-rollover-$stream.out" 2>&1
+    RIGSIGNAL_TEST_ROLLOVER_AT="after-fleet-snapshot:$stream" _installer >"$RUN_DIR/in-transaction-rollover-$stream.out" 2>&1
     rc=$?
     set -e
     [[ "$rc" != 0 ]] || fail "in-transaction rollover unexpectedly succeeded: $stream"
