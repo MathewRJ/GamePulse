@@ -277,6 +277,45 @@ class InstallAdoptionTests(unittest.TestCase):
             self.assertIn("candidate_verified", {state["phase"] for state in written_states})
             self.assertIn("committed", {state["phase"] for state in written_states})
 
+    def test_rolled_back_root_adopts_compatible_stream_for_fresh_transaction(self):
+        """Owner ruling 1 extends the clean-root adoption dispatch to audit-only roots."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "enrollment"
+            with ExitStack() as patches:
+                patches.enter_context(patch.object(INSTALL.argparse.ArgumentParser, "parse_args",
+                                                   return_value=self.installer_args(root, True)))
+                patches.enter_context(patch.object(INSTALL, "enrollment_condition", return_value="rolled-back"))
+                patches.enter_context(patch.object(INSTALL, "load_bundle", return_value=INSTALL.Bundle("test", "test", [])))
+                patches.enter_context(patch.object(INSTALL, "role_body", return_value={}))
+                patches.enter_context(patch.object(INSTALL, "configure_https"))
+                patches.enter_context(patch.object(INSTALL, "admin_authorization", return_value="admin"))
+                patches.enter_context(patch.object(INSTALL, "admin_credential_kind", return_value="native_user"))
+                patches.enter_context(patch.object(INSTALL, "cluster_health_gate"))
+                patches.enter_context(patch.object(INSTALL, "cluster_uuid", return_value="KUrXRgwRRQu-RikmIJhm0Q"))
+                patches.enter_context(patch.object(INSTALL, "prerequisites"))
+                fence = patches.enter_context(patch.object(INSTALL, "fence"))
+                remote = patches.enter_context(patch.object(INSTALL, "remote_stream_condition", side_effect=[
+                    ("compatible", frozenset({(".ds-old", "old-uuid")})),
+                    ("compatible", frozenset({(".ds-old", "old-uuid")})),
+                    ("compatible", frozenset({(".ds-old", "old-uuid")})),
+                ]))
+                patches.enter_context(patch.object(INSTALL, "ensure_stream"))
+                patches.enter_context(patch.object(INSTALL, "simulate"))
+                patches.enter_context(patch.object(INSTALL, "recompute_target_generation", return_value="0" * 64))
+                patches.enter_context(patch.object(INSTALL, "mint_key", return_value=("candidate", "encoded")))
+                patches.enter_context(patch.object(INSTALL, "enrollment_files", return_value={}))
+                patches.enter_context(patch.object(INSTALL, "atomic_write"))
+                patches.enter_context(patch.object(INSTALL, "verify_stream_behavior"))
+                patches.enter_context(patch.object(INSTALL, "verify_role_matrix"))
+                patches.enter_context(patch.object(INSTALL, "atomic_publication"))
+                patches.enter_context(patch.object(INSTALL, "run_handshake"))
+                patches.enter_context(patch.object(INSTALL, "request"))
+                patches.enter_context(patch.object(INSTALL, "verify_asset"))
+                self.assertEqual(INSTALL.main(), 0)
+            self.assertEqual(remote.call_count, 3)
+            fence.assert_called_once()
+            self.assertTrue(fence.call_args.args[-1])
+
     def test_fresh_main_dispatch_runs_full_transaction_after_absent_stream(self):
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw) / "enrollment"

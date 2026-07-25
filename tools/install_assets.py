@@ -2798,10 +2798,11 @@ def main() -> int:
             # API keys may still parse for dry-run/read-only tooling, but this
             # invocation will mint a descriptor-bearing shipper key.
             raise ProvisionError("install refused: admin_credential_api_key")
-        # A clean root is the only local condition in which a remote stream can
-        # be adopted.  Decide it before creating the root or running recovery.
+        # A clean root or the owner-ratified rolled-back audit-only root can
+        # adopt a compatible remote stream.  Decide it before creating the
+        # root or running recovery.
         adoption = (dispatch_clean_root(es_url, authorization, adopt_requested)
-                     if condition == "clean" else False)
+                     if condition in {"clean", "rolled-back"} else False)
 
         # The marker survives local rollback and a fresh enrollment root.  It
         # is therefore the authoritative rerun fence, ahead of secure_root()
