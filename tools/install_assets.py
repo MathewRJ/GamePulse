@@ -238,7 +238,10 @@ def verify_external_asset(es_url: str, authorization: str, asset: Asset) -> dict
         if not equivalent:
             raise InputError(f"external index template simulation differs: {asset.kind}/{asset.name}")
     live = asset_adapters.get_projection(asset.kind, response)
-    metadata = live.get("_meta") if isinstance(live, dict) and isinstance(live.get("_meta"), dict) else {}
+    metadata = dict(live.get("_meta")) if isinstance(live, dict) and isinstance(live.get("_meta"), dict) else {}
+    # Fleet captures have no package version.  Record the literal absence as
+    # null instead of guessing a version or refusing the compatible asset.
+    metadata.setdefault("version", None)
     return {"kind": asset.kind, "name": asset.name,
             "live_body_sha256": asset_adapters.sha256(live),
             "compatibility_projection_sha256": asset_adapters.sha256(live_compatibility),
@@ -523,6 +526,14 @@ def admin_credential_kind(path: Path) -> str:
 def cluster_health_gate(es_url: str, authorization: str) -> None:
     """Permit green, or explained yellow with neither primaries nor tasks pending."""
     forced = os.environ.get("RIGSIGNAL_TEST_CLUSTER_HEALTH")
+    if not forced:
+        # Best effort only: the following protocol check remains the one
+        # authoritative point-in-time health decision.
+        try:
+            es_json(es_url, "/_cluster/health?wait_for_events=languid&timeout=30s",
+                    "GET", authorization)
+        except (InputError, RequestFailure):
+            pass
     response = ({"status": forced, "unassigned_primary_shards": 1,
                  "number_of_pending_tasks": 1} if forced else
                 es_json(es_url, "/_cluster/health", "GET", authorization))
@@ -916,6 +927,20 @@ def enrollment_condition(root: Path) -> str:
                         or body_st.st_uid != os.geteuid() or body_st.st_mode & 0o077):
                     return "remediation"
         if "state.json" not in entries:
+            # A completed coexistence rollback retains its audit journal and
+            # body references.  This is a safe fresh-install state: a new
+            # transaction archives the completed journal before mutation.
+            retained = {JOURNAL_FILE}
+            if entries and JOURNAL_FILE in entries and all(
+                    name in retained or name.startswith("fleet-coexist-body-") for name in entries):
+                journal = secure_read(root / JOURNAL_FILE)
+                if journal is not None:
+                    try:
+                        value = parse_json(journal, JOURNAL_FILE)
+                    except InputError:
+                        return "remediation"
+                    if isinstance(value, dict) and value.get("rollback_ok") is True:
+                        return "rolled-back"
             return "clean" if not entries else "remediation"
         state = load_state(root)
         if state is None:
@@ -1268,15 +1293,19 @@ def rollback_transaction_proofs(es_url: str, authorization: str, journal: Transa
 
 
 def verify_rollback_external_baselines(es_url: str, authorization: str, journal: TransactionJournal) -> None:
-    """Rollback never restores Fleet assets; stop if their captured state moved."""
+    """Re-run the current external class oracle; Fleet assets are never restored."""
+    bundle = load_source()
+    assets = {(asset.kind, asset.name): asset for asset in bundle.assets}
     for baseline in journal.value.get("external_baselines", []):
         if not isinstance(baseline, dict) or not isinstance(baseline.get("kind"), str) or not isinstance(baseline.get("name"), str):
             raise ProvisionError("install refused: transaction_journal_invalid")
-        asset = Asset(baseline["kind"], baseline["name"], "", b"{}")
-        response = json_response(request(es_url, es_path(asset), "GET", authorization))
-        current = asset_adapters.sha256(asset_adapters.compatibility_projection(asset.kind, response))
-        if current != baseline.get("compatibility_projection_sha256"):
-            raise ProvisionError("install refused: rollback_external_compatibility")
+        asset = assets.get((baseline["kind"], baseline["name"]))
+        if asset is None:
+            raise ProvisionError("install refused: transaction_journal_invalid")
+        try:
+            verify_external_asset(es_url, authorization, asset)
+        except (InputError, RequestFailure) as error:
+            raise ProvisionError("install refused: rollback_external_compatibility") from error
 
 
 def _journal_body(journal: TransactionJournal, reference: dict) -> bytes:
@@ -1293,17 +1322,18 @@ def _journal_body(journal: TransactionJournal, reference: dict) -> bytes:
 
 
 def m1_anchor_pins(es_url: str, authorization: str) -> dict[str, str]:
-    """Pin both M1 sources, including intentional absence, with JCS hashes."""
+    """Pin each contract M1 source using a data-stream ids search exactly once."""
     pins: dict[str, str] = {}
     for ident in M1_ANCHOR_IDS:
-        try:
-            value = es_json(es_url, "/" + DIAGNOSIS_STREAM + "/_doc/" + ident, "GET", authorization)
-        except RequestFailure as error:
-            if error.status != 404:
-                raise
-            pins[ident] = asset_adapters.dashboard_absent_hash()
-            continue
-        source = value.get("_source") if isinstance(value, dict) else None
+        value = es_json(es_url, "/" + DIAGNOSIS_STREAM + "/_search", "POST", authorization,
+                        {"query": {"ids": {"values": [ident]}}, "size": 2, "_source": True})
+        hits = value.get("hits", {}).get("hits") if isinstance(value, dict) and isinstance(value.get("hits"), dict) else None
+        if not isinstance(hits, list) or len(hits) != 1:
+            raise ProvisionError("install refused: m1_anchor_absent")
+        hit = hits[0]
+        if not isinstance(hit, dict) or hit.get("_id") != ident:
+            raise ProvisionError("install refused: m1_anchor_absent")
+        source = hit.get("_source")
         if not isinstance(source, dict):
             raise InputError("M1 anchor response is invalid")
         pins[ident] = hashlib.sha256(jcs(source)).hexdigest()
@@ -1682,8 +1712,19 @@ def test_rollover(point: str, es_url: str, authorization: str,
         return
     if not snapshot:
         raise InputError("fleet rollover test stream is unavailable")
-    stream = sorted(snapshot)[0]
+    requested = os.environ.get("RIGSIGNAL_TEST_ROLLOVER_AT", "").partition(":")[2]
+    stream = requested or sorted(snapshot)[0]
+    if stream not in snapshot:
+        raise InputError("fleet rollover test stream is unavailable")
     request(es_url, "/" + urllib.parse.quote(stream, safe="") + "/_rollover", "POST", authorization)
+
+
+def external_write_test_allowed(es_url: str, unsafe_test_injection: bool) -> bool:
+    """Keep the deliberate external-write probe confined to local gate stacks."""
+    parsed = urllib.parse.urlsplit(es_url)
+    return (os.environ.get("RIGSIGNAL_TEST_EXTERNAL_WRITE") == "1"
+            and unsafe_test_injection
+            and parsed.hostname in {"127.0.0.1", "::1", "localhost"})
 
 
 def projection(asset: Asset, response: object) -> object:
@@ -2625,15 +2666,20 @@ def main() -> int:
     parser.add_argument("--rollback", type=Path, metavar="TRANSACTION",
                         help="explicitly reverse the journaled Fleet-coexist transaction at TRANSACTION")
     parser.add_argument("--dry-run", action="store_true", help="list API calls without network access")
+    parser.add_argument("--unsafe-test-injection", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
-    raw_ownership_profile = getattr(args, "ownership_profile", "default")
+    active_test_hooks = sorted(key for key, value in os.environ.items()
+                               if key.startswith("RIGSIGNAL_TEST_") and value)
+    if active_test_hooks:
+        print("test hooks active: " + ",".join(active_test_hooks), file=sys.stderr)
+    raw_ownership_profile = args.ownership_profile
     ownership_profile = raw_ownership_profile or "default"
     try:
         if args.profile != "user":
             raise InputError("profile system is unsupported/broker-required")
         es_url = https_origin(args.endpoint, "--endpoint")
         kb_url = https_origin(args.kibana_endpoint, "--kibana-endpoint")
-        if getattr(args, "rollback", None) is not None:
+        if args.rollback is not None:
             if args.dry_run:
                 raise InputError("rollback dry-run is unsupported")
             configure_https(args.ca_file)
@@ -2695,7 +2741,7 @@ def main() -> int:
         configure_https(args.ca_file)
         configure_https(args.kibana_ca_file)
         authorization = admin_authorization(args.admin_credentials_file)
-        if hasattr(args, "ownership_profile") and admin_credential_kind(args.admin_credentials_file) != "native_user":
+        if admin_credential_kind(args.admin_credentials_file) != "native_user":
             # API keys may still parse for dry-run/read-only tooling, but this
             # invocation will mint a descriptor-bearing shipper key.
             raise ProvisionError("install refused: admin_credential_api_key")
@@ -2707,9 +2753,8 @@ def main() -> int:
         # The marker survives local rollback and a fresh enrollment root.  It
         # is therefore the authoritative rerun fence, ahead of secure_root()
         # and every subsequent mutation.
-        if hasattr(args, "ownership_profile"):
-            fence_remote_ownership_profile(es_url, authorization, ownership_profile,
-                                           raw_ownership_profile is None)
+        fence_remote_ownership_profile(es_url, authorization, ownership_profile,
+                                       raw_ownership_profile is None)
         root = secure_root(requested_root)
         try:
             prior = load_state(root)
@@ -2775,8 +2820,7 @@ def main() -> int:
             dispatch_clean_root(es_url, authorization, False)
 
         prerequisites(es_url, kb_url, authorization)  # Step 3
-        if hasattr(args, "ownership_profile"):
-            cluster_health_gate(es_url, authorization)  # protocol invariant, all profiles
+        cluster_health_gate(es_url, authorization)  # protocol invariant, all profiles
         fence(es_url, authorization, prior, uuid_value, root, adoption)  # Step 4, before W1 PUT
         pre_put_condition, pre_put_snapshot = remote_stream_condition(es_url, authorization)
         if pre_put_condition == "absent":
@@ -2802,7 +2846,7 @@ def main() -> int:
                     journal.pin_m1_anchors(m1_anchor_pins(es_url, authorization))
                 for asset in bundle.assets:
                     if ownership[(asset.kind, asset.name)] == "external":
-                        if os.environ.get("RIGSIGNAL_TEST_EXTERNAL_WRITE") == "1":
+                        if external_write_test_allowed(es_url, args.unsafe_test_injection):
                             # Gate-only negative control for the recording
                             # transport.  It is deliberately impossible to
                             # trigger without an explicit test environment.
@@ -2862,7 +2906,7 @@ def main() -> int:
                        for name, value in (pre_fleet_snapshot or {}).items()):
                     raise InputError("fleet stream snapshot drifted")
         except (RequestFailure, InputError) as error:
-            raise ProvisionError("install failed: diagnosis stream verification:") from error
+            raise ProvisionError("install failed: fleet stream verification:") from error
         if pre_put_snapshot is None:
             # Fresh installation has no stream to snapshot before its W1
             # creates; from here on it receives the same drift protection.

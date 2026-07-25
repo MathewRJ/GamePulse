@@ -362,6 +362,7 @@ class FleetCoexistenceTests(unittest.TestCase):
             "kibana_endpoint": "https://kb.invalid", "kibana_ca_file": Path("kb-ca"),
             "admin_credentials_file": Path("admin"), "agent_binary": Path("agent"),
             "profile": "user", "rollback": Path("transaction"), "dry_run": False,
+            "ownership_profile": None, "unsafe_test_injection": False,
         })()
         output = io.StringIO()
         with mock.patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args), \
@@ -381,6 +382,7 @@ class FleetCoexistenceTests(unittest.TestCase):
             "kibana_endpoint": "https://kb.invalid", "kibana_ca_file": Path("kb-ca"),
             "admin_credentials_file": Path("admin"), "agent_binary": Path("agent"),
             "profile": "user", "rollback": Path("transaction"), "dry_run": False,
+            "ownership_profile": None, "unsafe_test_injection": False,
         })()
         errors = io.StringIO()
         with mock.patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args), \
@@ -488,3 +490,40 @@ class FleetCoexistenceTests(unittest.TestCase):
         with mock.patch.object(INSTALL, "m1_anchor_pins", return_value=changed):
             with self.assertRaisesRegex(INSTALL.ProvisionError, "m1_anchor_mismatch_break_glass"):
                 INSTALL.verify_m1_anchors("https://es", "auth", pins)
+
+    def test_m1_anchor_pins_searches_ids_and_refuses_absence(self):
+        ident = INSTALL.M1_ANCHOR_IDS[0]
+        def present(_url, _path, _method, _authorization, body):
+            current = body["query"]["ids"]["values"][0]
+            return {"hits": {"hits": [{"_id": current, "_source": {"event": {"id": current}}}]}}
+        with mock.patch.object(INSTALL, "es_json", side_effect=present) as search:
+            pins = INSTALL.m1_anchor_pins("https://es", "auth")
+        self.assertEqual(pins[ident], hashlib.sha256(INSTALL.jcs({"event": {"id": ident}})).hexdigest())
+        self.assertEqual(search.call_args.args[1], "/" + INSTALL.DIAGNOSIS_STREAM + "/_search")
+        with mock.patch.object(INSTALL, "es_json", return_value={"hits": {"hits": []}}):
+            with self.assertRaisesRegex(INSTALL.ProvisionError, "m1_anchor_absent"):
+                INSTALL.m1_anchor_pins("https://es", "auth")
+
+    def test_rollback_external_oracle_allows_a_compatible_live_upgrade(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            journal.value["external_baselines"] = [{"kind": "pipelines", "name": "metrics-rigsignal.cpu-0.5.0",
+                                                   "compatibility_projection_sha256": "obsolete"}]
+            with mock.patch.object(INSTALL, "verify_external_asset") as verify:
+                INSTALL.verify_rollback_external_baselines("https://es", "auth", journal)
+            verify.assert_called_once()
+
+    def test_external_write_negative_control_requires_env_unsafe_flag_and_loopback(self):
+        with mock.patch.dict("os.environ", {"RIGSIGNAL_TEST_EXTERNAL_WRITE": "1"}, clear=False):
+            self.assertFalse(INSTALL.external_write_test_allowed("https://owner.example", True))
+            self.assertFalse(INSTALL.external_write_test_allowed("https://localhost", False))
+            self.assertTrue(INSTALL.external_write_test_allowed("https://localhost", True))
+
+    def test_cluster_health_gate_settles_once_before_its_decisive_check(self):
+        with mock.patch.object(INSTALL, "es_json", side_effect=[{}, {"status": "green"}]) as health:
+            INSTALL.cluster_health_gate("https://es", "auth")
+        self.assertEqual(health.call_args_list, [
+            mock.call("https://es", "/_cluster/health?wait_for_events=languid&timeout=30s", "GET", "auth"),
+            mock.call("https://es", "/_cluster/health", "GET", "auth"),
+        ])

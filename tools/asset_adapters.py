@@ -259,6 +259,14 @@ def compatibility_projection(kind: str, live_body: object) -> object:
     # (Do not apply this relaxation to bundle-owned verification.)
     body.pop("_meta", None)
     if kind == "index_templates":
+        # Fleet also writes ownership metadata inside the resolved mapping.
+        # It is the same non-operational ownership contribution as top-level
+        # ``_meta`` (the owned-value dominance exemption covers this field).
+        template = body.get("template")
+        if isinstance(template, dict):
+            mappings = template.get("mappings")
+            if isinstance(mappings, dict):
+                mappings.pop("_meta", None)
         composed = body.get("composed_of")
         if isinstance(composed, list):
             body["composed_of"] = [item for item in composed if item not in FLEET_COMPOSITION_COMPONENTS]

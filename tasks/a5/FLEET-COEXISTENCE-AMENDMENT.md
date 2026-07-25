@@ -405,6 +405,10 @@ pass would otherwise have re-flagged.**
      bundle-owned stream between the pre- and post-barrier snapshots of §3.2; assert the
      in-transaction-rollover case (§3.3) fails closed and recovers via the journaled rollback
      path, rather than being misclassified as installer-caused drift or silently accepted.
+   - **Owner ratification (2026-07-25):** the inline per-cluster pre-apply transform rehearsal
+     is accepted as implemented: it briefly mutates the live transform to prove restorability,
+     then records verify-only and journals the result on a failed proof. This ratifies the
+     inline placement over the earlier rehearsal-environment wording; no redesign is authorized.
 3. **Base commit and hash:** all new legs run against pinned SHA
    `0d427d37c277ae7fdc8df35503cbedab8a25692f` (bundle SHA-256
    `aa57aade36993ea143717c62366942ea736c1bf4235f0952c3cd86c49ece323a`, `BINARY-PROVENANCE.md`)

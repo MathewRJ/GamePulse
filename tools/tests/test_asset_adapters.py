@@ -92,6 +92,13 @@ class AssetAdapterTests(unittest.TestCase):
         self.assertEqual(ADAPTERS.compatibility_projection("index_templates", live),
                          ADAPTERS.compatibility_projection("index_templates", expected))
 
+    def test_external_template_permits_nested_fleet_mapping_metadata(self):
+        expected = {"index_patterns": ["metrics-rigsignal.cpu-*"], "template": {"mappings": {}}}
+        live = {"index_patterns": ["metrics-rigsignal.cpu-*"], "template": {"mappings": {
+            "_meta": {"managed_by": "fleet", "package": {"name": "rigsignal"}}}}}
+        self.assertEqual(ADAPTERS.compatibility_projection("index_templates", live),
+                         ADAPTERS.compatibility_projection("index_templates", expected))
+
     def test_request_body_absent_is_delete_inverse(self):
         self.assertIsNone(ADAPTERS.request_body_from_preimage("dashboard", None))
 

@@ -1,0 +1,100 @@
+{
+  "_shards": {
+    "failed": 0,
+    "skipped": 0,
+    "successful": 1,
+    "total": 1
+  },
+  "hits": {
+    "hits": [
+      {
+        "_id": "76e28921-5229-50bc-96e6-79c5abbb1c7d",
+        "_index": ".ds-logs-rigsignal.diagnosis-default-2026.07.24-000001",
+        "_score": 1.0,
+        "_source": {
+          "@timestamp": "2026-07-03T08:08:43.572Z",
+          "event": {
+            "id": "76e28921-5229-50bc-96e6-79c5abbb1c7d"
+          },
+          "host": {
+            "name": "steamdeck"
+          },
+          "rigsignal": {
+            "diagnosis": {
+              "confidence": 0.75,
+              "confidence_basis": "backfilled: no confidence_basis captured by the 2026-07-03 Python reference implementation",
+              "detector_id": "D6",
+              "disposition": "non_finding",
+              "evidence": [
+                "modes.cfg line 2: LG Electronics LG HDR 4K:3840x2160@60 0 -- display not currently connected; cannot validate",
+                "modes.cfg line 1: Samsung Electric Company QCQ95S:3840x2160@120 0 -- pinned mode matches preferred resolution"
+              ],
+              "evidence_display": "1. modes.cfg line 2: LG Electronics LG HDR 4K:3840x2160@60 0 -- display not currently connected; cannot validate\n2. modes.cfg line 1: Samsung Electric Company QCQ95S:3840x2160@120 0 -- pinned mode matches preferred resolution",
+              "falsifier": "backfilled: no falsifier captured by the 2026-07-03 Python reference implementation",
+              "input_mode": "offline",
+              "missing_evidence": [],
+              "nearest_alternative": "backfilled: no nearest_alternative captured by the 2026-07-03 Python reference implementation",
+              "outcome": "diagnosis",
+              "plain_language": "Mapped gamescope display overrides validate against the current DRM snapshot.",
+              "rule_version": "unknown-legacy-python-refimpl",
+              "schema_version": 1,
+              "suggested_fixes": [],
+              "supported_scope": [
+                "backfilled: scope not captured by the 2026-07-03 Python reference implementation"
+              ],
+              "verdict": "ok"
+            }
+          }
+        }
+      },
+      {
+        "_id": "13610797-13f7-5c07-b028-4bd88c0b3edd",
+        "_index": ".ds-logs-rigsignal.diagnosis-default-2026.07.24-000001",
+        "_score": 1.0,
+        "_source": {
+          "@timestamp": "2026-07-03T08:08:43.518Z",
+          "event": {
+            "id": "13610797-13f7-5c07-b028-4bd88c0b3edd"
+          },
+          "host": {
+            "name": "gamingpc"
+          },
+          "rigsignal": {
+            "diagnosis": {
+              "confidence": 0.6,
+              "confidence_basis": "backfilled: no confidence_basis captured by the 2026-07-03 Python reference implementation",
+              "detector_id": "D3",
+              "disposition": "non_finding",
+              "evidence": [
+                "current journal: no boot-time PCI enumeration lines matched 'pci 0000:' or 'pci_bus 0000:'; journal is inconclusive, likely rotated/truncated",
+                "PCI snapshot: known-good GPU identity present at 0000:03:00.0 (0x1002:0x7550, driver=amdgpu)",
+                "prior journal: no prior journal supplied"
+              ],
+              "evidence_display": "1. current journal: no boot-time PCI enumeration lines matched 'pci 0000:' or 'pci_bus 0000:'; journal is inconclusive, likely rotated/truncated\n2. PCI snapshot: known-good GPU identity present at 0000:03:00.0 (0x1002:0x7550, driver=amdgpu)\n3. prior journal: no prior journal supplied",
+              "falsifier": "backfilled: no falsifier captured by the 2026-07-03 Python reference implementation",
+              "input_mode": "offline",
+              "missing_evidence": [],
+              "nearest_alternative": "backfilled: no nearest_alternative captured by the 2026-07-03 Python reference implementation",
+              "outcome": "diagnosis",
+              "plain_language": "No D3 GPU bus-absence or predictive SMU-hang condition was detected from the supplied fixtures.",
+              "rule_version": "unknown-legacy-python-refimpl",
+              "schema_version": 1,
+              "suggested_fixes": [],
+              "supported_scope": [
+                "backfilled: scope not captured by the 2026-07-03 Python reference implementation"
+              ],
+              "verdict": "ok"
+            }
+          }
+        }
+      }
+    ],
+    "max_score": 1.0,
+    "total": {
+      "relation": "eq",
+      "value": 2
+    }
+  },
+  "timed_out": false,
+  "took": 1
+}

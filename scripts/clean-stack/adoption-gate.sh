@@ -125,7 +125,7 @@ write_admin_credentials() {
   chmod 600 "$RUN_DIR/admin-credentials.toml"
 }
 
-run_installer() {
+_run_installer() {
   local root="$1" adopt="${2:-0}"
   # Settle transient cluster tasks from seeding before the installer's §7
   # point-in-time health gate reads them (harness race, not a product concern).
@@ -135,8 +135,16 @@ run_installer() {
     --admin-credentials-file "$RUN_DIR/admin-credentials.toml" --agent-binary "$CLEAN_STACK_AGENT_BINARY"
     --profile user --enrollment-root "$root")
   [[ "$adopt" == 1 ]] && args+=(--adopt-existing-w1-stream)
-  python3 "${CLEAN_STACK_INSTALLER:-$REPO_ROOT/tools/install_assets.py}" "${args[@]}"
+  local out rc attempt
+  for attempt in 1 2 3; do
+    set +e; out="$(python3 "${CLEAN_STACK_INSTALLER:-$REPO_ROOT/tools/install_assets.py}" "${args[@]}" 2>&1)"; rc=$?; set -e
+    if [[ "$rc" == 0 ]]; then printf '%s\n' "$out"; return 0; fi
+    if [[ "${out##*$'\n'}" == 'install refused: cluster_health' && "$attempt" != 3 ]]; then sleep 10; continue; fi
+    printf '%s\n' "$out"; return "$rc"
+  done
+  return 1
 }
+run_installer() { _run_installer "$@" || fail 'installer failed'; }
 
 # This is matrix.sh's owned_snapshot/zero-delta discipline, replicated here so
 # a selected adoption leg is self-contained.
@@ -155,7 +163,7 @@ owned_snapshot() {
 expect_refusal() {
   local name="$1" root="$2" flag="$3" code="$4" before after output
   output="$RUN_DIR/$name.out"; before="$(owned_snapshot "$RUN_DIR/$name.before" "$root")"
-  if run_installer "$root" "$flag" >"$output" 2>&1; then fail "$name unexpectedly succeeded"; fi
+  if _run_installer "$root" "$flag" >"$output" 2>&1; then fail "$name unexpectedly succeeded"; fi
   grep -Fx "install refused: $code" "$output" >/dev/null || { sed -n '1,20p' "$output" >&2; fail "$name wrong refusal"; }
   after="$(owned_snapshot "$RUN_DIR/$name.after" "$root")"; assert_eq "$name owned delta" "$before" "$after"
 }

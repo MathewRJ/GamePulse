@@ -276,7 +276,8 @@ class AssetToolsTests(unittest.TestCase):
                                        ca_file=Path("unused-ca"), kibana_endpoint="https://example.invalid",
                                        kibana_ca_file=Path("unused-kibana-ca"),
                                        admin_credentials_file=Path("unused-admin"), agent_binary=Path("unused-agent"),
-                                       profile="user", enrollment_root=target, dry_run=False)
+                                       profile="user", enrollment_root=target, dry_run=False,
+                                       ownership_profile=None, rollback=None, unsafe_test_injection=False)
                 old_parse = INSTALL.argparse.ArgumentParser.parse_args
                 old_bundle, old_role = INSTALL.load_bundle, INSTALL.role_body
                 old_configure, old_auth, old_uuid = (INSTALL.configure_https, INSTALL.admin_authorization,
@@ -587,7 +588,8 @@ i.atomic_publication(r, {n: ('new-' + n).encode() for n in ('credentials.toml','
         args = SimpleNamespace(bundle=Path("unused"), endpoint="https://es.invalid", ca_file=Path("unused"),
                                kibana_endpoint="https://kb.invalid", kibana_ca_file=Path("unused"),
                                admin_credentials_file=Path("unused"), agent_binary=Path("unused"), profile="user",
-                               enrollment_root=None, dry_run=True)
+                               enrollment_root=None, dry_run=True, ownership_profile=None,
+                               rollback=None, unsafe_test_injection=False)
         old_parse, old_bundle, old_role = (INSTALL.argparse.ArgumentParser.parse_args, INSTALL.load_bundle,
                                            INSTALL.role_body)
         INSTALL.argparse.ArgumentParser.parse_args = lambda _parser: args

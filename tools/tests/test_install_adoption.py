@@ -23,6 +23,7 @@ class InstallAdoptionTests(unittest.TestCase):
             kibana_endpoint="https://kb.invalid", kibana_ca_file=Path("unused"),
             admin_credentials_file=Path("unused"), agent_binary=Path("unused"), profile="user",
             enrollment_root=root, dry_run=False, adopt_existing_w1_stream=adopt,
+            ownership_profile=None, rollback=None, unsafe_test_injection=False,
         )
 
     def test_enrollment_condition_keeps_adoption_path_narrow(self):
@@ -48,6 +49,17 @@ class InstallAdoptionTests(unittest.TestCase):
             INSTALL.secure_candidate_root(root)
             self.assertEqual(INSTALL.enrollment_condition(root), "incomplete")
 
+    def test_enrollment_condition_recognizes_only_completed_retained_journal_as_rolled_back(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = INSTALL.secure_root(Path(raw) / "enrollment")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            journal.value["rollback_ok"] = True
+            journal._persist()
+            INSTALL.atomic_write(root, "fleet-coexist-body-test", b"audit body")
+            self.assertEqual(INSTALL.enrollment_condition(root), "rolled-back")
+            INSTALL.atomic_write(root, "unexpected", b"no")
+            self.assertEqual(INSTALL.enrollment_condition(root), "remediation")
+
     def test_candidate_write_recovery_redispatches_clean_root_without_adoption(self):
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw) / "enrollment"
@@ -65,6 +77,9 @@ class InstallAdoptionTests(unittest.TestCase):
                 patches.enter_context(patch.object(INSTALL, "role_body", return_value={}))
                 patches.enter_context(patch.object(INSTALL, "configure_https"))
                 patches.enter_context(patch.object(INSTALL, "admin_authorization", return_value="admin"))
+                patches.enter_context(patch.object(INSTALL, "admin_credential_kind", return_value="native_user"))
+                patches.enter_context(patch.object(INSTALL, "cluster_health_gate"))
+                patches.enter_context(patch.object(INSTALL, "fence_remote_ownership_profile"))
                 patches.enter_context(patch.object(INSTALL, "cluster_uuid", return_value=state["expected_cluster_uuid"]))
                 invalidate_name = patches.enter_context(patch.object(INSTALL, "invalidate_mint_name"))
                 invalidate = patches.enter_context(patch.object(INSTALL, "invalidate"))
@@ -104,11 +119,13 @@ class InstallAdoptionTests(unittest.TestCase):
         old_bundle, old_role = INSTALL.load_bundle, INSTALL.role_body
         old_configure, old_auth, old_remote = (INSTALL.configure_https, INSTALL.admin_authorization,
                                                INSTALL.remote_stream_condition)
+        old_credential_kind = INSTALL.admin_credential_kind
         try:
             INSTALL.load_bundle = lambda _path: INSTALL.Bundle("test", "test", [])
             INSTALL.role_body = lambda _bundle: {}
             INSTALL.configure_https = lambda _path: None
             INSTALL.admin_authorization = lambda _path: "admin"
+            INSTALL.admin_credential_kind = lambda _path: "native_user"
             for adopt, remote, code in (
                 (False, "compatible", "adoption_required"),
                 (False, "incompatible", "migration_required"),
@@ -122,6 +139,7 @@ class InstallAdoptionTests(unittest.TestCase):
                         kibana_endpoint="https://kb.invalid", kibana_ca_file=Path("unused"),
                         admin_credentials_file=Path("unused"), agent_binary=Path("unused"), profile="user",
                         enrollment_root=root, dry_run=False, adopt_existing_w1_stream=adopt,
+                        ownership_profile=None, rollback=None, unsafe_test_injection=False,
                     )
                     INSTALL.argparse.ArgumentParser.parse_args = lambda _parser: args
                     INSTALL.remote_stream_condition = lambda *_args: (remote, None)
@@ -132,8 +150,9 @@ class InstallAdoptionTests(unittest.TestCase):
                     self.assertFalse(root.exists())
         finally:
             (INSTALL.argparse.ArgumentParser.parse_args, INSTALL.load_bundle, INSTALL.role_body,
-             INSTALL.configure_https, INSTALL.admin_authorization, INSTALL.remote_stream_condition) = (
-                old_parse, old_bundle, old_role, old_configure, old_auth, old_remote)
+             INSTALL.configure_https, INSTALL.admin_authorization, INSTALL.remote_stream_condition,
+             INSTALL.admin_credential_kind) = (
+                old_parse, old_bundle, old_role, old_configure, old_auth, old_remote, old_credential_kind)
 
     def test_committed_rerun_remote_404_remains_compatible_for_self_healing(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -219,6 +238,8 @@ class InstallAdoptionTests(unittest.TestCase):
                 patches.enter_context(patch.object(INSTALL, "role_body", return_value={}))
                 patches.enter_context(patch.object(INSTALL, "configure_https"))
                 patches.enter_context(patch.object(INSTALL, "admin_authorization", return_value="admin"))
+                patches.enter_context(patch.object(INSTALL, "admin_credential_kind", return_value="native_user"))
+                patches.enter_context(patch.object(INSTALL, "cluster_health_gate"))
                 patches.enter_context(patch.object(INSTALL, "cluster_uuid", return_value="KUrXRgwRRQu-RikmIJhm0Q"))
                 patches.enter_context(patch.object(INSTALL, "prerequisites"))
                 fence = patches.enter_context(patch.object(INSTALL, "fence"))
@@ -267,6 +288,8 @@ class InstallAdoptionTests(unittest.TestCase):
                 patches.enter_context(patch.object(INSTALL, "role_body", return_value={}))
                 patches.enter_context(patch.object(INSTALL, "configure_https"))
                 patches.enter_context(patch.object(INSTALL, "admin_authorization", return_value="admin"))
+                patches.enter_context(patch.object(INSTALL, "admin_credential_kind", return_value="native_user"))
+                patches.enter_context(patch.object(INSTALL, "cluster_health_gate"))
                 patches.enter_context(patch.object(INSTALL, "cluster_uuid", return_value="KUrXRgwRRQu-RikmIJhm0Q"))
                 patches.enter_context(patch.object(INSTALL, "prerequisites"))
                 fence = patches.enter_context(patch.object(INSTALL, "fence"))
@@ -313,6 +336,8 @@ class InstallAdoptionTests(unittest.TestCase):
                 patches.enter_context(patch.object(INSTALL, "role_body", return_value={}))
                 patches.enter_context(patch.object(INSTALL, "configure_https"))
                 patches.enter_context(patch.object(INSTALL, "admin_authorization", return_value="admin"))
+                patches.enter_context(patch.object(INSTALL, "admin_credential_kind", return_value="native_user"))
+                patches.enter_context(patch.object(INSTALL, "cluster_health_gate"))
                 patches.enter_context(patch.object(INSTALL, "cluster_uuid", return_value="KUrXRgwRRQu-RikmIJhm0Q"))
                 patches.enter_context(patch.object(INSTALL, "prerequisites"))
                 patches.enter_context(patch.object(INSTALL, "fence"))
@@ -336,7 +361,7 @@ class InstallAdoptionTests(unittest.TestCase):
                     self.assertEqual(INSTALL.main(), 1)
             self.assertEqual(stderr.getvalue(), "install failed: pre-publication fence:\n")
             publication.assert_not_called()
-            marker_request.assert_not_called()
+            self.assertFalse(any(call.args[2] == "PUT" for call in marker_request.call_args_list))
             self.assertNotIn("committed", {state["phase"] for state in written_states})
 
     def test_in_transaction_fleet_rollover_snapshot_drift_fails_before_publication(self):
@@ -374,7 +399,7 @@ class InstallAdoptionTests(unittest.TestCase):
                 stderr = io.StringIO()
                 with redirect_stderr(stderr):
                     self.assertEqual(INSTALL.main(), 1)
-            self.assertEqual(stderr.getvalue(), "install failed: diagnosis stream verification:\n")
+            self.assertEqual(stderr.getvalue(), "install failed: fleet stream verification:\n")
             self.assertEqual(snapshots.call_count, 2)
             publication.assert_not_called()
             marker_request.assert_called_once_with(
