@@ -54,7 +54,7 @@ _installer() {
   [[ "${RIGSIGNAL_TEST_EXTERNAL_WRITE:-}" != 1 ]] || args+=(--unsafe-test-injection)
   api GET '/_cluster/health?wait_for_events=languid&wait_for_no_initializing_shards=true&timeout=30s' >/dev/null || true
   for attempt in 1 2 3; do
-    set +e; out="$(python3 "${CLEAN_STACK_INSTALLER:-$REPO_ROOT/tools/install_assets.py}" "${args[@]}" 2>&1)"; rc=$?; set -e
+    if out="$(python3 "${CLEAN_STACK_INSTALLER:-$REPO_ROOT/tools/install_assets.py}" "${args[@]}" 2>&1)"; then rc=0; else rc=$?; fi
     if [[ "$rc" == 0 ]]; then printf '%s\n' "$out"; return 0; fi
     if [[ "${out##*$'\n'}" == 'install refused: cluster_health' && "$attempt" != 3 ]]; then sleep 10; continue; fi
     printf '%s\n' "$out"; return "$rc"

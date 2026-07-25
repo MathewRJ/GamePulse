@@ -137,7 +137,7 @@ _run_installer() {
   [[ "$adopt" == 1 ]] && args+=(--adopt-existing-w1-stream)
   local out rc attempt
   for attempt in 1 2 3; do
-    set +e; out="$(python3 "${CLEAN_STACK_INSTALLER:-$REPO_ROOT/tools/install_assets.py}" "${args[@]}" 2>&1)"; rc=$?; set -e
+    if out="$(python3 "${CLEAN_STACK_INSTALLER:-$REPO_ROOT/tools/install_assets.py}" "${args[@]}" 2>&1)"; then rc=0; else rc=$?; fi
     if [[ "$rc" == 0 ]]; then printf '%s\n' "$out"; return 0; fi
     if [[ "${out##*$'\n'}" == 'install refused: cluster_health' && "$attempt" != 3 ]]; then sleep 10; continue; fi
     printf '%s\n' "$out"; return "$rc"
