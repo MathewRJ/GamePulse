@@ -1391,6 +1391,42 @@ def _delete_or_absent(base: str, path: str, authorization: str, headers: dict[st
             raise
 
 
+_PIPELINE_IN_USE_REASON = "cannot be deleted because it is the default pipeline for"
+
+
+def _pipeline_in_use_indices(error: RequestFailure) -> list[str] | None:
+    """Return the indices from ES's non-overridable default-pipeline guard.
+
+    This is deliberately narrower than a generic 400 handler: only the exact
+    Elasticsearch delete guard means that restoring the recorded absent
+    preimage is impossible.  All other delete failures remain fail-loud.
+    """
+    if error.status != 400:
+        return None
+    try:
+        response = parse_json(error.body, "pipeline delete response")
+    except InputError:
+        return None
+    if not isinstance(response, dict):
+        return None
+    causes = response.get("root_cause")
+    nested = response.get("error")
+    if causes is None and isinstance(nested, dict):
+        causes = nested.get("root_cause")
+    if not isinstance(causes, list) or not causes or not isinstance(causes[0], dict):
+        return None
+    cause = causes[0]
+    reason = cause.get("reason")
+    if cause.get("type") != "illegal_argument_exception" or not isinstance(reason, str):
+        return None
+    if _PIPELINE_IN_USE_REASON not in reason:
+        return None
+    match = re.search(r"\bincluding\s*\[([^\]]*)\]", reason)
+    if match is None:
+        return []
+    return [name.strip() for name in match.group(1).split(",") if name.strip()]
+
+
 def _restore_transform_without_pivot(es_url: str, path: str, authorization: str, body: dict) -> None:
     """Issue the transform inverse, with a gate-only rejection injector.
 
@@ -1553,7 +1589,17 @@ def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Pat
         target, path, headers = _rollback_asset_path(intent)
         base = es_url if target == "es" else kb_url
         if intent.get("preimage_absent"):
-            _delete_or_absent(base, path, authorization, headers)
+            try:
+                _delete_or_absent(base, path, authorization, headers)
+            except RequestFailure as error:
+                indices = (_pipeline_in_use_indices(error)
+                           if intent.get("kind") == "pipelines" else None)
+                if indices is None:
+                    raise
+                intent["pipeline_retained_in_use"] = {"referencing_indices": indices}
+                journal._persist()
+                operations.append("retained-in-use:pipelines/" + str(intent.get("name")))
+                continue
         else:
             raw = _journal_body(journal, intent.get("preimage_body"))
             preimage = parse_json(raw, "journal preimage")
@@ -1569,6 +1615,8 @@ def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Pat
         operations.append("asset:" + str(intent.get("kind")) + "/" + str(intent.get("name")))
     for intent in actions:
         if intent in marker:
+            continue
+        if intent.get("pipeline_retained_in_use") is not None:
             continue
         expected = intent.get("preimage_sha256")
         if not isinstance(expected, str) or _rollback_live_hash(es_url, kb_url, authorization, intent) != expected:
@@ -2687,10 +2735,15 @@ def main() -> int:
             authorization = admin_authorization(args.admin_credentials_file)
             operations = rollback_transaction(es_url, kb_url, authorization, args.rollback,
                                              deliberately_reversed=True)
+            reported = False
             if any(item.startswith("verify-only:transforms/") for item in operations):
                 print("rollback completed from journaled intents; transform _meta absence could not be restored: "
                       "verify-only cosmetic drift accepted")
-            else:
+                reported = True
+            if any(item.startswith("retained-in-use:pipelines/") for item in operations):
+                print("rollback completed from journaled intents; pipeline retained: in use as default pipeline for adopted stream indices")
+                reported = True
+            if not reported:
                 print("rollback completed from journaled intents")
             return 0
         if getattr(args, "bundle", None) is None:

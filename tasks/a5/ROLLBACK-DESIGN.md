@@ -177,7 +177,7 @@ in v1/v2 and is stated explicitly here per Sol's round-2 confirmation-pass findi
 | `component_templates` (**bundle-owned only** — see routing note above) | `GET /_component_template/{name}`, `get_projection()` | no HTTP write; journaled as `write_intent`/`write_verified` with `action:"noop"`, `request_body_sha256` = bundle body hash (§5, §2.5 of the amendment) | apply `PUT` bundle body (`action:"update"`); rollback `PUT` `request_body_from_preimage()` | apply `PUT` (create, `action:"create"`); rollback `DELETE /_component_template/{name}` | `verify()` vs. pin |
 | `index_templates` (**bundle-owned only** — see routing note above; non-Fleet — see §3) | `GET /_index_template/{name}`, `get_projection()` | no HTTP write; journaled `action:"noop"` (same as component templates) | apply `PUT` bundle body (`action:"update"`); rollback `PUT` `request_body_from_preimage()` | apply `PUT` (`action:"create"`); rollback `DELETE /_index_template/{name}` | `verify()` vs. pin |
 | `security_roles` (`rigsignal_shipper`) | `GET /_security/role/{name}`, role-specific stripping (`_ROLE_SERVER_KEYS`, `_ROLE_EMPTY_DEFAULT_KEYS`) | n/a (live is absent) | n/a | apply `PUT /_security/role/rigsignal_shipper` (`action:"create"`); rollback `DELETE /_security/role/rigsignal_shipper` | `verify()`; absent-on-rollback confirmed by 404 |
-| `pipelines` (non-Fleet only — see §3, §4) | `GET /_ingest/pipeline/{name}`, `get_projection()` extracts `response[name]` then strips the four server timestamps | `logs-rigsignal.stream@pipeline` post-correction: no HTTP write; journaled `action:"noop"` | apply `PUT` bundle body (`action:"update"`); rollback `PUT` `request_body_from_preimage()` | apply `PUT` (`action:"create"`); rollback `DELETE /_ingest/pipeline/{name}` | `verify()` on the operational-content projection (§1.1), not raw-body equality |
+| `pipelines` (non-Fleet only — see §3, §4) | `GET /_ingest/pipeline/{name}`, `get_projection()` extracts `response[name]` then strips the four server timestamps | `logs-rigsignal.stream@pipeline` post-correction: no HTTP write; journaled `action:"noop"` | apply `PUT` bundle body (`action:"update"`); rollback `PUT` `request_body_from_preimage()` | apply `PUT` (`action:"create"`); rollback `DELETE /_ingest/pipeline/{name}`; on ES's specific default-pipeline in-use guard, retain and journal the retained state (§5) | `verify()` on the operational-content projection (§1.1), not raw-body equality |
 | `transforms` (`rigsignal-game-timeline`) | `GET /_transform/{name}` **and** `GET /_transform/{name}/_stats` (state); `get_projection()` strips `id`, `version`, `create_time`, `authorization`, stats/state/checkpointing | n/a (live differs only in `_meta` visibility; `pivot` exactly equal) | apply `POST /_transform/{name}/_update` with bundle body minus `pivot` (installer's own update-hazard guard, matched here; `action:"update"`); rollback `POST …/_update` with preimage body minus `pivot` | n/a (live already exists) | config `verify()` **and** `_stats.state` unchanged, **gated on the transform `_meta`-absent-restore proof below** |
 | `kibana_spaces` (`rigsignal`) | `GET /api/spaces/space/{id}` | n/a | n/a | apply `POST /api/spaces/space` (create, per installer's 404-branch; `action:"create"`); rollback `DELETE /api/spaces/space/rigsignal` | `verify()`; absent-on-rollback confirmed by 404 |
 | `kibana_roles` (`rigsignal_viewer`) | `GET /api/security/role/{name}` | n/a | n/a | apply `PUT /api/security/role/rigsignal_viewer` (`action:"create"`); rollback `DELETE /api/security/role/rigsignal_viewer` | `verify()`; absent-on-rollback confirmed by 404 |
@@ -389,6 +389,13 @@ atomic, protected **per-object journal**:
   protected journal/enrollment state, mirroring the marker (§Capsules);
   a supplied profile that differs from persisted state refuses before any
   mutation.
+- **Pipeline retained in use (owner-ratified 2026-07-25):** when deletion of a
+  pipeline created by this transaction receives ES's 400
+  `illegal_argument_exception` stating it cannot be deleted because it is the
+  default pipeline for an index, rollback retains that pipeline, persists
+  `pipeline_retained_in_use` with the parsed referencing index names on its
+  journal intent, reports it to the operator, and still completes with
+  `rollback_ok`. Any other 400 remains a failure.
 
 **Rollback order (corrected, Sol #3):**
 

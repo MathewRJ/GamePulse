@@ -376,6 +376,70 @@ class FleetCoexistenceTests(unittest.TestCase):
                          "rollback completed from journaled intents; transform _meta absence could not be restored: "
                          "verify-only cosmetic drift accepted\n")
 
+    def test_rollback_retains_pipeline_used_by_adopted_stream(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            intent = journal.write_intent(
+                "pipelines", "logs-rigsignal.stream@pipeline", "create",
+                INSTALL.asset_adapters.dashboard_absent_hash(), "after", b"{}")
+            journal.write_verified(intent, "after")
+            response = json.dumps({"error": {"root_cause": [{
+                "type": "illegal_argument_exception",
+                "reason": ("pipeline [logs-rigsignal.stream@pipeline] cannot be deleted because it is "
+                           "the default pipeline for 2 index(es) including [.ds-logs-rigsignal.stream-default-000001, "
+                           ".ds-logs-rigsignal.stream-default-000002]")
+            }]}}).encode("utf-8")
+            with mock.patch.object(INSTALL, "verify_rollback_external_baselines"), \
+                 mock.patch.object(INSTALL, "request", side_effect=INSTALL.RequestFailure(400, "in use", response)), \
+                 mock.patch.object(INSTALL, "rollback_transaction_proofs"), \
+                 mock.patch.object(INSTALL, "verify_m1_anchors"), \
+                 mock.patch.object(INSTALL, "_rollback_live_hash", return_value="after"):
+                operations = INSTALL.rollback_transaction("https://es", "https://kb", "auth", root)
+            self.assertIn("retained-in-use:pipelines/logs-rigsignal.stream@pipeline", operations)
+            persisted = INSTALL.TransactionJournal(root, "fleet-coexist").value["intents"][0]
+            self.assertEqual(persisted["pipeline_retained_in_use"], {
+                "referencing_indices": [".ds-logs-rigsignal.stream-default-000001",
+                                        ".ds-logs-rigsignal.stream-default-000002"]})
+            self.assertTrue(INSTALL.TransactionJournal(root, "fleet-coexist").value["rollback_ok"])
+
+    def test_rollback_other_pipeline_400_still_raises(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            intent = journal.write_intent("pipelines", "journaled-only", "create",
+                                          INSTALL.asset_adapters.dashboard_absent_hash(), "after", b"{}")
+            journal.write_verified(intent, "after")
+            response = json.dumps({"error": {"root_cause": [{
+                "type": "illegal_argument_exception", "reason": "some other pipeline validation failure"
+            }]}}).encode("utf-8")
+            with mock.patch.object(INSTALL, "verify_rollback_external_baselines"), \
+                 mock.patch.object(INSTALL, "request", side_effect=INSTALL.RequestFailure(400, "other", response)), \
+                 mock.patch.object(INSTALL, "rollback_transaction_proofs"), \
+                 mock.patch.object(INSTALL, "verify_m1_anchors"), \
+                 mock.patch.object(INSTALL, "_rollback_live_hash", return_value="after"):
+                with self.assertRaises(INSTALL.RequestFailure):
+                    INSTALL.rollback_transaction("https://es", "https://kb", "auth", root)
+
+    def test_main_reports_retained_pipeline_rollback(self):
+        args = type("Args", (), {
+            "bundle": None, "endpoint": "https://es.invalid", "ca_file": Path("ca"),
+            "kibana_endpoint": "https://kb.invalid", "kibana_ca_file": Path("kb-ca"),
+            "admin_credentials_file": Path("admin"), "agent_binary": Path("agent"),
+            "profile": "user", "rollback": Path("transaction"), "dry_run": False,
+            "ownership_profile": None, "unsafe_test_injection": False,
+        })()
+        output = io.StringIO()
+        with mock.patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args), \
+             mock.patch.object(INSTALL, "configure_https"), \
+             mock.patch.object(INSTALL, "admin_authorization", return_value="auth"), \
+             mock.patch.object(INSTALL, "rollback_transaction",
+                               return_value=["retained-in-use:pipelines/logs-rigsignal.stream@pipeline"]), \
+             redirect_stdout(output):
+            self.assertEqual(INSTALL.main(), 0)
+        self.assertEqual(output.getvalue(),
+                         "rollback completed from journaled intents; pipeline retained: in use as default pipeline for adopted stream indices\n")
+
     def test_main_prints_clean_refusal_for_already_rolled_back_transaction(self):
         args = type("Args", (), {
             "bundle": None, "endpoint": "https://es.invalid", "ca_file": Path("ca"),
