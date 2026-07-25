@@ -1486,6 +1486,9 @@ def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Pat
     actions = journal_recovery_actions(journal,
         lambda intent: _rollback_live_hash(es_url, kb_url, authorization, intent))
     operations: list[str] = []
+    for intent in journal.value.get("intents", []):
+        if intent.get("kind") == "transforms" and intent.get("verify_only") is True:
+            operations.append("verify-only:transforms/" + str(intent.get("name")))
     marker = [item for item in actions if item.get("kind") == "component_templates" and item.get("name") == "rigsignal-bundle-meta"]
     for intent in marker:
         marker_path = es_path(Asset("component_templates", "rigsignal-bundle-meta", "", b""))

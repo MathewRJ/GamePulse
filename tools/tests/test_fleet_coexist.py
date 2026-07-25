@@ -1,8 +1,10 @@
 import importlib.util
 import hashlib
+import io
 import json
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -338,6 +340,40 @@ class FleetCoexistenceTests(unittest.TestCase):
             self.assertTrue(record["verify_only"])
             self.assertEqual(record["verify_only_reason"], "meta_absent_restore_unproven_preapply")
             self.assertEqual(record["action"], "noop")
+
+    def test_rollback_reports_journaled_verify_only_transform(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            intent = journal.write_intent(
+                "transforms", "rigsignal-game-timeline", "noop", "before", "after", b"{}")
+            journal.mark_transform_verify_only(intent, "meta_absent_restore_unproven_preapply")
+            with mock.patch.object(INSTALL, "verify_rollback_external_baselines"), \
+                 mock.patch.object(INSTALL, "_rollback_live_hash") as live_hash, \
+                 mock.patch.object(INSTALL, "rollback_transaction_proofs"), \
+                 mock.patch.object(INSTALL, "verify_m1_anchors"):
+                operations = INSTALL.rollback_transaction("https://es", "https://kb", "auth", root)
+            self.assertIn("verify-only:transforms/rigsignal-game-timeline", operations)
+            live_hash.assert_not_called()
+
+    def test_main_reports_verify_only_transform_rollback(self):
+        args = type("Args", (), {
+            "bundle": None, "endpoint": "https://es.invalid", "ca_file": Path("ca"),
+            "kibana_endpoint": "https://kb.invalid", "kibana_ca_file": Path("kb-ca"),
+            "admin_credentials_file": Path("admin"), "agent_binary": Path("agent"),
+            "profile": "user", "rollback": Path("transaction"), "dry_run": False,
+        })()
+        output = io.StringIO()
+        with mock.patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args), \
+             mock.patch.object(INSTALL, "configure_https"), \
+             mock.patch.object(INSTALL, "admin_authorization", return_value="auth"), \
+             mock.patch.object(INSTALL, "rollback_transaction",
+                               return_value=["verify-only:transforms/rigsignal-game-timeline"]), \
+             redirect_stdout(output):
+            self.assertEqual(INSTALL.main(), 0)
+        self.assertEqual(output.getvalue(),
+                         "rollback completed from journaled intents; transform _meta absence could not be restored: "
+                         "verify-only cosmetic drift accepted\n")
 
     def test_second_rollback_is_refused_before_any_external_or_restore_call(self):
         with tempfile.TemporaryDirectory() as directory:
