@@ -299,7 +299,7 @@ leg_6() {
   if RIGSIGNAL_TEST_CRASH_AT=candidate-write _run_installer "$root" 1 >"$RUN_DIR/crash.out" 2>&1; then status=0; else status=$?; fi
   [[ "$status" == 99 ]] || fail 'candidate-write crash hook did not terminate installer'
   pending_mint_name="$(jq -r '.pending_mint_name|@uri' "$root/state.json")"
-  if run_installer "$root" 0 >"$RUN_DIR/crash-retry.out" 2>&1; then fail 'candidate-write no-flag retry unexpectedly succeeded'; fi
+  if _run_installer "$root" 0 >"$RUN_DIR/crash-retry.out" 2>&1; then fail 'candidate-write no-flag retry unexpectedly succeeded'; fi
   grep -Fx 'install refused: adoption_required' "$RUN_DIR/crash-retry.out" >/dev/null || fail 'candidate-write retry did not re-dispatch adoption_required'
   [[ ! -d "$root/candidate" ]] || fail 'recovery left candidate directory'
   [[ ! -e "$root/state.json" ]] || fail 'recovery left null-active state'
@@ -318,7 +318,7 @@ leg_6() {
     api PUT "/$index_name/_mapping" "$RUN_DIR/toctou.json" >/dev/null
   ) &
   injector=$!
-  if run_installer "$root" 1 >"$RUN_DIR/toctou.out" 2>&1; then
+  if _run_installer "$root" 1 >"$RUN_DIR/toctou.out" 2>&1; then
     kill "$injector" 2>/dev/null || true
     wait "$injector" || true
     injector=''
