@@ -296,7 +296,7 @@ leg_5() {
 leg_6() {
   local root="$RUN_DIR/crash-root" status index_name injector='' pending_mint_name
   seed_m1; capture_m1 "$RUN_DIR/crash-m1.before"
-  if RIGSIGNAL_TEST_CRASH_AT=candidate-write run_installer "$root" 1 >"$RUN_DIR/crash.out" 2>&1; then status=0; else status=$?; fi
+  if RIGSIGNAL_TEST_CRASH_AT=candidate-write _run_installer "$root" 1 >"$RUN_DIR/crash.out" 2>&1; then status=0; else status=$?; fi
   [[ "$status" == 99 ]] || fail 'candidate-write crash hook did not terminate installer'
   pending_mint_name="$(jq -r '.pending_mint_name|@uri' "$root/state.json")"
   if run_installer "$root" 0 >"$RUN_DIR/crash-retry.out" 2>&1; then fail 'candidate-write no-flag retry unexpectedly succeeded'; fi
