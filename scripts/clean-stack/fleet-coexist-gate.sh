@@ -512,7 +512,11 @@ PY
   grep -F 'RIGSIGNAL_OPERATOR_ACTION resolve or remove foreign literal object' "$RUN_DIR/leg-m-iii-refusal.log" >/dev/null || fail 'Leg-M(iii) did not require foreign-seed resolution'
   sed -n 's/^RIGSIGNAL_REMEDIATION //p' "$RUN_DIR/leg-m-iii-refusal.log" >"$RUN_DIR/leg-m-remediation.jsonl"
   [[ -s "$RUN_DIR/leg-m-remediation.jsonl" ]] || fail 'Leg-M(iii) emitted no machine remediation payload'
-  jq -e 'all(.method == "DELETE" and (.path | startswith("/api/saved_objects/")) and .headers == {"kbn-xsrf":"true"})' "$RUN_DIR/leg-m-remediation.jsonl" >/dev/null || fail 'Leg-M(iii) remediation payload is malformed'
+  # One-arg all(f) iterates the INPUT's values (it would test .method against
+  # the string "DELETE" and error); the payload rows are objects, so slurp and
+  # use the two-arg form (solo leg-m round-17 catch — a harness jq defect, the
+  # emitted payloads were correct).
+  jq -s -e 'length > 0 and all(.[]; .method == "DELETE" and (.path | startswith("/api/saved_objects/")) and .headers == {"kbn-xsrf":"true"})' "$RUN_DIR/leg-m-remediation.jsonl" >/dev/null || fail 'Leg-M(iii) remediation payload is malformed'
   grep -E '^GET /api/saved_objects/_find\?type=dashboard&per_page=1000$' "$RUN_DIR/origin-http.log" >/dev/null || fail 'Leg-M(iii) default find was not unscoped'
   origin_seed replay "$RUN_DIR/leg-m-remediation.jsonl"
   if default_installer >"$RUN_DIR/leg-m-iii-negative.log" 2>&1; then fail 'Leg-M(iii) UUID-only cleanup accepted foreign seed'; fi
