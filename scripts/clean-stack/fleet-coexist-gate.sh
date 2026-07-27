@@ -405,7 +405,14 @@ leg_k() {
   if RIGSIGNAL_TEST_CRASH_AT='after-remote-mutation:dashboard/rigsignal-home.ndjson' _installer >"$RUN_DIR/leg-k-fault.log" 2>&1; then fail 'Leg-K qualified later-file fault did not crash'; fi
   grep -F 'rigsignal-home.ndjson' "$RUN_DIR/leg-k-fault.log" >/dev/null || fail 'Leg-K fault did not reach named later dashboard file'
   rollback >"$RUN_DIR/leg-k-rollback.log" 2>&1 || fail 'Leg-K rollback failed'
-  grep -E '^rollback completed from journaled intents(:|$)' "$RUN_DIR/leg-k-rollback.log" >/dev/null || fail 'Leg-K rollback reporter mismatch'
+  # The success line's benign variants continue with '; ...' (transform
+  # verify-only / retained pipeline) — K(e)'s crash lands after transforms
+  # applied, so the rollback legitimately prints a ';'-suffixed variant.
+  # D-11's '(:|$)' form is for REFUSAL tokens, not this line (round-14 catch).
+  # 'recovery incomplete' would also match the ';' form, so exclude it
+  # explicitly: K(e)'s sweep must leave zero unverified orphans.
+  grep -E '^rollback completed from journaled intents(;|$)' "$RUN_DIR/leg-k-rollback.log" >/dev/null || fail 'Leg-K rollback reporter mismatch'
+  ! grep -F 'recovery incomplete:' "$RUN_DIR/leg-k-rollback.log" >/dev/null || fail 'Leg-K rollback left unverified orphans'
   [[ "$(origin_dashboard_count rigsignal)" == 0 ]] || fail 'Leg-K rollback left shared-child or regenerated objects'
   kb_get rigsignal '/api/saved_objects/_find?type=legacy-url-alias&per_page=1000' | jq -e '.total == 0' >/dev/null || fail 'Leg-K rollback left an alias delta'
 }
