@@ -1625,12 +1625,12 @@ _ROLLBACK_ORDER = {"dashboard": 0, "kibana_roles": 1, "kibana_spaces": 2,
 def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Path,
                          deliberately_reversed: bool = True,
                          bundle_path: Path | None = None) -> list[str]:
-    """Execute the RD §5 inverse in journal order, never from the manifest.
+    """Execute the RD §5 inverse from a secured root, never from the manifest.
 
     The return value is an auditable operation sequence used by mocked-transport
     tests; production ignores it after a successful verify-oracle pass.
     """
-    journal = TransactionJournal(secure_root(root), "fleet-coexist")
+    journal = TransactionJournal(root, "fleet-coexist")
     newest_non_rolled_back_transaction(journal)
     verify_rollback_external_baselines(es_url, authorization, journal, bundle_path)
     actions = journal_recovery_actions(journal,
@@ -2813,6 +2813,7 @@ def main() -> int:
         es_url = https_origin(args.endpoint, "--endpoint")
         kb_url = https_origin(args.kibana_endpoint, "--kibana-endpoint")
         if args.rollback is not None:
+            rollback_root = secure_root(args.rollback)
             if args.dry_run:
                 raise InputError("rollback dry-run is unsupported")
             configure_https(args.ca_file)
@@ -2825,17 +2826,20 @@ def main() -> int:
             # reversed: a completed rollback legitimately restores the
             # enrollment profile file away (second-rollback refusal shape),
             # and the journal is the durable record of this root's profile.
-            requested_profile = load_ownership_profile(args.rollback) or "default"
-            journal_raw = secure_read(args.rollback / JOURNAL_FILE, missing_ok=True)
+            try:
+                requested_profile = load_ownership_profile(rollback_root) or "default"
+            except InputError:
+                requested_profile = "default"
+            journal_raw = secure_read(rollback_root / JOURNAL_FILE, missing_ok=True)
             if journal_raw is not None:
                 try:
                     recorded = parse_json(journal_raw, JOURNAL_FILE)
-                except InputError:
-                    recorded = None
+                except InputError as error:
+                    raise ProvisionError("install refused: transaction_journal_invalid") from error
                 if isinstance(recorded, dict) and recorded.get("ownership_profile") in {"default", "fleet-coexist"}:
                     requested_profile = recorded["ownership_profile"]
             fence_remote_ownership_profile(es_url, authorization, requested_profile, False)
-            operations = rollback_transaction(es_url, kb_url, authorization, args.rollback,
+            operations = rollback_transaction(es_url, kb_url, authorization, rollback_root,
                                              deliberately_reversed=True, bundle_path=args.bundle)
             reported = False
             if any(item.startswith("verify-only:transforms/") for item in operations):
@@ -2856,9 +2860,12 @@ def main() -> int:
     except ProvisionError as error:
         print(error.prefix, file=sys.stderr)
         return 1
-    except InputError as error:
+    except (InputError, RequestFailure, OSError) as error:
         if isinstance(error, OwnershipTableError):
             print("install refused: " + str(error), file=sys.stderr)
+            return 1
+        if args.rollback is not None:
+            print("install failed: enrollment output:", file=sys.stderr)
             return 1
         print(f"install failed: bundle validation:", file=sys.stderr)
         return 1
