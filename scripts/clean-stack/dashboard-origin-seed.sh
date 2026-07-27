@@ -159,8 +159,15 @@ case "${1:-}" in
     ;;
   one)
     space_create "$2"
+    # Each saved-object type validates its own attribute schema strictly:
+    # tags require name/description/color (a generic title body 400s —
+    # solo leg-j round-6 failure at pin e5f9505).
+    case "$3" in
+      tag) one_body="{\"attributes\":{\"name\":\"dashboard-origin seed $4\",\"description\":\"dashboard-origin seed\",\"color\":\"#00bfb3\"},\"references\":[]}" ;;
+      *)   one_body="{\"attributes\":{\"title\":\"dashboard-origin seed $4\"},\"references\":[]}" ;;
+    esac
     DASH_SPACE="$2" kb POST "/api/saved_objects/$3/$4?overwrite=true" \
-      --data-binary "{\"attributes\":{\"title\":\"dashboard-origin seed $4\"},\"references\":[]}" >/dev/null
+      --data-binary "$one_body" >/dev/null
     ;;
   delete)
     DASH_SPACE="$2" kb DELETE "/api/saved_objects/$3/$4" >/dev/null ;;
