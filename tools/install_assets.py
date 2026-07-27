@@ -1510,6 +1510,30 @@ def _pipeline_in_use_indices(error: RequestFailure) -> dict | None:
     return {"referencing_indices": [name.strip() for name in match.group(1).split(",") if name.strip()]}
 
 
+def _retained_pipeline_report_details(root: Path) -> list[str]:
+    """Return one-line-safe operator details from retained-pipeline journal intents."""
+    journal = TransactionJournal(root, "fleet-coexist")
+    details = []
+    for intent in journal.value["intents"]:
+        retained = intent.get("pipeline_retained_in_use")
+        if not isinstance(retained, dict):
+            continue
+        name = intent.get("name")
+        if not isinstance(name, str):
+            raise ProvisionError("install refused: transaction_journal_invalid")
+        reason = retained.get("raw_reason")
+        if isinstance(reason, str):
+            detail = "raw_reason: " + json.dumps(reason, ensure_ascii=False)
+        else:
+            indices = retained.get("referencing_indices")
+            if not isinstance(indices, list) or not all(isinstance(index, str) for index in indices):
+                raise ProvisionError("install refused: transaction_journal_invalid")
+            detail = "referencing_indices: " + json.dumps(
+                sorted(indices), ensure_ascii=False, separators=(",", ":"))
+        details.append((name, detail))
+    return [name + "; " + detail for name, detail in sorted(details)]
+
+
 def _restore_transform_without_pivot(es_url: str, path: str, authorization: str, body: dict) -> None:
     """Issue the transform inverse, with a gate-only rejection injector.
 
@@ -2846,8 +2870,12 @@ def main() -> int:
                 print("rollback completed from journaled intents; transform _meta absence could not be restored: "
                       "verify-only cosmetic drift accepted")
                 reported = True
+            retained = []
             if any(item.startswith("retained-in-use:pipelines/") for item in operations):
-                print("rollback completed from journaled intents; pipeline retained: in use as default pipeline for adopted stream indices")
+                retained = _retained_pipeline_report_details(rollback_root)
+            if retained:
+                print("rollback completed from journaled intents; pipeline retained: "
+                      "in use as default pipeline for adopted stream indices; " + "; ".join(retained))
                 reported = True
             if not reported:
                 print("rollback completed from journaled intents")

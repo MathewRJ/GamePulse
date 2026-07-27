@@ -2,6 +2,8 @@ import importlib.util
 import hashlib
 import io
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -487,24 +489,76 @@ class FleetCoexistenceTests(unittest.TestCase):
                     INSTALL.rollback_transaction("https://es", "https://kb", "auth", root)
 
     def test_main_reports_retained_pipeline_rollback(self):
-        args = type("Args", (), {
-            "bundle": None, "endpoint": "https://es.invalid", "ca_file": Path("ca"),
-            "kibana_endpoint": "https://kb.invalid", "kibana_ca_file": Path("kb-ca"),
-            "admin_credentials_file": Path("admin"), "agent_binary": Path("agent"),
-            "profile": "user", "rollback": Path("transaction"), "dry_run": False,
-            "ownership_profile": None, "unsafe_test_injection": False,
-        })()
-        output = io.StringIO()
-        with mock.patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args), \
-             mock.patch.object(INSTALL, "configure_https"), \
-             mock.patch.object(INSTALL, "admin_authorization", return_value="auth"), \
-             mock.patch.object(INSTALL, "fence_remote_ownership_profile"), \
-             mock.patch.object(INSTALL, "rollback_transaction",
-                               return_value=["retained-in-use:pipelines/logs-rigsignal.stream@pipeline"]), \
-             redirect_stdout(output):
-            self.assertEqual(INSTALL.main(), 0)
-        self.assertEqual(output.getvalue(),
-                         "rollback completed from journaled intents; pipeline retained: in use as default pipeline for adopted stream indices\n")
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            intent = journal.write_intent("pipelines", "logs-rigsignal.stream@pipeline", "create",
+                                          "before", "after", b"{}")
+            intent["pipeline_retained_in_use"] = {
+                "referencing_indices": [".ds-z", ".ds-a"]}
+            journal._persist()
+            args = type("Args", (), {
+                "bundle": None, "endpoint": "https://es.invalid", "ca_file": Path("ca"),
+                "kibana_endpoint": "https://kb.invalid", "kibana_ca_file": Path("kb-ca"),
+                "admin_credentials_file": Path("admin"), "agent_binary": Path("agent"),
+                "profile": "user", "rollback": root, "dry_run": False,
+                "ownership_profile": None, "unsafe_test_injection": False,
+            })()
+            output = io.StringIO()
+            with mock.patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args), \
+                 mock.patch.object(INSTALL, "configure_https"), \
+                 mock.patch.object(INSTALL, "admin_authorization", return_value="auth"), \
+                 mock.patch.object(INSTALL, "fence_remote_ownership_profile"), \
+                 mock.patch.object(INSTALL, "rollback_transaction",
+                                   return_value=["retained-in-use:pipelines/logs-rigsignal.stream@pipeline"]), \
+                 redirect_stdout(output):
+                self.assertEqual(INSTALL.main(), 0)
+            self.assertEqual(output.getvalue(),
+                             "rollback completed from journaled intents; pipeline retained: in use as default "
+                             "pipeline for adopted stream indices; logs-rigsignal.stream@pipeline; "
+                             "referencing_indices: [\".ds-a\",\".ds-z\"]\n")
+
+    def test_main_reports_retained_pipeline_raw_reason(self):
+        reason = ("pipeline [logs-rigsignal.stream@pipeline] cannot be deleted because it is "
+                  "the default pipeline for adopted stream indices")
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            intent = journal.write_intent("pipelines", "logs-rigsignal.stream@pipeline", "create",
+                                          "before", "after", b"{}")
+            intent["pipeline_retained_in_use"] = {"referencing_indices": [], "raw_reason": reason}
+            journal._persist()
+            args = type("Args", (), {
+                "bundle": None, "endpoint": "https://es.invalid", "ca_file": Path("ca"),
+                "kibana_endpoint": "https://kb.invalid", "kibana_ca_file": Path("kb-ca"),
+                "admin_credentials_file": Path("admin"), "agent_binary": Path("agent"),
+                "profile": "user", "rollback": root, "dry_run": False,
+                "ownership_profile": None, "unsafe_test_injection": False,
+            })()
+            output = io.StringIO()
+            with mock.patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args), \
+                 mock.patch.object(INSTALL, "configure_https"), \
+                 mock.patch.object(INSTALL, "admin_authorization", return_value="auth"), \
+                 mock.patch.object(INSTALL, "fence_remote_ownership_profile"), \
+                 mock.patch.object(INSTALL, "rollback_transaction",
+                                   return_value=["retained-in-use:pipelines/logs-rigsignal.stream@pipeline"]), \
+                 redirect_stdout(output):
+                self.assertEqual(INSTALL.main(), 0)
+            self.assertEqual(output.getvalue(),
+                             "rollback completed from journaled intents; pipeline retained: in use as default "
+                             "pipeline for adopted stream indices; logs-rigsignal.stream@pipeline; raw_reason: "
+                             + json.dumps(reason) + "\n")
+
+    def test_rollback_working_tree_loader_matches_current_tree_bundle(self):
+        with tempfile.TemporaryDirectory() as directory:
+            bundle_path = Path(directory) / "assets.tar.gz"
+            result = subprocess.run([
+                sys.executable, str(ROOT / "tools/build_asset_bundle.py"), "--source-commit",
+                INSTALL.source_commit(), "--output", str(bundle_path),
+            ], cwd=ROOT, text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(INSTALL.asset_set_sha256(INSTALL.load_source()),
+                             INSTALL.asset_set_sha256(INSTALL.load_bundle(bundle_path)))
 
     def test_main_prints_clean_refusal_for_already_rolled_back_transaction(self):
         args = type("Args", (), {
