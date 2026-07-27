@@ -100,17 +100,28 @@ case "${1:-}" in
   old-all) create_objects "$2" "$(old_objects)" ;;
   space) space_create "$2" ;;
   derivatives)
-    # createNewCopies mints UUID ids/originIds and rewrites all closure references.
+    # createNewCopies RESETS originId (documented + observed live: five
+    # dashboards landed in default with NO originId, solo leg-k at bab419f) —
+    # it can never build the owner-shaped derivative fixture. The owner's
+    # real derivatives got originId via CONFLICT REGENERATION (case 7b): the
+    # caller must have already seeded the OLD-id closure in a donor space
+    # (leg_k does old-all donor first); a plain overwrite import into default
+    # then regenerates every id (cross-space literal conflict) and stamps
+    # originId = the imported OLD id — the genesis of the owner topology.
+    # compatibilityMode stays OFF (it would mint aliases, extra surface).
     space_create default
     derivative_file="${TMPDIR:-/tmp}/dashboard-origin-derivatives.ndjson"
     derivative_response="${TMPDIR:-/tmp}/dashboard-origin-derivatives-response.json"
     derivative_objects >"$derivative_file"
     derivative_expected="$(wc -l <"$derivative_file")"
     curl --silent --show-error --fail --max-redirs 0 --user "elastic:$ELASTIC_PASSWORD" -H 'kbn-xsrf: true' \
-      -X POST "${KB_URL}/api/saved_objects/_import?createNewCopies=true" -F "file=@${derivative_file};type=application/ndjson;filename=import.ndjson" >"$derivative_response"
+      -X POST "${KB_URL}/api/saved_objects/_import?overwrite=true" -F "file=@${derivative_file};type=application/ndjson;filename=import.ndjson" >"$derivative_response"
     jq -e --argjson expected "$derivative_expected" \
       '.success == true and .successCount == $expected and ((.errors // []) | length == 0)' \
       "$derivative_response" >/dev/null || { cat "$derivative_response" >&2; printf '%s\n' 'dashboard-origin derivatives import was incomplete' >&2; exit 1; }
+    jq -e --argjson expected "$derivative_expected" \
+      '[.successResults[] | select(.destinationId? and .destinationId != .id)] | length == $expected' \
+      "$derivative_response" >/dev/null || { cat "$derivative_response" >&2; printf '%s\n' 'dashboard-origin derivatives were not regenerated (conflict seed missing?)' >&2; exit 1; }
     DASH_SPACE=default kb GET '/api/saved_objects/_find?type=dashboard&per_page=1000' >"${TMPDIR:-/tmp}/dashboard-origin-derivatives-find.json"
     jq -e '[.saved_objects[] | select((.originId // "") != "")] | length >= 5' \
       "${TMPDIR:-/tmp}/dashboard-origin-derivatives-find.json" >/dev/null || { cat "${TMPDIR:-/tmp}/dashboard-origin-derivatives-find.json" >&2; printf '%s\n' 'dashboard-origin derivatives did not create five default-space origin copies' >&2; exit 1; }
