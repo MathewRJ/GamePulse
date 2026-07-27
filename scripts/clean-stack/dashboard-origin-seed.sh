@@ -29,7 +29,7 @@ kb_form() {
   local method="$1" path="$2" file="$3"
   curl --silent --show-error --fail --max-redirs 0 --user "elastic:$ELASTIC_PASSWORD" \
     -H 'kbn-xsrf: true' -X "$method" "${KB_URL}$(prefix "${DASH_SPACE:-default}")${path}" \
-    --form "file=@${file};type=application/ndjson"
+    --form "file=@${file};type=application/ndjson;filename=import.ndjson"
 }
 space_create() {
   # /api/spaces/space is a ROOT-level API — never space-scoped (POSTing to
@@ -107,7 +107,7 @@ case "${1:-}" in
     derivative_objects >"$derivative_file"
     derivative_expected="$(wc -l <"$derivative_file")"
     curl --silent --show-error --fail --max-redirs 0 --user "elastic:$ELASTIC_PASSWORD" -H 'kbn-xsrf: true' \
-      -X POST "${KB_URL}/api/saved_objects/_import?createNewCopies=true" -F "file=@${derivative_file};type=application/ndjson" >"$derivative_response"
+      -X POST "${KB_URL}/api/saved_objects/_import?createNewCopies=true" -F "file=@${derivative_file};type=application/ndjson;filename=import.ndjson" >"$derivative_response"
     jq -e --argjson expected "$derivative_expected" \
       '.success == true and .successCount == $expected and ((.errors // []) | length == 0)' \
       "$derivative_response" >/dev/null || { cat "$derivative_response" >&2; printf '%s\n' 'dashboard-origin derivatives import was incomplete' >&2; exit 1; }
@@ -135,7 +135,14 @@ case "${1:-}" in
     alias_uuid="$(jq -r '.successResults[0].destinationId // empty' <<<"$alias_resp")"
     [[ -n "$alias_uuid" ]] \
       || { printf 'alias mint did not regenerate (no destinationId): %s\n' "$alias_resp" >&2; exit 1; }
-    DASH_SPACE="$alias_target" kb DELETE "/api/saved_objects/dashboard/${alias_uuid}" >/dev/null
+    # Deleting the alias's TARGET object cascade-deletes the alias (verified
+    # live 2026-07-27 on the kept leg-j stack), so the regenerated uuid host
+    # object MUST remain. It is inert to the preflight anyway: a uuid literal
+    # id matches no bundle id, and the typed-origin sweep is target-space
+    # scoped. Delete only the bundle-id LITERAL (which would otherwise add a
+    # literal_id_exists_elsewhere reason), leaving alias_match as the sole
+    # preflight-visible reason for bundle ids — exactly what Leg-J(i)/D-2
+    # asserts.
     DASH_SPACE="$alias_donor" kb DELETE "/api/saved_objects/dashboard/${alias_id}" >/dev/null
     # Independent-oracle verification via ES (same transport case 4 used;
     # deliberately NOT the installer's own _find, which Leg-J(i) exists to
