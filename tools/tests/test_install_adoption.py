@@ -504,3 +504,36 @@ class RollbackBoundaryFenceTests(unittest.TestCase):
                     self.assertEqual(INSTALL.main(), 1)
             self.assertEqual(stderr.getvalue(), "install refused: ownership_table_version_mismatch\n")
             rollback.assert_not_called()
+
+    def test_second_rollback_reaches_journal_refusal_with_restored_coexist_marker(self):
+        # Leg-i shape: after a completed rollback the enrollment profile file
+        # is gone but the journal records fleet-coexist; the boundary fence
+        # must derive the requested profile from the journal so the precise
+        # transaction_already_rolled_back refusal is reachable.
+        with tempfile.TemporaryDirectory() as raw:
+            root = INSTALL.secure_root(Path(raw) / "enrollment")
+            INSTALL.TransactionJournal(root, "fleet-coexist")
+            marker = {"component_templates": [{"component_template": {
+                "_meta": {"ownership_profile": "fleet-coexist",
+                          "ownership_table_version": INSTALL.OWNERSHIP_TABLE_VERSION},
+                "template": {}}}]}
+            args = SimpleNamespace(
+                bundle=None, endpoint="https://es.invalid", ca_file=Path("unused"),
+                kibana_endpoint="https://kb.invalid", kibana_ca_file=Path("unused"),
+                admin_credentials_file=Path("unused"), agent_binary=Path("unused"),
+                profile="user", enrollment_root=root, dry_run=False,
+                adopt_existing_w1_stream=False, ownership_profile=None,
+                rollback=root, unsafe_test_injection=False)
+            rollback = MagicMock(side_effect=INSTALL.ProvisionError(
+                "install refused: transaction_already_rolled_back"))
+            with ExitStack() as patches:
+                patches.enter_context(patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args))
+                patches.enter_context(patch.object(INSTALL, "configure_https"))
+                patches.enter_context(patch.object(INSTALL, "admin_authorization", return_value="admin"))
+                patches.enter_context(patch.object(INSTALL, "request", return_value=json.dumps(marker).encode()))
+                patches.enter_context(patch.object(INSTALL, "rollback_transaction", rollback))
+                stderr = io.StringIO()
+                with redirect_stderr(stderr):
+                    self.assertEqual(INSTALL.main(), 1)
+            self.assertEqual(stderr.getvalue(), "install refused: transaction_already_rolled_back\n")
+            rollback.assert_called_once()

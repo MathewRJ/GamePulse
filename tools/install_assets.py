@@ -2820,10 +2820,21 @@ def main() -> int:
             authorization = admin_authorization(args.admin_credentials_file)
             # Rollback is an invocation boundary too: the ratified invariant
             # (RD "every boundary", ruling 5 stamp) fences profile and table
-            # version before any journaled reversal begins (S1-v4).
-            fence_remote_ownership_profile(es_url, authorization,
-                                           load_ownership_profile(args.rollback) or "default",
-                                           False)
+            # version before any journaled reversal begins (S1-v4).  The
+            # requested profile comes from the journaled transaction being
+            # reversed: a completed rollback legitimately restores the
+            # enrollment profile file away (second-rollback refusal shape),
+            # and the journal is the durable record of this root's profile.
+            requested_profile = load_ownership_profile(args.rollback) or "default"
+            journal_raw = secure_read(args.rollback / JOURNAL_FILE, missing_ok=True)
+            if journal_raw is not None:
+                try:
+                    recorded = parse_json(journal_raw, JOURNAL_FILE)
+                except InputError:
+                    recorded = None
+                if isinstance(recorded, dict) and recorded.get("ownership_profile") in {"default", "fleet-coexist"}:
+                    requested_profile = recorded["ownership_profile"]
+            fence_remote_ownership_profile(es_url, authorization, requested_profile, False)
             operations = rollback_transaction(es_url, kb_url, authorization, args.rollback,
                                              deliberately_reversed=True, bundle_path=args.bundle)
             reported = False
