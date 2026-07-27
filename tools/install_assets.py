@@ -836,16 +836,23 @@ def run_topology_preflight(bundle: Bundle, es_url: str, kb_url: str, authorizati
                     row["id"]: row.get("originId") for row in _strict_saved_object_find(
                         kb_url, authorization, space, object_type)
                 }
-        aliases: dict[str, list[tuple[str, str]]] = {}
-        for space in spaces:
-            rows = _strict_saved_object_find(kb_url, authorization, space, "legacy-url-alias")
-            aliases[space] = []
-            for row in rows:
-                attributes = row.get("attributes")
-                if (not isinstance(attributes, dict) or not isinstance(attributes.get("sourceId"), str)
-                        or not isinstance(attributes.get("targetId"), str)):
-                    _topology_refusal("saved_object_topology_unverifiable", "alias_row_malformed")
-                aliases[space].append((attributes["sourceId"], attributes["targetId"]))
+        # legacy-url-alias is namespace-agnostic: a scoped _find returns the
+        # SAME rows for every /s/<space> prefix (verified live on 9.4.3,
+        # 2026-07-27 — a single alias appeared once per enumerated space,
+        # multiplying the refusal reasons). Query once, unscoped; each row
+        # names its own space via attributes.targetNamespace (validated as a
+        # string like sourceId/targetId — absence is unverifiable, never
+        # guessed).
+        alias_rows = _strict_saved_object_find(kb_url, authorization, "default", "legacy-url-alias")
+        alias_entries = []
+        for row in alias_rows:
+            attributes = row.get("attributes")
+            if (not isinstance(attributes, dict) or not isinstance(attributes.get("sourceId"), str)
+                    or not isinstance(attributes.get("targetId"), str)
+                    or not isinstance(attributes.get("targetNamespace"), str)):
+                _topology_refusal("saved_object_topology_unverifiable", "alias_row_malformed")
+            alias_entries.append((attributes["sourceId"], attributes["targetId"],
+                                  attributes["targetNamespace"]))
     except ProvisionError:
         raise
     except (RequestFailure, InputError, json.JSONDecodeError) as error:
@@ -858,8 +865,9 @@ def run_topology_preflight(bundle: Bundle, es_url: str, kb_url: str, authorizati
             if space != target and object_id in table[(space, object_type)]:
                 reasons.append(f"literal_id_exists_elsewhere space={space}")
                 foreign_spaces.append(space)
-            if any(object_id in pair for pair in aliases[space]):
-                reasons.append(f"alias_match space={space}")
+        for source_id, target_id, alias_space in alias_entries:
+            if object_id in (source_id, target_id):
+                reasons.append(f"alias_match space={alias_space}")
         if target in spaces:
             for physical_id, origin_id in table[(target, object_type)].items():
                 if physical_id != object_id and origin_id == object_id:
