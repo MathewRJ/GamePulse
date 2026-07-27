@@ -89,7 +89,10 @@ def _internal_reference_ids(value):
         if isinstance(references, list):
             for reference in references:
                 if isinstance(reference, dict) and isinstance(reference.get("id"), str):
-                    yield reference["id"]
+                    # gap-audit note (2026-07-27): URL-decode for literal spec
+                    # compliance with v8 W-A check (b)'s "URL-decoding each
+                    # parsed id before comparing".
+                    yield urllib.parse.unquote(reference["id"])
         for item in value.values():
             yield from _internal_reference_ids(item)
     elif isinstance(value, list):
