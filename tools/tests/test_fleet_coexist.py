@@ -410,6 +410,7 @@ class FleetCoexistenceTests(unittest.TestCase):
         with mock.patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args), \
              mock.patch.object(INSTALL, "configure_https"), \
              mock.patch.object(INSTALL, "admin_authorization", return_value="auth"), \
+             mock.patch.object(INSTALL, "fence_remote_ownership_profile"), \
              mock.patch.object(INSTALL, "rollback_transaction",
                                return_value=["verify-only:transforms/rigsignal-game-timeline"]), \
              redirect_stdout(output):
@@ -497,6 +498,7 @@ class FleetCoexistenceTests(unittest.TestCase):
         with mock.patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args), \
              mock.patch.object(INSTALL, "configure_https"), \
              mock.patch.object(INSTALL, "admin_authorization", return_value="auth"), \
+             mock.patch.object(INSTALL, "fence_remote_ownership_profile"), \
              mock.patch.object(INSTALL, "rollback_transaction",
                                return_value=["retained-in-use:pipelines/logs-rigsignal.stream@pipeline"]), \
              redirect_stdout(output):
@@ -516,6 +518,7 @@ class FleetCoexistenceTests(unittest.TestCase):
         with mock.patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args), \
              mock.patch.object(INSTALL, "configure_https"), \
              mock.patch.object(INSTALL, "admin_authorization", return_value="auth"), \
+             mock.patch.object(INSTALL, "fence_remote_ownership_profile"), \
              mock.patch.object(INSTALL, "rollback_transaction",
                                side_effect=INSTALL.ProvisionError(
                                    "install refused: transaction_already_rolled_back")), \
@@ -693,6 +696,20 @@ class FleetCoexistenceTests(unittest.TestCase):
                 INSTALL.verify_rollback_external_baselines("https://es", "auth", journal,
                                                            Path("wrong-assets.tar.gz"))
             load_bundle.assert_not_called()
+
+    def test_rollback_external_oracle_skips_absent_baselines_from_barrier_abort(self):
+        # A journal with a bundle pin but no external_baselines key models an
+        # abort between pin_bundle and pin_external_baselines (F1-v4/S2-v4):
+        # nothing external was journaled, so rollback must not refuse.
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            journal.value["bundle_pin"] = {
+                "sha256": "applied-bundle-sha", "source_commit": "applied-commit",
+                "asset_set_sha256": INSTALL.asset_set_sha256(INSTALL.load_source())}
+            with mock.patch.object(INSTALL, "verify_external_asset") as verify:
+                INSTALL.verify_rollback_external_baselines("https://es", "auth", journal)
+            verify.assert_not_called()
 
     def test_external_write_negative_control_requires_env_unsafe_flag_and_loopback(self):
         with mock.patch.dict("os.environ", {"RIGSIGNAL_TEST_EXTERNAL_WRITE": "1"}, clear=False):

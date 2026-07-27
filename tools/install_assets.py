@@ -1367,11 +1367,17 @@ def verify_rollback_external_baselines(es_url: str, authorization: str, journal:
             ownership = ownership_for_assets(bundle, "fleet-coexist")
         except InputError as error:
             raise _rollback_source_mismatch(pin["source_commit"]) from error
-        expected = {(item.get("kind"), item.get("name"))
-                    for item in journal.value.get("external_baselines", []) if isinstance(item, dict)}
-        source_external = {key for key, value in ownership.items() if value == "external"}
-        if source_external != expected:
-            raise _rollback_source_mismatch(pin["source_commit"])
+        # An abort between pin_bundle and pin_external_baselines journals no
+        # baselines and no intents; there is nothing external to re-verify, and
+        # comparing against the implicit empty set would refuse the exact
+        # applied bundle the refusal text asks for (F1-v4/S2-v4).  A present
+        # key still compares in full, including a present-but-empty list.
+        if "external_baselines" in journal.value:
+            expected = {(item.get("kind"), item.get("name"))
+                        for item in journal.value.get("external_baselines", []) if isinstance(item, dict)}
+            source_external = {key for key, value in ownership.items() if value == "external"}
+            if source_external != expected:
+                raise _rollback_source_mismatch(pin["source_commit"])
     assets = {(asset.kind, asset.name): asset for asset in bundle.assets}
     for baseline in journal.value.get("external_baselines", []):
         if not isinstance(baseline, dict) or not isinstance(baseline.get("kind"), str) or not isinstance(baseline.get("name"), str):
@@ -1471,7 +1477,7 @@ def _delete_or_absent(base: str, path: str, authorization: str, headers: dict[st
 _PIPELINE_IN_USE_REASON = "cannot be deleted because it is the default pipeline for"
 
 
-def _pipeline_in_use_indices(error: RequestFailure) -> list[str] | None:
+def _pipeline_in_use_indices(error: RequestFailure) -> dict | None:
     """Return the indices from ES's non-overridable default-pipeline guard.
 
     This is deliberately narrower than a generic 400 handler: only the exact
@@ -2812,6 +2818,12 @@ def main() -> int:
             configure_https(args.ca_file)
             configure_https(args.kibana_ca_file)
             authorization = admin_authorization(args.admin_credentials_file)
+            # Rollback is an invocation boundary too: the ratified invariant
+            # (RD "every boundary", ruling 5 stamp) fences profile and table
+            # version before any journaled reversal begins (S1-v4).
+            fence_remote_ownership_profile(es_url, authorization,
+                                           load_ownership_profile(args.rollback) or "default",
+                                           False)
             operations = rollback_transaction(es_url, kb_url, authorization, args.rollback,
                                              deliberately_reversed=True, bundle_path=args.bundle)
             reported = False

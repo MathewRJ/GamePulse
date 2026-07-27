@@ -473,3 +473,34 @@ class InstallAdoptionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RollbackBoundaryFenceTests(unittest.TestCase):
+    def test_rollback_invocation_fences_remote_table_version(self):
+        # S1-v4: rollback is an invocation boundary; a remote marker carrying a
+        # different ownership_table_version must refuse before any reversal.
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "enrollment"
+            marker = {"component_templates": [{"component_template": {
+                "_meta": {"ownership_profile": "fleet-coexist",
+                          "ownership_table_version": "fleet-coexist-v0"}, "template": {}}}]}
+            args = SimpleNamespace(
+                bundle=None, endpoint="https://es.invalid", ca_file=Path("unused"),
+                kibana_endpoint="https://kb.invalid", kibana_ca_file=Path("unused"),
+                admin_credentials_file=Path("unused"), agent_binary=Path("unused"),
+                profile="user", enrollment_root=root, dry_run=False,
+                adopt_existing_w1_stream=False, ownership_profile=None,
+                rollback=root, unsafe_test_injection=False)
+            rollback = MagicMock()
+            with ExitStack() as patches:
+                patches.enter_context(patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args))
+                patches.enter_context(patch.object(INSTALL, "configure_https"))
+                patches.enter_context(patch.object(INSTALL, "admin_authorization", return_value="admin"))
+                patches.enter_context(patch.object(INSTALL, "load_ownership_profile", return_value="fleet-coexist"))
+                patches.enter_context(patch.object(INSTALL, "request", return_value=json.dumps(marker).encode()))
+                patches.enter_context(patch.object(INSTALL, "rollback_transaction", rollback))
+                stderr = io.StringIO()
+                with redirect_stderr(stderr):
+                    self.assertEqual(INSTALL.main(), 1)
+            self.assertEqual(stderr.getvalue(), "install refused: ownership_table_version_mismatch\n")
+            rollback.assert_not_called()
