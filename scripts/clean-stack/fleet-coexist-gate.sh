@@ -178,7 +178,7 @@ leg_b() {
   transform_meta_matches_bundle "$RUN_DIR/transform-applied.json" || fail 'transform _meta did not match bundle after apply'
   transform_assert_state "$RUN_DIR/transform-applied.json" "$RUN_DIR/transform-applied-stats.json"
   rollback 2>&1 | tee -a "$RUN_DIR/leg-b-transform-rollback.log"
-  grep -Fx 'rollback completed from journaled intents; pipeline retained: in use as default pipeline for adopted stream indices' "$RUN_DIR/leg-b-transform-rollback.log" >/dev/null || fail 'retained adopted-stream pipeline was not reported'
+  grep -E '^rollback completed from journaled intents; pipeline retained: in use as default pipeline for adopted stream indices; logs-rigsignal\.stream@pipeline; (referencing_indices: \[.*\]|raw_reason: ".*")$' "$RUN_DIR/leg-b-transform-rollback.log" >/dev/null || fail 'retained adopted-stream pipeline was not reported'
   transform_get "$RUN_DIR/transform-after.json"
   if transform_meta_absent "$RUN_DIR/transform-after.json"; then
     transform_assert_state "$RUN_DIR/transform-after.json" "$RUN_DIR/transform-after-stats.json"
@@ -202,7 +202,7 @@ leg_b() {
   RIGSIGNAL_TEST_TRANSFORM_META_RESTORE_REJECT=1 installer || fail 'installer failed'
   jq -e '.intents[] | select(.kind == "transforms") | .verify_only == true and .verify_only_reason == "meta_absent_restore_unproven_preapply"' "$RUN_DIR/enrollment/fleet-coexist-journal.json" >/dev/null || fail 'transform pre-apply proof gate did not choose verify-only'
   rollback 2>&1 | tee -a "$RUN_DIR/leg-b-transform-rollback.log"
-  grep -Fx 'rollback completed from journaled intents; pipeline retained: in use as default pipeline for adopted stream indices' "$RUN_DIR/leg-b-transform-rollback.log" >/dev/null || fail 'retained adopted-stream pipeline was not reported'
+  grep -E '^rollback completed from journaled intents; pipeline retained: in use as default pipeline for adopted stream indices; logs-rigsignal\.stream@pipeline; (referencing_indices: \[.*\]|raw_reason: ".*")$' "$RUN_DIR/leg-b-transform-rollback.log" >/dev/null || fail 'retained adopted-stream pipeline was not reported'
   transform_get "$RUN_DIR/transform-verify-only.json"
   transform_meta_matches_bundle "$RUN_DIR/transform-verify-only.json" || fail 'transform verify-only fallback did not retain accepted _meta drift'
   transform_assert_state "$RUN_DIR/transform-verify-only.json" "$RUN_DIR/transform-verify-only-stats.json"; printf 'leg_b transform restore branch: verify-only\n'
