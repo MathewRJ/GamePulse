@@ -45,43 +45,47 @@ bundle_lines() {
   done
 }
 derivative_objects() {
+  # The ENTIRE closure — dashboards AND their tag/index-pattern/search/viz
+  # children, ids AND references[].id — is mapped to the OLD legacy ids
+  # (round-10 catch at 14c46a4: a dashboards-only mapping left the 9 children
+  # at literal NEW bundle ids, which imported un-regenerated into default and
+  # would have made the installer's own preflight refuse
+  # literal_id_exists_elsewhere on the very ids the leg installs). _import
+  # validates references within the batch, so references must be mapped in
+  # lockstep with ids.
   local file
   for file in rigsignal-engine.ndjson rigsignal-flamegraph-dashboard.ndjson rigsignal-game-perf.ndjson rigsignal-home.ndjson rigsignal-software.ndjson; do
     tar -xOf "$BUNDLE" "dashboards/v0.3.1/$file"
-  done | jq -cs '
-    map(if .type == "dashboard" then
-      .id |= ({
-        "rigsignal-pkg-engine":"rigsignal-engine",
-        "rigsignal-pkg-flamegraph-dashboard":"rigsignal-flamegraph-dashboard",
-        "rigsignal-pkg-game-perf":"rigsignal-game-perf",
-        "rigsignal-pkg-home":"rigsignal-home",
-        "rigsignal-pkg-software":"rigsignal-software"
-      }[.] // .)
-    else . end) | unique_by([.type, .id])[]'
+  done | jq -cs --argjson map "$OLD_ID_MAP" '
+    map(.id |= ($map[.] // .)
+        | (.references[]?.id) |= ($map[.] // .))
+    | unique_by([.type, .id])[]'
 }
 new_objects() { bundle_lines | jq -c '{type,id,attributes:(.attributes // {}),references:(.references // [])}'; }
+# NEW->OLD id map, shared by old_objects (donor literal seed) and
+# derivative_objects (default-space regeneration closure).
+OLD_ID_MAP='{
+  "rigsignal-pkg-engine":"rigsignal-engine",
+  "rigsignal-pkg-flamegraph-dashboard":"rigsignal-flamegraph-dashboard",
+  "rigsignal-pkg-game-perf":"rigsignal-game-perf",
+  "rigsignal-pkg-home":"rigsignal-home",
+  "rigsignal-pkg-software":"rigsignal-software",
+  "rigsignal-pkg-streaming-lab":"rigsignal-streaming-lab",
+  "rigsignal-pkg-system-health":"rigsignal-system-health",
+  "rigsignal-pkg-metrics-ebpf":"metrics-rigsignal.ebpf*",
+  "rigsignal-pkg-metrics-session":"metrics-rigsignal.session*",
+  "rigsignal-pkg-flamegraph-data-view":"rigsignal-flamegraph-data-view",
+  "rigsignal-pkg-sl-d1-host-data-view":"sl-d1-host-data-view",
+  "rigsignal-pkg-sl-d1-stream-data-view":"sl-d1-stream-data-view",
+  "rigsignal-pkg-flamegraph-top-function-delta":"rigsignal-flamegraph-top-function-delta",
+  "rigsignal-pkg-managed":"fleet-managed-gaming",
+  "rigsignal-pkg-bundle":"fleet-pkg-rigsignal-gaming",
+  "rigsignal-pkg-flamegraph-vega-diff":"rigsignal-flamegraph-vega-diff",
+  "rigsignal-pkg-flamegraph-vega-live-diff":"rigsignal-flamegraph-vega-live-diff",
+  "rigsignal-pkg-flamegraph-vega-single":"rigsignal-flamegraph-vega-single"
+}'
 old_objects() {
-  new_objects | jq -c '
-    .id |= ({
-      "rigsignal-pkg-engine":"rigsignal-engine",
-      "rigsignal-pkg-flamegraph-dashboard":"rigsignal-flamegraph-dashboard",
-      "rigsignal-pkg-game-perf":"rigsignal-game-perf",
-      "rigsignal-pkg-home":"rigsignal-home",
-      "rigsignal-pkg-software":"rigsignal-software",
-      "rigsignal-pkg-streaming-lab":"rigsignal-streaming-lab",
-      "rigsignal-pkg-system-health":"rigsignal-system-health",
-      "rigsignal-pkg-metrics-ebpf":"metrics-rigsignal.ebpf*",
-      "rigsignal-pkg-metrics-session":"metrics-rigsignal.session*",
-      "rigsignal-pkg-flamegraph-data-view":"rigsignal-flamegraph-data-view",
-      "rigsignal-pkg-sl-d1-host-data-view":"sl-d1-host-data-view",
-      "rigsignal-pkg-sl-d1-stream-data-view":"sl-d1-stream-data-view",
-      "rigsignal-pkg-flamegraph-top-function-delta":"rigsignal-flamegraph-top-function-delta",
-      "rigsignal-pkg-managed":"fleet-managed-gaming",
-      "rigsignal-pkg-bundle":"fleet-pkg-rigsignal-gaming",
-      "rigsignal-pkg-flamegraph-vega-diff":"rigsignal-flamegraph-vega-diff",
-      "rigsignal-pkg-flamegraph-vega-live-diff":"rigsignal-flamegraph-vega-live-diff",
-      "rigsignal-pkg-flamegraph-vega-single":"rigsignal-flamegraph-vega-single"
-    }[.] // .)' | awk '!seen[$0]++'
+  new_objects | jq -c --argjson map "$OLD_ID_MAP" '.id |= ($map[.] // .)' | awk '!seen[$0]++'
 }
 create_objects() {
   local space="$1" rows="$2" row type id body
