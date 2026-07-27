@@ -442,7 +442,7 @@ leg_m() {
   # (solo leg-m failure at pin 0e3689c). An empty pre-existing target space
   # is legitimate topology and makes the assertion prove the /s/rigsignal
   # find branch actually executed.
-  bash "$REPO_ROOT/scripts/clean-stack/dashboard-origin-seed.sh" space rigsignal
+  origin_seed space rigsignal
   origin_pause_install "$RUN_DIR/leg-m-i.out" origin_installer
   origin_seed one donor dashboard rigsignal-pkg-engine
   if origin_resume; then fail 'Leg-M(i) regenerated import unexpectedly succeeded'; fi
