@@ -349,7 +349,14 @@ leg_j() {
 
   origin_reset
   origin_seed one donor tag rigsignal-pkg-engine
-  api PUT '/_security/role/rigsignal-origin-restricted' --data-binary '{"cluster":[],"indices":[],"applications":[{"application":"kibana-.kibana","privileges":["feature_dashboard.read"],"resources":["space:default"]}]}' >/dev/null
+  # The role must be ES-omnipotent (cluster/indices all) so the installer's
+  # pre-W-B read steps (dispatch_clean_root, remote-profile fence) succeed and
+  # execution actually REACHES W-B step 0 — but the role is not NAMED
+  # superuser, so the _authenticate roles check trips privilege_unverified
+  # there (round-7 catch: an empty-privilege role 403'd before W-B and
+  # produced a different refusal). Kibana visibility stays partial (default
+  # space only) for the filtered-200 evidence capture below.
+  api PUT '/_security/role/rigsignal-origin-restricted' --data-binary '{"cluster":["all"],"indices":[{"names":["*"],"privileges":["all"],"allow_restricted_indices":false}],"applications":[{"application":"kibana-.kibana","privileges":["feature_dashboard.read"],"resources":["space:default"]}]}' >/dev/null
   api POST '/_security/user/rigsignal-origin-restricted' --data-binary '{"password":"restricted-password","roles":["rigsignal-origin-restricted"]}' >/dev/null
   curl --silent --show-error --fail --max-redirs 0 --user 'rigsignal-origin-restricted:restricted-password' -H 'kbn-xsrf: true' "$KB_URL/api/spaces/space" >"$RUN_DIR/leg-j-restricted-spaces.json"
   jq -e 'type == "array" and length > 0 and all(.[]; .id != "donor")' "$RUN_DIR/leg-j-restricted-spaces.json" >/dev/null || fail 'restricted user did not produce partial-200 spaces evidence'
