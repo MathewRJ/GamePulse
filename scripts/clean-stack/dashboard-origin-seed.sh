@@ -103,6 +103,19 @@ case "${1:-}" in
   new-all) create_objects "$2" "$(new_objects)" ;;
   old-all) create_objects "$2" "$(old_objects)" ;;
   space) space_create "$2" ;;
+  space-bundle)
+    # Pre-create the target space from the BUNDLE's own body so the installer
+    # classifies it noop. A MINIMAL pre-create instead makes the space intent
+    # an update whose rollback cannot restore exactly: Kibana's space PUT does
+    # not clear fields omitted from the body, so the description the install
+    # added survives the preimage restore and rollback_verify_failed fires
+    # (solo leg-m at 39ab016; recorded as ERRATA E6 — pre-existing product
+    # behavior, not introduced by this arc).
+    curl --silent --show-error --fail --max-redirs 0 --user "elastic:$ELASTIC_PASSWORD" \
+      -H 'kbn-xsrf: true' -H 'Content-Type: application/json' -X POST \
+      "${KB_URL}/api/spaces/space" \
+      --data-binary "$(tar -xOf "$BUNDLE" elastic/kibana-spaces/rigsignal.json)" >/dev/null 2>&1 || true
+    ;;
   derivatives)
     # createNewCopies RESETS originId (documented + observed live: five
     # dashboards landed in default with NO originId, solo leg-k at bab419f) —
