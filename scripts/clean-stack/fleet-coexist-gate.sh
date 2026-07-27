@@ -363,7 +363,10 @@ leg_j() {
   printf '[elasticsearch]\nusername = "rigsignal-origin-restricted"\npassword = "restricted-password"\n' >"$RUN_DIR/restricted.toml"; chmod 600 "$RUN_DIR/restricted.toml"
   # This credential trips privilege_unverified at step 0 (ES role-name check) by
   # design; the captured spaces response above is the filtered-200 path evidence.
-  origin_unverifiable python3 "$REPO_ROOT/tools/install_assets.py" --bundle "$BUNDLE" --endpoint "$ES_URL" --ca-file "$CS_CA_FILE" --kibana-endpoint "$KB_URL" --kibana-ca-file "$CS_CA_FILE" --admin-credentials-file "$RUN_DIR/restricted.toml" --agent-binary "$CLEAN_STACK_AGENT_BINARY" --profile user --enrollment-root "$RUN_DIR/enrollment" --ownership-profile fleet-coexist
+  # --adopt-existing-w1-stream mirrors _installer's first-install flag: the
+  # harness-seeded W1 stream otherwise refuses adoption_required at
+  # dispatch_clean_root, which by design precedes W-B (round-8 catch).
+  origin_unverifiable python3 "$REPO_ROOT/tools/install_assets.py" --bundle "$BUNDLE" --endpoint "$ES_URL" --ca-file "$CS_CA_FILE" --kibana-endpoint "$KB_URL" --kibana-ca-file "$CS_CA_FILE" --admin-credentials-file "$RUN_DIR/restricted.toml" --agent-binary "$CLEAN_STACK_AGENT_BINARY" --profile user --enrollment-root "$RUN_DIR/enrollment" --ownership-profile fleet-coexist --adopt-existing-w1-stream
   grep -E '^install refused: saved_object_topology_unverifiable: privilege_unverified(:|$)' "$RUN_DIR/origin-refusal.out" >/dev/null || fail 'restricted credential did not refuse privilege_unverified'
 
   origin_reset
