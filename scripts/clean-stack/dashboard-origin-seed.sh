@@ -209,8 +209,14 @@ case "${1:-}" in
         printf 'dashboard-origin export failed: %s\n' "$export_body" >&2; exit 1
       fi
     else
+      # .sort is an export search-cursor artifact whose values shift after
+      # UNRELATED writes to the same .kibana index — the exact volatile field
+      # v8 §6 (overseer m16 / Sol r5) requires the canonicalizer to strip;
+      # missing it made leg-k's byte-untouched donor compare fail after the
+      # installer wrote other objects (round-11 catch). created_by/updated_by
+      # are 9.x profile-uid fields, equally non-content.
       printf '%s\n' "$export_body" \
-        | jq -S -c 'del(.created_at,.updated_at,.version,.coreMigrationVersion,.typeMigrationVersion,.migrationVersion)' | sort >"$3"
+        | jq -S -c 'del(.created_at,.updated_at,.version,.coreMigrationVersion,.typeMigrationVersion,.migrationVersion,.sort,.created_by,.updated_by)' | sort >"$3"
     fi
     ;;
   replay)
