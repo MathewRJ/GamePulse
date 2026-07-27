@@ -233,12 +233,26 @@ case "${1:-}" in
     fi
     ;;
   replay)
+    # Headers are replayed VERBATIM from the payload as explicit -H arguments.
+    # The previous --config file form depended on curl's config-file value
+    # quoting and the kbn-xsrf header did not reach the request, which Kibana
+    # answers with exactly 400 "Request must contain a kbn-xsrf header"
+    # (solo leg-m round-18). 404 is accepted as converged (already removed);
+    # any other non-2xx fails loudly with its status and body.
     while IFS= read -r payload; do
+      [[ -n "$payload" ]] || continue
       method="$(jq -r '.method' <<<"$payload")"; path="$(jq -r '.path' <<<"$payload")"
-      config="$(mktemp)"
-      jq -r '.headers | to_entries[] | "header = \(.key): \(.value)"' <<<"$payload" >"$config"
-      curl --silent --show-error --fail --max-redirs 0 --user "elastic:$ELASTIC_PASSWORD" \
-        --config "$config" -X "$method" "${KB_URL}${path}" >/dev/null
+      replay_args=()
+      while IFS= read -r header_line; do replay_args+=(-H "$header_line"); done \
+        < <(jq -r '.headers | to_entries[] | "\(.key): \(.value)"' <<<"$payload")
+      replay_out="$(mktemp)"
+      replay_code="$(curl --silent --show-error --max-redirs 0 --user "elastic:$ELASTIC_PASSWORD" \
+        "${replay_args[@]}" -X "$method" "${KB_URL}${path}" -o "$replay_out" -w '%{http_code}')"
+      case "$replay_code" in
+        2*|404) ;;
+        *) printf 'remediation replay %s %s failed: HTTP %s\n' "$method" "$path" "$replay_code" >&2
+           cat "$replay_out" >&2; exit 1 ;;
+      esac
     done <"$2"
     ;;
   *) usage; exit 2 ;;
