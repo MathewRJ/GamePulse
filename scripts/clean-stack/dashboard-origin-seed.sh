@@ -25,7 +25,11 @@ kb() {
     -H 'kbn-xsrf: true' -H 'Content-Type: application/json' -X "$method" "${KB_URL}$(prefix "${DASH_SPACE:-default}")${path}" "$@"
 }
 space_create() {
-  DASH_SPACE="$1" kb POST /api/spaces/space --data-binary "{\"id\":\"$1\",\"name\":\"$1\"}" >/dev/null 2>&1 || true
+  # /api/spaces/space is a ROOT-level API — never space-scoped (POSTing to
+  # /s/<space>/api/spaces/space 400s; solo legs j/k failure at pin 0e3689c).
+  curl --silent --show-error --fail --max-redirs 0 --user "elastic:$ELASTIC_PASSWORD" \
+    -H 'kbn-xsrf: true' -H 'Content-Type: application/json' -X POST \
+    "${KB_URL}/api/spaces/space" --data-binary "{\"id\":\"$1\",\"name\":\"$1\"}" >/dev/null 2>&1 || true
 }
 bundle_lines() {
   local file
@@ -83,6 +87,7 @@ create_objects() {
 case "${1:-}" in
   new-all) create_objects "$2" "$(new_objects)" ;;
   old-all) create_objects "$2" "$(old_objects)" ;;
+  space) space_create "$2" ;;
   derivatives)
     # createNewCopies mints UUID ids/originIds and rewrites all closure references.
     space_create default
