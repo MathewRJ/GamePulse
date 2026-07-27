@@ -24,6 +24,13 @@ kb() {
   curl --silent --show-error --fail --max-redirs 0 --user "elastic:$ELASTIC_PASSWORD" \
     -H 'kbn-xsrf: true' -H 'Content-Type: application/json' -X "$method" "${KB_URL}$(prefix "${DASH_SPACE:-default}")${path}" "$@"
 }
+kb_form() {
+  # Multipart variant for _import (a JSON Content-Type header breaks --form).
+  local method="$1" path="$2" file="$3"
+  curl --silent --show-error --fail --max-redirs 0 --user "elastic:$ELASTIC_PASSWORD" \
+    -H 'kbn-xsrf: true' -X "$method" "${KB_URL}$(prefix "${DASH_SPACE:-default}")${path}" \
+    --form "file=@${file};type=application/ndjson"
+}
 space_create() {
   # /api/spaces/space is a ROOT-level API — never space-scoped (POSTing to
   # /s/<space>/api/spaces/space 400s; solo legs j/k failure at pin 0e3689c).
@@ -77,11 +84,15 @@ old_objects() {
     }[.] // .)' | awk '!seen[$0]++'
 }
 create_objects() {
-  local space="$1" rows="$2" row type id
+  local space="$1" rows="$2" row type id body
   space_create "$space"
   while IFS= read -r row; do
     type="$(jq -r '.type' <<<"$row")"; id="$(jq -r '.id' <<<"$row")"
-    DASH_SPACE="$space" kb POST "/api/saved_objects/$type/$id?overwrite=true" --data-binary "$row" >/dev/null
+    # The per-object create API takes type/id in the URL; its strict body
+    # schema rejects extra top-level keys (whole-row body 400s — solo leg-j
+    # round-3 failure at pin 0498f28). Send only {attributes, references}.
+    body="$(jq -c '{attributes,references}' <<<"$row")"
+    DASH_SPACE="$space" kb POST "/api/saved_objects/$type/$id?overwrite=true" --data-binary "$body" >/dev/null
   done <<<"$rows"
 }
 case "${1:-}" in
@@ -105,9 +116,39 @@ case "${1:-}" in
       "${TMPDIR:-/tmp}/dashboard-origin-derivatives-find.json" >/dev/null || { cat "${TMPDIR:-/tmp}/dashboard-origin-derivatives-find.json" >&2; printf '%s\n' 'dashboard-origin derivatives did not create five default-space origin copies' >&2; exit 1; }
     ;;
   alias)
-    space_create "$2"
-    DASH_SPACE="$2" kb POST "/api/saved_objects/legacy-url-alias/dashboard-origin-alias-$4" \
-      --data-binary "{\"attributes\":{\"sourceId\":\"$4\",\"targetId\":\"$4\"}}" >/dev/null
+    # legacy-url-alias is a HIDDEN type: the public create API does not accept
+    # it. Mint a REAL alias via Kibana's own machinery instead — proven on
+    # 9.4.3 in kibana-943-experiment case 4: a compatibilityMode import that
+    # must regenerate (cross-space literal conflict, the case-7b trigger)
+    # creates the alias in the target space. Then delete every object,
+    # leaving ONLY the alias (Leg-J(i): the alias is the only seed).
+    alias_target="$2"; alias_id="$4"; alias_donor="dashboard-origin-alias-donor"
+    space_create "$alias_target"; space_create "$alias_donor"
+    DASH_SPACE="$alias_donor" kb POST "/api/saved_objects/dashboard/${alias_id}?overwrite=true" \
+      --data-binary '{"attributes":{"title":"dashboard-origin alias donor"},"references":[]}' >/dev/null
+    alias_ndjson="$(mktemp)"
+    printf '{"type":"dashboard","id":"%s","attributes":{"title":"dashboard-origin alias seed"},"references":[]}\n' \
+      "$alias_id" >"$alias_ndjson"
+    alias_resp="$(DASH_SPACE="$alias_target" kb_form POST '/api/saved_objects/_import?compatibilityMode=true&overwrite=true' "$alias_ndjson")"
+    jq -e '.success == true' <<<"$alias_resp" >/dev/null \
+      || { printf 'alias mint import failed: %s\n' "$alias_resp" >&2; exit 1; }
+    alias_uuid="$(jq -r '.successResults[0].destinationId // empty' <<<"$alias_resp")"
+    [[ -n "$alias_uuid" ]] \
+      || { printf 'alias mint did not regenerate (no destinationId): %s\n' "$alias_resp" >&2; exit 1; }
+    DASH_SPACE="$alias_target" kb DELETE "/api/saved_objects/dashboard/${alias_uuid}" >/dev/null
+    DASH_SPACE="$alias_donor" kb DELETE "/api/saved_objects/dashboard/${alias_id}" >/dev/null
+    # Independent-oracle verification via ES (same transport case 4 used;
+    # deliberately NOT the installer's own _find, which Leg-J(i) exists to
+    # prove): the alias doc must exist and reference alias_id.
+    : "${ES_URL:?ES_URL required for alias verification}"
+    alias_es="$(curl --silent --show-error --fail ${CS_CA_FILE:+--cacert "$CS_CA_FILE"} \
+      --user "elastic:$ELASTIC_PASSWORD" -H 'Content-Type: application/json' \
+      "${ES_URL}/.kibana*/_search" --data-binary \
+      "{\"query\":{\"term\":{\"type\":\"legacy-url-alias\"}},\"size\":100}")"
+    jq -e --arg id "$alias_id" \
+      '[.hits.hits[]._source["legacy-url-alias"].sourceId // empty | select(. == $id)] | length >= 1' \
+      <<<"$alias_es" >/dev/null \
+      || { printf 'alias not found in .kibana after mint: %s\n' "$alias_es" >&2; exit 1; }
     ;;
   one)
     space_create "$2"

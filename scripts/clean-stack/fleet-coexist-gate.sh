@@ -139,7 +139,7 @@ installer_bad_ilm() { RIGSIGNAL_TEST_ILM_DELETE_PHASE=1 _installer; }
 
 # Dashboard-origin legs use a deliberately separate fixture helper so the
 # old/new identity fixtures cannot bleed into the Fleet owner seeder.
-origin_seed() { KB_URL="$KB_URL" ELASTIC_PASSWORD="$ELASTIC_PASSWORD" "$SCRIPT_DIR/dashboard-origin-seed.sh" --bundle "$BUNDLE" "$@"; }
+origin_seed() { KB_URL="$KB_URL" ELASTIC_PASSWORD="$ELASTIC_PASSWORD" ES_URL="${ES_URL:-}" CS_CA_FILE="${CS_CA_FILE:-}" "$SCRIPT_DIR/dashboard-origin-seed.sh" --bundle "$BUNDLE" "$@"; }
 origin_reset() { cs_cleanup || true; rm -rf "$RUN_DIR/enrollment" "$RUN_DIR/default-enrollment"; setup; }
 kb_get() { local space="$1" path="$2"; curl --silent --show-error --fail --max-redirs 0 --user "elastic:$ELASTIC_PASSWORD" -H 'kbn-xsrf: true' "${KB_URL}$([[ "$space" == default ]] || printf '/s/%s' "$space")$path"; }
 space_absent() { ! kb_get "$1" "/api/spaces/space/$1" >/dev/null 2>&1; }
