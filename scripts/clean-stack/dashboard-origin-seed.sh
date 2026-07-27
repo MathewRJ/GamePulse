@@ -117,9 +117,26 @@ case "${1:-}" in
     done < <(new_objects | jq -r '[.type,.id] | @tsv' | awk '!seen[$0]++')
     ;;
   export)
-    DASH_SPACE="$2" kb POST /api/saved_objects/_export --data-binary \
-      '{"type":["dashboard","index-pattern","search","tag","visualization","legacy-url-alias"],"excludeExportDetails":true}' \
-      | jq -S -c 'del(.created_at,.updated_at,.version,.coreMigrationVersion,.typeMigrationVersion,.migrationVersion)' | sort >"$3"
+    # legacy-url-alias is a hidden, non-exportable type (public _export 400s on
+    # it — solo leg-j failure at pin 5a2364c); alias presence is asserted via
+    # _find in the gate legs instead. An EMPTY space is a legitimate baseline:
+    # Kibana _export returns 400 "No objects to export" on zero matches, so
+    # run without --fail, tolerate exactly that error as an empty baseline,
+    # and fail loudly on anything else.
+    export_body="$(curl --silent --show-error --max-redirs 0 --user "elastic:$ELASTIC_PASSWORD" \
+      -H 'kbn-xsrf: true' -H 'Content-Type: application/json' -X POST \
+      "${KB_URL}$(prefix "$2")/api/saved_objects/_export" --data-binary \
+      '{"type":["dashboard","index-pattern","search","tag","visualization"],"excludeExportDetails":true}')"
+    if jq -e 'select(.statusCode? == 400)' <<<"$(printf '%s' "$export_body" | head -1)" >/dev/null 2>&1; then
+      if grep -qi 'no objects' <<<"$export_body"; then
+        : >"$3"
+      else
+        printf 'dashboard-origin export failed: %s\n' "$export_body" >&2; exit 1
+      fi
+    else
+      printf '%s\n' "$export_body" \
+        | jq -S -c 'del(.created_at,.updated_at,.version,.coreMigrationVersion,.typeMigrationVersion,.migrationVersion)' | sort >"$3"
+    fi
     ;;
   replay)
     while IFS= read -r payload; do
