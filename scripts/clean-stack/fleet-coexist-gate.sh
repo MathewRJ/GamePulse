@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
 # Manual Fleet-coexistence scenario gate.  It intentionally has no CI caller.
-# shellcheck disable=SC2329
+# shellcheck disable=SC2329 # lib.sh callbacks are invoked by the clean-stack framework.
 set -euo pipefail
 SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 REPO_ROOT="$(CDPATH='' cd -- "$SCRIPT_DIR/../.." && pwd)"
-# shellcheck source=scripts/clean-stack/lib.sh disable=SC1091
+# shellcheck source=scripts/clean-stack/lib.sh
 source "$SCRIPT_DIR/lib.sh"
 
 ES_VERSION='' KB_VERSION='' BUNDLE='' KEEP=0
 declare -a LEGS=()
-usage() { printf '%s\n' 'Usage: fleet-coexist-gate.sh --es-version 9.4.3|9.4.4 [--kb-version VERSION] --leg a..i [--bundle PATH] [--all]' >&2; }
+usage() { printf '%s\n' 'Usage: fleet-coexist-gate.sh --es-version 9.4.3|9.4.4 [--kb-version VERSION] --leg a..m [--bundle PATH] [--all]' >&2; }
 version() { [[ "$1" =~ ^9\.4\.[34]$ ]]; }
 fail() { printf 'ASSERT FAIL %s\n' "$*" >&2; return 1; }
 while (($#)); do case "$1" in
   --es-version) ES_VERSION="${2:-}"; shift 2 ;; --kb-version) KB_VERSION="${2:-}"; shift 2 ;;
   --bundle) BUNDLE="${2:-}"; shift 2 ;; --leg) LEGS+=("${2:-}"); shift 2 ;;
-  --all) LEGS=(a b c d e f g h i); shift ;; --keep) KEEP=1; shift ;;
+  --all) LEGS=(a b c d e f g h i j k l m); shift ;; --keep) KEEP=1; shift ;;
   -h|--help) usage; exit 0 ;; *) usage; exit 2 ;; esac; done
 [[ -n "$ES_VERSION" ]] || { usage; exit 2; }; KB_VERSION="${KB_VERSION:-$ES_VERSION}"
 version "$ES_VERSION" && version "$KB_VERSION" && [[ "$ES_VERSION" == "$KB_VERSION" ]] || { usage; exit 2; }
@@ -51,7 +51,7 @@ _installer() {
   # Adoption flag only on the first install per root: a rerun with committed
   # state correctly refuses adoption_flag_state_present (A4 flag-misuse guard).
   [[ -f "$RUN_DIR/enrollment/state.json" ]] || args+=(--adopt-existing-w1-stream)
-  [[ "${RIGSIGNAL_TEST_EXTERNAL_WRITE:-}" != 1 ]] || args+=(--unsafe-test-injection)
+  [[ "${RIGSIGNAL_TEST_EXTERNAL_WRITE:-}" != 1 && -z "${RIGSIGNAL_TEST_PAUSE_AT:-}" ]] || args+=(--unsafe-test-injection)
   api GET '/_cluster/health?wait_for_events=languid&wait_for_no_initializing_shards=true&timeout=30s' >/dev/null || true
   for attempt in 1 2 3; do
     if out="$(python3 "${CLEAN_STACK_INSTALLER:-$REPO_ROOT/tools/install_assets.py}" "${args[@]}" 2>&1)"; then rc=0; else rc=$?; fi
@@ -136,6 +136,61 @@ external_audit_clean() { local log="$1"; ! grep -E "$EXTERNAL_WRITE_RE" "$log"; 
 installer_unresolved() { RIGSIGNAL_TEST_UNRESOLVED_ASSET=1 _installer; }
 installer_bad_health() { RIGSIGNAL_TEST_CLUSTER_HEALTH=red _installer; }
 installer_bad_ilm() { RIGSIGNAL_TEST_ILM_DELETE_PHASE=1 _installer; }
+
+# Dashboard-origin legs use a deliberately separate fixture helper so the
+# old/new identity fixtures cannot bleed into the Fleet owner seeder.
+origin_seed() { KB_URL="$KB_URL" ELASTIC_PASSWORD="$ELASTIC_PASSWORD" "$SCRIPT_DIR/dashboard-origin-seed.sh" --bundle "$BUNDLE" "$@"; }
+origin_reset() { cs_cleanup || true; rm -rf "$RUN_DIR/enrollment" "$RUN_DIR/default-enrollment"; setup; }
+kb_get() { local space="$1" path="$2"; curl --silent --show-error --fail --max-redirs 0 --user "elastic:$ELASTIC_PASSWORD" -H 'kbn-xsrf: true' "${KB_URL}$([[ "$space" == default ]] || printf '/s/%s' "$space")$path"; }
+space_absent() { ! kb_get "$1" "/api/spaces/space/$1" >/dev/null 2>&1; }
+origin_refusal() { local reason="$1"; shift; if "$@" >"$RUN_DIR/origin-refusal.out" 2>&1; then fail "origin refusal unexpectedly succeeded"; fi; grep -E '^install refused: saved_object_topology_conflict(:|$)' "$RUN_DIR/origin-refusal.out" >/dev/null || { cat "$RUN_DIR/origin-refusal.out" >&2; fail 'wrong topology refusal'; }; grep -F "$reason" "$RUN_DIR/origin-refusal.out" >/dev/null || { cat "$RUN_DIR/origin-refusal.out" >&2; fail "topology reason missing: $reason"; }; }
+origin_unverifiable() { if "$@" >"$RUN_DIR/origin-refusal.out" 2>&1; then fail 'unverifiable topology unexpectedly succeeded'; fi; grep -E '^install refused: saved_object_topology_unverifiable(:|$)' "$RUN_DIR/origin-refusal.out" >/dev/null || { cat "$RUN_DIR/origin-refusal.out" >&2; fail 'wrong unverifiable refusal'; }; }
+origin_export() { origin_seed export "$1" "$2"; }
+origin_assert_clean_refusal() {
+  space_absent rigsignal || fail 'topology refusal created rigsignal space'
+  [[ ! -e "$RUN_DIR/enrollment" ]] || fail 'topology refusal created any journal/profile/body root'
+  if api GET '/_component_template/rigsignal-bundle-meta' >"$RUN_DIR/origin-marker.json" 2>&1; then fail 'topology refusal wrote remote marker'; fi
+  origin_export default "$RUN_DIR/default-after-refusal.ndjson"
+  cmp -s "$RUN_DIR/default-before-refusal.ndjson" "$RUN_DIR/default-after-refusal.ndjson" || fail 'topology refusal changed default objects'
+}
+origin_dashboard_count() {
+  local space="$1" type total=0
+  for type in dashboard index-pattern search tag visualization; do
+    total=$((total + $(kb_get "$space" "/api/saved_objects/_find?type=$type&per_page=1000" | jq '[.saved_objects[] | select(.id | startswith("rigsignal-pkg-"))] | length')))
+  done
+  printf '%s\n' "$total"
+}
+origin_export_legacy() { origin_export "$1" "$2.all"; jq -c 'select(.id | startswith("rigsignal-pkg-") | not)' "$2.all" >"$2"; }
+origin_assert_full_accounting() {
+  local log="$1"
+  sed -n 's/^RIGSIGNAL_DASHBOARD_IMPORT_RESULT //p' "$log" >"$RUN_DIR/import-results.jsonl"
+  jq -s '([.[].results[]] | length == 29) and ([.[].results[] | .destinationId_present] | any | not)' "$RUN_DIR/import-results.jsonl" | grep -Fx true >/dev/null || fail 'dashboard import results were not 29 zero-destinationId occurrences'
+  [[ "$(origin_dashboard_count rigsignal)" == 15 && "$(origin_dashboard_count default)" == 3 ]] || fail 'dashboard unique-object target split is not 15/3'
+  marker_check
+}
+origin_missing() { ! kb_get "$1" "/api/saved_objects/$2/$3" >/dev/null 2>&1; }
+default_installer() {
+  local -a args=(--bundle "$BUNDLE" --endpoint "$ES_URL" --ca-file "$CS_CA_FILE" --kibana-endpoint "$KB_URL" --kibana-ca-file "$CS_CA_FILE" --admin-credentials-file "$RUN_DIR/admin.toml" --agent-binary "$CLEAN_STACK_AGENT_BINARY" --profile user --enrollment-root "$RUN_DIR/default-enrollment" --adopt-existing-w1-stream)
+  [[ -z "${RIGSIGNAL_TEST_PAUSE_AT:-}" ]] || args+=(--unsafe-test-injection)
+  python3 "${CLEAN_STACK_INSTALLER:-$REPO_ROOT/tools/install_assets.py}" "${args[@]}"
+}
+origin_installer() {
+  local -a args=(--bundle "$BUNDLE" --endpoint "$ES_URL" --ca-file "$CS_CA_FILE" --kibana-endpoint "$KB_URL" --kibana-ca-file "$CS_CA_FILE" --admin-credentials-file "$RUN_DIR/admin.toml" --agent-binary "$CLEAN_STACK_AGENT_BINARY" --profile user --enrollment-root "$RUN_DIR/enrollment" --ownership-profile fleet-coexist)
+  [[ -f "$RUN_DIR/enrollment/state.json" ]] || args+=(--adopt-existing-w1-stream)
+  [[ -z "${RIGSIGNAL_TEST_PAUSE_AT:-}" ]] || args+=(--unsafe-test-injection)
+  python3 "${CLEAN_STACK_INSTALLER:-$REPO_ROOT/tools/install_assets.py}" "${args[@]}"
+}
+origin_pause_install() {
+  local log="$1"; shift
+  rm -f "$RUN_DIR/pause.resume"
+  : >"$RUN_DIR/origin-http.log"
+  RIGSIGNAL_TEST_PAUSE_AT=after-topology-preflight RIGSIGNAL_TEST_PAUSE_SENTINEL="$RUN_DIR/pause.resume" RIGSIGNAL_HTTP_AUDIT_LOG="$RUN_DIR/origin-http.log" "$@" >"$log" 2>&1 &
+  ORIGIN_PID=$!
+  local n
+  for ((n = 0; n < 200; n++)); do grep -Fx 'RIGSIGNAL_TEST_PAUSE_REACHED after-topology-preflight' "$log" >/dev/null 2>&1 && return 0; sleep 0.05; done
+  fail 'topology pause hook was not reached'
+}
+origin_resume() { : >"$RUN_DIR/pause.resume"; wait "$ORIGIN_PID"; }
 
 # Dirty Fleet assets + reinstall/upgrade rehearsal.
 leg_a() { setup; installer || fail 'installer failed'; marker_check; cp "$RUN_DIR/marker.json" "$RUN_DIR/marker-before-upgrade.json"; simulation_canary; external_hashes_check; jq -e '[.component_templates[0].component_template._meta.applied_owned_assets[].action] | all(. == "create" or . == "update" or . == "import" or . == "noop") and any(. != "noop")' "$RUN_DIR/marker.json" >/dev/null; seed --upgrade; installer || fail 'installer failed'; marker_check; external_hashes_check; jq -e --slurpfile before "$RUN_DIR/marker-before-upgrade.json" '([.component_templates[0].component_template._meta.verified_external_assets[] | [.kind,.name,.owner_metadata,.live_body_sha256]]) != ([$before[0].component_templates[0].component_template._meta.verified_external_assets[] | [.kind,.name,.owner_metadata,.live_body_sha256]])' "$RUN_DIR/marker.json" >/dev/null || fail 'upgrade did not capture moved owner metadata/live body'; jq -e '[.component_templates[0].component_template._meta.applied_owned_assets[].action] | all(. == "noop")' "$RUN_DIR/marker.json" >/dev/null; api PUT '/_component_template/.fleet_globals-1' --data-binary '{"template":{"settings":{"index.default_pipeline":"rigsignal-a5-dominance-canary"}}}' >/dev/null; expect_refusal 'external asset compatibility' _installer; }
@@ -267,4 +322,148 @@ leg_f() { setup; : >"$RUN_DIR/audit.log"; RIGSIGNAL_HTTP_AUDIT_LOG="$RUN_DIR/aud
 
 leg_g() { setup; installer; marker_check; jq -e '[.component_templates[0].component_template._meta|has("installed_assets")|not]' "$RUN_DIR/marker.json" >/dev/null; }
 leg_h() { build_bundle; printf 'GATE ARTIFACT commit=%s bundle_sha256=%s\n' "$IMPLEMENTING_COMMIT" "$BUNDLE_SHA256"; }
-for leg in "${LEGS[@]}"; do case "$leg" in a|b|c|d|e|f|g|h|i) "leg_$leg" ;; *) fail "unknown leg: $leg"; exit 2 ;; esac; done
+
+# J: W-B refuses every origin/literal topology collision before either local or
+# remote mutation.  Each variant is deliberately a fresh stack/root.
+leg_j() {
+  setup
+  origin_export default "$RUN_DIR/default-before-refusal.ndjson"
+  origin_seed new-all donor
+  origin_refusal literal_id_exists_elsewhere _installer
+  origin_assert_clean_refusal
+  origin_seed delete-all donor
+  _installer >"$RUN_DIR/leg-j-rerun.log" 2>&1 || fail 'Leg-J clean rerun did not succeed'
+  origin_assert_full_accounting "$RUN_DIR/leg-j-rerun.log"
+
+  origin_reset
+  origin_export default "$RUN_DIR/default-before-refusal.ndjson"
+  # D-2: this is intentionally the only seed.  Reason matching is mandatory.
+  origin_seed alias donor dashboard rigsignal-pkg-engine
+  if _installer >"$RUN_DIR/leg-j-alias.out" 2>&1; then fail 'alias-only seed unexpectedly installed'; fi
+  grep -E '^install refused: saved_object_topology_conflict(:|$)' "$RUN_DIR/leg-j-alias.out" >/dev/null || fail 'alias-only seed had wrong token'
+  if ! grep -E '^install refused: saved_object_topology_conflict: [^:]+: alias_match space=donor$' "$RUN_DIR/leg-j-alias.out" >/dev/null; then
+    api POST '/.kibana*/_search' --data-binary '{"query":{"term":{"type":"legacy-url-alias"}}}' >"$RUN_DIR/leg-j-alias-fallback.json"
+    fail 'alias-only refusal was not exclusively alias_match'
+  fi
+  origin_assert_clean_refusal
+
+  origin_reset
+  origin_seed one donor tag rigsignal-pkg-engine
+  api PUT '/_security/role/rigsignal-origin-restricted' --data-binary '{"cluster":[],"indices":[],"applications":[{"application":"kibana-.kibana","privileges":["feature_dashboard.read"],"resources":["space:default"]}]}' >/dev/null
+  api POST '/_security/user/rigsignal-origin-restricted' --data-binary '{"password":"restricted-password","roles":["rigsignal-origin-restricted"]}' >/dev/null
+  curl --silent --show-error --fail --max-redirs 0 --user 'rigsignal-origin-restricted:restricted-password' -H 'kbn-xsrf: true' "$KB_URL/api/spaces/space" >"$RUN_DIR/leg-j-restricted-spaces.json"
+  jq -e 'type == "array" and length > 0 and all(.[]; .id != "donor")' "$RUN_DIR/leg-j-restricted-spaces.json" >/dev/null || fail 'restricted user did not produce partial-200 spaces evidence'
+  printf '[elasticsearch]\nusername = "rigsignal-origin-restricted"\npassword = "restricted-password"\n' >"$RUN_DIR/restricted.toml"; chmod 600 "$RUN_DIR/restricted.toml"
+  origin_unverifiable python3 "$REPO_ROOT/tools/install_assets.py" --bundle "$BUNDLE" --endpoint "$ES_URL" --ca-file "$CS_CA_FILE" --kibana-endpoint "$KB_URL" --kibana-ca-file "$CS_CA_FILE" --admin-credentials-file "$RUN_DIR/restricted.toml" --agent-binary "$CLEAN_STACK_AGENT_BINARY" --profile user --enrollment-root "$RUN_DIR/enrollment" --ownership-profile fleet-coexist
+
+  origin_reset
+  origin_export default "$RUN_DIR/default-before-refusal.ndjson"
+  origin_seed one donor tag rigsignal-pkg-managed
+  origin_refusal literal_id_exists_elsewhere _installer
+  origin_assert_clean_refusal
+}
+
+# K: legacy identities and default-origin derivatives coexist with the new
+# namespace; the qualified fault is deliberately the later shared-child file.
+leg_k() {
+  setup
+  origin_seed old-all donor
+  origin_seed derivatives
+  origin_export donor "$RUN_DIR/leg-k-donor-before.ndjson"; origin_export_legacy default "$RUN_DIR/leg-k-default-before.ndjson"
+  _installer >"$RUN_DIR/leg-k-install.log" 2>&1 || fail 'Leg-K new-id install failed'
+  origin_assert_full_accounting "$RUN_DIR/leg-k-install.log"
+  origin_export donor "$RUN_DIR/leg-k-donor-after.ndjson"; origin_export_legacy default "$RUN_DIR/leg-k-default-after.ndjson"
+  cmp -s "$RUN_DIR/leg-k-donor-before.ndjson" "$RUN_DIR/leg-k-donor-after.ndjson" || fail 'Leg-K changed donor legacy seeds'
+  cmp -s "$RUN_DIR/leg-k-default-before.ndjson" "$RUN_DIR/leg-k-default-after.ndjson" || fail 'Leg-K changed default derivative seeds'
+  _installer >"$RUN_DIR/leg-k-rerun.log" 2>&1 || fail 'Leg-K noop rerun failed'
+  origin_assert_full_accounting "$RUN_DIR/leg-k-rerun.log"
+
+  origin_reset; origin_seed old-all donor; origin_seed derivatives
+  if RIGSIGNAL_TEST_CRASH_AT='after-remote-mutation:dashboard/rigsignal-home.ndjson' _installer >"$RUN_DIR/leg-k-fault.log" 2>&1; then fail 'Leg-K qualified later-file fault did not crash'; fi
+  grep -F 'rigsignal-home.ndjson' "$RUN_DIR/leg-k-fault.log" >/dev/null || fail 'Leg-K fault did not reach named later dashboard file'
+  rollback >"$RUN_DIR/leg-k-rollback.log" 2>&1 || fail 'Leg-K rollback failed'
+  grep -E '^rollback completed from journaled intents(:|$)' "$RUN_DIR/leg-k-rollback.log" >/dev/null || fail 'Leg-K rollback reporter mismatch'
+  [[ "$(origin_dashboard_count rigsignal)" == 0 ]] || fail 'Leg-K rollback left shared-child or regenerated objects'
+  kb_get rigsignal '/api/saved_objects/_find?type=legacy-url-alias&per_page=1000' | jq -e '.total == 0' >/dev/null || fail 'Leg-K rollback left an alias delta'
+}
+
+# L: a retained {apply_ok:false,rollback_ok:true} transaction is archivable and
+# its next install is a fresh, fully-accounted transaction (D-12 invocation).
+leg_l() {
+  setup
+  if RIGSIGNAL_TEST_CRASH_AT=after-remote-mutation _installer >"$RUN_DIR/leg-l-crash.log" 2>&1; then fail 'Leg-L after-remote-mutation fault did not crash'; fi
+  rollback >"$RUN_DIR/leg-l-first-rollback.log" 2>&1 || fail 'Leg-L first rollback failed'
+  jq -e '.apply_ok == false and .rollback_ok == true' "$RUN_DIR/enrollment/fleet-coexist-journal.json" >/dev/null || fail 'Leg-L did not retain the deadlock live shape'
+  _installer >"$RUN_DIR/leg-l-reinstall.log" 2>&1 || fail 'Leg-L reinstall from retained root failed'
+  origin_assert_full_accounting "$RUN_DIR/leg-l-reinstall.log"
+  jq -e '(.transactions|length) == 1 and .transactions[0].apply_ok == false and .transactions[0].rollback_ok == true and .apply_ok == true' "$RUN_DIR/enrollment/fleet-coexist-journal.json" >/dev/null || fail 'Leg-L did not archive then open a fresh transaction'
+  rollback >"$RUN_DIR/leg-l-second-rollback.log" 2>&1 || fail 'Leg-L second rollback failed'
+  jq -e '.rollback_ok == true and (.transactions|length) == 1 and .transactions[0].rollback_ok == true' "$RUN_DIR/enrollment/fleet-coexist-journal.json" >/dev/null || fail 'Leg-L second rollback did not stay in active transaction'
+}
+
+# M: pause-created collisions, lost responses, and per-delete resume cover both
+# space_prefix branches.  The assertions consume the captured request log.
+leg_m() {
+  setup
+  origin_pause_install "$RUN_DIR/leg-m-i.out" origin_installer
+  origin_seed one donor dashboard rigsignal-pkg-engine
+  if origin_resume; then fail 'Leg-M(i) regenerated import unexpectedly succeeded'; fi
+  grep -E '^install refused: saved_object_id_regenerated(:|$)' "$RUN_DIR/leg-m-i.out" >/dev/null || fail 'Leg-M(i) wrong regeneration refusal'
+  uuid="$(sed -n 's/^install refused: saved_object_id_regenerated:.*destinationId[^[:alnum:]_-]*\([[:alnum:]_-]\{22\}\).*/\1/p' "$RUN_DIR/leg-m-i.out" | head -1)"
+  [[ -n "$uuid" ]] || fail 'Leg-M(i) did not expose a regenerated UUID'
+  origin_missing rigsignal dashboard "$uuid" || fail 'Leg-M(i) cleanup did not explicitly leave destination 404'
+  grep -F "/s/rigsignal/api/saved_objects/dashboard/$uuid" "$RUN_DIR/origin-http.log" >/dev/null || fail 'Leg-M(i) cleanup did not use scoped path'
+  grep -F '/s/rigsignal/api/saved_objects/_find?type=dashboard&per_page=1000' "$RUN_DIR/origin-http.log" >/dev/null || fail 'Leg-M(i) preflight did not use scoped find path'
+  jq -e '.apply_ok == false' "$RUN_DIR/enrollment/fleet-coexist-journal.json" >/dev/null || fail 'Leg-M(i) journal was not retained unfinished'
+  rollback >"$RUN_DIR/leg-m-i-rollback.log" 2>&1 || fail 'Leg-M(i) rollback failed'
+  jq -e '.rollback_ok == true' "$RUN_DIR/enrollment/fleet-coexist-journal.json" >/dev/null || fail 'Leg-M(i) rollback did not persist'
+  origin_seed delete donor dashboard rigsignal-pkg-engine
+  _installer >"$RUN_DIR/leg-m-i-reinstall.log" 2>&1 || fail 'Leg-M(i) rollback-then-reinstall failed'
+  origin_assert_full_accounting "$RUN_DIR/leg-m-i-reinstall.log"
+
+  origin_reset
+  RIGSIGNAL_TEST_CRASH_AT='after-dashboard-response-before-regen-check:dashboard/rigsignal-engine.ndjson' origin_pause_install "$RUN_DIR/leg-m-ii.out" origin_installer
+  origin_seed one donor dashboard rigsignal-pkg-engine
+  : >"$RUN_DIR/pause.resume"
+  if wait "$ORIGIN_PID"; then fail 'Leg-M(ii) crash hook did not exit'; fi
+  RIGSIGNAL_HTTP_AUDIT_LOG="$RUN_DIR/leg-m-ii-rollback-http.log" rollback >"$RUN_DIR/leg-m-ii-rollback.log" 2>&1 || fail 'Leg-M(ii) sweep rollback failed'
+  grep -F '/s/rigsignal/api/saved_objects/_find?type=dashboard&per_page=1000' "$RUN_DIR/leg-m-ii-rollback-http.log" >/dev/null || fail 'Leg-M(ii) sweep find was not scoped'
+  grep -F 'DELETE /s/rigsignal/api/saved_objects/dashboard/' "$RUN_DIR/leg-m-ii-rollback-http.log" >/dev/null || fail 'Leg-M(ii) sweep delete was not scoped'
+  kb_get rigsignal '/api/saved_objects/_find?type=dashboard&per_page=1000' | jq -e '[.saved_objects[] | select(.originId == "rigsignal-pkg-engine")] | length == 0' >/dev/null || fail 'Leg-M(ii) sweep left UUID orphan'
+  ! grep -F 'unverified-orphan:' "$RUN_DIR/leg-m-ii-rollback.log" >/dev/null || fail 'Leg-M(ii) sweep left an unverified orphan'
+  origin_seed delete donor dashboard rigsignal-pkg-engine
+  _installer >"$RUN_DIR/leg-m-ii-reinstall.log" 2>&1 || fail 'Leg-M(ii) clean reinstall failed'
+  origin_assert_full_accounting "$RUN_DIR/leg-m-ii-reinstall.log"
+
+  origin_reset
+  RIGSIGNAL_TEST_CRASH_AT='after-dashboard-response-before-regen-check:dashboard/rigsignal-engine.ndjson' origin_pause_install "$RUN_DIR/leg-m-prime.out" origin_installer
+  origin_seed one donor dashboard rigsignal-pkg-engine; : >"$RUN_DIR/pause.resume"
+  if wait "$ORIGIN_PID"; then fail 'Leg-M(iii-prime) import crash did not fire'; fi
+  if RIGSIGNAL_TEST_CRASH_AT=after-regen-cleanup-delete rollback >"$RUN_DIR/leg-m-prime-crash.log" 2>&1; then fail 'Leg-M(iii-prime) delete crash did not fire'; fi
+  rollback >"$RUN_DIR/leg-m-prime-resume.log" 2>&1 || fail 'Leg-M(iii-prime) same-transaction rollback did not resume'
+  jq -e '.rollback_ok == true' "$RUN_DIR/enrollment/fleet-coexist-journal.json" >/dev/null || fail 'Leg-M(iii-prime) resumed rollback did not persist'
+  kb_get rigsignal '/api/saved_objects/_find?type=dashboard&per_page=1000' | jq -e '[.saved_objects[] | select(.originId == "rigsignal-pkg-engine")] | length == 0' >/dev/null || fail 'Leg-M(iii-prime) resumed sweep left UUID orphan'
+  ! grep -F 'unverified-orphan:' "$RUN_DIR/leg-m-prime-resume.log" >/dev/null || fail 'Leg-M(iii-prime) resumed sweep was not converged'
+
+  origin_reset
+  RIGSIGNAL_TEST_CRASH_AT='after-dashboard-response-before-regen-check:dashboard/rigsignal-streaming-lab.ndjson' origin_pause_install "$RUN_DIR/leg-m-iii.out" default_installer
+  origin_seed one donor dashboard rigsignal-pkg-streaming-lab; : >"$RUN_DIR/pause.resume"
+  if wait "$ORIGIN_PID"; then fail 'Leg-M(iii) default crash did not fire'; fi
+  if RIGSIGNAL_HTTP_AUDIT_LOG="$RUN_DIR/origin-http.log" default_installer >"$RUN_DIR/leg-m-iii-refusal.log" 2>&1; then fail 'Leg-M(iii) lost-response rerun unexpectedly succeeded'; fi
+  grep -E '^install refused: saved_object_topology_conflict(:|$)' "$RUN_DIR/leg-m-iii-refusal.log" >/dev/null || fail 'Leg-M(iii) wrong refusal token'
+  grep -F 'target_origin_derivative' "$RUN_DIR/leg-m-iii-refusal.log" >/dev/null || fail 'Leg-M(iii) did not name UUID orphan'
+  grep -F 'literal_id_exists_elsewhere' "$RUN_DIR/leg-m-iii-refusal.log" >/dev/null || fail 'Leg-M(iii) did not name foreign literal seed'
+  grep -F 'RIGSIGNAL_OPERATOR_ACTION resolve or remove foreign literal object' "$RUN_DIR/leg-m-iii-refusal.log" >/dev/null || fail 'Leg-M(iii) did not require foreign-seed resolution'
+  sed -n 's/^RIGSIGNAL_REMEDIATION //p' "$RUN_DIR/leg-m-iii-refusal.log" >"$RUN_DIR/leg-m-remediation.jsonl"
+  [[ -s "$RUN_DIR/leg-m-remediation.jsonl" ]] || fail 'Leg-M(iii) emitted no machine remediation payload'
+  jq -e 'all(.method == "DELETE" and (.path | startswith("/api/saved_objects/")) and .headers == {"kbn-xsrf":"true"})' "$RUN_DIR/leg-m-remediation.jsonl" >/dev/null || fail 'Leg-M(iii) remediation payload is malformed'
+  grep -F '/api/saved_objects/_find?type=dashboard&per_page=1000' "$RUN_DIR/origin-http.log" >/dev/null || fail 'Leg-M(iii) default find was not unscoped'
+  origin_seed replay "$RUN_DIR/leg-m-remediation.jsonl"
+  if default_installer >"$RUN_DIR/leg-m-iii-negative.log" 2>&1; then fail 'Leg-M(iii) UUID-only cleanup accepted foreign seed'; fi
+  grep -E '^install refused: saved_object_topology_conflict(:|$)' "$RUN_DIR/leg-m-iii-negative.log" >/dev/null || fail 'Leg-M(iii) UUID-only cleanup wrong token'
+  grep -F 'literal_id_exists_elsewhere' "$RUN_DIR/leg-m-iii-negative.log" >/dev/null || fail 'Leg-M(iii) UUID-only cleanup did not retain literal refusal'
+  origin_seed delete donor dashboard rigsignal-pkg-streaming-lab
+  default_installer >"$RUN_DIR/leg-m-iii-success.log" 2>&1 || fail 'Leg-M(iii) remediation replay did not permit rerun'
+}
+
+for leg in "${LEGS[@]}"; do case "$leg" in a|b|c|d|e|f|g|h|i|j|k|l|m) "leg_$leg" ;; *) fail "unknown leg: $leg"; exit 2 ;; esac; done
