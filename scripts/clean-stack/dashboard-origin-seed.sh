@@ -33,6 +33,21 @@ bundle_lines() {
     tar -xOf "$BUNDLE" "dashboards/v0.3.1/$file"
   done
 }
+derivative_objects() {
+  local file
+  for file in rigsignal-engine.ndjson rigsignal-flamegraph-dashboard.ndjson rigsignal-game-perf.ndjson rigsignal-home.ndjson rigsignal-software.ndjson; do
+    tar -xOf "$BUNDLE" "dashboards/v0.3.1/$file"
+  done | jq -cs '
+    map(if .type == "dashboard" then
+      .id |= ({
+        "rigsignal-pkg-engine":"rigsignal-engine",
+        "rigsignal-pkg-flamegraph-dashboard":"rigsignal-flamegraph-dashboard",
+        "rigsignal-pkg-game-perf":"rigsignal-game-perf",
+        "rigsignal-pkg-home":"rigsignal-home",
+        "rigsignal-pkg-software":"rigsignal-software"
+      }[.] // .)
+    else . end) | unique_by([.type, .id])[]'
+}
 new_objects() { bundle_lines | jq -c '{type,id,attributes:(.attributes // {}),references:(.references // [])}'; }
 old_objects() {
   new_objects | jq -c '
@@ -69,11 +84,20 @@ case "${1:-}" in
   new-all) create_objects "$2" "$(new_objects)" ;;
   old-all) create_objects "$2" "$(old_objects)" ;;
   derivatives)
-    # createNewCopies makes Kibana mint physical ids with the old dashboard ids as originId.
+    # createNewCopies mints UUID ids/originIds and rewrites all closure references.
     space_create default
-    bundle_lines | jq -c 'select(.type == "dashboard" and (.id == "rigsignal-pkg-engine" or .id == "rigsignal-pkg-flamegraph-dashboard" or .id == "rigsignal-pkg-game-perf" or .id == "rigsignal-pkg-home" or .id == "rigsignal-pkg-software")) | .id |= ({"rigsignal-pkg-engine":"rigsignal-engine","rigsignal-pkg-flamegraph-dashboard":"rigsignal-flamegraph-dashboard","rigsignal-pkg-game-perf":"rigsignal-game-perf","rigsignal-pkg-home":"rigsignal-home","rigsignal-pkg-software":"rigsignal-software"}[.] // .)' >"${TMPDIR:-/tmp}/dashboard-origin-derivatives.ndjson"
+    derivative_file="${TMPDIR:-/tmp}/dashboard-origin-derivatives.ndjson"
+    derivative_response="${TMPDIR:-/tmp}/dashboard-origin-derivatives-response.json"
+    derivative_objects >"$derivative_file"
+    derivative_expected="$(wc -l <"$derivative_file")"
     curl --silent --show-error --fail --max-redirs 0 --user "elastic:$ELASTIC_PASSWORD" -H 'kbn-xsrf: true' \
-      -X POST "${KB_URL}/api/saved_objects/_import?createNewCopies=true" -F "file=@${TMPDIR:-/tmp}/dashboard-origin-derivatives.ndjson;type=application/ndjson" >/dev/null
+      -X POST "${KB_URL}/api/saved_objects/_import?createNewCopies=true" -F "file=@${derivative_file};type=application/ndjson" >"$derivative_response"
+    jq -e --argjson expected "$derivative_expected" \
+      '.success == true and .successCount == $expected and ((.errors // []) | length == 0)' \
+      "$derivative_response" >/dev/null || { cat "$derivative_response" >&2; printf '%s\n' 'dashboard-origin derivatives import was incomplete' >&2; exit 1; }
+    DASH_SPACE=default kb GET '/api/saved_objects/_find?type=dashboard&per_page=1000' >"${TMPDIR:-/tmp}/dashboard-origin-derivatives-find.json"
+    jq -e '[.saved_objects[] | select((.originId // "") != "")] | length >= 5' \
+      "${TMPDIR:-/tmp}/dashboard-origin-derivatives-find.json" >/dev/null || { cat "${TMPDIR:-/tmp}/dashboard-origin-derivatives-find.json" >&2; printf '%s\n' 'dashboard-origin derivatives did not create five default-space origin copies' >&2; exit 1; }
     ;;
   alias)
     space_create "$2"

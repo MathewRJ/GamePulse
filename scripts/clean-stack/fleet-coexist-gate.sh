@@ -354,7 +354,10 @@ leg_j() {
   curl --silent --show-error --fail --max-redirs 0 --user 'rigsignal-origin-restricted:restricted-password' -H 'kbn-xsrf: true' "$KB_URL/api/spaces/space" >"$RUN_DIR/leg-j-restricted-spaces.json"
   jq -e 'type == "array" and length > 0 and all(.[]; .id != "donor")' "$RUN_DIR/leg-j-restricted-spaces.json" >/dev/null || fail 'restricted user did not produce partial-200 spaces evidence'
   printf '[elasticsearch]\nusername = "rigsignal-origin-restricted"\npassword = "restricted-password"\n' >"$RUN_DIR/restricted.toml"; chmod 600 "$RUN_DIR/restricted.toml"
+  # This credential trips privilege_unverified at step 0 (ES role-name check) by
+  # design; the captured spaces response above is the filtered-200 path evidence.
   origin_unverifiable python3 "$REPO_ROOT/tools/install_assets.py" --bundle "$BUNDLE" --endpoint "$ES_URL" --ca-file "$CS_CA_FILE" --kibana-endpoint "$KB_URL" --kibana-ca-file "$CS_CA_FILE" --admin-credentials-file "$RUN_DIR/restricted.toml" --agent-binary "$CLEAN_STACK_AGENT_BINARY" --profile user --enrollment-root "$RUN_DIR/enrollment" --ownership-profile fleet-coexist
+  grep -E '^install refused: saved_object_topology_unverifiable: privilege_unverified(:|$)' "$RUN_DIR/origin-refusal.out" >/dev/null || fail 'restricted credential did not refuse privilege_unverified'
 
   origin_reset
   origin_export default "$RUN_DIR/default-before-refusal.ndjson"
@@ -409,11 +412,29 @@ leg_m() {
   origin_seed one donor dashboard rigsignal-pkg-engine
   if origin_resume; then fail 'Leg-M(i) regenerated import unexpectedly succeeded'; fi
   grep -E '^install refused: saved_object_id_regenerated(:|$)' "$RUN_DIR/leg-m-i.out" >/dev/null || fail 'Leg-M(i) wrong regeneration refusal'
-  uuid="$(sed -n 's/^install refused: saved_object_id_regenerated:.*destinationId[^[:alnum:]_-]*\([[:alnum:]_-]\{22\}\).*/\1/p' "$RUN_DIR/leg-m-i.out" | head -1)"
+  uuid="$(python3 - "$RUN_DIR/leg-m-i.out" <<'PY'
+import ast
+import sys
+
+prefix = "install refused: saved_object_id_regenerated: "
+for line in open(sys.argv[1], encoding="utf-8"):
+    if not line.startswith(prefix):
+        continue
+    payload = line[len(prefix):].partition(" space=")[0]
+    try:
+        regenerated = ast.literal_eval(payload)
+    except (SyntaxError, ValueError):
+        continue
+    for item in regenerated:
+        if isinstance(item, tuple) and len(item) >= 3 and isinstance(item[2], str):
+            print(item[2])
+            raise SystemExit
+PY
+)"
   [[ -n "$uuid" ]] || fail 'Leg-M(i) did not expose a regenerated UUID'
   origin_missing rigsignal dashboard "$uuid" || fail 'Leg-M(i) cleanup did not explicitly leave destination 404'
-  grep -F "/s/rigsignal/api/saved_objects/dashboard/$uuid" "$RUN_DIR/origin-http.log" >/dev/null || fail 'Leg-M(i) cleanup did not use scoped path'
-  grep -F '/s/rigsignal/api/saved_objects/_find?type=dashboard&per_page=1000' "$RUN_DIR/origin-http.log" >/dev/null || fail 'Leg-M(i) preflight did not use scoped find path'
+  grep -E "^DELETE /s/rigsignal/api/saved_objects/dashboard/${uuid}$" "$RUN_DIR/origin-http.log" >/dev/null || fail 'Leg-M(i) cleanup did not use scoped path'
+  grep -E '^GET /s/rigsignal/api/saved_objects/_find\?type=dashboard&per_page=1000$' "$RUN_DIR/origin-http.log" >/dev/null || fail 'Leg-M(i) preflight did not use scoped find path'
   jq -e '.apply_ok == false' "$RUN_DIR/enrollment/fleet-coexist-journal.json" >/dev/null || fail 'Leg-M(i) journal was not retained unfinished'
   rollback >"$RUN_DIR/leg-m-i-rollback.log" 2>&1 || fail 'Leg-M(i) rollback failed'
   jq -e '.rollback_ok == true' "$RUN_DIR/enrollment/fleet-coexist-journal.json" >/dev/null || fail 'Leg-M(i) rollback did not persist'
@@ -427,8 +448,8 @@ leg_m() {
   : >"$RUN_DIR/pause.resume"
   if wait "$ORIGIN_PID"; then fail 'Leg-M(ii) crash hook did not exit'; fi
   RIGSIGNAL_HTTP_AUDIT_LOG="$RUN_DIR/leg-m-ii-rollback-http.log" rollback >"$RUN_DIR/leg-m-ii-rollback.log" 2>&1 || fail 'Leg-M(ii) sweep rollback failed'
-  grep -F '/s/rigsignal/api/saved_objects/_find?type=dashboard&per_page=1000' "$RUN_DIR/leg-m-ii-rollback-http.log" >/dev/null || fail 'Leg-M(ii) sweep find was not scoped'
-  grep -F 'DELETE /s/rigsignal/api/saved_objects/dashboard/' "$RUN_DIR/leg-m-ii-rollback-http.log" >/dev/null || fail 'Leg-M(ii) sweep delete was not scoped'
+  grep -E '^GET /s/rigsignal/api/saved_objects/_find\?type=dashboard&per_page=1000$' "$RUN_DIR/leg-m-ii-rollback-http.log" >/dev/null || fail 'Leg-M(ii) sweep find was not scoped'
+  grep -E '^DELETE /s/rigsignal/api/saved_objects/dashboard/[^/]+$' "$RUN_DIR/leg-m-ii-rollback-http.log" >/dev/null || fail 'Leg-M(ii) sweep delete was not scoped'
   kb_get rigsignal '/api/saved_objects/_find?type=dashboard&per_page=1000' | jq -e '[.saved_objects[] | select(.originId == "rigsignal-pkg-engine")] | length == 0' >/dev/null || fail 'Leg-M(ii) sweep left UUID orphan'
   ! grep -F 'unverified-orphan:' "$RUN_DIR/leg-m-ii-rollback.log" >/dev/null || fail 'Leg-M(ii) sweep left an unverified orphan'
   origin_seed delete donor dashboard rigsignal-pkg-engine
@@ -457,7 +478,7 @@ leg_m() {
   sed -n 's/^RIGSIGNAL_REMEDIATION //p' "$RUN_DIR/leg-m-iii-refusal.log" >"$RUN_DIR/leg-m-remediation.jsonl"
   [[ -s "$RUN_DIR/leg-m-remediation.jsonl" ]] || fail 'Leg-M(iii) emitted no machine remediation payload'
   jq -e 'all(.method == "DELETE" and (.path | startswith("/api/saved_objects/")) and .headers == {"kbn-xsrf":"true"})' "$RUN_DIR/leg-m-remediation.jsonl" >/dev/null || fail 'Leg-M(iii) remediation payload is malformed'
-  grep -F '/api/saved_objects/_find?type=dashboard&per_page=1000' "$RUN_DIR/origin-http.log" >/dev/null || fail 'Leg-M(iii) default find was not unscoped'
+  grep -E '^GET /api/saved_objects/_find\?type=dashboard&per_page=1000$' "$RUN_DIR/origin-http.log" >/dev/null || fail 'Leg-M(iii) default find was not unscoped'
   origin_seed replay "$RUN_DIR/leg-m-remediation.jsonl"
   if default_installer >"$RUN_DIR/leg-m-iii-negative.log" 2>&1; then fail 'Leg-M(iii) UUID-only cleanup accepted foreign seed'; fi
   grep -E '^install refused: saved_object_topology_conflict(:|$)' "$RUN_DIR/leg-m-iii-negative.log" >/dev/null || fail 'Leg-M(iii) UUID-only cleanup wrong token'
