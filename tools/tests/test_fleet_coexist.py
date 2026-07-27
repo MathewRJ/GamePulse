@@ -828,6 +828,13 @@ class FleetCoexistenceTests(unittest.TestCase):
                 INSTALL.atomic_write(root, INSTALL.JOURNAL_FILE, INSTALL.jcs(value) + b"\n")
                 with self.assertRaisesRegex(INSTALL.ProvisionError, "ownership_profile_mismatch"):
                     INSTALL.TransactionJournal(root, "fleet-coexist")
+        for required in ("version", "intents", "proofs", "m1_anchors", "apply_ok"):
+            with self.subTest(required_absent=required), tempfile.TemporaryDirectory() as directory:
+                root = INSTALL.secure_root(Path(directory) / "state")
+                value = dict(base); del value[required]
+                INSTALL.atomic_write(root, INSTALL.JOURNAL_FILE, INSTALL.jcs(value) + b"\n")
+                with self.assertRaisesRegex(INSTALL.ProvisionError, "ownership_profile_mismatch"):
+                    INSTALL.TransactionJournal(root, "fleet-coexist")
         for change in ({}, {"rollback_ok": None}):
             with self.subTest(accepted=change), tempfile.TemporaryDirectory() as directory:
                 root = INSTALL.secure_root(Path(directory) / "state")
@@ -961,6 +968,34 @@ class FleetCoexistenceTests(unittest.TestCase):
                  mock.patch.object(INSTALL, "_strict_saved_object_find", side_effect=[error, [], []]):
                 operations = INSTALL._recovery_sweep("https://kb", "auth", {"intents": intents})
             self.assertEqual(operations, ["unverified-orphan:dashboard/dashboard/one/rigsignal"])
+            self._assert_main_reports_recovery_incomplete(operations)
+
+    def test_recovery_sweep_is_idempotent_for_the_same_converged_live_state(self):
+        intents = [{"kind": "dashboard", "name": "rigsignal-engine.ndjson",
+                    "object_id": "dashboard/literal", "intended_after_sha256": "after"}]
+        with mock.patch.object(INSTALL, "_strict_saved_object_find", return_value=[]):
+            self.assertEqual(INSTALL._recovery_sweep("https://kb", "auth", {"intents": intents}), [])
+            self.assertEqual(INSTALL._recovery_sweep("https://kb", "auth", {"intents": intents}), [])
+
+    def _assert_main_reports_recovery_incomplete(self, operations):
+        args = type("Args", (), {
+            "bundle": None, "endpoint": "https://es.invalid", "ca_file": Path("ca"),
+            "kibana_endpoint": "https://kb.invalid", "kibana_ca_file": Path("kb-ca"),
+            "admin_credentials_file": Path("admin"), "agent_binary": Path("agent"), "profile": "user",
+            "rollback": Path("transaction"), "dry_run": False, "ownership_profile": None,
+            "unsafe_test_injection": False,
+        })()
+        output = io.StringIO()
+        with mock.patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args), \
+             mock.patch.object(INSTALL, "configure_https"), \
+             mock.patch.object(INSTALL, "admin_authorization", return_value="auth"), \
+             mock.patch.object(INSTALL, "fence_remote_ownership_profile"), \
+             mock.patch.object(INSTALL, "rollback_transaction", return_value=operations), \
+             redirect_stdout(output):
+            self.assertEqual(INSTALL.main(), 0)
+        self.assertIn("rollback completed from journaled intents; recovery incomplete: "
+                      "unverified-orphan:dashboard/dashboard/one/rigsignal",
+                      output.getvalue())
 
     def test_main_normal_rollback_prints_no_recovery_warning(self):
         args = type("Args", (), {

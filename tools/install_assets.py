@@ -773,7 +773,7 @@ def _dashboard_inventory(bundle: Bundle) -> list[tuple[str, str, str, dict, str]
                 continue
             value = parse_json(line.encode("utf-8"), asset.path)
             if not isinstance(value, dict) or not isinstance(value.get("type"), str) or not isinstance(value.get("id"), str):
-                _topology_refusal("saved_object_topology_conflict", "duplicate_divergent_definition")
+                _topology_refusal("saved_object_topology_conflict", "malformed_bundle_record")
             object_type, object_id = value["type"], value["id"]
             canonical = {"attributes": value.get("attributes", {})}
             if "references" in value:
@@ -871,8 +871,9 @@ def run_topology_preflight(bundle: Bundle, es_url: str, kb_url: str, authorizati
                 for space in foreign_spaces:
                     print("RIGSIGNAL_OPERATOR_ACTION resolve or remove foreign literal object "
                           f"{object_type}/{object_id} in space={space}")
-                for physical_id in orphan_ids:
-                    _print_topology_remediation(target, object_type, physical_id)
+                if any(reason.startswith("target_origin_derivative") for reason in reasons):
+                    for physical_id in orphan_ids:
+                        _print_topology_remediation(target, object_type, physical_id)
             _topology_refusal("saved_object_topology_conflict",
                               f"{object_type}/{object_id}: " + "; ".join(reasons))
         outcome = "proceed-as-rerun" if target in spaces and object_id in table[(target, object_type)] else "proceed-as-create"
