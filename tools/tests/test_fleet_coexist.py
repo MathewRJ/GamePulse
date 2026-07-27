@@ -799,3 +799,183 @@ class FleetCoexistenceTests(unittest.TestCase):
                 INSTALL.test_rollover("after-fleet-snapshot", "https://es", "auth",
                                       {"logs-x-default": {}})
             self.assertEqual(len(calls), 2)
+
+    def test_transaction_journal_rejects_full_schema_matrix_and_tolerates_legacy_absences(self):
+        base = {"version": 1, "ownership_profile": "fleet-coexist",
+                "ownership_table_version": INSTALL.OWNERSHIP_TABLE_VERSION,
+                "intents": [], "proofs": [], "m1_anchors": {}, "apply_ok": True}
+        invalid = [
+            {"version": value} for value in (None, "1", [], True, False, 2)
+        ] + [
+            {"transaction_id": value} for value in (None, {}, [], 1)
+        ] + [
+            {"intents": value} for value in (None, {}, "x")
+        ] + [
+            {"proofs": value} for value in (None, {}, "x")
+        ] + [
+            {"m1_anchors": value} for value in (None, [], "x")
+        ] + [
+            {"apply_ok": value} for value in (None, {}, [], "true", 1)
+        ] + [
+            {"rollback_ok": value} for value in ({}, [], 1, "true")
+        ] + [
+            {"transactions": value} for value in (None, {}, "x", 1)
+        ]
+        for change in invalid:
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as directory:
+                root = INSTALL.secure_root(Path(directory) / "state")
+                value = dict(base); value.update(change)
+                INSTALL.atomic_write(root, INSTALL.JOURNAL_FILE, INSTALL.jcs(value) + b"\n")
+                with self.assertRaisesRegex(INSTALL.ProvisionError, "ownership_profile_mismatch"):
+                    INSTALL.TransactionJournal(root, "fleet-coexist")
+        for change in ({}, {"rollback_ok": None}):
+            with self.subTest(accepted=change), tempfile.TemporaryDirectory() as directory:
+                root = INSTALL.secure_root(Path(directory) / "state")
+                value = dict(base); value.update(change)
+                INSTALL.atomic_write(root, INSTALL.JOURNAL_FILE, INSTALL.jcs(value) + b"\n")
+                journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+                self.assertIsInstance(journal.value["transaction_id"], str)
+                self.assertEqual(journal.value["transactions"], [])
+
+    def test_transaction_journal_archives_rolled_back_legacy_transaction(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "state")
+            legacy = {"version": 1, "ownership_profile": "fleet-coexist",
+                      "ownership_table_version": INSTALL.OWNERSHIP_TABLE_VERSION,
+                      "intents": [], "proofs": [], "m1_anchors": {}, "apply_ok": False,
+                      "rollback_ok": True}
+            INSTALL.atomic_write(root, INSTALL.JOURNAL_FILE, INSTALL.jcs(legacy) + b"\n")
+            fresh = INSTALL.TransactionJournal(root, "fleet-coexist", new_transaction=True)
+            self.assertEqual(fresh.value["transactions"][0]["rollback_ok"], True)
+            self.assertEqual(fresh.value["transactions"][0]["intents"], [])
+            broken = dict(legacy, transactions=None)
+            INSTALL.atomic_write(root, INSTALL.JOURNAL_FILE, INSTALL.jcs(broken) + b"\n")
+            with self.assertRaisesRegex(INSTALL.ProvisionError, "ownership_profile_mismatch"):
+                INSTALL.TransactionJournal(root, "fleet-coexist", new_transaction=True)
+
+    def test_transaction_journal_w_c_terminal_state_table(self):
+        for apply_ok, rollback_ok, archives in ((False, True, True), (False, False, False),
+                                                (True, True, True), (True, False, True)):
+            with self.subTest(apply_ok=apply_ok, rollback_ok=rollback_ok), tempfile.TemporaryDirectory() as directory:
+                root = INSTALL.secure_root(Path(directory) / "state")
+                value = {"version": 1, "ownership_profile": "fleet-coexist",
+                         "ownership_table_version": INSTALL.OWNERSHIP_TABLE_VERSION,
+                         "intents": [], "proofs": [], "m1_anchors": {}, "apply_ok": apply_ok,
+                         "rollback_ok": rollback_ok, "transactions": []}
+                INSTALL.atomic_write(root, INSTALL.JOURNAL_FILE, INSTALL.jcs(value) + b"\n")
+                if archives:
+                    fresh = INSTALL.TransactionJournal(root, "fleet-coexist", new_transaction=True)
+                    self.assertEqual(len(fresh.value["transactions"]), 1)
+                else:
+                    with self.assertRaisesRegex(INSTALL.ProvisionError, "transaction_recovery_required"):
+                        INSTALL.TransactionJournal(root, "fleet-coexist", new_transaction=True)
+
+    def test_fault_supports_bare_matching_and_nonmatching_qualified_forms(self):
+        with mock.patch.object(INSTALL.os, "_exit") as exit_hook:
+            with mock.patch.dict(INSTALL.os.environ, {"RIGSIGNAL_TEST_CRASH_AT": "point"}, clear=False):
+                INSTALL.fault("point", "asset/a")
+            with mock.patch.dict(INSTALL.os.environ, {"RIGSIGNAL_TEST_CRASH_AT": "point:asset/a"}, clear=False):
+                INSTALL.fault("point", "asset/a")
+            with mock.patch.dict(INSTALL.os.environ, {"RIGSIGNAL_TEST_CRASH_AT": "point:asset/b"}, clear=False):
+                INSTALL.fault("point", "asset/a")
+        self.assertEqual(exit_hook.call_count, 2)
+
+    def test_pause_requires_both_gates_and_flushes_ready_marker(self):
+        with tempfile.TemporaryDirectory() as directory:
+            sentinel = Path(directory) / "resume"
+            with mock.patch.dict(INSTALL.os.environ, {"RIGSIGNAL_TEST_PAUSE_AT": "point"}, clear=False):
+                INSTALL.test_pause("point", False)
+            sentinel.touch()
+            output = io.StringIO()
+            with mock.patch.dict(INSTALL.os.environ, {
+                    "RIGSIGNAL_TEST_PAUSE_AT": "point",
+                    "RIGSIGNAL_TEST_PAUSE_SENTINEL": str(sentinel)}, clear=False), redirect_stdout(output):
+                INSTALL.test_pause("point", True)
+            self.assertEqual(output.getvalue(), "RIGSIGNAL_TEST_PAUSE_REACHED point\n")
+
+    def test_dashboard_target_space_rejects_substring_name(self):
+        self.assertEqual(INSTALL.dashboard_target_space(INSTALL.STREAMING_LAB_DASHBOARD), "default")
+        with self.assertRaisesRegex(INSTALL.ProvisionError, "unrecognized dashboard"):
+            INSTALL.dashboard_target_space("lab.ndjson")
+
+    def test_strict_find_rejects_non_string_origin_and_duplicate_ids(self):
+        for rows, expected in (([{"type": "dashboard", "id": "x", "originId": None}], "find_row_malformed"),
+                               ([{"type": "dashboard", "id": "x"},
+                                 {"type": "dashboard", "id": "x"}], "duplicate_row_id")):
+            body = {"page": 1, "total": len(rows), "saved_objects": rows}
+            with self.subTest(expected=expected), \
+                 mock.patch.object(INSTALL, "request_response", return_value=(200, INSTALL.jcs(body))):
+                with self.assertRaisesRegex(INSTALL.InputError, expected):
+                    INSTALL._strict_saved_object_find("https://kb", "auth", "default", "dashboard")
+
+    def test_topology_preflight_uses_es_privilege_proof_and_scoped_find_paths(self):
+        asset = INSTALL.Asset("dashboard", "rigsignal-engine.ndjson", "fixture",
+                              b'{"type":"dashboard","id":"literal","attributes":{}}\n')
+        calls = []
+        def response(base, path, method, authorization, data=None, headers=None):
+            calls.append((base, path, method))
+            if path == "/_security/_authenticate":
+                return 200, b'{"roles":["superuser"]}'
+            if path == "/api/spaces/space":
+                return 200, b'[{"id":"default"},{"id":"rigsignal"}]'
+            return 200, b'{"page":1,"total":0,"saved_objects":[]}'
+        with mock.patch.object(INSTALL, "request_response", side_effect=response), \
+             redirect_stdout(io.StringIO()):
+            INSTALL.run_topology_preflight(INSTALL.Bundle("test", "test", [asset]),
+                                           "https://es", "https://kb", "auth", "fleet-coexist")
+        self.assertEqual(calls[0], ("https://es", "/_security/_authenticate", "GET"))
+        self.assertIn(("https://kb", "/s/rigsignal/api/saved_objects/_find?type=dashboard&per_page=1000", "GET"), calls)
+
+    def test_regeneration_refuses_non_string_destination_before_url_quoting(self):
+        asset = INSTALL.Asset("dashboard", "rigsignal-engine.ndjson", "fixture", b"{}")
+        response = {"successResults": [{"type": "dashboard", "id": "literal", "destinationId": 7}]}
+        with mock.patch.object(INSTALL.urllib.parse, "quote", side_effect=AssertionError("must not quote")):
+            with self.assertRaisesRegex(INSTALL.ProvisionError, "saved_object_id_regenerated"):
+                INSTALL.assert_no_id_regeneration("https://kb", "auth", asset, response)
+
+    def test_recovery_sweep_unknown_dashboard_degrades_and_rollback_completes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            intent = journal.write_intent("dashboard", "lab.ndjson", "update", "before", "after", b"{}",
+                                          object_id="dashboard/literal")
+            journal.write_verified(intent, "after")
+            with mock.patch.object(INSTALL, "verify_rollback_external_baselines"), \
+                 mock.patch.object(INSTALL, "_rollback_live_hash", return_value="before"), \
+                 mock.patch.object(INSTALL, "rollback_transaction_proofs"), \
+                 mock.patch.object(INSTALL, "verify_m1_anchors"):
+                operations = INSTALL.rollback_transaction("https://es", "https://kb", "auth", root)
+            self.assertIn("unverified-orphan:dashboard/lab.ndjson", operations)
+            self.assertTrue(INSTALL.TransactionJournal(root, "fleet-coexist").value["rollback_ok"])
+
+    def test_recovery_sweep_degrades_find_failures_and_continues_other_triples(self):
+        intents = [
+            {"kind": "dashboard", "name": "rigsignal-engine.ndjson", "object_id": "dashboard/one",
+             "intended_after_sha256": "after"},
+            {"kind": "dashboard", "name": "rigsignal-home.ndjson", "object_id": "dashboard/two",
+             "intended_after_sha256": "after"},
+        ]
+        for error in (INSTALL.RequestFailure(503, "offline"), INSTALL.InputError("not-json"),
+                      INSTALL.InputError("find_row_malformed")):
+            with self.subTest(error=type(error).__name__ + str(error)), \
+                 mock.patch.object(INSTALL, "_strict_saved_object_find", side_effect=[error, [], []]):
+                operations = INSTALL._recovery_sweep("https://kb", "auth", {"intents": intents})
+            self.assertEqual(operations, ["unverified-orphan:dashboard/dashboard/one/rigsignal"])
+
+    def test_main_normal_rollback_prints_no_recovery_warning(self):
+        args = type("Args", (), {
+            "bundle": None, "endpoint": "https://es.invalid", "ca_file": Path("ca"),
+            "kibana_endpoint": "https://kb.invalid", "kibana_ca_file": Path("kb-ca"),
+            "admin_credentials_file": Path("admin"), "agent_binary": Path("agent"), "profile": "user",
+            "rollback": Path("transaction"), "dry_run": False, "ownership_profile": None,
+            "unsafe_test_injection": False,
+        })()
+        output = io.StringIO()
+        with mock.patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args), \
+             mock.patch.object(INSTALL, "configure_https"), \
+             mock.patch.object(INSTALL, "admin_authorization", return_value="auth"), \
+             mock.patch.object(INSTALL, "fence_remote_ownership_profile"), \
+             mock.patch.object(INSTALL, "rollback_transaction", return_value=["marker"]), \
+             redirect_stdout(output):
+            self.assertEqual(INSTALL.main(), 0)
+        self.assertNotIn("recovery incomplete", output.getvalue())

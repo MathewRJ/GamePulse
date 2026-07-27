@@ -52,6 +52,7 @@ PRODUCT_DASHBOARDS = frozenset((
     "rigsignal-system-health.ndjson",
 ))
 STREAMING_LAB_DASHBOARD = "rigsignal-streaming-lab.ndjson"
+DASHBOARD_SAVED_OBJECT_TYPES = frozenset(("dashboard", "index-pattern", "search", "tag", "visualization"))
 W1_RAW_SHA256 = {
     "elastic/component-templates/logs-rigsignal.diagnosis-mappings.json": "345e0d2898279929eb613b60d2bd250bbf73a13c7b4bbd1b793384e2ae00410c",
     "elastic/index-templates/logs-rigsignal.diagnosis.json": "5f4d4f403fc17a1096b2d2b1c8a43bad94efa52b05c3b117961333b2f3d52199",
@@ -680,9 +681,25 @@ def dashboard_import_path(asset: Asset) -> str:
     raise InputError("dashboard is not authorized for installation")
 
 
+def space_prefix(space: str) -> str:
+    """Return Kibana's scoped path prefix (the default space is unscoped)."""
+    return "" if space == "default" else "/s/" + urllib.parse.quote(space, safe="")
+
+
+def dashboard_target_space(asset_or_name) -> str:
+    """Return the one ratified destination space for a dashboard asset."""
+    name = asset_or_name.name if hasattr(asset_or_name, "name") else asset_or_name
+    if name in PRODUCT_DASHBOARDS:
+        return "rigsignal"
+    if name == STREAMING_LAB_DASHBOARD:
+        return "default"
+    raise ProvisionError(
+        f"install refused: saved_object_topology_conflict: unrecognized dashboard {name}")
+
+
 def dashboard_object_path(asset: Asset, object_type: str, object_id: str) -> str:
-    prefix = "/s/rigsignal" if asset.name in PRODUCT_DASHBOARDS else ""
-    return (prefix + "/api/saved_objects/" + urllib.parse.quote(object_type, safe="") + "/"
+    return (space_prefix(dashboard_target_space(asset)) + "/api/saved_objects/"
+            + urllib.parse.quote(object_type, safe="") + "/"
             + urllib.parse.quote(object_id, safe=""))
 
 
@@ -705,6 +722,193 @@ def assert_dashboard_import_result(asset: Asset, response: object) -> None:
         actual.append((result["type"], result["id"]))
     if sorted(actual) != sorted(expected):
         raise InputError("dashboard import result differs from submitted objects")
+
+
+def _topology_refusal(token: str, reason: str) -> None:
+    raise ProvisionError(f"install refused: {token}: {reason}")
+
+
+def _strict_saved_object_find(kb_url: str, authorization: str, space: str,
+                              object_type: str) -> list[dict]:
+    """Read one complete saved-object type page, rejecting ambiguous answers."""
+    path = (space_prefix(space) + "/api/saved_objects/_find?type="
+            + urllib.parse.quote(object_type, safe="") + "&per_page=1000")
+    try:
+        status, raw = request_response(kb_url, path, "GET", authorization,
+                                       headers={"kbn-xsrf": "true"})
+        body = json_response(raw)
+    except (RequestFailure, InputError) as error:
+        raise InputError("find_response_malformed") from error
+    if status != 200 or not isinstance(body, dict):
+        raise InputError("find_response_malformed")
+    total, rows = body.get("total"), body.get("saved_objects")
+    if body.get("page") != 1 or not isinstance(total, int) or isinstance(total, bool):
+        raise InputError("find_response_malformed")
+    if not isinstance(rows, list) or total != len(rows):
+        raise InputError("find_response_malformed")
+    if total > 1000:
+        raise InputError("pagination_incomplete")
+    seen: set[str] = set()
+    for row in rows:
+        if (not isinstance(row, dict) or row.get("type") != object_type
+                or not isinstance(row.get("id"), str)
+                or ("originId" in row and not isinstance(row["originId"], str))):
+            raise InputError("find_row_malformed")
+        if row["id"] in seen:
+            raise InputError("duplicate_row_id")
+        seen.add(row["id"])
+    return rows
+
+
+def _dashboard_inventory(bundle: Bundle) -> list[tuple[str, str, str, dict, str]]:
+    """Parse the dashboard definitions and enforce local canonical consistency."""
+    grouped: dict[tuple[str, str, str], list[tuple[dict, str]]] = {}
+    targets: dict[tuple[str, str], set[str]] = {}
+    for asset in bundle.assets:
+        if asset.kind != "dashboard":
+            continue
+        target = dashboard_target_space(asset)
+        for line in asset.data.decode("utf-8").splitlines():
+            if not line.strip():
+                continue
+            value = parse_json(line.encode("utf-8"), asset.path)
+            if not isinstance(value, dict) or not isinstance(value.get("type"), str) or not isinstance(value.get("id"), str):
+                _topology_refusal("saved_object_topology_conflict", "duplicate_divergent_definition")
+            object_type, object_id = value["type"], value["id"]
+            canonical = {"attributes": value.get("attributes", {})}
+            if "references" in value:
+                canonical["references"] = value["references"]
+            grouped.setdefault((object_type, object_id, target), []).append((canonical, asset.name))
+            targets.setdefault((object_type, object_id), set()).add(target)
+    for (object_type, object_id), spaces in targets.items():
+        if len(spaces) > 1:
+            _topology_refusal("saved_object_topology_conflict",
+                              f"inconsistent_target {object_type}/{object_id}")
+    inventory = []
+    for (object_type, object_id, target), entries in grouped.items():
+        first = jcs(entries[0][0])
+        if any(jcs(value) != first for value, _name in entries[1:]):
+            names = ",".join(name for _value, name in entries)
+            _topology_refusal("saved_object_topology_conflict",
+                              f"duplicate_divergent_definition {object_type}/{object_id} files={names}")
+        inventory.append((object_type, object_id, target, entries[0][0], entries[0][1]))
+    return inventory
+
+
+def _print_topology_remediation(target_space: str, object_type: str, physical_id: str) -> None:
+    payload = {
+        "method": "DELETE",
+        "path": (space_prefix(target_space) + "/api/saved_objects/"
+                 + urllib.parse.quote(object_type, safe="") + "/"
+                 + urllib.parse.quote(physical_id, safe="")),
+        "headers": {"kbn-xsrf": "true"},
+    }
+    print("RIGSIGNAL_REMEDIATION " + json.dumps(payload))
+
+
+def run_topology_preflight(bundle: Bundle, es_url: str, kb_url: str, authorization: str,
+                           ownership_profile: str) -> None:
+    """Fail closed before any local or remote installation mutation."""
+    inventory = _dashboard_inventory(bundle)
+    if not inventory:
+        return
+    try:
+        status, raw = request_response(es_url, "/_security/_authenticate", "GET", authorization)
+        authenticated = json_response(raw)
+        if (status != 200 or not isinstance(authenticated, dict)
+                or not isinstance(authenticated.get("roles"), list)
+                or "superuser" not in authenticated["roles"]):
+            _topology_refusal("saved_object_topology_unverifiable", "privilege_unverified")
+        status, raw = request_response(kb_url, "/api/spaces/space", "GET", authorization,
+                                       headers={"kbn-xsrf": "true"})
+        spaces_body = json_response(raw)
+        if status != 200 or not isinstance(spaces_body, list):
+            _topology_refusal("saved_object_topology_unverifiable", "space_list_unverifiable")
+        if any(not isinstance(item, dict) or not isinstance(item.get("id"), str) for item in spaces_body):
+            _topology_refusal("saved_object_topology_unverifiable", "space_list_unverifiable")
+        spaces = {item["id"] for item in spaces_body}
+        if "default" not in spaces:
+            _topology_refusal("saved_object_topology_unverifiable", "space_list_unverifiable")
+        table: dict[tuple[str, str], dict[str, str | None]] = {}
+        for space in spaces:
+            for object_type in DASHBOARD_SAVED_OBJECT_TYPES:
+                table[(space, object_type)] = {
+                    row["id"]: row.get("originId") for row in _strict_saved_object_find(
+                        kb_url, authorization, space, object_type)
+                }
+        aliases: dict[str, list[tuple[str, str]]] = {}
+        for space in spaces:
+            rows = _strict_saved_object_find(kb_url, authorization, space, "legacy-url-alias")
+            aliases[space] = []
+            for row in rows:
+                attributes = row.get("attributes")
+                if (not isinstance(attributes, dict) or not isinstance(attributes.get("sourceId"), str)
+                        or not isinstance(attributes.get("targetId"), str)):
+                    _topology_refusal("saved_object_topology_unverifiable", "alias_row_malformed")
+                aliases[space].append((attributes["sourceId"], attributes["targetId"]))
+    except ProvisionError:
+        raise
+    except (RequestFailure, InputError, json.JSONDecodeError) as error:
+        _topology_refusal("saved_object_topology_unverifiable", str(error) or "find_response_malformed")
+    for object_type, object_id, target, _body, _name in inventory:
+        reasons: list[str] = []
+        orphan_ids: list[str] = []
+        foreign_spaces: list[str] = []
+        for space in spaces:
+            if space != target and object_id in table[(space, object_type)]:
+                reasons.append(f"literal_id_exists_elsewhere space={space}")
+                foreign_spaces.append(space)
+            if any(object_id in pair for pair in aliases[space]):
+                reasons.append(f"alias_match space={space}")
+        if target in spaces:
+            for physical_id, origin_id in table[(target, object_type)].items():
+                if physical_id != object_id and origin_id == object_id:
+                    reasons.append("target_origin_derivative "
+                                   f"physical_id={physical_id} originId={origin_id} space={target}")
+                    orphan_ids.append(physical_id)
+        if reasons:
+            if ownership_profile != "fleet-coexist":
+                for space in foreign_spaces:
+                    print("RIGSIGNAL_OPERATOR_ACTION resolve or remove foreign literal object "
+                          f"{object_type}/{object_id} in space={space}")
+                for physical_id in orphan_ids:
+                    _print_topology_remediation(target, object_type, physical_id)
+            _topology_refusal("saved_object_topology_conflict",
+                              f"{object_type}/{object_id}: " + "; ".join(reasons))
+        outcome = "proceed-as-rerun" if target in spaces and object_id in table[(target, object_type)] else "proceed-as-create"
+        print(f"RIGSIGNAL_TOPOLOGY_OUTCOME {object_type}/{object_id} {target} {outcome}")
+
+
+def assert_no_id_regeneration(kb_url: str, authorization: str, asset: Asset, response: dict) -> None:
+    """Remove Kibana-generated ids, then refuse so they can never become owned."""
+    target_space = dashboard_target_space(asset)
+    flagged = [row for row in response.get("successResults", [])
+               if isinstance(row, dict) and "destinationId" in row]
+    if not flagged:
+        return
+    survivors = []
+    valid = []
+    for row in flagged:
+        if not isinstance(row.get("type"), str) or not isinstance(row.get("id"), str) or not isinstance(row.get("destinationId"), str):
+            raise ProvisionError(f"install refused: saved_object_id_regenerated: malformed destinationId row {row}")
+        valid.append(row)
+    for row in valid:
+        object_type, destination_id = row["type"], row["destinationId"]
+        try:
+            request(kb_url, space_prefix(target_space) + "/api/saved_objects/"
+                    + urllib.parse.quote(object_type, safe="") + "/"
+                    + urllib.parse.quote(destination_id, safe=""), "DELETE", authorization,
+                    headers={"kbn-xsrf": "true"})
+        except RequestFailure as error:
+            if error.status != 404:
+                survivors.append((object_type, destination_id))
+                continue
+        fault("after-regen-cleanup-delete", f"{object_type}/{destination_id}")
+    if survivors:
+        raise ProvisionError("install refused: saved_object_id_regenerated_cleanup_failed: "
+                             f"{survivors} space={target_space}")
+    raise ProvisionError("install refused: saved_object_id_regenerated: "
+                         f"{[(row['type'], row['id'], row['destinationId']) for row in valid]} space={target_space}")
 
 
 def marker_body(bundle: Bundle, ownership_profile: str = "default",
@@ -1144,9 +1348,22 @@ class TransactionJournal:
             self._persist()
         else:
             self.value = parse_json(raw, JOURNAL_FILE)
-            if (not isinstance(self.value, dict) or self.value.get("ownership_profile") != profile
+            if (not isinstance(self.value, dict)
+                    or self.value.get("ownership_profile") != profile
                     or self.value.get("ownership_table_version") != OWNERSHIP_TABLE_VERSION
-                    or not isinstance(self.value.get("intents"), list)):
+                    or not isinstance(self.value.get("version"), int)
+                    or isinstance(self.value.get("version"), bool)
+                    or self.value.get("version") != 1
+                    or ("transaction_id" in self.value
+                        and not isinstance(self.value.get("transaction_id"), str))
+                    or not isinstance(self.value.get("intents"), list)
+                    or not isinstance(self.value.get("proofs"), list)
+                    or not isinstance(self.value.get("m1_anchors"), dict)
+                    or not isinstance(self.value.get("apply_ok"), bool)
+                    or (self.value.get("rollback_ok") is not None
+                        and not isinstance(self.value.get("rollback_ok"), bool))
+                    or ("transactions" in self.value
+                        and not isinstance(self.value.get("transactions"), list))):
                 raise ProvisionError("install refused: ownership_profile_mismatch")
             self.value.setdefault("transaction_id", uuid.uuid4().hex)
             self.value.setdefault("transactions", [])
@@ -1154,7 +1371,7 @@ class TransactionJournal:
                 # Archive the completed transaction immutably, then open a
                 # fresh mutation authority.  In particular, never append
                 # invocation N's proofs to invocation N-1.
-                if not self.value.get("apply_ok"):
+                if self.value.get("apply_ok") is not True and self.value.get("rollback_ok") is not True:
                     raise ProvisionError("install refused: transaction_recovery_required")
                 previous = {key: value for key, value in self.value.items() if key != "transactions"}
                 history = list(self.value["transactions"])
@@ -1646,6 +1863,67 @@ _ROLLBACK_ORDER = {"dashboard": 0, "kibana_roles": 1, "kibana_spaces": 2,
                    "index_templates": 6, "component_templates": 7}
 
 
+def _recovery_sweep(kb_url: str, authorization: str, active: dict) -> list[str]:
+    """Delete regenerated dashboard derivatives recorded by this transaction.
+
+    This is deliberately a degradation-only recovery aid: malformed journal
+    intents and every Kibana read/delete failure are reported per intent and
+    never prevent the journaled inverse from completing.
+    """
+    operations: list[str] = []
+    triples: dict[tuple[str, str, str], list[dict]] = {}
+    try:
+        intents = active.get("intents", []) if isinstance(active, dict) else []
+        if not isinstance(intents, list):
+            raise ValueError("dashboard intents malformed")
+    except Exception:
+        return ["unverified-orphan:dashboard/unknown"]
+    for intent in intents:
+        if not isinstance(intent, dict) or intent.get("kind") != "dashboard":
+            continue
+        try:
+            name, object_id = intent["name"], intent["object_id"]
+            if not isinstance(name, str) or not isinstance(object_id, str):
+                raise ValueError("missing dashboard intent identity")
+            object_type, separator, object_id_value = object_id.partition("/")
+            if not separator or not object_type or not object_id_value:
+                raise ValueError("malformed dashboard object identity")
+            target = dashboard_target_space(name)
+            triples.setdefault((object_type, object_id_value, target), []).append(intent)
+        except Exception:
+            suffix = intent.get("name") if isinstance(intent, dict) else None
+            operations.append("unverified-orphan:dashboard/" + (str(suffix) if suffix else "unknown"))
+    for (object_type, literal_id, target_space), intents in triples.items():
+        try:
+            rows = _strict_saved_object_find(kb_url, authorization, target_space, object_type)
+            for row in rows:
+                physical_id = row["id"]
+                if physical_id == literal_id or row.get("originId") != literal_id:
+                    continue
+                # This is the installer adapter projection, intentionally not
+                # a second document-spec canonicalizer.
+                live_hash = asset_adapters.sha256(asset_adapters.get_projection("dashboard", row))
+                if live_hash != intents[0].get("intended_after_sha256"):
+                    print(json.dumps(row, sort_keys=True))
+                try:
+                    request(kb_url, space_prefix(target_space) + "/api/saved_objects/"
+                            + urllib.parse.quote(object_type, safe="") + "/"
+                            + urllib.parse.quote(physical_id, safe=""), "DELETE", authorization,
+                            headers={"kbn-xsrf": "true"})
+                except RequestFailure as error:
+                    if error.status != 404:
+                        raise
+                fault("after-regen-cleanup-delete", f"{object_type}/{physical_id}")
+            # A single final read is the convergence proof; persistent hits
+            # are degraded, never re-looped.
+            final_rows = _strict_saved_object_find(kb_url, authorization, target_space, object_type)
+            if any(row["id"] != literal_id and row.get("originId") == literal_id for row in final_rows):
+                operations.append(f"unverified-orphan:dashboard/{object_type}/{literal_id}/{target_space}")
+        except Exception:
+            operations.append(f"unverified-orphan:dashboard/{object_type}/{literal_id}/{target_space}")
+    return operations
+
+
 def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Path,
                          deliberately_reversed: bool = True,
                          bundle_path: Path | None = None) -> list[str]:
@@ -1655,7 +1933,8 @@ def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Pat
     tests; production ignores it after a successful verify-oracle pass.
     """
     journal = TransactionJournal(root, "fleet-coexist")
-    newest_non_rolled_back_transaction(journal)
+    active = newest_non_rolled_back_transaction(journal)
+    unswept_operations = _recovery_sweep(kb_url, authorization, active)
     verify_rollback_external_baselines(es_url, authorization, journal, bundle_path)
     actions = journal_recovery_actions(journal,
         lambda intent: _rollback_live_hash(es_url, kb_url, authorization, intent))
@@ -1739,6 +2018,7 @@ def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Pat
     verify_m1_anchors(es_url, authorization, journal.value.get("m1_anchors", {}))
     journal.value["rollback_ok"] = True
     journal._persist()
+    operations.extend(unswept_operations)
     return operations
 
 
@@ -1851,9 +2131,12 @@ def _remove_old_enrollment_generation(root: Path) -> None:
     root.rmdir()
 
 
-def fault(point: str) -> None:
-    """Test-only crash hook; inert unless explicitly set by a test."""
-    if os.environ.get("RIGSIGNAL_TEST_CRASH_AT") == point:
+def fault(point: str, argument: str | None = None) -> None:
+    """Test-only crash hook supporting ``point`` and ``point:argument``."""
+    trigger, colon, requested = os.environ.get("RIGSIGNAL_TEST_CRASH_AT", "").partition(":")
+    if trigger != point or (colon and requested != argument):
+        return
+    if trigger == point:
         os._exit(99)
 
 
@@ -1882,6 +2165,19 @@ def external_write_test_allowed(es_url: str, unsafe_test_injection: bool) -> boo
     return (os.environ.get("RIGSIGNAL_TEST_EXTERNAL_WRITE") == "1"
             and unsafe_test_injection
             and parsed.hostname in {"127.0.0.1", "::1", "localhost"})
+
+
+def test_pause(point: str, unsafe_test_injection: bool) -> None:
+    """Deterministically pause only when both explicit test gates are set."""
+    if os.environ.get("RIGSIGNAL_TEST_PAUSE_AT") != point or not unsafe_test_injection:
+        return
+    sentinel = os.environ.get("RIGSIGNAL_TEST_PAUSE_SENTINEL")
+    if not sentinel:
+        raise InputError("test pause requested without a sentinel path")
+    print(f"RIGSIGNAL_TEST_PAUSE_REACHED {point}", flush=True)
+    sentinel_path = Path(sentinel)
+    while not sentinel_path.exists():
+        time.sleep(0.05)
 
 
 def projection(asset: Asset, response: object) -> object:
@@ -2090,7 +2386,7 @@ def response_status(base: str, path: str, method: str, authorization: str, paylo
         return error.status or 0
 
 
-def install_asset(es_url: str, kb_url: str, authorization: str, asset: Asset) -> None:
+def install_asset(es_url: str, kb_url: str, authorization: str, asset: Asset) -> object:
     if asset.kind == "dashboard":
         body, boundary = multipart_dashboard(asset)
         response = json_response(request(
@@ -2098,10 +2394,21 @@ def install_asset(es_url: str, kb_url: str, authorization: str, asset: Asset) ->
             {"Content-Type": f"multipart/form-data; boundary={boundary}", "kbn-xsrf": "true"},
         ))
         assert_dashboard_import_result(asset, response)
+        fault("after-dashboard-response-before-regen-check", f"{asset.kind}/{asset.name}")
+        assert_no_id_regeneration(kb_url, authorization, asset, response)
+        projection = {"file": asset.name,
+                      "results": sorted(({"type": row["type"], "id": row["id"],
+                                          "destinationId_present": "destinationId" in row,
+                                          "destinationId": row.get("destinationId")}
+                                         for row in response["successResults"]),
+                                        key=lambda row: (row["type"], row["id"]))}
+        projection_sha256 = hashlib.sha256(jcs(projection)).hexdigest()
+        print("RIGSIGNAL_DASHBOARD_IMPORT_RESULT " + json.dumps(
+            {**projection, "sha256": projection_sha256}, sort_keys=True))
         for object_type, object_id in dashboard_objects(asset.data):
             request(kb_url, dashboard_object_path(asset, object_type, object_id), "GET", authorization,
                     headers={"kbn-xsrf": "true"})
-        return
+        return response
     if asset.kind == "kibana_spaces":
         headers = {"kbn-xsrf": "true"}
         try:
@@ -2877,6 +3184,10 @@ def main() -> int:
                 print("rollback completed from journaled intents; pipeline retained: "
                       "in use as default pipeline for adopted stream indices; " + "; ".join(retained))
                 reported = True
+            for item in operations:
+                if item.startswith("unverified-orphan:"):
+                    print("rollback completed from journaled intents; recovery incomplete: " + item)
+                    reported = True
             if not reported:
                 print("rollback completed from journaled intents")
             return 0
@@ -2946,6 +3257,8 @@ def main() -> int:
         # and every subsequent mutation.
         fence_remote_ownership_profile(es_url, authorization, ownership_profile,
                                        raw_ownership_profile is None)
+        run_topology_preflight(bundle, es_url, kb_url, authorization, ownership_profile)
+        test_pause("after-topology-preflight", args.unsafe_test_injection)
         root = secure_root(requested_root)
         try:
             prior = load_state(root)
@@ -3069,7 +3382,7 @@ def main() -> int:
                     if asset.kind == "dashboard":
                         fault("dashboard-multipart")
                     install_asset(es_url, kb_url, authorization, asset)
-                    fault("after-remote-mutation")
+                    fault("after-remote-mutation", f"{asset.kind}/{asset.name}")
                 if journal is not None:
                     journal_verify_owned_asset(journal, records, es_url, kb_url, authorization, asset)
                     fault("after-write-verified")
