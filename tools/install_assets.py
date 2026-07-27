@@ -2146,6 +2146,13 @@ def fault(point: str, argument: str | None = None) -> None:
     if trigger != point or (colon and requested != argument):
         return
     if trigger == point:
+        # os._exit skips interpreter cleanup INCLUDING stream flushing —
+        # block-buffered stdout (redirected to a log) would silently drop
+        # everything printed since the last flush, e.g. the
+        # RIGSIGNAL_DASHBOARD_IMPORT_RESULT capture lines a gate leg asserts
+        # on (solo leg-k at 698cdaf). Same discipline as test_pause.
+        sys.stdout.flush()
+        sys.stderr.flush()
         os._exit(99)
 
 
