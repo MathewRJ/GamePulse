@@ -415,6 +415,7 @@ class InstallAdoptionTests(unittest.TestCase):
             with ExitStack() as patches:
                 patches.enter_context(patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args))
                 patches.enter_context(patch.object(INSTALL, "load_bundle", return_value=INSTALL.Bundle("test", "test", [])))
+                patches.enter_context(patch.object(INSTALL, "bundle_sha256", return_value="test-bundle-sha"))
                 patches.enter_context(patch.object(INSTALL, "role_body", return_value={}))
                 patches.enter_context(patch.object(INSTALL, "ownership_for_assets", return_value={}))
                 patches.enter_context(patch.object(INSTALL, "configure_https"))

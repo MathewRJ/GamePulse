@@ -116,6 +116,20 @@ class FleetCoexistenceTests(unittest.TestCase):
             journal.write_verified(record, "after")
             self.assertTrue(INSTALL.parse_json((root / INSTALL.JOURNAL_FILE).read_bytes(), "journal")["intents"][0]["write_verified"])
 
+    def test_journal_bundle_pin_persists_bundle_hash_and_source_commit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "state")
+            bundle_path = Path(directory) / "assets.tar.gz"
+            bundle_path.write_bytes(b"applied bundle")
+            bundle = INSTALL.Bundle("test", "applied-commit", [])
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            journal.pin_bundle(bundle_path, bundle)
+            self.assertEqual(journal.value["bundle_pin"], {
+                "sha256": hashlib.sha256(b"applied bundle").hexdigest(),
+                "source_commit": "applied-commit",
+                "asset_set_sha256": INSTALL.asset_set_sha256(bundle),
+            })
+
     def test_new_transaction_archives_prior_proofs_and_opens_empty_scope(self):
         with tempfile.TemporaryDirectory() as directory:
             root = INSTALL.secure_root(Path(directory) / "state")
@@ -133,6 +147,34 @@ class FleetCoexistenceTests(unittest.TestCase):
         with mock.patch.object(INSTALL, "request", return_value=json.dumps(marker).encode()):
             with self.assertRaisesRegex(INSTALL.ProvisionError, "omitted_profile_on_coexist"):
                 INSTALL.fence_remote_ownership_profile("https://es", "auth", "default", True)
+
+    def test_remote_profile_fence_refuses_marker_table_version_mismatch(self):
+        marker = {"component_templates": [{"component_template": {
+            "_meta": {"ownership_profile": "fleet-coexist",
+                      "ownership_table_version": "fleet-coexist-v0"}, "template": {}}}]}
+        with mock.patch.object(INSTALL, "request", return_value=json.dumps(marker).encode()):
+            with self.assertRaisesRegex(INSTALL.ProvisionError, "ownership_table_version_mismatch"):
+                INSTALL.fence_remote_ownership_profile("https://es", "auth", "fleet-coexist", False)
+
+    def test_remote_profile_fence_accepts_matching_marker_table_version(self):
+        marker = {"component_templates": [{"component_template": {
+            "_meta": {"ownership_profile": "fleet-coexist",
+                      "ownership_table_version": INSTALL.OWNERSHIP_TABLE_VERSION}, "template": {}}}]}
+        with mock.patch.object(INSTALL, "request", return_value=json.dumps(marker).encode()):
+            INSTALL.fence_remote_ownership_profile("https://es", "auth", "fleet-coexist", False)
+
+    def test_remote_profile_fence_accepts_absent_version_on_legacy_default_marker(self):
+        marker = {"component_templates": [{"component_template": {
+            "_meta": {"ownership_profile": "default"}, "template": {}}}]}
+        with mock.patch.object(INSTALL, "request", return_value=json.dumps(marker).encode()):
+            INSTALL.fence_remote_ownership_profile("https://es", "auth", "fleet-coexist", False)
+
+    def test_remote_profile_fence_refuses_versionless_coexist_marker(self):
+        marker = {"component_templates": [{"component_template": {
+            "_meta": {"ownership_profile": "fleet-coexist"}, "template": {}}}]}
+        with mock.patch.object(INSTALL, "request", return_value=json.dumps(marker).encode()):
+            with self.assertRaisesRegex(INSTALL.ProvisionError, "ownership_table_version_mismatch"):
+                INSTALL.fence_remote_ownership_profile("https://es", "auth", "fleet-coexist", False)
 
     def test_external_index_template_requires_both_fleet_components(self):
         asset = INSTALL.Asset("index_templates", "metrics-rigsignal.cpu", "fixture",
@@ -403,6 +445,28 @@ class FleetCoexistenceTests(unittest.TestCase):
                                         ".ds-logs-rigsignal.stream-default-000002"]})
             self.assertTrue(INSTALL.TransactionJournal(root, "fleet-coexist").value["rollback_ok"])
 
+    def test_rollback_retained_pipeline_records_raw_reason_when_indices_are_unparseable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            intent = journal.write_intent(
+                "pipelines", "logs-rigsignal.stream@pipeline", "create",
+                INSTALL.asset_adapters.dashboard_absent_hash(), "after", b"{}")
+            journal.write_verified(intent, "after")
+            reason = ("pipeline [logs-rigsignal.stream@pipeline] cannot be deleted because it is "
+                      "the default pipeline for adopted stream indices")
+            response = json.dumps({"error": {"root_cause": [{
+                "type": "illegal_argument_exception", "reason": reason
+            }]}}).encode("utf-8")
+            with mock.patch.object(INSTALL, "verify_rollback_external_baselines"), \
+                 mock.patch.object(INSTALL, "request", side_effect=INSTALL.RequestFailure(400, "in use", response)), \
+                 mock.patch.object(INSTALL, "rollback_transaction_proofs"), \
+                 mock.patch.object(INSTALL, "verify_m1_anchors"), \
+                 mock.patch.object(INSTALL, "_rollback_live_hash", return_value="after"):
+                INSTALL.rollback_transaction("https://es", "https://kb", "auth", root)
+            retained = INSTALL.TransactionJournal(root, "fleet-coexist").value["intents"][0]["pipeline_retained_in_use"]
+            self.assertEqual(retained, {"referencing_indices": [], "raw_reason": reason})
+
     def test_rollback_other_pipeline_400_still_raises(self):
         with tempfile.TemporaryDirectory() as directory:
             root = INSTALL.secure_root(Path(directory) / "transaction")
@@ -568,7 +632,7 @@ class FleetCoexistenceTests(unittest.TestCase):
             with self.assertRaisesRegex(INSTALL.ProvisionError, "m1_anchor_absent"):
                 INSTALL.m1_anchor_pins("https://es", "auth")
 
-    def test_rollback_external_oracle_allows_a_compatible_live_upgrade(self):
+    def test_rollback_external_oracle_legacy_journal_uses_working_tree(self):
         with tempfile.TemporaryDirectory() as directory:
             root = INSTALL.secure_root(Path(directory) / "transaction")
             journal = INSTALL.TransactionJournal(root, "fleet-coexist")
@@ -577,6 +641,58 @@ class FleetCoexistenceTests(unittest.TestCase):
             with mock.patch.object(INSTALL, "verify_external_asset") as verify:
                 INSTALL.verify_rollback_external_baselines("https://es", "auth", journal)
             verify.assert_called_once()
+
+    def test_rollback_external_oracle_pinned_bundle_match_passes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            bundle = INSTALL.load_source()
+            ownership = INSTALL.ownership_for_assets(bundle, "fleet-coexist")
+            journal.value["external_baselines"] = [
+                {"kind": kind, "name": name, "compatibility_projection_sha256": "pinned"}
+                for (kind, name), value in ownership.items() if value == "external"
+            ]
+            journal.value["bundle_pin"] = {"sha256": "applied-bundle-sha",
+                                           "source_commit": "applied-commit",
+                                           "asset_set_sha256": INSTALL.asset_set_sha256(bundle)}
+            with mock.patch.object(INSTALL, "bundle_sha256", return_value="applied-bundle-sha"), \
+                 mock.patch.object(INSTALL, "load_bundle", return_value=bundle), \
+                 mock.patch.object(INSTALL, "verify_external_asset") as verify:
+                INSTALL.verify_rollback_external_baselines("https://es", "auth", journal,
+                                                           Path("applied-assets.tar.gz"))
+            self.assertEqual(verify.call_count, 39)
+
+    def test_rollback_external_oracle_refuses_pinned_working_tree_mismatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            bundle = INSTALL.load_source()
+            ownership = INSTALL.ownership_for_assets(bundle, "fleet-coexist")
+            journal.value["external_baselines"] = [
+                {"kind": kind, "name": name, "compatibility_projection_sha256": "pinned"}
+                for (kind, name), value in ownership.items() if value == "external"
+            ]
+            journal.value["bundle_pin"] = {"sha256": "applied-bundle-sha",
+                                           "source_commit": "applied-commit",
+                                           "asset_set_sha256": "different"}
+            with self.assertRaisesRegex(INSTALL.ProvisionError,
+                                        r"rollback_source_mismatch; provide the applied bundle for recorded source_commit applied-commit"):
+                INSTALL.verify_rollback_external_baselines("https://es", "auth", journal)
+
+    def test_rollback_external_oracle_refuses_mismatched_supplied_bundle(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            journal.value["bundle_pin"] = {"sha256": "applied-bundle-sha",
+                                           "source_commit": "applied-commit",
+                                           "asset_set_sha256": "asset-set"}
+            with mock.patch.object(INSTALL, "bundle_sha256", return_value="other-bundle-sha"), \
+                 mock.patch.object(INSTALL, "load_bundle") as load_bundle, \
+                 self.assertRaisesRegex(INSTALL.ProvisionError,
+                                        r"rollback_source_mismatch; provide the applied bundle for recorded source_commit applied-commit"):
+                INSTALL.verify_rollback_external_baselines("https://es", "auth", journal,
+                                                           Path("wrong-assets.tar.gz"))
+            load_bundle.assert_not_called()
 
     def test_external_write_negative_control_requires_env_unsafe_flag_and_loopback(self):
         with mock.patch.dict("os.environ", {"RIGSIGNAL_TEST_EXTERNAL_WRITE": "1"}, clear=False):

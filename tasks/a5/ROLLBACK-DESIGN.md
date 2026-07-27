@@ -323,6 +323,17 @@ unaffected by this section.
 - `ownership_profile` and `ownership_table_version` (persisted in both
   protected transaction/enrollment state and the marker) match on every
   boundary; a mismatch fences the invocation (Sol #5).
+  - **Owner ratification (2026-07-27, v3 gate ruling 5):** the profile limb of this
+    invariant is DIRECTIONAL by design: a remote marker carrying `fleet-coexist` fences
+    any non-coexist invocation, while remote `default`/absent → requested `fleet-coexist`
+    is A5's own migration direction and is intentionally not fenced (it fails closed
+    downstream at the Fleet-composition check if the remote is not genuinely
+    Fleet-composed). The `ownership_table_version` limb is unconditional: any remote
+    marker version differing from the invoker's `OWNERSHIP_TABLE_VERSION` refuses; a
+    `fleet-coexist` marker lacking the version refuses (every coexist writer stamps
+    it); a pre-A5 `default` marker lacking it is legacy input on the accepted
+    migration direction. This stamp corrects the v2 closure record, which wrongly marked the version limb
+    implemented (v3 findings F1-v3/S3-v3).
 
 ### Capsules (axiom 6)
 

@@ -311,6 +311,25 @@ The installer performs **no PUT, no DELETE, and no dry-run PUT** against any `ex
    of the above is a contract violation of this clause, independent of whether the underlying
    installation succeeded.
 
+   **Owner ratification (2026-07-27, v3 gate rulings):**
+   - *Fence direction (ruling 5):* the mismatch fence of this clause is directional for the
+     profile field — remote `fleet-coexist` marker vs non-coexist invocation refuses; remote
+     `default`/absent vs requested `fleet-coexist` is the amendment's own migration direction
+     and is accepted, relying on the Fleet-composition check to fail closed when the remote is
+     not Fleet-composed. The `ownership_table_version` field is mismatch-fenced without
+     direction. Any prior reading of this clause as fully bidirectional for the profile field
+     is superseded.
+   - *Mappings-level `_meta` (v3 F5-v3/S2-v3):* the ownership-metadata compatibility exception
+     of §1.1 covers `template.mappings._meta` in addition to top-level `_meta` — Fleet stamps
+     both locations (ground-truthed 13/13 against live owner-cluster captures); the projection
+     records the dropped object verbatim as `owner_metadata`.
+   - *Accepted deviation (v3 ruling on F16-v2):* the pre-publication fence re-verifies all
+     external asset bodies and re-fences W1 stream identity, but does not re-capture the full
+     `fleet_stream_snapshot` across all RigSignal streams; accepted because the installer never
+     mutates external streams inside the transaction window and W1 identity is independently
+     re-fenced. Recorded as a deviation from the §5 "any rollover in-window is a STOP" wording,
+     not silently closed.
+
 ## 3. Verification/assertion additions
 
 ### 3.1 Fleet integration version + live asset hashes

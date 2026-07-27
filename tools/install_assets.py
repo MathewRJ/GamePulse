@@ -426,6 +426,30 @@ def load_bundle(bundle_path: Path) -> Bundle:
     return Bundle(version, commit, ordered_assets(assets))
 
 
+def bundle_sha256(bundle_path: Path) -> str:
+    """Hash the exact bundle file supplied for a Fleet transaction pin."""
+    digest = hashlib.sha256()
+    try:
+        with bundle_path.open("rb") as source:
+            while chunk := source.read(1024 * 1024):
+                digest.update(chunk)
+    except OSError as error:
+        raise InputError(f"cannot read bundle: {error}") from error
+    return digest.hexdigest()
+
+
+def asset_set_sha256(bundle: Bundle) -> str:
+    """Hash every source identity and body deterministically for rollback fencing."""
+    digest = hashlib.sha256()
+    for asset in sorted(bundle.assets, key=lambda item: (item.kind, item.name, item.path)):
+        for value in (asset.kind, asset.name, asset.path):
+            encoded = value.encode("utf-8")
+            digest.update(len(encoded).to_bytes(4, "big"))
+            digest.update(encoded)
+        digest.update(hashlib.sha256(asset.data).digest())
+    return digest.hexdigest()
+
+
 def ordered_assets(assets: list[Asset]) -> list[Asset]:
     order = {"component_templates": 0, "index_templates": 1, "security_roles": 2,
              "pipelines": 3, "transforms": 4, "kibana_spaces": 5,
@@ -864,7 +888,7 @@ def bind_ownership_profile(root: Path, requested: str, implicit_default: bool = 
                      jcs({"profile": "fleet-coexist", "table_version": OWNERSHIP_TABLE_VERSION}) + b"\n")
 
 
-def remote_ownership_profile(es_url: str, authorization: str) -> str | None:
+def remote_ownership_profile(es_url: str, authorization: str) -> tuple[str, object, bool] | None:
     """Read the durable cluster-side profile fence before any local mutation."""
     try:
         raw = request(es_url, "/_component_template/rigsignal-bundle-meta", "GET", authorization)
@@ -886,15 +910,26 @@ def remote_ownership_profile(es_url: str, authorization: str) -> str | None:
     profile = meta.get("ownership_profile") if isinstance(meta, dict) else None
     if profile not in {"default", "fleet-coexist"}:
         raise InputError("remote ownership marker is invalid")
-    return profile
+    return profile, meta.get("ownership_table_version"), "ownership_table_version" in meta
 
 
 def fence_remote_ownership_profile(es_url: str, authorization: str, requested: str,
                                    implicit_default: bool) -> None:
     remote = remote_ownership_profile(es_url, authorization)
-    if remote == "fleet-coexist" and requested != "fleet-coexist":
+    if remote is None:
+        return
+    remote_profile, remote_version, has_remote_version = remote
+    # Pre-A5 default markers legitimately predate versioning, and that absence
+    # is the accepted migration direction.  Every fleet-coexist marker writer
+    # stamps the version, so a coexist marker lacking it is anomalous state,
+    # not legacy input — both that and any present mismatch fence.
+    if has_remote_version and remote_version != OWNERSHIP_TABLE_VERSION:
+        raise ProvisionError("install refused: ownership_table_version_mismatch")
+    if remote_profile == "fleet-coexist" and requested != "fleet-coexist":
         raise ProvisionError("install refused: omitted_profile_on_coexist" if implicit_default
                              else "install refused: ownership_profile_mismatch")
+    if remote_profile == "fleet-coexist" and not has_remote_version:
+        raise ProvisionError("install refused: ownership_table_version_mismatch")
 
 
 def enrollment_condition(root: Path) -> str:
@@ -1204,6 +1239,13 @@ class TransactionJournal:
         ]
         self._persist()
 
+    def pin_bundle(self, bundle_path: Path, bundle: Bundle) -> None:
+        """Persist the immutable source needed by the external rollback oracle."""
+        self.value["bundle_pin"] = {"sha256": bundle_sha256(bundle_path),
+                                    "source_commit": bundle.source_commit,
+                                    "asset_set_sha256": asset_set_sha256(bundle)}
+        self._persist()
+
     def apply_ok(self) -> None:
         self.value["apply_ok"] = True
         self._persist()
@@ -1292,9 +1334,44 @@ def rollback_transaction_proofs(es_url: str, authorization: str, journal: Transa
                 urllib.parse.quote(event_id, safe="") + "?refresh=wait_for", "DELETE", authorization)
 
 
-def verify_rollback_external_baselines(es_url: str, authorization: str, journal: TransactionJournal) -> None:
-    """Re-run the current external class oracle; Fleet assets are never restored."""
-    bundle = load_source()
+def _rollback_source_mismatch(source_commit: str) -> ProvisionError:
+    return ProvisionError("install refused: rollback_source_mismatch; provide the applied bundle "
+                          f"for recorded source_commit {source_commit}")
+
+
+def verify_rollback_external_baselines(es_url: str, authorization: str, journal: TransactionJournal,
+                                      bundle_path: Path | None = None) -> None:
+    """Re-run the external oracle using the applied source, never an unchecked tree."""
+    pin = journal.value.get("bundle_pin")
+    if pin is None:
+        # Transactions created before bundle pins intentionally retain the
+        # established working-tree rollback behavior for backward compatibility.
+        bundle = load_source()
+    else:
+        if (not isinstance(pin, dict) or not isinstance(pin.get("sha256"), str)
+                or not isinstance(pin.get("source_commit"), str)
+                or not isinstance(pin.get("asset_set_sha256"), str)):
+            raise ProvisionError("install refused: rollback_source_mismatch")
+        try:
+            if bundle_path is not None:
+                if bundle_sha256(bundle_path) != pin["sha256"]:
+                    raise _rollback_source_mismatch(pin["source_commit"])
+                bundle = load_bundle(bundle_path)
+            else:
+                bundle = load_source()
+                if asset_set_sha256(bundle) != pin["asset_set_sha256"]:
+                    raise _rollback_source_mismatch(pin["source_commit"])
+        except InputError as error:
+            raise _rollback_source_mismatch(pin["source_commit"]) from error
+        try:
+            ownership = ownership_for_assets(bundle, "fleet-coexist")
+        except InputError as error:
+            raise _rollback_source_mismatch(pin["source_commit"]) from error
+        expected = {(item.get("kind"), item.get("name"))
+                    for item in journal.value.get("external_baselines", []) if isinstance(item, dict)}
+        source_external = {key for key, value in ownership.items() if value == "external"}
+        if source_external != expected:
+            raise _rollback_source_mismatch(pin["source_commit"])
     assets = {(asset.kind, asset.name): asset for asset in bundle.assets}
     for baseline in journal.value.get("external_baselines", []):
         if not isinstance(baseline, dict) or not isinstance(baseline.get("kind"), str) or not isinstance(baseline.get("name"), str):
@@ -1423,8 +1500,8 @@ def _pipeline_in_use_indices(error: RequestFailure) -> list[str] | None:
         return None
     match = re.search(r"\bincluding\s*\[([^\]]*)\]", reason)
     if match is None:
-        return []
-    return [name.strip() for name in match.group(1).split(",") if name.strip()]
+        return {"referencing_indices": [], "raw_reason": reason}
+    return {"referencing_indices": [name.strip() for name in match.group(1).split(",") if name.strip()]}
 
 
 def _restore_transform_without_pivot(es_url: str, path: str, authorization: str, body: dict) -> None:
@@ -1540,7 +1617,8 @@ _ROLLBACK_ORDER = {"dashboard": 0, "kibana_roles": 1, "kibana_spaces": 2,
 
 
 def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Path,
-                         deliberately_reversed: bool = True) -> list[str]:
+                         deliberately_reversed: bool = True,
+                         bundle_path: Path | None = None) -> list[str]:
     """Execute the RD §5 inverse in journal order, never from the manifest.
 
     The return value is an auditable operation sequence used by mocked-transport
@@ -1548,7 +1626,7 @@ def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Pat
     """
     journal = TransactionJournal(secure_root(root), "fleet-coexist")
     newest_non_rolled_back_transaction(journal)
-    verify_rollback_external_baselines(es_url, authorization, journal)
+    verify_rollback_external_baselines(es_url, authorization, journal, bundle_path)
     actions = journal_recovery_actions(journal,
         lambda intent: _rollback_live_hash(es_url, kb_url, authorization, intent))
     operations: list[str] = []
@@ -1596,7 +1674,7 @@ def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Pat
                            if intent.get("kind") == "pipelines" else None)
                 if indices is None:
                     raise
-                intent["pipeline_retained_in_use"] = {"referencing_indices": indices}
+                intent["pipeline_retained_in_use"] = indices
                 journal._persist()
                 operations.append("retained-in-use:pipelines/" + str(intent.get("name")))
                 continue
@@ -2735,7 +2813,7 @@ def main() -> int:
             configure_https(args.kibana_ca_file)
             authorization = admin_authorization(args.admin_credentials_file)
             operations = rollback_transaction(es_url, kb_url, authorization, args.rollback,
-                                             deliberately_reversed=True)
+                                             deliberately_reversed=True, bundle_path=args.bundle)
             reported = False
             if any(item.startswith("verify-only:transforms/") for item in operations):
                 print("rollback completed from journaled intents; transform _meta absence could not be restored: "
@@ -2747,7 +2825,7 @@ def main() -> int:
             if not reported:
                 print("rollback completed from journaled intents")
             return 0
-        if getattr(args, "bundle", None) is None:
+        if args.bundle is None:
             raise InputError("--bundle is required unless --rollback is used")
         bundle = load_bundle(args.bundle)  # Step 1: no HTTP before this line succeeds.
         role = role_body(bundle)
@@ -2897,6 +2975,7 @@ def main() -> int:
                 pre_fleet_snapshot = fleet_stream_snapshot(es_url, authorization)
                 test_rollover("after-fleet-snapshot", es_url, authorization, pre_fleet_snapshot)
                 journal = TransactionJournal(root, ownership_profile, new_transaction=True)
+                journal.pin_bundle(args.bundle, bundle)
                 if not journal.value.get("m1_anchors"):
                     journal.pin_m1_anchors(m1_anchor_pins(es_url, authorization))
                 for asset in bundle.assets:
