@@ -168,6 +168,16 @@ origin_assert_full_accounting() {
   [[ "$(origin_dashboard_count rigsignal)" == 15 && "$(origin_dashboard_count default)" == 3 ]] || fail 'dashboard unique-object target split is not 15/3'
   marker_check
 }
+# Noop-rerun shape (v8 D-9): capture lines are emitted only for non-noop
+# dashboard files, so an unchanged rerun must produce ZERO of them while the
+# live 15/3 split and marker stay intact (round-12 catch: asserting the
+# 29-row install shape on the rerun log).
+origin_assert_noop_accounting() {
+  local log="$1"
+  [[ "$(grep -c '^RIGSIGNAL_DASHBOARD_IMPORT_RESULT ' "$log")" == 0 ]] || fail 'noop rerun emitted dashboard import captures'
+  [[ "$(origin_dashboard_count rigsignal)" == 15 && "$(origin_dashboard_count default)" == 3 ]] || fail 'noop rerun changed the 15/3 target split'
+  marker_check
+}
 origin_missing() { ! kb_get "$1" "/api/saved_objects/$2/$3" >/dev/null 2>&1; }
 default_installer() {
   local -a args=(--bundle "$BUNDLE" --endpoint "$ES_URL" --ca-file "$CS_CA_FILE" --kibana-endpoint "$KB_URL" --kibana-ca-file "$CS_CA_FILE" --admin-credentials-file "$RUN_DIR/admin.toml" --agent-binary "$CLEAN_STACK_AGENT_BINARY" --profile user --enrollment-root "$RUN_DIR/default-enrollment" --adopt-existing-w1-stream)
@@ -389,7 +399,7 @@ leg_k() {
   cmp -s "$RUN_DIR/leg-k-donor-before.ndjson" "$RUN_DIR/leg-k-donor-after.ndjson" || fail 'Leg-K changed donor legacy seeds'
   cmp -s "$RUN_DIR/leg-k-default-before.ndjson" "$RUN_DIR/leg-k-default-after.ndjson" || fail 'Leg-K changed default derivative seeds'
   _installer >"$RUN_DIR/leg-k-rerun.log" 2>&1 || fail 'Leg-K noop rerun failed'
-  origin_assert_full_accounting "$RUN_DIR/leg-k-rerun.log"
+  origin_assert_noop_accounting "$RUN_DIR/leg-k-rerun.log"
 
   origin_reset; origin_seed old-all donor; origin_seed derivatives
   if RIGSIGNAL_TEST_CRASH_AT='after-remote-mutation:dashboard/rigsignal-home.ndjson' _installer >"$RUN_DIR/leg-k-fault.log" 2>&1; then fail 'Leg-K qualified later-file fault did not crash'; fi
