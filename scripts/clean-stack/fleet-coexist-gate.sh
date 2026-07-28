@@ -7,19 +7,20 @@ REPO_ROOT="$(CDPATH='' cd -- "$SCRIPT_DIR/../.." && pwd)"
 # shellcheck source=scripts/clean-stack/lib.sh
 source "$SCRIPT_DIR/lib.sh"
 
-ES_VERSION='' KB_VERSION='' BUNDLE='' KEEP=0
+ES_VERSION='' KB_VERSION='' BUNDLE='' PREDECESSOR_MANIFEST='' KEEP=0
 declare -a LEGS=()
-usage() { printf '%s\n' 'Usage: fleet-coexist-gate.sh --es-version 9.4.3|9.4.4 [--kb-version VERSION] --leg a..m [--bundle PATH] [--all]' >&2; }
+usage() { printf '%s\n' 'Usage: fleet-coexist-gate.sh --es-version 9.4.3|9.4.4 [--kb-version VERSION] --leg a..p [--bundle PATH] [--predecessor-manifest PATH] [--all]' 'Solo-screen subset: fleet legs a/b/i/n/o/p plus adoption leg 1.' >&2; }
 version() { [[ "$1" =~ ^9\.4\.[34]$ ]]; }
 fail() { printf 'ASSERT FAIL %s\n' "$*" >&2; return 1; }
 while (($#)); do case "$1" in
   --es-version) ES_VERSION="${2:-}"; shift 2 ;; --kb-version) KB_VERSION="${2:-}"; shift 2 ;;
-  --bundle) BUNDLE="${2:-}"; shift 2 ;; --leg) LEGS+=("${2:-}"); shift 2 ;;
-  --all) LEGS=(a b c d e f g h i j k l m); shift ;; --keep) KEEP=1; shift ;;
+  --bundle) BUNDLE="${2:-}"; shift 2 ;; --predecessor-manifest) PREDECESSOR_MANIFEST="${2:-}"; shift 2 ;; --leg) LEGS+=("${2:-}"); shift 2 ;;
+  --all) LEGS=(a b c d e f g h i j k l m n o p); shift ;; --keep) KEEP=1; shift ;;
   -h|--help) usage; exit 0 ;; *) usage; exit 2 ;; esac; done
 [[ -n "$ES_VERSION" ]] || { usage; exit 2; }; KB_VERSION="${KB_VERSION:-$ES_VERSION}"
 version "$ES_VERSION" && version "$KB_VERSION" && [[ "$ES_VERSION" == "$KB_VERSION" ]] || { usage; exit 2; }
 ((${#LEGS[@]})) || { usage; exit 2; }; [[ -z "$BUNDLE" || -f "$BUNDLE" ]] || { fail '--bundle is not a file'; exit 2; }
+[[ -z "$PREDECESSOR_MANIFEST" || -f "$PREDECESSOR_MANIFEST" ]] || { fail '--predecessor-manifest is not a file'; exit 2; }
 : "${ELASTIC_PASSWORD:?ELASTIC_PASSWORD must be set}"; : "${ELASTICSEARCH_PASSWORD:?ELASTICSEARCH_PASSWORD must be set}"; : "${CLEAN_STACK_AGENT_BINARY:?CLEAN_STACK_AGENT_BINARY must be set}"
 cs_require_tools bash curl docker jq openssl python3 sha256sum
 RUN_DIR="$(mktemp -d)"
@@ -51,6 +52,7 @@ _installer() {
   # Adoption flag only on the first install per root: a rerun with committed
   # state correctly refuses adoption_flag_state_present (A4 flag-misuse guard).
   [[ -f "$RUN_DIR/enrollment/state.json" ]] || args+=(--adopt-existing-w1-stream)
+  [[ -z "$PREDECESSOR_MANIFEST" ]] || args+=(--predecessor-manifest "$PREDECESSOR_MANIFEST")
   [[ "${RIGSIGNAL_TEST_EXTERNAL_WRITE:-}" != 1 && -z "${RIGSIGNAL_TEST_PAUSE_AT:-}" ]] || args+=(--unsafe-test-injection)
   api GET '/_cluster/health?wait_for_events=languid&wait_for_no_initializing_shards=true&timeout=30s' >/dev/null || true
   for attempt in 1 2 3; do
@@ -136,6 +138,57 @@ external_audit_clean() { local log="$1"; ! grep -E "$EXTERNAL_WRITE_RE" "$log"; 
 installer_unresolved() { RIGSIGNAL_TEST_UNRESOLVED_ASSET=1 _installer; }
 installer_bad_health() { RIGSIGNAL_TEST_CLUSTER_HEALTH=red _installer; }
 installer_bad_ilm() { RIGSIGNAL_TEST_ILM_DELETE_PHASE=1 _installer; }
+
+# Generate a set-shaped manifest from the same projection functions the
+# installer uses.  The Workflow-side generator is the operator tool; keeping
+# this tiny in-gate version local makes the chain leg self-contained.
+make_predecessor_manifest() {
+  local output="$1"
+  python3 - "$REPO_ROOT" "$BUNDLE" "$output" <<'PY'
+import hashlib, sys
+from pathlib import Path
+repo, bundle_path, output = map(Path, sys.argv[1:])
+sys.path.insert(0, str(repo / "tools"))
+import install_assets as install
+
+bundle = install.load_bundle(bundle_path)
+assets = {}
+for asset in bundle.assets:
+    if (asset.kind, asset.name) in install._EXTERNAL_ASSET_KEYS:
+        continue
+    if asset.kind == "dashboard":
+        absent = hashlib.sha256(install.jcs([[kind, ident, "ABSENT"] for kind, ident, _ in install._dashboard_expected_objects(asset)])).hexdigest()
+        current = hashlib.sha256(install.jcs([[kind, ident, body] for kind, ident, body in install._dashboard_expected_objects(asset)])).hexdigest()
+    else:
+        absent = install.asset_adapters.dashboard_absent_hash()
+        current = install.asset_adapters.sha256(install.asset_adapters.get_projection(asset.kind, install.parse_json(asset.data, asset.path)))
+    entry = {"id": "gate-current-set", "approved_sha256": sorted({absent, current})}
+    if (asset.kind, asset.name) == ("pipelines", "logs-rigsignal.stream@pipeline"):
+        entry["comment"] = "Includes post-install body for retained-pipeline retry."
+    assets[asset.kind + "/" + asset.name] = entry
+Path(output).write_bytes(install.jcs({"version": 1, "assets": dict(sorted(assets.items()))}) + b"\n")
+PY
+}
+
+owned_template_matches_bundle() {
+  local name="$1" live="$RUN_DIR/$name-live.json"
+  api GET "/_index_template/$name" >"$live"
+  python3 - "$REPO_ROOT" "$BUNDLE" "$name" "$live" <<'PY'
+import sys
+from pathlib import Path
+repo, bundle_path, name, live_path = map(Path, sys.argv[1:])
+sys.path.insert(0, str(repo / "tools"))
+import install_assets as install
+bundle = install.load_bundle(bundle_path)
+asset = next(item for item in bundle.assets if item.kind == "index_templates" and item.name == str(name))
+expected = install.asset_adapters.get_projection(asset.kind, install.parse_json(asset.data, asset.path))
+live = install.asset_adapters.get_projection(asset.kind, install.parse_json(live_path.read_bytes(), str(live_path)))
+if install.jcs(expected) != install.jcs(live):
+    raise SystemExit("owned template differs from bundle projection: " + str(name))
+PY
+}
+
+stream_backing_snapshot() { api GET "/_data_stream/$1" | jq -S '[.data_streams[0].indices[]|{index_name,index_uuid}]'; }
 
 # Dashboard-origin legs use a deliberately separate fixture helper so the
 # old/new identity fixtures cannot bleed into the Fleet owner seeder.
@@ -526,4 +579,70 @@ PY
   default_installer >"$RUN_DIR/leg-m-iii-success.log" 2>&1 || fail 'Leg-M(iii) remediation replay did not permit rerun'
 }
 
-for leg in "${LEGS[@]}"; do case "$leg" in a|b|c|d|e|f|g|h|i|j|k|l|m) "leg_$leg" ;; *) fail "unknown leg: $leg"; exit 2 ;; esac; done
+# N: Existing Fleet streams whose owned winners are semantically old must be
+# classified L3 and receive the bundle's sanctioned projection—not rejected by
+# an obsolete byte-equality fence.
+leg_n() {
+  setup
+  jq 'del(.template.mappings.properties.stream)' "$REPO_ROOT/elastic/index-templates/logs-rigsignal.stream.json" >"$RUN_DIR/logs-rigsignal.stream-old.json"
+  jq 'del(.template.mappings.properties["node.width"])' "$REPO_ROOT/elastic/index-templates/metrics-rigsignal.profiles.json" >"$RUN_DIR/metrics-rigsignal.profiles-old.json"
+  api PUT '/_index_template/logs-rigsignal.stream' --data-binary "@$RUN_DIR/logs-rigsignal.stream-old.json" >/dev/null
+  api PUT '/_index_template/metrics-rigsignal.profiles' --data-binary "@$RUN_DIR/metrics-rigsignal.profiles-old.json" >/dev/null
+  _installer >"$RUN_DIR/leg-n-install.log" 2>&1 || fail 'Leg-N installer refused sanctioned owned-template update'
+  cat "$RUN_DIR/leg-n-install.log"
+  for stream in logs-rigsignal.stream-default metrics-rigsignal.profiles-default; do
+    jq -e --arg stream "$stream" '.fleet_fence.plan[$stream] | (.classification.status == "L3") and ((.projection.ops | length) > 0) and (.classification.winner_evidence.matching_set | type == "array") and (.classification.winner_evidence.matching_set | length > 0) and (.classification.winner_evidence.max_priority | type == "number") and (.classification.winner_evidence.unique == true) and (.classification | has("winning_template"))' "$RUN_DIR/enrollment/fleet-coexist-journal.json" >/dev/null || fail "Leg-N missing L3 projection/winner evidence: $stream"
+  done
+  owned_template_matches_bundle logs-rigsignal.stream
+  owned_template_matches_bundle metrics-rigsignal.profiles
+  printf 'Leg-N proof: non-empty L3 D on pre-existing streams proves the old byte-equality fence would have refused its own sanctioned write.\n'
+}
+
+# O: a rollover after the candidate proof is an honest late-fence abort.  P6
+# reverses only installer intents and preserves the external backing change.
+leg_o() {
+  setup
+  stream_backing_snapshot logs-rigsignal.stream-default >"$RUN_DIR/leg-o-before-backing.json"
+  set +e
+  RIGSIGNAL_TEST_ROLLOVER_AT='before-publication:logs-rigsignal.stream-default' _installer >"$RUN_DIR/leg-o-install.log" 2>&1
+  rc=$?
+  set -e
+  [[ "$rc" != 0 ]] || fail 'Leg-O late rollover unexpectedly succeeded'
+  grep -Fx 'install failed: pre-publication fence:' "$RUN_DIR/leg-o-install.log" >/dev/null || { cat "$RUN_DIR/leg-o-install.log" >&2; fail 'Leg-O did not report pre-publication fence'; }
+  for artifact in credentials.toml handshake.toml shipping-policy-v1.toml; do [[ ! -e "$RUN_DIR/enrollment/$artifact" ]] || fail "Leg-O published $artifact after late fence"; done
+  stream_backing_snapshot logs-rigsignal.stream-default >"$RUN_DIR/leg-o-post-rollover-backing.json"
+  cmp -s "$RUN_DIR/leg-o-before-backing.json" "$RUN_DIR/leg-o-post-rollover-backing.json" && fail 'Leg-O hook did not roll over the tracked stream'
+  rollback 2>&1 | tee "$RUN_DIR/leg-o-rollback.log"
+  grep -Fx 'rollback completed from journaled intents; external_rollover_observed' "$RUN_DIR/leg-o-rollback.log" >/dev/null || fail 'Leg-O P6 did not report external rollover'
+  jq -e '.apply_ok == false and .rollback_ok == true and .fleet_fence.external_rollover_observed == true and (.fleet_fence.external_rollovers | length) > 0 and .fleet_fence.failure.layer == "late"' "$RUN_DIR/enrollment/fleet-coexist-journal.json" >/dev/null || fail 'Leg-O journal did not classify honest rollover abort'
+  stream_backing_snapshot logs-rigsignal.stream-default >"$RUN_DIR/leg-o-after-rollback-backing.json"
+  cmp -s "$RUN_DIR/leg-o-post-rollover-backing.json" "$RUN_DIR/leg-o-after-rollback-backing.json" || fail 'Leg-O rollback restored rather than preserved external rollover backing list'
+}
+
+# P: P3 refuses a non-approved predecessor before any cluster write, while the
+# set-valued manifest permits the P6-retained pipeline state on a retry.
+leg_p() {
+  setup
+  make_predecessor_manifest "$RUN_DIR/predecessor-good.json"
+  jq '.assets["index_templates/logs-rigsignal.stream"].approved_sha256 = ["0000000000000000000000000000000000000000000000000000000000000000"]' "$RUN_DIR/predecessor-good.json" >"$RUN_DIR/predecessor-bad.json"
+  : >"$RUN_DIR/leg-p-refusal-audit.log"
+  set +e
+  PREDECESSOR_MANIFEST="$RUN_DIR/predecessor-bad.json" RIGSIGNAL_HTTP_AUDIT_LOG="$RUN_DIR/leg-p-refusal-audit.log" _installer >"$RUN_DIR/leg-p-mismatch.log" 2>&1
+  rc=$?
+  set -e
+  [[ "$rc" != 0 ]] || fail 'Leg-P predecessor mismatch unexpectedly succeeded'
+  grep -F 'predecessor manifest mismatch' "$RUN_DIR/leg-p-mismatch.log" >/dev/null || { cat "$RUN_DIR/leg-p-mismatch.log" >&2; fail 'Leg-P mismatch did not surface predecessor barrier'; }
+  ! grep -E '^(PUT|DELETE) ' "$RUN_DIR/leg-p-refusal-audit.log" >/dev/null || fail 'Leg-P mismatch wrote a cluster asset'
+  if api GET '/_component_template/rigsignal-bundle-meta' >"$RUN_DIR/leg-p-marker.json" 2>&1; then fail 'Leg-P mismatch wrote marker'; fi
+  # The first half deliberately leaves its local unfinished journal as refusal
+  # evidence.  Start Part 2 with a fresh enrollment root so recovery policy is
+  # not mistaken for predecessor-barrier behavior.
+  rm -rf "$RUN_DIR/enrollment"
+  PREDECESSOR_MANIFEST="$RUN_DIR/predecessor-good.json" installer || fail 'Leg-P correct predecessor manifest did not install'
+  rollback 2>&1 | tee "$RUN_DIR/leg-p-rollback.log"
+  grep -F 'pipeline retained:' "$RUN_DIR/leg-p-rollback.log" >/dev/null || fail 'Leg-P did not exercise retained-pipeline exception'
+  jq -e '[.intents[] | select(.kind == "pipelines" and .name == "logs-rigsignal.stream@pipeline") | .pipeline_retained_in_use] | length == 1' "$RUN_DIR/enrollment/fleet-coexist-journal.json" >/dev/null || fail 'Leg-P journal lacks retained pipeline record'
+  PREDECESSOR_MANIFEST="$RUN_DIR/predecessor-good.json" installer || fail 'Leg-P post-retained-pipeline retry did not pass predecessor barrier'
+}
+
+for leg in "${LEGS[@]}"; do case "$leg" in a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p) "leg_$leg" ;; *) fail "unknown leg: $leg"; exit 2 ;; esac; done

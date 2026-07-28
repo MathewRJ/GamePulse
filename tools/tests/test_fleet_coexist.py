@@ -272,6 +272,16 @@ class FleetCoexistenceTests(unittest.TestCase):
                 INSTALL.test_candidate_drift("after-first-owned-write", "https://es", "auth", {"logs-x-default": {}})
         self.assertEqual(len(calls), 1)
 
+    def test_v2_before_publication_candidate_drift_hook_is_gated(self):
+        calls = []
+        with mock.patch.object(INSTALL, "request", side_effect=lambda *args, **kwargs: calls.append(args)):
+            INSTALL.test_candidate_drift("before-publication", "https://es", "auth", {"logs-x-default": {}})
+            self.assertEqual(calls, [])
+            with mock.patch.dict(INSTALL.os.environ,
+                                 {"RIGSIGNAL_TEST_ROLLOVER_AT": "before-publication:logs-x-default"}):
+                INSTALL.test_candidate_drift("before-publication", "https://es", "auth", {"logs-x-default": {}})
+        self.assertEqual(len(calls), 1)
+
     def test_coexist_fence_accepts_cosmetic_external_drift_and_refuses_operational_drift(self):
         asset = INSTALL.Asset(
             "component_templates", "metrics-rigsignal.audio@package", "fixture.json",

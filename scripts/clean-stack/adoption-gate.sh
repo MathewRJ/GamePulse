@@ -16,6 +16,7 @@ UPGRADE_ES_VERSION='9.4.4'
 UPGRADE_KB_VERSION='9.4.4'
 BUNDLE=''
 BUNDLE_INPUT=''
+PREDECESSOR_MANIFEST=''
 KEEP=0
 declare -a LEGS=()
 
@@ -25,11 +26,12 @@ Usage: adoption-gate.sh --es-version VERSION --kb-version VERSION [options] --le
 
 Leg names: 1/refusal, 2/adopt, 3/rerun, 4/shape-negative, 5/flag-misuse,
            6/crash-toctou, 7/m1-shape, 8/fresh, 9/upgrade, 10/proof-set.
-Options: --bundle PATH, --keep, --all,
+Options: --bundle PATH, --predecessor-manifest PATH, --keep, --all,
          --upgrade-es-version VERSION --upgrade-kb-version VERSION (leg 9 only).
 
 Legs 1-8 and 10 accept either supported equal version pair.  Leg 9 starts at
 9.4.3/9.4.3 and upgrades to 9.4.4/9.4.4 unless both upgrade options override it.
+Solo-screen subset: adoption leg 1 plus fleet-coexist legs a/b/i/n/o/p.
 EOF
 }
 
@@ -47,6 +49,7 @@ while (($#)); do
     --upgrade-es-version) UPGRADE_ES_VERSION="${2:-}"; shift 2 ;;
     --upgrade-kb-version) UPGRADE_KB_VERSION="${2:-}"; shift 2 ;;
     --bundle) BUNDLE_INPUT="${2:-}"; shift 2 ;;
+    --predecessor-manifest) PREDECESSOR_MANIFEST="${2:-}"; shift 2 ;;
     --leg) LEGS+=("${2:-}"); shift 2 ;;
     --all) LEGS=(1 2 3 4 5 6 7 8 9 10); shift ;;
     --keep) KEEP=1; shift ;;
@@ -59,6 +62,7 @@ done
 version "$ES_VERSION" && version "$KB_VERSION" && [[ "$ES_VERSION" == "$KB_VERSION" ]] || fail 'use a supported equal ES/Kibana pair'
 ((${#LEGS[@]})) || { usage; exit 2; }
 [[ -z "$BUNDLE_INPUT" || -f "$BUNDLE_INPUT" ]] || fail '--bundle must be a regular file'
+[[ -z "$PREDECESSOR_MANIFEST" || -f "$PREDECESSOR_MANIFEST" ]] || fail '--predecessor-manifest must be a regular file'
 : "${ELASTIC_PASSWORD:?ELASTIC_PASSWORD must be set}"
 : "${ELASTICSEARCH_PASSWORD:?ELASTICSEARCH_PASSWORD must be set}"
 : "${CLEAN_STACK_AGENT_BINARY:?CLEAN_STACK_AGENT_BINARY must name the handshake agent}"
@@ -135,6 +139,7 @@ _run_installer() {
     --admin-credentials-file "$RUN_DIR/admin-credentials.toml" --agent-binary "$CLEAN_STACK_AGENT_BINARY"
     --profile user --enrollment-root "$root")
   [[ "$adopt" == 1 ]] && args+=(--adopt-existing-w1-stream)
+  [[ -z "$PREDECESSOR_MANIFEST" ]] || args+=(--predecessor-manifest "$PREDECESSOR_MANIFEST")
   local out rc attempt
   for attempt in 1 2 3; do
     if out="$(python3 "${CLEAN_STACK_INSTALLER:-$REPO_ROOT/tools/install_assets.py}" "${args[@]}" 2>&1)"; then rc=0; else rc=$?; fi

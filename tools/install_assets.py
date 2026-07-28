@@ -3993,6 +3993,13 @@ def main() -> int:
             # The asset writes, candidate checks, and publication are separated
             # by a final read-only fence.  It closes the period in which a
             # rollover or template mutation could otherwise be published over.
+            # This is deliberately after the candidate proof (Steps 7/8) and
+            # before publication (Step 9), so the clean-stack late-rollover
+            # leg exercises the actual final fence rather than an earlier
+            # transaction drift path.  It is inert unless explicitly gated.
+            if ownership_profile == "fleet-coexist":
+                test_candidate_drift("before-publication", es_url, authorization,
+                                     post_fleet_snapshot or {})
             prepublication_asset_fence(es_url, kb_url, authorization, bundle,
                                        ownership_profile, ownership,
                                        journal.value.get("external_baselines") if journal is not None else None)
