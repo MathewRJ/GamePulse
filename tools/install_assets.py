@@ -3070,6 +3070,23 @@ def _declared_paths(value: object, path: str = "") -> set[str]:
     return {path}
 
 
+def _fleet_refusal(message: str, stream: str, ops: list[dict] | None = None) -> InputError:
+    """Attach the per-stream evidence required by the durable fence journal."""
+    error = InputError(message)
+    error.stream = stream
+    error.ops = deepcopy(ops or [])
+    return error
+
+
+def _annotate_fleet_refusal(error: InputError, stream: str) -> InputError:
+    """Preserve a lower-level refusal while making its journal evidence whole."""
+    if not isinstance(getattr(error, "stream", None), str):
+        error.stream = stream
+    if not isinstance(getattr(error, "ops", None), list):
+        error.ops = []
+    return error
+
+
 def _matching_templates(index_templates: object, stream: str) -> list[dict]:
     if not isinstance(index_templates, dict):
         raise InputError("fleet template enumeration is invalid")
@@ -3122,6 +3139,27 @@ def _owned_component_closure(template: object, owned_components: set[str]) -> li
     return sorted(value for value in composed if value in owned_components)
 
 
+def _matching_owned_templates(owned_templates: dict[str, Asset], actions: dict[tuple[str, str], str],
+                              stream: str) -> list[Asset]:
+    """Return every changing bundle template whose declared patterns match stream."""
+    result = []
+    for asset in owned_templates.values():
+        if actions.get((asset.kind, asset.name)) not in {"create", "update"}:
+            continue
+        try:
+            body = asset_adapters.get_projection("index_templates", parse_json(asset.data, asset.path))
+        except asset_adapters.AdapterError as error:
+            raise InputError("fleet template projection is invalid") from error
+        if not isinstance(body, dict):
+            raise InputError("fleet template projection is invalid")
+        patterns = body.get("index_patterns")
+        if not isinstance(patterns, list) or not all(isinstance(pattern, str) for pattern in patterns):
+            raise InputError("fleet template projection is invalid")
+        if any(fnmatch.fnmatchcase(stream, pattern) for pattern in patterns):
+            result.append(asset)
+    return result
+
+
 def _simulate_template(es_url: str, authorization: str, template: dict, uniqueness: str) -> tuple[dict, bytes]:
     try:
         body, probe = asset_adapters.synthetic_simulation_template(template, uniqueness)
@@ -3152,17 +3190,35 @@ def plan_fleet_fence(es_url: str, authorization: str, snapshot: dict[str, object
             continue
         # N1: stream is taken only from fleet_stream_snapshot, never derived
         # from an index template name.
-        evidence = _winner_evidence(es_url, authorization, stream,
-                                    record.get("data_stream_template"))
+        try:
+            evidence = _winner_evidence(es_url, authorization, stream,
+                                        record.get("data_stream_template"))
+            matching_owned = _matching_owned_templates(owned_templates, actions, stream)
+        except InputError as error:
+            raise _annotate_fleet_refusal(error, stream) from error
         winner = evidence["winning_template"]
+        # Classification is deliberately derived from owned pattern matches,
+        # not from the current winner.  Otherwise a foreign higher-priority
+        # template with an identical resolved outcome could silently demote a
+        # changing owned template to L2.
+        if any(actions[(asset.kind, asset.name)] == "create" for asset in matching_owned):
+            raise _fleet_refusal("fleet template preimage is absent", stream)
         if not evidence["unique"]:
-            raise InputError("fleet template winner is ambiguous")
+            raise _fleet_refusal("fleet template winner is ambiguous", stream)
         if evidence["data_stream_template"] is not None and evidence["data_stream_template"] != winner:
-            raise InputError("fleet stream template corroboration differs")
-        closure = _owned_component_closure(evidence["winning_body"], owned_components)
-        target = owned_templates.get(winner)
-        changed_template = target is not None and actions.get((target.kind, target.name)) in {"create", "update"}
+            raise _fleet_refusal("fleet stream template corroboration differs", stream)
+        for asset in matching_owned:
+            if winner != asset.name:
+                raise _fleet_refusal("fleet owned template is not the winner", stream)
+        try:
+            closure = _owned_component_closure(evidence["winning_body"], owned_components)
+        except InputError as error:
+            raise _annotate_fleet_refusal(error, stream) from error
+        target = matching_owned[0] if matching_owned else None
+        changed_template = target is not None
         status = "L3-C" if closure else "L3" if changed_template else "L2"
+        if status == "L3-C" and stream != DIAGNOSIS_STREAM:
+            raise _fleet_refusal("fleet L3-C stream is unattested", stream)
         classification = {"status": status, "winning_template": winner,
                           "winner_evidence": {key: evidence[key] for key in (
                               "matching_set", "max_priority", "unique", "data_stream_template")},
@@ -3174,34 +3230,44 @@ def plan_fleet_fence(es_url: str, authorization: str, snapshot: dict[str, object
                 asset = next((item for item in bundle.assets
                               if item.kind == "component_templates" and item.name == component), None)
                 if asset is not None:
-                    body = parse_json(asset.data, asset.path)
+                    try:
+                        body = parse_json(asset.data, asset.path)
+                    except InputError as error:
+                        raise _annotate_fleet_refusal(error, stream) from error
                     if isinstance(body, dict):
                         declared.update(_declared_paths(body.get("template", {})))
             if target is not None:
-                body = parse_json(target.data, target.path)
+                try:
+                    body = parse_json(target.data, target.path)
+                except InputError as error:
+                    raise _annotate_fleet_refusal(error, stream) from error
                 if isinstance(body, dict):
                     declared.update(_declared_paths(body.get("template", {})))
             entry["owned_paths"] = sorted(declared)
         if status == "L3":
             if target is None:
-                raise InputError("fleet template projection is unavailable")
+                raise _fleet_refusal("fleet template projection is unavailable", stream)
             # A create action proves no live T body exists, even if its name
             # somehow won through a concurrently changing response.
             if actions[(target.kind, target.name)] == "create":
-                raise InputError("fleet template preimage is absent")
-            live = es_json(es_url, es_path(target), "GET", authorization)
+                raise _fleet_refusal("fleet template preimage is absent", stream)
             try:
+                live = es_json(es_url, es_path(target), "GET", authorization)
                 pre_body = asset_adapters.get_projection("index_templates", live)
                 post_body = asset_adapters.get_projection("index_templates", parse_json(target.data, target.path))
-            except asset_adapters.AdapterError as error:
-                raise InputError("fleet template projection is invalid") from error
+            except (InputError, asset_adapters.AdapterError) as error:
+                raise _fleet_refusal("fleet template projection is invalid", stream) from error
             uniqueness = hashlib.sha256(target.name.encode()).hexdigest()[:16]
-            pre_synth, pre_bytes = _simulate_template(es_url, authorization, pre_body, uniqueness)
-            post_synth, post_bytes = _simulate_template(es_url, authorization, post_body, uniqueness)
+            try:
+                pre_synth, pre_bytes = _simulate_template(es_url, authorization, pre_body, uniqueness)
+                post_synth, post_bytes = _simulate_template(es_url, authorization, post_body, uniqueness)
+            except InputError as error:
+                raise _annotate_fleet_refusal(error, stream) from error
             pre_real = {key: record[key] for key in ("mappings", "settings", "aliases")}
             anchor_ok = jcs(pre_synth) == jcs(pre_real)
             if not anchor_ok:
-                raise InputError("fleet synthetic anchor differs")
+                raise _fleet_refusal("fleet synthetic anchor differs", stream,
+                                    rfc6901_diff(pre_synth, pre_real))
             entry["projection"] = {"template": target.name, "uniqueness": uniqueness, "anchor_ok": anchor_ok,
                                    "pre_synth": pre_synth, "post_synth": post_synth,
                                    "ops": rfc6901_diff(pre_synth, post_synth),
@@ -3217,24 +3283,33 @@ def verify_fleet_fence(pre: dict[str, object], post: dict[str, object], plan: di
     """Apply L1/L2/L3/L3-C/L4.  Every refusal is journaled before escape."""
     try:
         extra = set(post) - set(pre)
-        if extra - {DIAGNOSIS_STREAM} or (DIAGNOSIS_STREAM in extra and DIAGNOSIS_STREAM in pre):
-            raise InputError("fleet stream set drifted")
+        unexpected = sorted(extra - {DIAGNOSIS_STREAM})
+        if unexpected or (DIAGNOSIS_STREAM in extra and DIAGNOSIS_STREAM in pre):
+            stream = unexpected[0] if unexpected else DIAGNOSIS_STREAM
+            raise _fleet_refusal("fleet stream set drifted", stream,
+                                 rfc6901_diff(pre.get(stream), post.get(stream)))
         for stream, before in pre.items():
             after = post.get(stream)
             if not isinstance(before, dict) or not isinstance(after, dict):
-                raise InputError("fleet stream snapshot drifted")
+                raise _fleet_refusal("fleet stream snapshot drifted", stream,
+                                     rfc6901_diff(before, after))
             if before.get("backing") != after.get("backing") or before.get("stream_state") != after.get("stream_state"):
-                raise InputError("fleet L1 drifted")
+                raise _fleet_refusal("fleet L1 drifted", stream,
+                                     rfc6901_diff({"backing": before.get("backing"),
+                                                   "stream_state": before.get("stream_state")},
+                                                  {"backing": after.get("backing"),
+                                                   "stream_state": after.get("stream_state")}))
             entry = plan.get(stream, {})
             status = entry.get("classification", {}).get("status", "L2") if isinstance(entry, dict) else "L2"
             pre_real = {key: before[key] for key in ("mappings", "settings", "aliases")}
             post_real = {key: after[key] for key in ("mappings", "settings", "aliases")}
             if status == "L2" and jcs(pre_real) != jcs(post_real):
-                raise InputError("fleet L2 drifted")
+                raise _fleet_refusal("fleet L2 drifted", stream, rfc6901_diff(pre_real, post_real))
             if status == "L3":
                 projection = entry.get("projection", {})
-                if rfc6901_diff(pre_real, post_real) != projection.get("ops"):
-                    raise InputError("fleet L3 projection differs")
+                ops = rfc6901_diff(pre_real, post_real)
+                if ops != projection.get("ops"):
+                    raise _fleet_refusal("fleet L3 projection differs", stream, ops)
             if status == "L3-C":
                 # simulate() supplies the independent bundle-derived
                 # attestation; unchanged non-owned resolved outcome is the
@@ -3242,16 +3317,23 @@ def verify_fleet_fence(pre: dict[str, object], post: dict[str, object], plan: di
                 # The owned diagnosis paths are intentionally the only surface
                 # allowed to move in this class.
                 owned = set(entry.get("owned_paths", []))
+                if stream != DIAGNOSIS_STREAM:
+                    raise _fleet_refusal("fleet L3-C stream is unattested", stream)
                 if not owned:
-                    raise InputError("fleet L3-C attestation is unavailable")
+                    raise _fleet_refusal("fleet L3-C attestation is unavailable", stream)
                 for op in rfc6901_diff(pre_real, post_real):
-                    if not any(op["path"] == path or op["path"].startswith(path + "/") for path in owned):
-                        raise InputError("fleet L3-C outside-owned drifted")
+                    # A newly introduced owned leaf may necessarily appear as
+                    # one RFC add at its absent object parent.  That parent is
+                    # still within the declared owned subtree; dictionary
+                    # recursion keeps unrelated siblings as separate ops.
+                    if not any(op["path"] == path or op["path"].startswith(path + "/")
+                               or (op["path"] and path.startswith(op["path"] + "/")) for path in owned):
+                        raise _fleet_refusal("fleet L3-C outside-owned drifted", stream, [op])
         if journal is not None:
             journal.fleet_fence_snapshot(phase, post)
     except InputError as error:
         if journal is not None:
-            journal.fleet_fence_failure(phase, getattr(error, "stream", None), [])
+            journal.fleet_fence_failure(phase, getattr(error, "stream", None), getattr(error, "ops", []))
         raise
 
 
@@ -3260,15 +3342,18 @@ def verify_late_fleet_fence(post: dict[str, object], late: dict[str, object],
     """The publication fence admits no further Fleet topology or outcome move."""
     try:
         if set(post) != set(late):
-            raise InputError("late fleet stream set drifted")
+            stream = sorted(set(post) ^ set(late))[0]
+            raise _fleet_refusal("late fleet stream set drifted", stream,
+                                 rfc6901_diff(post.get(stream), late.get(stream)))
         for stream, value in post.items():
             if late.get(stream) != value:
-                raise InputError("late fleet stream drifted")
+                raise _fleet_refusal("late fleet stream drifted", stream,
+                                     rfc6901_diff(value, late.get(stream)))
         if journal is not None:
             journal.fleet_fence_snapshot("late", late)
-    except InputError:
+    except InputError as error:
         if journal is not None:
-            journal.fleet_fence_failure("late", None, [])
+            journal.fleet_fence_failure("late", getattr(error, "stream", None), getattr(error, "ops", []))
         raise
 
 
@@ -3762,7 +3847,8 @@ def main() -> int:
                     fleet_plan = plan_fleet_fence(es_url, authorization, pre_fleet_snapshot,
                                                    bundle, planned_actions, journal)
                 except (RequestFailure, InputError) as error:
-                    journal.fleet_fence_failure("pre", None, [])
+                    journal.fleet_fence_failure("pre", getattr(error, "stream", None),
+                                                getattr(error, "ops", []))
                     raise ProvisionError("install failed: fleet stream verification:") from error
                 for asset in bundle.assets:
                     if ownership[(asset.kind, asset.name)] == "external":
@@ -3925,6 +4011,7 @@ def main() -> int:
             # The durable candidate state is deliberately retained for the
             # established recovery path; no consumer publication or marker can
             # occur after this fence fails.
+            # Phase-3 runbook classifies this with the Step-5 fence-abort string.
             raise ProvisionError("install failed: pre-publication fence:") from error
         final = state_template(uuid_value, generation, candidate_id, str(root))
         # Step 9.  During replacement the old ID is kept pending until published

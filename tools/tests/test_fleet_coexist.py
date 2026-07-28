@@ -29,6 +29,182 @@ class FleetCoexistenceTests(unittest.TestCase):
                 "mappings": {"properties": {"sample": {"type": mapping}}},
                 "settings": {"index.lifecycle.name": lifecycle}, "aliases": {}}
 
+    def _template_asset(self, name, patterns, priority, *, mapping="keyword", composed_of=(), version="1"):
+        body = {"_meta": {"version": version}, "index_patterns": list(patterns), "priority": priority,
+                "composed_of": list(composed_of),
+                "template": {"mappings": {"properties": {"sample": {"type": mapping}}},
+                             "settings": {"index.lifecycle.name": "ilm-a"}}}
+        return INSTALL.Asset("index_templates", name, name + ".json",
+                             json.dumps(body, sort_keys=True).encode("utf-8"))
+
+    def _plan_l3(self, stream, record, target, live, *, templates=None, actions=None,
+                 pre_synth=None, post_synth=None):
+        templates = templates or {target.name: live}
+        actions = actions or {(target.kind, target.name): "update"}
+        entries = [{"name": name, "index_template": body} for name, body in templates.items()]
+        pre_synth = pre_synth or {key: record[key] for key in ("mappings", "settings", "aliases")}
+        post_synth = post_synth or pre_synth
+
+        def es_response(_base, path, _method, _authorization, _payload=None):
+            if path == "/_index_template":
+                return {"index_templates": entries}
+            if path == "/_index_template/" + target.name:
+                return {"index_templates": [{"name": target.name, "index_template": live}]}
+            raise AssertionError("unexpected fleet-fence request: " + path)
+
+        with mock.patch.object(INSTALL, "es_json", side_effect=es_response), \
+             mock.patch.object(INSTALL, "_simulate_template",
+                               side_effect=[(pre_synth, b"pre-synth"), (post_synth, b"post-synth")]):
+            return INSTALL.plan_fleet_fence("https://es", "auth", {stream: record},
+                                             INSTALL.Bundle("fixture", "fixture", [target]), actions)
+
+    def test_v2_leg1_old_outcome_equality_fails_but_planned_l3_passes_owned_update(self):
+        """Leg 1: the pre-991c2fd all-outcome equality predicate rejects this valid update."""
+        stream = "logs-rigsignal.events-default"
+        target = self._template_asset("logs-rigsignal.events", ["logs-rigsignal.events-*"], 100,
+                                      mapping="text")
+        live = json.loads(target.data); live["template"]["mappings"]["properties"]["sample"]["type"] = "keyword"
+        before = self._fleet_record(); before["data_stream_template"] = target.name
+        after = self._fleet_record(mapping="text"); after["data_stream_template"] = target.name
+        old_fence = lambda pre, post: all(pre[name] == post.get(name) for name in pre)
+        self.assertFalse(old_fence({stream: before}, {stream: after}))
+        pre_real = {key: before[key] for key in ("mappings", "settings", "aliases")}
+        post_real = {key: after[key] for key in ("mappings", "settings", "aliases")}
+        plan = self._plan_l3(stream, before, target, live, pre_synth=pre_real, post_synth=post_real)
+        self.assertEqual(plan[stream]["classification"]["status"], "L3")
+        INSTALL.verify_fleet_fence({stream: before}, {stream: after}, plan)
+
+    def test_v2_leg2_same_version_mutated_template_body_is_planned_as_l3(self):
+        stream = "logs-rigsignal.events-default"
+        target = self._template_asset("logs-rigsignal.events", ["logs-rigsignal.events-*"], 100,
+                                      mapping="text", version="7")
+        live = json.loads(target.data); live["template"]["mappings"]["properties"]["sample"]["type"] = "keyword"
+        self.assertEqual(live["_meta"]["version"], json.loads(target.data)["_meta"]["version"])
+        before = self._fleet_record(); before["data_stream_template"] = target.name
+        after = self._fleet_record(mapping="text"); after["data_stream_template"] = target.name
+        plan = self._plan_l3(stream, before, target, live,
+                             pre_synth={key: before[key] for key in ("mappings", "settings", "aliases")},
+                             post_synth={key: after[key] for key in ("mappings", "settings", "aliases")})
+        self.assertEqual(plan[stream]["classification"]["status"], "L3")
+        self.assertEqual(plan[stream]["projection"]["ops"], INSTALL.rfc6901_diff(
+            {key: before[key] for key in ("mappings", "settings", "aliases")},
+            {key: after[key] for key in ("mappings", "settings", "aliases")}))
+
+    def test_v2_leg7_identical_outcome_foreign_takeover_refuses_by_winner_proof(self):
+        stream = "logs-rigsignal.events-default"
+        target = self._template_asset("logs-rigsignal.events", ["logs-rigsignal.events-*"], 100)
+        foreign = json.loads(target.data); foreign["priority"] = 200
+        before = self._fleet_record(); before["data_stream_template"] = "foreign-takeover"
+        # The synthetic anchor/outcome equality that the old fence relied on holds;
+        # only winner proof exposes the priority takeover.
+        self.assertEqual({key: before[key] for key in ("mappings", "settings", "aliases")},
+                         {key: self._fleet_record()[key] for key in ("mappings", "settings", "aliases")})
+        entries = [{"name": target.name, "index_template": json.loads(target.data)},
+                   {"name": "foreign-takeover", "index_template": foreign}]
+        with mock.patch.object(INSTALL, "es_json", return_value={"index_templates": entries}):
+            with self.assertRaisesRegex(INSTALL.InputError, "owned template is not the winner"):
+                INSTALL.plan_fleet_fence("https://es", "auth", {stream: before},
+                                         INSTALL.Bundle("fixture", "fixture", [target]),
+                                         {(target.kind, target.name): "update"})
+
+    def test_v2_leg8_noop_metrics_template_is_l2(self):
+        stream = "metrics-rigsignal.cpu-default"
+        target = self._template_asset("metrics-rigsignal.profiles", ["metrics-rigsignal.cpu-*"], 100)
+        record = self._fleet_record(); record["data_stream_template"] = target.name
+        with mock.patch.object(INSTALL, "es_json", side_effect=AssertionError("L2 requires no winner lookup")):
+            plan = INSTALL.plan_fleet_fence("https://es", "auth", {stream: record},
+                                             INSTALL.Bundle("fixture", "fixture", [target]),
+                                             {(target.kind, target.name): "noop"})
+        self.assertEqual(plan[stream]["classification"]["status"], "L2")
+
+    def test_v2_leg9_component_only_diagnosis_update_is_l3c(self):
+        stream = INSTALL.DIAGNOSIS_STREAM
+        template = self._template_asset("logs-rigsignal.stream", ["logs-rigsignal.diagnosis-*"], 100,
+                                        composed_of=("logs-rigsignal.diagnosis-mappings",))
+        component = INSTALL.Asset("component_templates", "logs-rigsignal.diagnosis-mappings", "component.json",
+                                  b'{"template":{"mappings":{"properties":{"rigsignal":{"properties":{"diagnosis":{}}}}}}}')
+        before = self._fleet_record(); before["data_stream_template"] = template.name
+        entries = [{"name": template.name, "index_template": json.loads(template.data)}]
+        with mock.patch.object(INSTALL, "es_json", return_value={"index_templates": entries}):
+            plan = INSTALL.plan_fleet_fence("https://es", "auth", {stream: before},
+                                             INSTALL.Bundle("fixture", "fixture", [template, component]),
+                                             {(template.kind, template.name): "noop",
+                                              (component.kind, component.name): "update"})
+        self.assertEqual(plan[stream]["classification"]["status"], "L3-C")
+        after = deepcopy(before)
+        after["mappings"]["properties"]["rigsignal"] = {"properties": {"diagnosis": {}}}
+        INSTALL.verify_fleet_fence({stream: before}, {stream: after}, plan)
+
+    def test_v2_fence_helpers_cover_resolution_closure_and_declared_paths(self):
+        templates = {"low": {"index_template": {"index_patterns": ["logs-rigsignal.*"], "priority": 1,
+                                                   "template": {}}},
+                     "winner": {"index_template": {"index_patterns": ["logs-rigsignal.events-*"], "priority": 2,
+                                                      "composed_of": ["owned", "foreign"], "template": {}}}}
+        matches = INSTALL._matching_templates(templates, "logs-rigsignal.events-default")
+        self.assertEqual([(item["name"], item["priority"]) for item in matches], [("low", 1), ("winner", 2)])
+        with mock.patch.object(INSTALL, "es_json", return_value={"index_templates": [
+                {"name": name, "index_template": value["index_template"]} for name, value in templates.items()]}):
+            evidence = INSTALL._winner_evidence("https://es", "auth", "logs-rigsignal.events-default", "winner")
+        self.assertEqual(evidence["winning_template"], "winner")
+        self.assertEqual(INSTALL._owned_component_closure(evidence["winning_body"], {"owned"}), ["owned"])
+        self.assertEqual(INSTALL._declared_paths({"mappings": {"a/b": {"til~de": 1}}}),
+                         {"/mappings/a~1b/til~0de"})
+
+    def test_v2_fence_failure_journal_includes_failing_stream_and_ops(self):
+        stream = "logs-rigsignal.events-default"
+        before = {stream: self._fleet_record()}
+        after = {stream: self._fleet_record(mapping="text")}
+        with tempfile.TemporaryDirectory() as directory:
+            journal = INSTALL.TransactionJournal(INSTALL.secure_root(Path(directory) / "state"), "fleet-coexist")
+            with self.assertRaises(INSTALL.InputError):
+                INSTALL.verify_fleet_fence(before, after, {stream: {"classification": {"status": "L2"}}}, journal)
+            failure = journal.value["fleet_fence"]["failure"]
+        self.assertEqual(failure["stream"], stream)
+        self.assertEqual(failure["ops"], INSTALL.rfc6901_diff(
+            {key: before[stream][key] for key in ("mappings", "settings", "aliases")},
+            {key: after[stream][key] for key in ("mappings", "settings", "aliases")}))
+        with tempfile.TemporaryDirectory() as directory:
+            journal = INSTALL.TransactionJournal(INSTALL.secure_root(Path(directory) / "state"), "fleet-coexist")
+            with self.assertRaises(INSTALL.InputError):
+                INSTALL.verify_late_fleet_fence(before, after, journal)
+            late_failure = journal.value["fleet_fence"]["failure"]
+        self.assertEqual(late_failure["stream"], stream)
+        self.assertEqual(late_failure["ops"], INSTALL.rfc6901_diff(before[stream], after[stream]))
+
+    def test_v2_leg6a_crash_after_template_write_leaves_intent_for_recovery_without_publication(self):
+        stream = "logs-rigsignal.events-default"
+        name = "logs-rigsignal.stream"
+        pre_body = b'{"index_patterns":["logs-rigsignal.diagnosis-*"],"template":{}}'
+        post_body = b'{"index_patterns":["logs-rigsignal.diagnosis-*"],"template":{"mappings":{"properties":{"x":{"type":"keyword"}}}}}'
+        pre_hash = hashlib.sha256(pre_body).hexdigest()
+        post_hash = hashlib.sha256(post_body).hexdigest()
+        snapshot = {stream: self._fleet_record()}
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "state")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            intent = journal.write_intent("index_templates", name, "update", pre_hash, post_hash,
+                                          post_body, preimage_body=pre_body)
+            journal.pin_fleet_fence({stream: {"pre": snapshot[stream]}})
+            with mock.patch.dict(INSTALL.os.environ, {"RIGSIGNAL_TEST_CRASH_AT":
+                                                       "after-remote-mutation:index_templates/" + name}), \
+                 mock.patch.object(INSTALL.os, "_exit", side_effect=SystemExit(99)):
+                with self.assertRaises(SystemExit):
+                    INSTALL.fault("after-remote-mutation", "index_templates/" + name)
+            self.assertEqual(journal.value["intents"], [intent])
+            self.assertFalse((root / "state.json").exists())
+            with mock.patch.object(INSTALL, "_recovery_sweep", return_value=[]), \
+                 mock.patch.object(INSTALL, "verify_rollback_external_baselines"), \
+                 mock.patch.object(INSTALL, "_fence_transaction_consumer"), \
+                 mock.patch.object(INSTALL, "rollback_transaction_proofs"), \
+                 mock.patch.object(INSTALL, "verify_m1_anchors"), \
+                 mock.patch.object(INSTALL, "fleet_stream_snapshot", side_effect=[snapshot, snapshot]), \
+                 mock.patch.object(INSTALL, "_rollback_live_hash", side_effect=[post_hash, pre_hash]), \
+                 mock.patch.object(INSTALL, "request") as request:
+                operations = INSTALL.rollback_transaction("https://es", "https://kb", "auth", root)
+        self.assertIn("asset:index_templates/" + name, operations)
+        self.assertNotIn("external_rollover_observed", operations)
+        request.assert_called_once_with("https://es", "/_index_template/" + name, "PUT", "auth", pre_body, None)
+
     def test_v2_matrix_l1_l2_l3_l3c_l4(self):
         """Regression legs 3/4/5/8/9/10: old whole-predicate lacked this split."""
         before = {"logs-rigsignal.events-default": self._fleet_record()}
@@ -51,11 +227,17 @@ class FleetCoexistenceTests(unittest.TestCase):
         with self.assertRaises(INSTALL.InputError):  # leg 4: expected change does not excuse rollover
             INSTALL.verify_fleet_fence({"logs-rigsignal.events-default": l3_before},
                                        {"logs-rigsignal.events-default": self._fleet_record(backing="two", mapping="text")}, l3)
-        l3c = {"logs-rigsignal.events-default": {"classification": {"status": "L3-C"},
+        diagnosis_stream = INSTALL.DIAGNOSIS_STREAM
+        with self.assertRaisesRegex(INSTALL.InputError, "L3-C stream is unattested"):
+            INSTALL.verify_fleet_fence(before, deepcopy(before),
+                                       {"logs-rigsignal.events-default": {
+                                           "classification": {"status": "L3-C"}, "owned_paths": ["/mappings"]}})
+        l3c = {diagnosis_stream: {"classification": {"status": "L3-C"},
               "owned_paths": ["/mappings/properties/rigsignal"]}}
         diagnosis_after = self._fleet_record(); diagnosis_after["mappings"] = {
             "properties": {"sample": {"type": "keyword"}, "rigsignal": {"properties": {"diagnosis": {}}}}}
-        INSTALL.verify_fleet_fence(before, {"logs-rigsignal.events-default": diagnosis_after}, l3c)
+        INSTALL.verify_fleet_fence({diagnosis_stream: before["logs-rigsignal.events-default"]},
+                                   {diagnosis_stream: diagnosis_after}, l3c)
 
     def test_v2_rfc6901_ops_include_values_and_escape(self):
         ops = INSTALL.rfc6901_diff({"a/b": 1, "gone": True}, {"a/b": 2, "til~de": [1]})
