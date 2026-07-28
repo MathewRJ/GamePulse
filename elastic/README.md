@@ -53,3 +53,34 @@ the exact target API paths without making network calls.
 
 The diagnostic-results (diagnose verdict) assets are **not yet part of this
 bundle**, pending the results-to-Kibana design task.
+
+## Saved-object topology preflight — refusals and operator response
+
+Before any mutation, the installer enumerates every space and refuses rather
+than risk Kibana regenerating a bundle object's id (which would leave objects
+this installer cannot verify or roll back). The preflight runs for **every**
+ownership profile.
+
+| Refusal | Meaning | Operator response |
+|---|---|---|
+| `saved_object_topology_conflict: <type>/<id>: literal_id_exists_elsewhere space=<s>` | A bundle id already exists in another space; importing would regenerate ids. | Resolve or remove that object; its disposition is a judgment call the installer will not make for you. |
+| `saved_object_topology_conflict: <type>/<id>: alias_match space=<s>` | A legacy-url-alias references a bundle id. | Remove the alias (or the object that owns it), then re-run. |
+| `saved_object_topology_conflict: <type>/<id>: target_origin_derivative physical_id=<uuid> …` | An origin-derivative of a bundle id sits in the target space — typically an earlier run whose response was lost. | Run the printed `RIGSIGNAL_REMEDIATION` payload (below), then re-run. |
+| `saved_object_topology_unverifiable: …` | The topology could not be proven complete (non-superuser credential, unreadable space list, malformed/paginated `_find`). | Re-run with a `superuser` credential and a reachable Kibana; never treat as clean. |
+| `saved_object_id_regenerated` / `…_cleanup_failed` | Kibana regenerated an id despite the preflight (a race), or the targeted cleanup of the regenerated copy failed. | For `_cleanup_failed`, delete the named `(type, destinationId, space)` by hand, then re-run. |
+
+**Two-part remediation.** When a refusal names both a target-space UUID orphan
+and a foreign literal object, BOTH must be addressed, in order: (1) resolve or
+remove every named foreign literal object by hand — no command is printed for
+these on purpose; (2) execute every printed `RIGSIGNAL_REMEDIATION` line, which
+is a single-line JSON payload (`method`, pre-encoded `path`, `headers`) meant to
+be parsed and replayed verbatim through an authenticated client, never
+hand-retyped; (3) only then re-run the installer. Deleting the UUID alone will
+refuse again on the untouched foreign object.
+
+**Credential requirement (0.3.1+).** The preflight proves complete space
+visibility via `GET /_security/_authenticate` and requires the built-in
+`superuser` role. An equivalently-privileged *custom* role is refused
+`saved_object_topology_unverifiable: privilege_unverified` — this is a
+deliberate fail-closed change; a custom admin role that worked previously must
+now be swapped for a `superuser` credential for install/rollback.
