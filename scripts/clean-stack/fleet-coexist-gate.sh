@@ -171,7 +171,8 @@ PY
 }
 
 owned_template_matches_bundle() {
-  local name="$1" live="$RUN_DIR/$name-live.json"
+  local name="$1"
+  local live="$RUN_DIR/$name-live.json"
   api GET "/_index_template/$name" >"$live"
   python3 - "$REPO_ROOT" "$BUNDLE" "$name" "$live" <<'PY'
 import sys
