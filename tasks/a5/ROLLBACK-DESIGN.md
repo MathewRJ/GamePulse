@@ -227,6 +227,20 @@ module rather than a special case.
 **Oracle:** `verify()` above; post-rollback, 404 on each object id, matching the pre-apply
 baseline exactly as it does for `kibana_spaces`/`kibana_roles`/`install_marker`.
 
+**Ratification (owner-ratified 2026-07-28, dashboard-origin v8 §5):** §1.2's routing note and
+§1.3's dashboard/saved-object adapter — including the clean-stack/first-install qualification that
+today's preimage is `ABSENT` for all 18 objects — stand **verbatim, unchanged**; v8 §5 names both as
+"kept verbatim from v3 (no round-3 findings against these)". This adapter's `get_projection`/
+`request_body_from_preimage`/`verify` triad is unaffected by the dashboard-origin fix: the fix's
+fail-closed topology preflight (v8 §2 W-B, `run_topology_preflight`) runs **before** this adapter's
+own apply path is ever reached, refusing pre-mutation rather than changing what the adapter does
+once apply proceeds; the Kibana `_import`-response-based regeneration check that guards the actual
+multipart import call (v8 §2, inside `install_asset`'s dashboard branch) likewise runs on the same
+absent-preimage, 18-object topology this section already describes. `ERRATA-v8.md` E2/E5 (alias
+cascade-delete and `createNewCopies` origin-reset) are fixture-level findings about the *gate leg
+harness* that exercises this adapter's rollback inverse, not amendments to the adapter's own
+`get_projection`/`request_body_from_preimage`/`verify` contract stated above.
+
 ### Transform `_meta`-absent-restore gate (Sol #2 / Overseer #4)
 
 Live transform GET omits the bundle `_meta`; apply *adds* it via
@@ -407,6 +421,19 @@ atomic, protected **per-object journal**:
   `pipeline_retained_in_use` with the parsed referencing index names on its
   journal intent, reports it to the operator, and still completes with
   `rollback_ok`. Any other 400 remains a failure.
+- **Topology preflight and recovery-sweep exemption (owner-ratified 2026-07-28, dashboard-origin
+  v8 §5):** the fail-closed saved-object topology preflight (`run_topology_preflight`, v8 §2 W-B),
+  its rollback-time recovery sweep for lost-response id-regeneration orphans (`_recovery_sweep`,
+  v8 §2 W-B (a)(iii) degradation marker), and the `test_pause` test hook are all **outside
+  `write_intent` scope, by the same reasoning as the preflight itself** — none of the three is a
+  journaled mutation of a bundle-owned asset. The preflight is proof-of-activity read traffic only
+  (every verdict traces to a validated `200`, never an unqualified `404`); the recovery sweep's own
+  deletes act only on forensically-logged, hash-verified regenerated-id orphans identified by
+  `asset_adapters.sha256(asset_adapters.get_projection("dashboard", row))` (v8 §9 D-1/D-5), never on
+  a journaled dashboard-import intent from §1.3 above; `test_pause` is inert unless test-enabled and
+  never issues a remote call. A degradation-sweep DELETE that fails leaves a named orphan and
+  refuses `saved_object_id_regenerated_cleanup_failed` (§6 STOP list below) rather than silently
+  retrying or rolling forward.
 
 **Rollback order (corrected, Sol #3):**
 
@@ -496,6 +523,17 @@ PHASE=break-glass   # optional insurance, never auto-invoked by rollback
 
 PHASE=apply
   need PREIMAGE_OK
+  - **Preflight call order, corrected (owner-ratified 2026-07-28, dashboard-origin v8 §5 —
+    apply-sequence pseudocode amendment, matches installer:2934-3035 exactly):**
+    admin_credential_kind(...) -> dispatch_clean_root(...) ->
+    fence_remote_ownership_profile(...) -> run_topology_preflight(bundle, es_url, kb_url,
+    authorization) [NEW — the W-B fail-closed saved-object topology preflight, v8 §2] ->
+    test_pause("after-topology-preflight", unsafe_test_injection) [NEW — inert unless
+    test-enabled] -> secure_root(...) -> bind_ownership_profile(...) ->
+    TransactionJournal(root, profile, new_transaction=True). Both new steps run strictly
+    before secure_root/bind_ownership_profile/journal construction and before any asset
+    mutation; a refusal from either is a pure no-op against local and remote state (§5's
+    write_intent-exemption note above).
   - Walk assets in the pinned installer's own ordered_assets() priority:
     component_templates, index_templates, security_roles, pipelines,
     transforms, kibana_spaces, kibana_roles, dashboard, then marker last.
@@ -603,6 +641,21 @@ PHASE=rollback
   the after-pin — concurrent drift, STOP (§5).
 - Attempted deletion of a transaction proof without the ratified A4
   exception in force.
+- **New rows (owner-ratified 2026-07-28, dashboard-origin v8 §5) — the topology preflight (W-B)
+  refuses before any mutation:**
+  - `saved_object_topology_conflict` — a bundle id already exists elsewhere (`literal_id_exists_elsewhere`),
+    a legacy-url-alias references one (`alias_match`), or two bundle files define the same
+    `(type, id, target_space)` divergently (`duplicate_divergent_definition`) or map the same
+    `(type, id)` to more than one `target_space` (`inconsistent_target`) — resolve by hand per
+    `elastic/README.md`'s two-part remediation, then re-run; no local or remote state was touched.
+  - `saved_object_topology_unverifiable` — the topology could not be proven complete (non-`superuser`
+    credential, unreadable/malformed/paginated space or `_find` response, malformed alias row) — never
+    treat as clean; re-run with a `superuser` credential against a reachable Kibana.
+  - `saved_object_id_regenerated` — Kibana regenerated a bundle id despite the preflight (a race);
+    the installer's own targeted cleanup runs automatically.
+  - `saved_object_id_regenerated_cleanup_failed` — the targeted cleanup's own DELETE failed; an
+    orphaned UUID survives at the named `(type, destinationId, space)` — escalate, do not retry the
+    install, resolve the orphan by hand first.
 
 ---
 

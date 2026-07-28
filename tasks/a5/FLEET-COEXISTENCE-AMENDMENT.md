@@ -175,6 +175,17 @@ multiple saved objects), split **16 bundle-owned / 39 external**, disjoint, unio
 Every manifest asset MUST resolve to exactly one row; an asset matching no row is a build defect
 and MUST refuse before any mutation, not fall through to a default.
 
+**Ratification (owner-ratified 2026-07-28, dashboard-origin v8 §5):** row 3's disposition —
+Kibana `rigsignal` space, `rigsignal_viewer` role, and all 18 product/default-space saved objects
+as **bundle-owned**, "W2 territory, unaffected by Fleet" — stands **verbatim, unchanged**; v8 §5
+names it as "kept verbatim from v3 (no round-3 findings against these)". The dashboard-origin fix
+adds a fail-closed read-only preflight (v8 §2 W-B, `run_topology_preflight`) and a Kibana
+`_import`-response regeneration check in front of exactly these 20 objects' apply path; it does not
+reclassify any of them as external, and it does not change this row's ownership disposition. The
+`rigsignal` space named here is the same object `ERRATA-v8.md` E6 concerns (a rollback-fidelity gap
+for a partial pre-existing space) and the same object the A4-LIVE-RUNBOOK's new P0 fence asserts
+absent (`GET /api/spaces/space/rigsignal` -> 404) before every apply.
+
 ### 1.1 Component templates behind Fleet-managed streams (row 8)
 
 Even though these 13 component templates' mapping/settings bodies are byte-identical to the
@@ -329,6 +340,18 @@ The installer performs **no PUT, no DELETE, and no dry-run PUT** against any `ex
      mutates external streams inside the transaction window and W1 identity is independently
      re-fenced. Recorded as a deviation from the §5 "any rollover in-window is a STOP" wording,
      not silently closed.
+
+   **Owner ratification (2026-07-28, dashboard-origin v8 §5):** this clause's marker semantics —
+   the 16/39 disjoint-union invariant, the `create`/`update`/`import`/`noop` action vocabulary, and
+   the mismatch-fenced `ownership_profile`/`ownership_table_version` persistence — stand
+   **verbatim, unchanged**; v8 §5 names §2.5 as "kept verbatim from v3 (no round-3 findings against
+   these)". The dashboard-origin fix's fail-closed topology preflight (v8 §2 W-B) and its regen-check
+   inside `install_asset`'s dashboard branch run **before** an `import`/`noop` action is ever
+   recorded for a dashboard-bundle manifest asset; a preflight refusal means no `write_intent` was
+   persisted and no entry is added to `applied_owned_assets` at all (this section's marker is never
+   reached), so the action vocabulary and the disjoint-union invariant above are unaffected. The new
+   `RIGSIGNAL_DASHBOARD_IMPORT_RESULT` evidence line (v8 §6) is a P5 forensic artifact over the
+   installer's stdout, not a marker field, and does not extend or alter this clause's schema.
 
 ## 3. Verification/assertion additions
 
