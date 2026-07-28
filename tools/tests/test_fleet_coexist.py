@@ -29,6 +29,16 @@ class FleetCoexistenceTests(unittest.TestCase):
                 "mappings": {"properties": {"sample": {"type": mapping}}},
                 "settings": {"index.lifecycle.name": lifecycle}, "aliases": {}}
 
+    def _rollback_with_fleet_snapshot(self, root, snapshot):
+        with mock.patch.object(INSTALL, "_recovery_sweep", return_value=[]), \
+             mock.patch.object(INSTALL, "verify_rollback_external_baselines"), \
+             mock.patch.object(INSTALL, "_fence_transaction_consumer"), \
+             mock.patch.object(INSTALL, "rollback_transaction_proofs"), \
+             mock.patch.object(INSTALL, "verify_m1_anchors"), \
+             mock.patch.object(INSTALL, "fleet_stream_snapshot", return_value=snapshot) as fleet_snapshot:
+            operations = INSTALL.rollback_transaction("https://es", "https://kb", "auth", root)
+        return operations, fleet_snapshot
+
     def _template_asset(self, name, patterns, priority, *, mapping="keyword", composed_of=(), version="1"):
         body = {"_meta": {"version": version}, "index_patterns": list(patterns), "priority": priority,
                 "composed_of": list(composed_of),
@@ -263,6 +273,64 @@ class FleetCoexistenceTests(unittest.TestCase):
         self.assertNotIn("external_rollover_observed", operations)
         request.assert_called_once_with("https://es", "/_index_template/" + name, "PUT", "auth", pre_body, None)
 
+    def test_rollback_reports_external_rollover_against_journaled_pre_backing(self):
+        stream = "logs-rigsignal.events-default"
+        pre = self._fleet_record(backing="one")
+        live = deepcopy(pre)
+        live["backing"].append((".ds-two", "uuid-two"))
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            journal.pin_fleet_fence({stream: {"pre": pre}})
+            operations, fleet_snapshot = self._rollback_with_fleet_snapshot(root, {stream: live})
+            fence = INSTALL.TransactionJournal(root, "fleet-coexist").value["fleet_fence"]
+        self.assertIn("external_rollover_observed", operations)
+        fleet_snapshot.assert_called_once_with("https://es", "auth")
+        self.assertTrue(fence["external_rollover_observed"])
+        self.assertEqual(fence["external_rollovers"], [{"stream": stream,
+                                                          "pre_backing": [[".ds-one", "uuid-one"]],
+                                                          "post_backing": [[".ds-one", "uuid-one"],
+                                                                           [".ds-two", "uuid-two"]]}])
+
+    def test_rollback_does_not_report_unchanged_journaled_pre_backing(self):
+        stream = "logs-rigsignal.events-default"
+        pre = self._fleet_record()
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            journal.pin_fleet_fence({stream: {"pre": pre}})
+            operations, fleet_snapshot = self._rollback_with_fleet_snapshot(root, {stream: deepcopy(pre)})
+            fence = INSTALL.TransactionJournal(root, "fleet-coexist").value["fleet_fence"]
+        self.assertNotIn("external_rollover_observed", operations)
+        fleet_snapshot.assert_called_once_with("https://es", "auth")
+        self.assertNotIn("external_rollover_observed", fence)
+        self.assertNotIn("external_rollovers", fence)
+
+    def test_rollback_ignores_window_created_stream_absent_from_journaled_pre(self):
+        stream = "logs-rigsignal.events-default"
+        pre = self._fleet_record()
+        created = self._fleet_record(backing="diagnosis")
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            journal.pin_fleet_fence({stream: {"pre": pre}})
+            operations, fleet_snapshot = self._rollback_with_fleet_snapshot(
+                root, {stream: deepcopy(pre), INSTALL.DIAGNOSIS_STREAM: created})
+            fence = INSTALL.TransactionJournal(root, "fleet-coexist").value["fleet_fence"]
+        self.assertNotIn("external_rollover_observed", operations)
+        fleet_snapshot.assert_called_once_with("https://es", "auth")
+        self.assertNotIn("external_rollover_observed", fence)
+
+    def test_rollback_without_fence_plan_skips_external_rollover_observation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            INSTALL.TransactionJournal(root, "fleet-coexist")
+            operations, fleet_snapshot = self._rollback_with_fleet_snapshot(root, {})
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist").value
+        self.assertNotIn("external_rollover_observed", operations)
+        fleet_snapshot.assert_not_called()
+        self.assertNotIn("fleet_fence", journal)
+
     def test_v2_matrix_l1_l2_l3_l3c_l4(self):
         """Regression legs 3/4/5/8/9/10: old whole-predicate lacked this split."""
         before = {"logs-rigsignal.events-default": self._fleet_record()}
@@ -320,6 +388,112 @@ class FleetCoexistenceTests(unittest.TestCase):
         self.assertEqual(pins[("pipelines", "p")], absent)
         with mock.patch.object(INSTALL, "_predecessor_hash", return_value="tampered"), self.assertRaises(INSTALL.InputError):
             INSTALL.predecessor_manifest_barrier("https://es", "https://kb", "auth", bundle, ownership, manifest)
+
+    def test_v2_dashboard_barrier_journals_per_object_pins_without_changing_manifest(self):
+        asset = INSTALL.Asset("dashboard", "asset.ndjson", "fixture", (
+            b'{"type":"dashboard","id":"D1","attributes":{"title":"one"}}\n'
+            b'{"type":"tag","id":"T1","attributes":{"name":"shared"}}\n'))
+        values = [["dashboard", "D1", {"attributes": {"title": "old"}}],
+                  ["tag", "T1", "ABSENT"]]
+        observed = hashlib.sha256(INSTALL.jcs(values)).hexdigest()
+        manifest = {"version": 1, "assets": {"dashboard/asset.ndjson": {
+            "id": "approved-v1", "approved_sha256": [observed]}}}
+        original_manifest = deepcopy(manifest)
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            with mock.patch.object(INSTALL, "_dashboard_predecessor_values", return_value=values):
+                INSTALL.predecessor_manifest_barrier(
+                    "https://es", "https://kb", "auth", INSTALL.Bundle("test", "test", [asset]),
+                    {(asset.kind, asset.name): "bundle-owned"}, manifest, journal)
+        self.assertEqual(manifest, original_manifest)
+        self.assertEqual(journal.value["predecessor_manifest"]["dashboard/asset.ndjson"], {
+            "approved_predecessor_id": "approved-v1", "predecessor_match": observed,
+            "barrier_object_pins": [
+                ["dashboard", "D1", hashlib.sha256(INSTALL.jcs(values[0][2])).hexdigest()],
+                ["tag", "T1", hashlib.sha256(INSTALL.jcs("ABSENT")).hexdigest()],
+            ]})
+
+    def test_v2_dashboard_predecessor_recheck_accepts_shared_tags_from_verified_journal(self):
+        asset = INSTALL.Asset("dashboard", "asset2.ndjson", "fixture", b"\n".join([
+            b'{"type":"dashboard","id":"D2","attributes":{}}',
+            b'{"type":"index-pattern","id":"IP2","attributes":{}}',
+            b'{"type":"tag","id":"T1","attributes":{}}',
+            b'{"type":"tag","id":"T2","attributes":{}}',
+        ]))
+        barrier = [["dashboard", "D2", "D2-before"], ["index-pattern", "IP2", "IP2-before"],
+                   ["tag", "T1", "T1-before"], ["tag", "T2", "T2-before"]]
+        current = [["dashboard", "D2", "D2-before"], ["index-pattern", "IP2", "IP2-before"],
+                   ["tag", "T1", "T1-after"], ["tag", "T2", "T2-after"]]
+        with tempfile.TemporaryDirectory() as directory:
+            journal = INSTALL.TransactionJournal(INSTALL.secure_root(Path(directory) / "transaction"), "fleet-coexist")
+            journal.value["predecessor_manifest"] = {"dashboard/asset2.ndjson": {"barrier_object_pins": barrier}}
+            for tag in ("T1", "T2"):
+                record = journal.write_intent("dashboard", "asset1.ndjson", "update", "before", tag + "-after", b"{}",
+                                              object_id="tag/" + tag)
+                journal.write_verified(record, tag + "-after")
+            with mock.patch.object(INSTALL, "_dashboard_predecessor_object_pins", return_value=current):
+                INSTALL.recheck_predecessor_pins("https://es", "https://kb", "auth", asset, "whole-before", journal)
+
+    def test_v2_dashboard_predecessor_recheck_refuses_foreign_shared_tag_and_journals_failure(self):
+        asset = INSTALL.Asset("dashboard", "asset2.ndjson", "fixture",
+                              b'{"type":"tag","id":"T1","attributes":{}}')
+        with tempfile.TemporaryDirectory() as directory:
+            journal = INSTALL.TransactionJournal(INSTALL.secure_root(Path(directory) / "transaction"), "fleet-coexist")
+            journal.value["predecessor_manifest"] = {"dashboard/asset2.ndjson": {
+                "barrier_object_pins": [["tag", "T1", "before"]]}}
+            record = journal.write_intent("dashboard", "asset1.ndjson", "update", "before", "after", b"{}",
+                                          object_id="tag/T1")
+            journal.write_verified(record, "after")
+            with mock.patch.object(INSTALL, "_dashboard_predecessor_object_pins",
+                                   return_value=[["tag", "T1", "foreign"]]), \
+                 self.assertRaises(INSTALL.PredecessorRefusal) as refused:
+                INSTALL.recheck_predecessor_pins("https://es", "https://kb", "auth", asset, "whole-before", journal)
+            provision = INSTALL.predecessor_recheck_provision_error(journal, refused.exception)
+            self.assertEqual(provision.prefix, "install failed: predecessor recheck:")
+            self.assertEqual(refused.exception.source, "journaled")
+            self.assertEqual(journal.value["predecessor_manifest"]["dashboard/asset2.ndjson"]["recheck_failure"], {
+                "asset": "dashboard/asset2.ndjson", "object_type": "tag", "object_id": "T1",
+                "expected": "after", "observed": "foreign", "source": "journaled"})
+
+    def test_v2_dashboard_predecessor_recheck_refuses_foreign_not_yet_written_object(self):
+        asset = INSTALL.Asset("dashboard", "asset2.ndjson", "fixture",
+                              b'{"type":"dashboard","id":"D2","attributes":{}}')
+        with tempfile.TemporaryDirectory() as directory:
+            journal = INSTALL.TransactionJournal(INSTALL.secure_root(Path(directory) / "transaction"), "fleet-coexist")
+            journal.value["predecessor_manifest"] = {"dashboard/asset2.ndjson": {
+                "barrier_object_pins": [["dashboard", "D2", "before"]]}}
+            with mock.patch.object(INSTALL, "_dashboard_predecessor_object_pins",
+                                   return_value=[["dashboard", "D2", "foreign"]]), \
+                 self.assertRaises(INSTALL.PredecessorRefusal) as refused:
+                INSTALL.recheck_predecessor_pins("https://es", "https://kb", "auth", asset, "whole-before", journal)
+        self.assertEqual((refused.exception.source, refused.exception.expected), ("barrier", "before"))
+
+    def test_v2_dashboard_predecessor_recheck_refuses_missing_verified_shared_tag_record(self):
+        asset = INSTALL.Asset("dashboard", "asset2.ndjson", "fixture",
+                              b'{"type":"tag","id":"T1","attributes":{}}')
+        with tempfile.TemporaryDirectory() as directory:
+            journal = INSTALL.TransactionJournal(INSTALL.secure_root(Path(directory) / "transaction"), "fleet-coexist")
+            journal.value["predecessor_manifest"] = {"dashboard/asset2.ndjson": {
+                "barrier_object_pins": [["tag", "T1", "before"]]}}
+            journal.write_intent("dashboard", "asset1.ndjson", "update", "before", "after", b"{}",
+                                 object_id="tag/T1")
+            with mock.patch.object(INSTALL, "_dashboard_predecessor_object_pins",
+                                   return_value=[["tag", "T1", "after"]]), \
+                 self.assertRaises(INSTALL.PredecessorRefusal) as refused:
+                INSTALL.recheck_predecessor_pins("https://es", "https://kb", "auth", asset, "whole-before", journal)
+        self.assertEqual((refused.exception.source, refused.exception.expected), ("journaled", "MISSING"))
+
+    def test_v2_non_dashboard_predecessor_recheck_keeps_whole_asset_barrier_rule(self):
+        asset = INSTALL.Asset("pipelines", "p", "fixture", b'{"processors":[]}')
+        with tempfile.TemporaryDirectory() as directory:
+            journal = INSTALL.TransactionJournal(INSTALL.secure_root(Path(directory) / "transaction"), "fleet-coexist")
+            journal.write_intent("dashboard", "unrelated.ndjson", "update", "before", "after", b"{}",
+                                 object_id="tag/T1")
+            with mock.patch.object(INSTALL, "_predecessor_hash", return_value="foreign"), \
+                 self.assertRaisesRegex(INSTALL.InputError, "predecessor manifest mismatch") as refused:
+                INSTALL.recheck_predecessor_pins("https://es", "https://kb", "auth", asset, "before", journal)
+        self.assertNotIsInstance(refused.exception, INSTALL.PredecessorRefusal)
 
     def test_v2_nonfatal_candidate_drift_hook_is_env_gated(self):
         calls = []

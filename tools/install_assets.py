@@ -175,6 +175,22 @@ class Asset:
     data: bytes
 
 
+class PredecessorRefusal(InputError):
+    """A write-time predecessor pin no longer represents the live object."""
+
+    def __init__(self, asset: Asset | str, object_type: str, object_id: str,
+                 expected: str, observed: str, source: str):
+        self.asset = asset.kind + "/" + asset.name if isinstance(asset, Asset) else asset
+        self.object_type, self.object_id = object_type, object_id
+        self.expected, self.observed, self.source = expected, observed, source
+        super().__init__("predecessor recheck failed")
+
+    def record(self) -> dict[str, str]:
+        return {"asset": self.asset, "object_type": self.object_type,
+                "object_id": self.object_id, "expected": self.expected,
+                "observed": self.observed, "source": self.source}
+
+
 @dataclass(frozen=True)
 class Bundle:
     version: str
@@ -1397,6 +1413,10 @@ class TransactionJournal:
     def _persist(self) -> None:
         atomic_write(self.root, JOURNAL_FILE, jcs(self.value) + b"\n")
 
+    def persist(self) -> None:
+        """Durably flush a deliberate direct journal mutation."""
+        self._persist()
+
     def _body_ref(self, key: str, body: bytes) -> dict:
         digest = hashlib.sha256(body).hexdigest()
         # atomic_write is deliberately single-directory/no-slash; this is a
@@ -1500,6 +1520,11 @@ class TransactionJournal:
     def fleet_fence_failure(self, layer: str, stream: str | None, ops: list[dict]) -> None:
         fence = self.value.setdefault("fleet_fence", {"plan": {}, "snapshots": {}})
         fence["failure"] = {"layer": layer, "stream": stream, "ops": deepcopy(ops)}
+        self._persist()
+
+    def predecessor_recheck_failure(self, refusal: PredecessorRefusal) -> None:
+        entries = self.value.setdefault("predecessor_manifest", {})
+        entries.setdefault(refusal.asset, {})["recheck_failure"] = refusal.record()
         self._persist()
 
     def apply_ok(self) -> None:
@@ -1974,10 +1999,19 @@ def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Pat
     journal = TransactionJournal(root, "fleet-coexist")
     active = newest_non_rolled_back_transaction(journal)
     fleet_before = None
-    if isinstance(active.get("fleet_fence"), dict):
-        # P6 never restores a data-stream topology.  This pre-reversal read is
-        # the only honest comparison point if Fleet rolls over mid-window.
-        fleet_before = fleet_stream_snapshot(es_url, authorization)
+    fence = active.get("fleet_fence")
+    plan = fence.get("plan") if isinstance(fence, dict) else None
+    if isinstance(plan, dict):
+        journaled_pre = {}
+        for stream, entry in plan.items():
+            pre = entry.get("pre") if isinstance(entry, dict) else None
+            if isinstance(stream, str) and isinstance(pre, dict) and isinstance(pre.get("backing"), list):
+                journaled_pre[stream] = {"backing": deepcopy(pre["backing"])}
+        if journaled_pre:
+            fleet_before = journaled_pre
+    # P6 never restores a data-stream topology.  Observe it once, before the
+    # reversal, then compare it with the transaction's durable pre-window plan.
+    fleet_after = fleet_stream_snapshot(es_url, authorization) if fleet_before is not None else None
     unswept_operations = _recovery_sweep(kb_url, authorization, active)
     verify_rollback_external_baselines(es_url, authorization, journal, bundle_path)
     actions = journal_recovery_actions(journal,
@@ -2061,12 +2095,12 @@ def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Pat
                 raise ProvisionError("install refused: rollback_verify_failed")
     verify_m1_anchors(es_url, authorization, journal.value.get("m1_anchors", {}))
     if fleet_before is not None:
-        fleet_after = fleet_stream_snapshot(es_url, authorization)
         changed = []
-        for stream in sorted(set(fleet_before) | set(fleet_after)):
+        for stream in sorted(fleet_before):
             before = fleet_before.get(stream, {})
-            after = fleet_after.get(stream, {})
-            if isinstance(before, dict) and isinstance(after, dict) and before.get("backing") != after.get("backing"):
+            after = fleet_after.get(stream, {}) if fleet_after is not None else {}
+            if (isinstance(before, dict) and isinstance(after, dict)
+                    and jcs(before.get("backing")) != jcs(after.get("backing"))):
                 changed.append({"stream": stream, "pre_backing": before.get("backing"),
                                 "post_backing": after.get("backing")})
         if changed:
@@ -2657,16 +2691,7 @@ def load_predecessor_manifest(path: Path | None) -> dict | None:
 def _predecessor_hash(es_url: str, kb_url: str, authorization: str, asset: Asset) -> str:
     """Read the same canonical preimage used by the mutation journal."""
     if asset.kind == "dashboard":
-        values = []
-        for kind, ident, _expected in _dashboard_expected_objects(asset):
-            try:
-                live = json_response(request(kb_url, dashboard_object_path(asset, kind, ident), "GET", authorization,
-                                             headers={"kbn-xsrf": "true"}))
-                values.append([kind, ident, asset_adapters.get_projection("dashboard", live)])
-            except RequestFailure as error:
-                if error.status != 404:
-                    raise
-                values.append([kind, ident, "ABSENT"])
+        values = _dashboard_predecessor_values(es_url, kb_url, authorization, asset)
         return hashlib.sha256(jcs(values)).hexdigest()
     base = kb_url if asset.kind in {"kibana_spaces", "kibana_roles"} else es_url
     path = kibana_path(asset) if base == kb_url else es_path(asset)
@@ -2678,6 +2703,89 @@ def _predecessor_hash(es_url: str, kb_url: str, authorization: str, asset: Asset
             raise
         return asset_adapters.dashboard_absent_hash()
     return asset_adapters.sha256(asset_adapters.get_projection(asset.kind, live))
+
+
+def _dashboard_predecessor_values(es_url: str, kb_url: str, authorization: str,
+                                  asset: Asset) -> list[list[object]]:
+    """Read dashboard predecessor projections in the whole-asset hash order."""
+    values = []
+    for kind, ident, _expected in _dashboard_expected_objects(asset):
+        try:
+            live = json_response(request(kb_url, dashboard_object_path(asset, kind, ident), "GET", authorization,
+                                         headers={"kbn-xsrf": "true"}))
+            values.append([kind, ident, asset_adapters.get_projection("dashboard", live)])
+        except RequestFailure as error:
+            if error.status != 404:
+                raise
+            values.append([kind, ident, "ABSENT"])
+    return values
+
+
+def _dashboard_predecessor_object_pins(es_url: str, kb_url: str, authorization: str,
+                                       asset: Asset) -> list[list[str]]:
+    """Hash each dashboard predecessor projection without changing its aggregate pin."""
+    return [[kind, ident, hashlib.sha256(jcs(value)).hexdigest()]
+            for kind, ident, value in _dashboard_predecessor_values(es_url, kb_url, authorization, asset)]
+
+
+def _journaled_dashboard_after_pin(journal: TransactionJournal, object_type: str,
+                                  object_id: str) -> str | None:
+    """Return the latest verified dashboard after-pin, or refuse an incomplete write."""
+    identity = object_type + "/" + object_id
+    matching = [record for record in journal.value.get("intents", [])
+                if (isinstance(record, dict) and record.get("kind") == "dashboard"
+                    and record.get("object_id") == identity and record.get("action") != "noop")]
+    if not matching:
+        return None
+    record = matching[-1]
+    after = record.get("after_sha256")
+    if (record.get("write_verified") is not True or not isinstance(after, str)
+            or after != record.get("intended_after_sha256")):
+        return ""
+    return after
+
+
+def recheck_dashboard_predecessor_pins(es_url: str, kb_url: str, authorization: str,
+                                       asset: Asset, barrier_pins: list[list[str]],
+                                       journal: TransactionJournal) -> None:
+    """Require every dashboard object to match its barrier or journaled after-pin."""
+    current_pins = _dashboard_predecessor_object_pins(es_url, kb_url, authorization, asset)
+    barrier_by_identity = {(kind, ident): pin for kind, ident, pin in barrier_pins}
+    for object_type, object_id, observed in current_pins:
+        barrier = barrier_by_identity.get((object_type, object_id))
+        if not isinstance(barrier, str):
+            raise PredecessorRefusal(asset, object_type, object_id, "MISSING", observed, "barrier")
+        journaled = _journaled_dashboard_after_pin(journal, object_type, object_id)
+        if journaled is None:
+            if observed != barrier:
+                raise PredecessorRefusal(asset, object_type, object_id, barrier, observed, "barrier")
+        elif not journaled:
+            raise PredecessorRefusal(asset, object_type, object_id, "MISSING", observed, "journaled")
+        elif observed != journaled:
+            raise PredecessorRefusal(asset, object_type, object_id, journaled, observed, "journaled")
+
+
+def recheck_predecessor_pins(es_url: str, kb_url: str, authorization: str, asset: Asset,
+                             barrier_pin: str | None, journal: TransactionJournal) -> None:
+    """Repeat the barrier pin immediately before a potentially mutating write."""
+    if asset.kind != "dashboard":
+        current_pin = _predecessor_hash(es_url, kb_url, authorization, asset)
+        if current_pin != barrier_pin:
+            raise InputError("predecessor manifest mismatch")
+        return
+    predecessor_entry = journal.value.get("predecessor_manifest", {}).get(asset.kind + "/" + asset.name, {})
+    barrier_object_pins = (predecessor_entry.get("barrier_object_pins")
+                           if isinstance(predecessor_entry, dict) else None)
+    if not isinstance(barrier_object_pins, list):
+        raise PredecessorRefusal(asset, "", "", "MISSING", "MISSING", "barrier")
+    recheck_dashboard_predecessor_pins(es_url, kb_url, authorization, asset, barrier_object_pins, journal)
+
+
+def predecessor_recheck_provision_error(journal: TransactionJournal,
+                                        refusal: PredecessorRefusal) -> ProvisionError:
+    """Persist the exact predecessor refusal before exposing its stable oracle."""
+    journal.predecessor_recheck_failure(refusal)
+    return ProvisionError("install failed: predecessor recheck:")
 
 
 def predecessor_manifest_barrier(es_url: str, kb_url: str, authorization: str, bundle: Bundle,
@@ -2694,15 +2802,24 @@ def predecessor_manifest_barrier(es_url: str, kb_url: str, authorization: str, b
         entry = manifest["assets"].get(key)
         if not isinstance(entry, dict):
             raise InputError("predecessor manifest has no asset approval")
-        observed = _predecessor_hash(es_url, kb_url, authorization, asset)
+        dashboard_values = None
+        if asset.kind == "dashboard":
+            dashboard_values = _dashboard_predecessor_values(es_url, kb_url, authorization, asset)
+            observed = hashlib.sha256(jcs(dashboard_values)).hexdigest()
+        else:
+            observed = _predecessor_hash(es_url, kb_url, authorization, asset)
         approved = entry["approved_sha256"]
         if observed not in approved:
             raise InputError("predecessor manifest mismatch")
         pinned[(asset.kind, asset.name)] = observed
         if journal is not None:
-            journal.value.setdefault("predecessor_manifest", {})[key] = {
+            journal_record = journal.value.setdefault("predecessor_manifest", {})[key] = {
                 "approved_predecessor_id": entry.get("id"), "predecessor_match": observed}
-            journal._persist()
+            if asset.kind == "dashboard":
+                journal_record["barrier_object_pins"] = [
+                    [kind, ident, hashlib.sha256(jcs(value)).hexdigest()]
+                    for kind, ident, value in dashboard_values or []]
+            journal.persist()
     return pinned
 
 
@@ -3874,9 +3991,9 @@ def main() -> int:
                 records: list[dict] = []
                 if journal is not None:
                     if predecessor_manifest is not None and action != "noop":
-                        current_pin = _predecessor_hash(es_url, kb_url, authorization, asset)
-                        if current_pin != predecessor_pins.get((asset.kind, asset.name)):
-                            raise InputError("predecessor manifest mismatch")
+                        recheck_predecessor_pins(
+                            es_url, kb_url, authorization, asset,
+                            predecessor_pins.get((asset.kind, asset.name)), journal)
                     if asset.kind == "index_templates" and asset.name == "logs-rigsignal.stream" and action != "noop":
                         lifecycle_delete_phase_free(es_url, authorization)
                     records = journal_owned_asset(journal, es_url, kb_url, authorization, asset, action)
@@ -3902,6 +4019,10 @@ def main() -> int:
                 if ownership_profile == "fleet-coexist":
                     applied_owned_assets.append({"kind": asset.kind, "name": asset.name, "action": action,
                                                  "request_body_sha256": hashlib.sha256(asset.data).hexdigest()})
+            except PredecessorRefusal as error:
+                if journal is not None:
+                    raise predecessor_recheck_provision_error(journal, error) from error
+                raise ProvisionError("install failed: predecessor recheck:") from error
             except (RequestFailure, InputError) as error:
                 if asset.kind == "security_roles":
                     category = "shipper role verification:"
