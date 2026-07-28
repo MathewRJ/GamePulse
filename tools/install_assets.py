@@ -5,6 +5,7 @@ import argparse
 import base64
 import ctypes
 import datetime
+import fnmatch
 import hashlib
 import json
 import os
@@ -21,6 +22,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -1472,6 +1474,34 @@ class TransactionJournal:
                                     "asset_set_sha256": asset_set_sha256(bundle)}
         self._persist()
 
+    def pin_fleet_fence(self, plan: dict) -> None:
+        """Persist the pre-mutation fence evidence and durable synthetic bodies."""
+        stored = {}
+        for stream, entry in plan.items():
+            if not isinstance(entry, dict):
+                continue
+            value = deepcopy(entry)
+            projection = value.get("projection")
+            if isinstance(projection, dict):
+                for key in ("pre_synth_body", "post_synth_body"):
+                    body = projection.pop(key, None)
+                    if isinstance(body, bytes):
+                        projection[key + "_ref"] = self._body_ref("fleet:" + stream + ":" + key, body)
+            stored[stream] = value
+        self.value["fleet_fence"] = {"plan": stored, "snapshots": {}}
+        self._persist()
+
+    def fleet_fence_snapshot(self, phase: str, snapshot: dict[str, object]) -> None:
+        fence = self.value.setdefault("fleet_fence", {"plan": {}, "snapshots": {}})
+        fence.setdefault("snapshots", {})[phase] = {
+            "sha256": hashlib.sha256(jcs(snapshot)).hexdigest(), "state": deepcopy(snapshot)}
+        self._persist()
+
+    def fleet_fence_failure(self, layer: str, stream: str | None, ops: list[dict]) -> None:
+        fence = self.value.setdefault("fleet_fence", {"plan": {}, "snapshots": {}})
+        fence["failure"] = {"layer": layer, "stream": stream, "ops": deepcopy(ops)}
+        self._persist()
+
     def apply_ok(self) -> None:
         self.value["apply_ok"] = True
         self._persist()
@@ -1943,6 +1973,11 @@ def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Pat
     """
     journal = TransactionJournal(root, "fleet-coexist")
     active = newest_non_rolled_back_transaction(journal)
+    fleet_before = None
+    if isinstance(active.get("fleet_fence"), dict):
+        # P6 never restores a data-stream topology.  This pre-reversal read is
+        # the only honest comparison point if Fleet rolls over mid-window.
+        fleet_before = fleet_stream_snapshot(es_url, authorization)
     unswept_operations = _recovery_sweep(kb_url, authorization, active)
     verify_rollback_external_baselines(es_url, authorization, journal, bundle_path)
     actions = journal_recovery_actions(journal,
@@ -2025,6 +2060,19 @@ def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Pat
                                      or _transform_stats_state(es_url, path, authorization) != state))):
                 raise ProvisionError("install refused: rollback_verify_failed")
     verify_m1_anchors(es_url, authorization, journal.value.get("m1_anchors", {}))
+    if fleet_before is not None:
+        fleet_after = fleet_stream_snapshot(es_url, authorization)
+        changed = []
+        for stream in sorted(set(fleet_before) | set(fleet_after)):
+            before = fleet_before.get(stream, {})
+            after = fleet_after.get(stream, {})
+            if isinstance(before, dict) and isinstance(after, dict) and before.get("backing") != after.get("backing"):
+                changed.append({"stream": stream, "pre_backing": before.get("backing"),
+                                "post_backing": after.get("backing")})
+        if changed:
+            journal.value.setdefault("fleet_fence", {})["external_rollover_observed"] = True
+            journal.value["fleet_fence"]["external_rollovers"] = changed
+            operations.append("external_rollover_observed")
     journal.value["rollback_ok"] = True
     journal._persist()
     operations.extend(unswept_operations)
@@ -2173,6 +2221,11 @@ def test_rollover(point: str, es_url: str, authorization: str,
     if stream not in snapshot:
         raise InputError("fleet rollover test stream is unavailable")
     request(es_url, "/" + urllib.parse.quote(stream, safe="") + "/_rollover", "POST", authorization)
+
+
+def test_candidate_drift(point: str, es_url: str, authorization: str, snapshot: dict[str, object]) -> None:
+    """Non-fatal test-only rollover hook for the candidate-proof interval."""
+    test_rollover(point, es_url, authorization, snapshot)
 
 
 def external_write_test_allowed(es_url: str, unsafe_test_injection: bool) -> bool:
@@ -2445,7 +2498,7 @@ def install_asset(es_url: str, kb_url: str, authorization: str, asset: Asset) ->
         verify_kibana_asset(kb_url, authorization, asset)
         return
     path = es_path(asset)
-    if asset.kind == "index_templates" and asset.name == "metrics-rigsignal.profiles":
+    if asset.kind == "index_templates" and asset.name in {"metrics-rigsignal.profiles", "logs-rigsignal.stream"}:
         # This separately-decided owned template is safe to write only while
         # it remains uncomposed.  Re-read immediately before PUT, not merely
         # at preimage capture, so a concurrent Fleet adoption cannot be lost.
@@ -2460,7 +2513,9 @@ def install_asset(es_url: str, kb_url: str, authorization: str, asset: Asset) ->
             except asset_adapters.AdapterError as error:
                 raise InputError("profiles composition is invalid") from error
             if not isinstance(body, dict) or body.get("composed_of") != []:
-                raise ProvisionError("install refused: profiles_composed_of")
+                token = ("profiles_composed_of" if asset.name == "metrics-rigsignal.profiles"
+                         else "stream_composed_of")
+                raise ProvisionError("install refused: " + token)
     if asset.kind == "transforms":
         try:
             request(es_url, path, "GET", authorization)
@@ -2576,6 +2631,77 @@ def journal_verify_owned_asset(journal: TransactionJournal, records: list[dict],
                      or _transform_stats_state(es_url, path, authorization) != expected_state)):
             raise InputError("transform state differs")
     journal.write_verified(records[0], after)
+
+
+def load_predecessor_manifest(path: Path | None) -> dict | None:
+    """Load the owner-ratified v1 predecessor allow-set artifact."""
+    if path is None:
+        return None
+    try:
+        value = parse_json(path.read_bytes(), "predecessor manifest")
+    except OSError as error:
+        raise InputError("predecessor manifest cannot be read") from error
+    assets = value.get("assets") if isinstance(value, dict) else None
+    if not isinstance(value, dict) or value.get("version") != 1 or not isinstance(assets, dict):
+        raise InputError("predecessor manifest is invalid")
+    for key, entry in assets.items():
+        hashes = entry.get("approved_sha256") if isinstance(entry, dict) else None
+        if (not isinstance(key, str) or not isinstance(hashes, list) or not hashes
+                or not all(isinstance(item, str) for item in hashes)):
+            raise InputError("predecessor manifest is invalid")
+    return value
+
+
+def _predecessor_hash(es_url: str, kb_url: str, authorization: str, asset: Asset) -> str:
+    """Read the same canonical preimage used by the mutation journal."""
+    if asset.kind == "dashboard":
+        values = []
+        for kind, ident, _expected in _dashboard_expected_objects(asset):
+            try:
+                live = json_response(request(kb_url, dashboard_object_path(asset, kind, ident), "GET", authorization,
+                                             headers={"kbn-xsrf": "true"}))
+                values.append([kind, ident, asset_adapters.get_projection("dashboard", live)])
+            except RequestFailure as error:
+                if error.status != 404:
+                    raise
+                values.append([kind, ident, "ABSENT"])
+        return hashlib.sha256(jcs(values)).hexdigest()
+    base = kb_url if asset.kind in {"kibana_spaces", "kibana_roles"} else es_url
+    path = kibana_path(asset) if base == kb_url else es_path(asset)
+    try:
+        live = json_response(request(base, path, "GET", authorization,
+                                     headers={"kbn-xsrf": "true"} if base == kb_url else None))
+    except RequestFailure as error:
+        if error.status != 404:
+            raise
+        return asset_adapters.dashboard_absent_hash()
+    return asset_adapters.sha256(asset_adapters.get_projection(asset.kind, live))
+
+
+def predecessor_manifest_barrier(es_url: str, kb_url: str, authorization: str, bundle: Bundle,
+                                 ownership: dict[tuple[str, str], str], manifest: dict | None,
+                                 journal: TransactionJournal | None = None) -> dict[tuple[str, str], str]:
+    """P3/P4: fully pin approved preimages before, and again at, each write."""
+    if manifest is None:
+        return {}
+    pinned = {}
+    for asset in bundle.assets:
+        if ownership.get((asset.kind, asset.name)) == "external":
+            continue
+        key = asset.kind + "/" + asset.name
+        entry = manifest["assets"].get(key)
+        if not isinstance(entry, dict):
+            raise InputError("predecessor manifest has no asset approval")
+        observed = _predecessor_hash(es_url, kb_url, authorization, asset)
+        approved = entry["approved_sha256"]
+        if observed not in approved:
+            raise InputError("predecessor manifest mismatch")
+        pinned[(asset.kind, asset.name)] = observed
+        if journal is not None:
+            journal.value.setdefault("predecessor_manifest", {})[key] = {
+                "approved_predecessor_id": entry.get("id"), "predecessor_match": observed}
+            journal._persist()
+    return pinned
 
 
 def cluster_uuid(es_url: str, authorization: str) -> str:
@@ -2877,10 +3003,13 @@ def fleet_stream_snapshot(es_url: str, authorization: str) -> dict[str, object]:
             raise InputError("fleet stream enumeration is invalid")
         name = stream["name"]
         pairs = []
+        backing_state = []
         for index in stream.get("indices", []):
             if not isinstance(index, dict) or not isinstance(index.get("index_name"), str) or not isinstance(index.get("index_uuid"), str):
                 raise InputError("fleet backing index is invalid")
             pairs.append((index["index_name"], index["index_uuid"]))
+            backing_state.append({key: index.get(key) for key in ("index_name", "index_uuid",
+                                                                  "prefer_ilm", "managed_by")})
         # `_simulate_index` is the effective mappings/settings/default-pipeline/
         # lifecycle oracle, not merely a composed_of textual comparison.
         simulated = es_json(es_url, "/_index_template/_simulate_index/" + urllib.parse.quote(name, safe=""),
@@ -2893,8 +3022,254 @@ def fleet_stream_snapshot(es_url: str, authorization: str) -> dict[str, object]:
             outcome = asset_adapters.simulation_outcome(simulated)
         except ValueError as error:
             raise InputError("fleet index simulation is invalid") from error
-        snapshot[name] = {"backing": sorted(pairs), **outcome}
+        # Keep every data-stream field which is a topology/lifecycle contract.
+        # Do not retain status/health: those are explicitly volatile.  The
+        # simulate normalization below remains the sole TSDB-boundary filter.
+        state = {key: deepcopy(stream.get(key)) for key in (
+            "lifecycle", "failure_store", "ilm_policy", "next_generation_managed_by",
+            "generation", "hidden", "system", "allow_custom_routing") if key in stream}
+        state["backing"] = sorted(backing_state, key=lambda value: (value["index_name"], value["index_uuid"]))
+        snapshot[name] = {"backing": sorted(pairs), "stream_state": state,
+                          "data_stream_template": stream.get("template"), **outcome}
     return snapshot
+
+
+def _pointer_escape(part: str) -> str:
+    return part.replace("~", "~0").replace("/", "~1")
+
+
+def rfc6901_diff(before: object, after: object, path: str = "") -> list[dict]:
+    """Return a deterministic complete JSON-pointer operation list.
+
+    Lists are atomic deliberately: ES mapping/template arrays have ordering
+    semantics, and a positional patch would conceal a foreign reordering.
+    """
+    if isinstance(before, dict) and isinstance(after, dict):
+        result: list[dict] = []
+        for key in sorted(set(before) | set(after)):
+            child = path + "/" + _pointer_escape(key)
+            if key not in before:
+                result.append({"op": "add", "path": child, "value": deepcopy(after[key])})
+            elif key not in after:
+                result.append({"op": "remove", "path": child})
+            else:
+                result.extend(rfc6901_diff(before[key], after[key], child))
+        return result
+    if before != after:
+        return [{"op": "replace", "path": path, "value": deepcopy(after)}]
+    return []
+
+
+def _declared_paths(value: object, path: str = "") -> set[str]:
+    """Return leaf pointers for a bundle-owned resolved template declaration."""
+    if isinstance(value, dict):
+        result: set[str] = set()
+        for key, member in value.items():
+            result.update(_declared_paths(member, path + "/" + _pointer_escape(key)))
+        return result or {path}
+    return {path}
+
+
+def _matching_templates(index_templates: object, stream: str) -> list[dict]:
+    if not isinstance(index_templates, dict):
+        raise InputError("fleet template enumeration is invalid")
+    result = []
+    for name, raw in index_templates.items():
+        try:
+            body = asset_adapters.get_projection("index_templates",
+                                                 raw.get("index_template") if isinstance(raw, dict) else raw)
+        except asset_adapters.AdapterError as error:
+            raise InputError("fleet template projection is invalid") from error
+        if not isinstance(name, str) or not isinstance(body, dict):
+            raise InputError("fleet template enumeration is invalid")
+        patterns = body.get("index_patterns")
+        priority = body.get("priority", 0)
+        if (not isinstance(patterns, list) or not all(isinstance(p, str) for p in patterns)
+                or type(priority) is not int):
+            raise InputError("fleet template enumeration is invalid")
+        if any(fnmatch.fnmatchcase(stream, pattern) for pattern in patterns):
+            result.append({"name": name, "body": body, "priority": priority})
+    return result
+
+
+def _winner_evidence(es_url: str, authorization: str, stream: str, data_stream_template: object) -> dict:
+    response = es_json(es_url, "/_index_template", "GET", authorization)
+    entries = response.get("index_templates") if isinstance(response, dict) else None
+    if not isinstance(entries, list):
+        raise InputError("fleet template enumeration is invalid")
+    templates = {item.get("name"): item for item in entries if isinstance(item, dict) and isinstance(item.get("name"), str)}
+    matching = _matching_templates(templates, stream)
+    if not matching:
+        raise InputError("fleet template winner is absent")
+    maximum = max(item["priority"] for item in matching)
+    winners = [item for item in matching if item["priority"] == maximum]
+    return {"matching_set": [{"name": item["name"], "priority": item["priority"]} for item in matching],
+            "max_priority": maximum, "unique": len(winners) == 1,
+            "winning_template": winners[0]["name"] if len(winners) == 1 else None,
+            "winning_body": winners[0]["body"] if len(winners) == 1 else None,
+            "data_stream_template": data_stream_template}
+
+
+def _owned_component_closure(template: object, owned_components: set[str]) -> list[str]:
+    """Resolve composed_of transitively from the single GET /_index_template set."""
+    # The closure's component bodies are supplied by the caller as an internal
+    # mapping, avoiding a new request for each component.
+    if not isinstance(template, dict):
+        raise InputError("fleet winning template is invalid")
+    composed = template.get("composed_of", [])
+    if not isinstance(composed, list) or not all(isinstance(value, str) for value in composed):
+        raise InputError("fleet winning template is invalid")
+    return sorted(value for value in composed if value in owned_components)
+
+
+def _simulate_template(es_url: str, authorization: str, template: dict, uniqueness: str) -> tuple[dict, bytes]:
+    try:
+        body, probe = asset_adapters.synthetic_simulation_template(template, uniqueness)
+        outcome = asset_adapters.simulation_outcome(es_json(
+            es_url, "/_index_template/_simulate_index/" + urllib.parse.quote(probe, safe=""),
+            "POST", authorization, body))
+    except asset_adapters.AdapterError as error:
+        raise InputError("fleet synthetic simulation is invalid") from error
+    return outcome, jcs(body)
+
+
+def plan_fleet_fence(es_url: str, authorization: str, snapshot: dict[str, object], bundle: Bundle,
+                     actions: dict[tuple[str, str], str], journal: TransactionJournal | None = None) -> dict:
+    """Pin L2/L3/L3-C classifications and projections before the first PUT."""
+    owned_templates = {asset.name: asset for asset in bundle.assets if asset.kind == "index_templates"}
+    owned_components = {asset.name for asset in bundle.assets if asset.kind == "component_templates"
+                        and actions.get((asset.kind, asset.name)) != "noop"}
+    changed_templates = {name for name, asset in owned_templates.items()
+                         if actions.get((asset.kind, asset.name)) in {"create", "update"}}
+    plan: dict[str, object] = {}
+    for stream, record in snapshot.items():
+        if not isinstance(record, dict):
+            raise InputError("fleet stream snapshot is invalid")
+        if not changed_templates and not owned_components:
+            plan[stream] = {"classification": {"status": "L2", "winning_template": None,
+                                                 "winner_evidence": {}, "closure_owned_components": []},
+                            "pre": deepcopy(record)}
+            continue
+        # N1: stream is taken only from fleet_stream_snapshot, never derived
+        # from an index template name.
+        evidence = _winner_evidence(es_url, authorization, stream,
+                                    record.get("data_stream_template"))
+        winner = evidence["winning_template"]
+        if not evidence["unique"]:
+            raise InputError("fleet template winner is ambiguous")
+        if evidence["data_stream_template"] is not None and evidence["data_stream_template"] != winner:
+            raise InputError("fleet stream template corroboration differs")
+        closure = _owned_component_closure(evidence["winning_body"], owned_components)
+        target = owned_templates.get(winner)
+        changed_template = target is not None and actions.get((target.kind, target.name)) in {"create", "update"}
+        status = "L3-C" if closure else "L3" if changed_template else "L2"
+        classification = {"status": status, "winning_template": winner,
+                          "winner_evidence": {key: evidence[key] for key in (
+                              "matching_set", "max_priority", "unique", "data_stream_template")},
+                          "closure_owned_components": closure}
+        entry: dict = {"classification": classification, "pre": deepcopy(record)}
+        if status == "L3-C":
+            declared: set[str] = set()
+            for component in closure:
+                asset = next((item for item in bundle.assets
+                              if item.kind == "component_templates" and item.name == component), None)
+                if asset is not None:
+                    body = parse_json(asset.data, asset.path)
+                    if isinstance(body, dict):
+                        declared.update(_declared_paths(body.get("template", {})))
+            if target is not None:
+                body = parse_json(target.data, target.path)
+                if isinstance(body, dict):
+                    declared.update(_declared_paths(body.get("template", {})))
+            entry["owned_paths"] = sorted(declared)
+        if status == "L3":
+            if target is None:
+                raise InputError("fleet template projection is unavailable")
+            # A create action proves no live T body exists, even if its name
+            # somehow won through a concurrently changing response.
+            if actions[(target.kind, target.name)] == "create":
+                raise InputError("fleet template preimage is absent")
+            live = es_json(es_url, es_path(target), "GET", authorization)
+            try:
+                pre_body = asset_adapters.get_projection("index_templates", live)
+                post_body = asset_adapters.get_projection("index_templates", parse_json(target.data, target.path))
+            except asset_adapters.AdapterError as error:
+                raise InputError("fleet template projection is invalid") from error
+            uniqueness = hashlib.sha256(target.name.encode()).hexdigest()[:16]
+            pre_synth, pre_bytes = _simulate_template(es_url, authorization, pre_body, uniqueness)
+            post_synth, post_bytes = _simulate_template(es_url, authorization, post_body, uniqueness)
+            pre_real = {key: record[key] for key in ("mappings", "settings", "aliases")}
+            anchor_ok = jcs(pre_synth) == jcs(pre_real)
+            if not anchor_ok:
+                raise InputError("fleet synthetic anchor differs")
+            entry["projection"] = {"template": target.name, "uniqueness": uniqueness, "anchor_ok": anchor_ok,
+                                   "pre_synth": pre_synth, "post_synth": post_synth,
+                                   "ops": rfc6901_diff(pre_synth, post_synth),
+                                   "pre_synth_body": pre_bytes, "post_synth_body": post_bytes}
+        plan[stream] = entry
+    if journal is not None:
+        journal.pin_fleet_fence(plan)
+    return plan
+
+
+def verify_fleet_fence(pre: dict[str, object], post: dict[str, object], plan: dict,
+                       journal: TransactionJournal | None = None, phase: str = "post") -> None:
+    """Apply L1/L2/L3/L3-C/L4.  Every refusal is journaled before escape."""
+    try:
+        extra = set(post) - set(pre)
+        if extra - {DIAGNOSIS_STREAM} or (DIAGNOSIS_STREAM in extra and DIAGNOSIS_STREAM in pre):
+            raise InputError("fleet stream set drifted")
+        for stream, before in pre.items():
+            after = post.get(stream)
+            if not isinstance(before, dict) or not isinstance(after, dict):
+                raise InputError("fleet stream snapshot drifted")
+            if before.get("backing") != after.get("backing") or before.get("stream_state") != after.get("stream_state"):
+                raise InputError("fleet L1 drifted")
+            entry = plan.get(stream, {})
+            status = entry.get("classification", {}).get("status", "L2") if isinstance(entry, dict) else "L2"
+            pre_real = {key: before[key] for key in ("mappings", "settings", "aliases")}
+            post_real = {key: after[key] for key in ("mappings", "settings", "aliases")}
+            if status == "L2" and jcs(pre_real) != jcs(post_real):
+                raise InputError("fleet L2 drifted")
+            if status == "L3":
+                projection = entry.get("projection", {})
+                if rfc6901_diff(pre_real, post_real) != projection.get("ops"):
+                    raise InputError("fleet L3 projection differs")
+            if status == "L3-C":
+                # simulate() supplies the independent bundle-derived
+                # attestation; unchanged non-owned resolved outcome is the
+                # conservative pointer-equivalent check for this closed W1 set.
+                # The owned diagnosis paths are intentionally the only surface
+                # allowed to move in this class.
+                owned = set(entry.get("owned_paths", []))
+                if not owned:
+                    raise InputError("fleet L3-C attestation is unavailable")
+                for op in rfc6901_diff(pre_real, post_real):
+                    if not any(op["path"] == path or op["path"].startswith(path + "/") for path in owned):
+                        raise InputError("fleet L3-C outside-owned drifted")
+        if journal is not None:
+            journal.fleet_fence_snapshot(phase, post)
+    except InputError as error:
+        if journal is not None:
+            journal.fleet_fence_failure(phase, getattr(error, "stream", None), [])
+        raise
+
+
+def verify_late_fleet_fence(post: dict[str, object], late: dict[str, object],
+                            journal: TransactionJournal | None = None) -> None:
+    """The publication fence admits no further Fleet topology or outcome move."""
+    try:
+        if set(post) != set(late):
+            raise InputError("late fleet stream set drifted")
+        for stream, value in post.items():
+            if late.get(stream) != value:
+                raise InputError("late fleet stream drifted")
+        if journal is not None:
+            journal.fleet_fence_snapshot("late", late)
+    except InputError:
+        if journal is not None:
+            journal.fleet_fence_failure("late", None, [])
+        raise
 
 
 def mint_key(es_url: str, authorization: str, role: dict, name: str) -> tuple[str, str]:
@@ -3145,6 +3520,8 @@ def main() -> int:
                         help="ownership policy for a Fleet-coexisting cluster")
     parser.add_argument("--rollback", type=Path, metavar="TRANSACTION",
                         help="explicitly reverse the journaled Fleet-coexist transaction at TRANSACTION")
+    parser.add_argument("--predecessor-manifest", type=Path, metavar="MANIFEST",
+                        help="owner-approved Fleet predecessor allow-set artifact")
     parser.add_argument("--dry-run", action="store_true", help="list API calls without network access")
     parser.add_argument("--unsafe-test-injection", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
@@ -3200,6 +3577,9 @@ def main() -> int:
                 print("rollback completed from journaled intents; pipeline retained: "
                       "in use as default pipeline for adopted stream indices; " + "; ".join(retained))
                 reported = True
+            if "external_rollover_observed" in operations:
+                print("rollback completed from journaled intents; external_rollover_observed")
+                reported = True
             for item in operations:
                 if item.startswith("unverified-orphan:"):
                     print("rollback completed from journaled intents; recovery incomplete: " + item)
@@ -3210,6 +3590,7 @@ def main() -> int:
         if args.bundle is None:
             raise InputError("--bundle is required unless --rollback is used")
         bundle = load_bundle(args.bundle)  # Step 1: no HTTP before this line succeeds.
+        predecessor_manifest = load_predecessor_manifest(getattr(args, "predecessor_manifest", None))
         role = role_body(bundle)
         ownership = ownership_for_assets(bundle, ownership_profile)
     except ProvisionError as error:
@@ -3355,6 +3736,11 @@ def main() -> int:
         verified_external_assets: list[dict] = []
         journal: TransactionJournal | None = None
         pre_fleet_snapshot: dict[str, object] | None = None
+        fleet_plan: dict = {}
+        planned_actions: dict[tuple[str, str], str] = {}
+        predecessor_pins: dict[tuple[str, str], str] = {}
+        post_fleet_snapshot: dict[str, object] | None = None
+        candidate_drift_done = False
         if ownership_profile == "fleet-coexist":
             try:
                 # This capture dynamically enumerates the active stream set;
@@ -3365,6 +3751,19 @@ def main() -> int:
                 journal.pin_bundle(args.bundle, bundle)
                 if not journal.value.get("m1_anchors"):
                     journal.pin_m1_anchors(m1_anchor_pins(es_url, authorization))
+                # P3 is a complete no-write barrier.  P4 repeats each pin at
+                # its write site below, rather than trusting this first read.
+                for asset in bundle.assets:
+                    if ownership[(asset.kind, asset.name)] != "external":
+                        planned_actions[(asset.kind, asset.name)] = owned_action(es_url, kb_url, authorization, asset)
+                predecessor_pins = predecessor_manifest_barrier(
+                    es_url, kb_url, authorization, bundle, ownership, predecessor_manifest, journal)
+                try:
+                    fleet_plan = plan_fleet_fence(es_url, authorization, pre_fleet_snapshot,
+                                                   bundle, planned_actions, journal)
+                except (RequestFailure, InputError) as error:
+                    journal.fleet_fence_failure("pre", None, [])
+                    raise ProvisionError("install failed: fleet stream verification:") from error
                 for asset in bundle.assets:
                     if ownership[(asset.kind, asset.name)] == "external":
                         if external_write_test_allowed(es_url, args.unsafe_test_injection):
@@ -3380,10 +3779,14 @@ def main() -> int:
             if ownership[(asset.kind, asset.name)] == "external":
                 continue
             try:
-                action = (owned_action(es_url, kb_url, authorization, asset)
+                action = (planned_actions[(asset.kind, asset.name)]
                           if ownership_profile == "fleet-coexist" else "update")
                 records: list[dict] = []
                 if journal is not None:
+                    if predecessor_manifest is not None and action != "noop":
+                        current_pin = _predecessor_hash(es_url, kb_url, authorization, asset)
+                        if current_pin != predecessor_pins.get((asset.kind, asset.name)):
+                            raise InputError("predecessor manifest mismatch")
                     if asset.kind == "index_templates" and asset.name == "logs-rigsignal.stream" and action != "noop":
                         lifecycle_delete_phase_free(es_url, authorization)
                     records = journal_owned_asset(journal, es_url, kb_url, authorization, asset, action)
@@ -3399,6 +3802,10 @@ def main() -> int:
                         fault("dashboard-multipart")
                     install_asset(es_url, kb_url, authorization, asset)
                     fault("after-remote-mutation", f"{asset.kind}/{asset.name}")
+                    if not candidate_drift_done:
+                        test_candidate_drift("after-first-owned-write", es_url, authorization,
+                                             pre_fleet_snapshot or {})
+                        candidate_drift_done = True
                 if journal is not None:
                     journal_verify_owned_asset(journal, records, es_url, kb_url, authorization, asset)
                     fault("after-write-verified")
@@ -3418,14 +3825,8 @@ def main() -> int:
             simulate(es_url, authorization)
             if ownership_profile == "fleet-coexist":
                 post_fleet_snapshot = fleet_stream_snapshot(es_url, authorization)
-                # A fresh transaction may legitimately create the diagnosis
-                # stream after the pre-Step-5 capture.  Every stream that was
-                # active when the transaction started must nevertheless be
-                # byte-for-byte invariant; a changed/missing member is an
-                # in-transaction rollover or drift and fails closed.
-                if any(post_fleet_snapshot.get(name) != value
-                       for name, value in (pre_fleet_snapshot or {}).items()):
-                    raise InputError("fleet stream snapshot drifted")
+                verify_fleet_fence(pre_fleet_snapshot or {}, post_fleet_snapshot,
+                                   fleet_plan, journal, "post")
         except (RequestFailure, InputError) as error:
             raise ProvisionError("install failed: fleet stream verification:") from error
         if pre_put_snapshot is None:
@@ -3510,6 +3911,11 @@ def main() -> int:
                                        ownership_profile, ownership,
                                        journal.value.get("external_baselines") if journal is not None else None)
             simulate(es_url, authorization)
+            if ownership_profile == "fleet-coexist":
+                if post_fleet_snapshot is None:
+                    raise InputError("late fleet snapshot is unavailable")
+                verify_late_fleet_fence(post_fleet_snapshot,
+                                        fleet_stream_snapshot(es_url, authorization), journal)
             post_condition, post_snapshot = remote_stream_condition(es_url, authorization)
             if post_condition != "compatible" or post_snapshot != pre_put_snapshot:
                 raise InputError("pre-publication stream snapshot drifted")

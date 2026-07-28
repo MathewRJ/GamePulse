@@ -2,6 +2,7 @@ import importlib.util
 import hashlib
 import io
 import json
+from copy import deepcopy
 import subprocess
 import sys
 import tempfile
@@ -19,6 +20,76 @@ SPEC.loader.exec_module(INSTALL)
 
 
 class FleetCoexistenceTests(unittest.TestCase):
+    def _fleet_record(self, *, backing="one", mapping="keyword", lifecycle="ilm-a"):
+        return {"backing": [(".ds-" + backing, "uuid-" + backing)],
+                "stream_state": {"generation": 1, "ilm_policy": lifecycle,
+                                 "backing": [{"index_name": ".ds-" + backing,
+                                              "index_uuid": "uuid-" + backing,
+                                              "prefer_ilm": True, "managed_by": "Index Lifecycle Management"}]},
+                "mappings": {"properties": {"sample": {"type": mapping}}},
+                "settings": {"index.lifecycle.name": lifecycle}, "aliases": {}}
+
+    def test_v2_matrix_l1_l2_l3_l3c_l4(self):
+        """Regression legs 3/4/5/8/9/10: old whole-predicate lacked this split."""
+        before = {"logs-rigsignal.events-default": self._fleet_record()}
+        l2 = {"logs-rigsignal.events-default": {"classification": {"status": "L2"}}}
+        INSTALL.verify_fleet_fence(before, deepcopy(before), l2)
+        with self.assertRaises(INSTALL.InputError):  # leg 3: unaffected rollout
+            INSTALL.verify_fleet_fence(before, {"logs-rigsignal.events-default": self._fleet_record(backing="two")}, l2)
+        with self.assertRaises(INSTALL.InputError):  # leg 10: lifecycle drift is L1 even if simulate matches
+            INSTALL.verify_fleet_fence(before, {"logs-rigsignal.events-default": self._fleet_record(lifecycle="ilm-b")}, l2)
+        with self.assertRaises(INSTALL.InputError):  # leg 5: unexpected post-only stream
+            INSTALL.verify_fleet_fence(before, {**before, "logs-rigsignal.operator-default": self._fleet_record()}, l2)
+        l3_before = self._fleet_record(mapping="keyword")
+        l3_after = self._fleet_record(mapping="text")
+        l3 = {"logs-rigsignal.events-default": {"classification": {"status": "L3"},
+              "projection": {"ops": INSTALL.rfc6901_diff(
+                  {key: l3_before[key] for key in ("mappings", "settings", "aliases")},
+                  {key: l3_after[key] for key in ("mappings", "settings", "aliases")})}}}
+        INSTALL.verify_fleet_fence({"logs-rigsignal.events-default": l3_before},
+                                   {"logs-rigsignal.events-default": l3_after}, l3)
+        with self.assertRaises(INSTALL.InputError):  # leg 4: expected change does not excuse rollover
+            INSTALL.verify_fleet_fence({"logs-rigsignal.events-default": l3_before},
+                                       {"logs-rigsignal.events-default": self._fleet_record(backing="two", mapping="text")}, l3)
+        l3c = {"logs-rigsignal.events-default": {"classification": {"status": "L3-C"},
+              "owned_paths": ["/mappings/properties/rigsignal"]}}
+        diagnosis_after = self._fleet_record(); diagnosis_after["mappings"] = {
+            "properties": {"sample": {"type": "keyword"}, "rigsignal": {"properties": {"diagnosis": {}}}}}
+        INSTALL.verify_fleet_fence(before, {"logs-rigsignal.events-default": diagnosis_after}, l3c)
+
+    def test_v2_rfc6901_ops_include_values_and_escape(self):
+        ops = INSTALL.rfc6901_diff({"a/b": 1, "gone": True}, {"a/b": 2, "til~de": [1]})
+        self.assertEqual(ops, [{"op": "replace", "path": "/a~1b", "value": 2},
+                               {"op": "remove", "path": "/gone"},
+                               {"op": "add", "path": "/til~0de", "value": [1]}])
+
+    def test_v2_late_fence_rejects_any_post_candidate_drift(self):
+        post = {"logs-rigsignal.events-default": self._fleet_record()}
+        INSTALL.verify_late_fleet_fence(post, deepcopy(post))
+        with self.assertRaises(INSTALL.InputError):
+            INSTALL.verify_late_fleet_fence(post, {"logs-rigsignal.events-default": self._fleet_record(backing="late")})
+
+    def test_v2_predecessor_manifest_is_set_pinned(self):
+        asset = INSTALL.Asset("pipelines", "p", "p", b'{"processors":[]}')
+        bundle = INSTALL.Bundle("test", "test", [asset])
+        ownership = {(asset.kind, asset.name): "bundle-owned"}
+        absent = INSTALL.asset_adapters.dashboard_absent_hash()
+        manifest = {"version": 1, "assets": {"pipelines/p": {"id": "approved-v1", "approved_sha256": [absent, "new"]}}}
+        with mock.patch.object(INSTALL, "_predecessor_hash", return_value=absent):
+            pins = INSTALL.predecessor_manifest_barrier("https://es", "https://kb", "auth", bundle, ownership, manifest)
+        self.assertEqual(pins[("pipelines", "p")], absent)
+        with mock.patch.object(INSTALL, "_predecessor_hash", return_value="tampered"), self.assertRaises(INSTALL.InputError):
+            INSTALL.predecessor_manifest_barrier("https://es", "https://kb", "auth", bundle, ownership, manifest)
+
+    def test_v2_nonfatal_candidate_drift_hook_is_env_gated(self):
+        calls = []
+        with mock.patch.object(INSTALL, "request", side_effect=lambda *args, **kwargs: calls.append(args)):
+            INSTALL.test_candidate_drift("after-first-owned-write", "https://es", "auth", {"logs-x-default": {}})
+            self.assertEqual(calls, [])
+            with mock.patch.dict(INSTALL.os.environ, {"RIGSIGNAL_TEST_ROLLOVER_AT": "after-first-owned-write:logs-x-default"}):
+                INSTALL.test_candidate_drift("after-first-owned-write", "https://es", "auth", {"logs-x-default": {}})
+        self.assertEqual(len(calls), 1)
+
     def test_coexist_fence_accepts_cosmetic_external_drift_and_refuses_operational_drift(self):
         asset = INSTALL.Asset(
             "component_templates", "metrics-rigsignal.audio@package", "fixture.json",
