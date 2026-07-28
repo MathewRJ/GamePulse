@@ -135,6 +135,64 @@ class FleetCoexistenceTests(unittest.TestCase):
         after["mappings"]["properties"]["rigsignal"] = {"properties": {"diagnosis": {}}}
         INSTALL.verify_fleet_fence({stream: before}, {stream: after}, plan)
 
+    def test_v2_external_fleet_components_do_not_poison_l2_closure(self):
+        """Leg-a shape: external winner/components plus a changed owned template elsewhere."""
+        stream = "logs-rigsignal.events-default"
+        external_components = [
+            INSTALL.Asset("component_templates", ".fleet_globals-1", "globals.json", b"{}"),
+            INSTALL.Asset("component_templates", "logs-rigsignal.events@package", "events.json", b"{}"),
+        ]
+        external_winner = self._template_asset(
+            "logs-rigsignal.events", ["logs-rigsignal.events-*"], 200,
+            composed_of=tuple(component.name for component in external_components))
+        changed_elsewhere = self._template_asset(
+            "logs-rigsignal.stream", ["logs-rigsignal.diagnosis-*"], 100)
+        before = self._fleet_record(); before["data_stream_template"] = external_winner.name
+        entries = [{"name": external_winner.name, "index_template": json.loads(external_winner.data)},
+                   {"name": changed_elsewhere.name, "index_template": json.loads(changed_elsewhere.data)}]
+        with mock.patch.object(INSTALL, "es_json", return_value={"index_templates": entries}):
+            plan = INSTALL.plan_fleet_fence(
+                "https://es", "auth", {stream: before},
+                INSTALL.Bundle("fixture", "fixture", [*external_components, external_winner, changed_elsewhere]),
+                {(changed_elsewhere.kind, changed_elsewhere.name): "update"})
+        classification = plan[stream]["classification"]
+        self.assertEqual(classification["status"], "L2")
+        self.assertEqual(classification["closure_owned_components"], [])
+
+    def test_v2_owned_component_create_is_l3c_for_diagnosis(self):
+        stream = INSTALL.DIAGNOSIS_STREAM
+        template = self._template_asset("logs-rigsignal.stream", ["logs-rigsignal.diagnosis-*"], 100,
+                                        composed_of=("logs-rigsignal.diagnosis-mappings",))
+        component = INSTALL.Asset("component_templates", "logs-rigsignal.diagnosis-mappings", "component.json",
+                                  b'{"template":{"mappings":{"properties":{"rigsignal":{}}}}}')
+        before = self._fleet_record(); before["data_stream_template"] = template.name
+        entries = [{"name": template.name, "index_template": json.loads(template.data)}]
+        with mock.patch.object(INSTALL, "es_json", return_value={"index_templates": entries}):
+            plan = INSTALL.plan_fleet_fence("https://es", "auth", {stream: before},
+                                             INSTALL.Bundle("fixture", "fixture", [template, component]),
+                                             {(template.kind, template.name): "noop",
+                                              (component.kind, component.name): "create"})
+        self.assertEqual(plan[stream]["classification"]["status"], "L3-C")
+
+    def test_v2_owned_component_absent_action_is_not_changed(self):
+        stream = INSTALL.DIAGNOSIS_STREAM
+        template = self._template_asset("logs-rigsignal.stream", ["logs-rigsignal.diagnosis-*"], 100,
+                                        composed_of=("logs-rigsignal.diagnosis-mappings",))
+        component = INSTALL.Asset("component_templates", "logs-rigsignal.diagnosis-mappings", "component.json",
+                                  b'{"template":{"mappings":{"properties":{"rigsignal":{}}}}}')
+        before = self._fleet_record(); before["data_stream_template"] = template.name
+        with mock.patch.object(INSTALL, "es_json", side_effect=AssertionError("L2 requires no winner lookup")):
+            plan = INSTALL.plan_fleet_fence("https://es", "auth", {stream: before},
+                                             INSTALL.Bundle("fixture", "fixture", [template, component]),
+                                             {(template.kind, template.name): "noop"})
+        self.assertEqual(plan[stream]["classification"]["status"], "L2")
+
+    def test_stream_composition_parse_error_names_stream(self):
+        asset = self._template_asset("logs-rigsignal.stream", ["logs-rigsignal.diagnosis-*"], 100)
+        with mock.patch.object(INSTALL, "request", return_value=b'{"index_templates":[]}'):
+            with self.assertRaisesRegex(INSTALL.InputError, "^stream composition is invalid$"):
+                INSTALL.install_asset("https://es", "https://kb", "auth", asset)
+
     def test_v2_fence_helpers_cover_resolution_closure_and_declared_paths(self):
         templates = {"low": {"index_template": {"index_patterns": ["logs-rigsignal.*"], "priority": 1,
                                                    "template": {}}},

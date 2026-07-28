@@ -2511,7 +2511,9 @@ def install_asset(es_url: str, kb_url: str, authorization: str, asset: Asset) ->
             try:
                 body = asset_adapters.get_projection("index_templates", current)
             except asset_adapters.AdapterError as error:
-                raise InputError("profiles composition is invalid") from error
+                message = ("profiles composition is invalid" if asset.name == "metrics-rigsignal.profiles"
+                           else "stream composition is invalid")
+                raise InputError(message) from error
             if not isinstance(body, dict) or body.get("composed_of") != []:
                 token = ("profiles_composed_of" if asset.name == "metrics-rigsignal.profiles"
                          else "stream_composed_of")
@@ -3174,9 +3176,11 @@ def _simulate_template(es_url: str, authorization: str, template: dict, uniquene
 def plan_fleet_fence(es_url: str, authorization: str, snapshot: dict[str, object], bundle: Bundle,
                      actions: dict[tuple[str, str], str], journal: TransactionJournal | None = None) -> dict:
     """Pin L2/L3/L3-C classifications and projections before the first PUT."""
-    owned_templates = {asset.name: asset for asset in bundle.assets if asset.kind == "index_templates"}
+    owned_templates = {asset.name: asset for asset in bundle.assets
+                       if asset.kind == "index_templates" and (asset.kind, asset.name) in actions}
     owned_components = {asset.name for asset in bundle.assets if asset.kind == "component_templates"
-                        and actions.get((asset.kind, asset.name)) != "noop"}
+                        and (asset.kind, asset.name) in actions
+                        and actions[(asset.kind, asset.name)] in {"create", "update"}}
     changed_templates = {name for name, asset in owned_templates.items()
                          if actions.get((asset.kind, asset.name)) in {"create", "update"}}
     plan: dict[str, object] = {}
