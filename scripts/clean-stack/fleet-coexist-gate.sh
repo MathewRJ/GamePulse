@@ -9,13 +9,13 @@ source "$SCRIPT_DIR/lib.sh"
 
 ES_VERSION='' KB_VERSION='' BUNDLE='' PREDECESSOR_MANIFEST='' KEEP=0
 declare -a LEGS=()
-usage() { printf '%s\n' 'Usage: fleet-coexist-gate.sh --es-version 9.4.3|9.4.4 [--kb-version VERSION] --leg a..p [--bundle PATH] [--predecessor-manifest PATH] [--all]' 'Solo-screen subset: fleet legs a/b/i/n/o/p plus adoption leg 1.' >&2; }
+usage() { printf '%s\n' 'Usage: fleet-coexist-gate.sh --es-version 9.4.3|9.4.4 [--kb-version VERSION] --leg a..r [--bundle PATH] [--predecessor-manifest PATH] [--all]' 'Solo-screen subset: fleet legs a/b/i/n/o/p/q/r plus adoption leg 1.' >&2; }
 version() { [[ "$1" =~ ^9\.4\.[34]$ ]]; }
 fail() { printf 'ASSERT FAIL %s\n' "$*" >&2; return 1; }
 while (($#)); do case "$1" in
   --es-version) ES_VERSION="${2:-}"; shift 2 ;; --kb-version) KB_VERSION="${2:-}"; shift 2 ;;
   --bundle) BUNDLE="${2:-}"; shift 2 ;; --predecessor-manifest) PREDECESSOR_MANIFEST="${2:-}"; shift 2 ;; --leg) LEGS+=("${2:-}"); shift 2 ;;
-  --all) LEGS=(a b c d e f g h i j k l m n o p); shift ;; --keep) KEEP=1; shift ;;
+  --all) LEGS=(a b c d e f g h i j k l m n o p q r); shift ;; --keep) KEEP=1; shift ;;
   -h|--help) usage; exit 0 ;; *) usage; exit 2 ;; esac; done
 [[ -n "$ES_VERSION" ]] || { usage; exit 2; }; KB_VERSION="${KB_VERSION:-$ES_VERSION}"
 version "$ES_VERSION" && version "$KB_VERSION" && [[ "$ES_VERSION" == "$KB_VERSION" ]] || { usage; exit 2; }
@@ -584,16 +584,42 @@ PY
 # classified L3 and receive the bundle's sanctioned projection—not rejected by
 # an obsolete byte-equality fence.
 leg_n() {
+  local stream_mapping node_width
   setup
-  jq 'del(.template.mappings.properties.stream)' "$REPO_ROOT/elastic/index-templates/logs-rigsignal.stream.json" >"$RUN_DIR/logs-rigsignal.stream-old.json"
+  jq 'del(.template.mappings.properties.stream) | .template.settings.index.lifecycle.name = "logs-rigsignal-stream-30d"' "$REPO_ROOT/elastic/index-templates/logs-rigsignal.stream.json" >"$RUN_DIR/logs-rigsignal.stream-old.json"
   jq 'del(.template.mappings.properties["node.width"])' "$REPO_ROOT/elastic/index-templates/metrics-rigsignal.profiles.json" >"$RUN_DIR/metrics-rigsignal.profiles-old.json"
+  # Recreate this pre-existing stream under the old winner so both its
+  # resolved mapping and lifecycle surfaces diverge from the bundle winner.
+  api DELETE '/_data_stream/logs-rigsignal.stream-default' >/dev/null
   api PUT '/_index_template/logs-rigsignal.stream' --data-binary "@$RUN_DIR/logs-rigsignal.stream-old.json" >/dev/null
   api PUT '/_index_template/metrics-rigsignal.profiles' --data-binary "@$RUN_DIR/metrics-rigsignal.profiles-old.json" >/dev/null
+  api PUT '/_data_stream/logs-rigsignal.stream-default' >/dev/null
   _installer >"$RUN_DIR/leg-n-install.log" 2>&1 || fail 'Leg-N installer refused sanctioned owned-template update'
   cat "$RUN_DIR/leg-n-install.log"
-  for stream in logs-rigsignal.stream-default metrics-rigsignal.profiles-default; do
-    jq -e --arg stream "$stream" '.fleet_fence.plan[$stream] | (.classification.status == "L3") and ((.projection.ops | length) > 0) and (.classification.winner_evidence.matching_set | type == "array") and (.classification.winner_evidence.matching_set | length > 0) and (.classification.winner_evidence.max_priority | type == "number") and (.classification.winner_evidence.unique == true) and (.classification | has("winning_template"))' "$RUN_DIR/enrollment/fleet-coexist-journal.json" >/dev/null || fail "Leg-N missing L3 projection/winner evidence: $stream"
-  done
+  stream_mapping="$(jq -c '.template.mappings.properties.stream' "$REPO_ROOT/elastic/index-templates/logs-rigsignal.stream.json")"
+  node_width="$(jq -c '.template.mappings.properties["node.width"]' "$REPO_ROOT/elastic/index-templates/metrics-rigsignal.profiles.json")"
+  jq -e --argjson stream_mapping "$stream_mapping" '
+    .fleet_fence.plan["logs-rigsignal.stream-default"] |
+    (.classification.status == "L3") and
+    (.projection.ops | any(.[]; . == {"op":"add","path":"/mappings/properties/stream","value":$stream_mapping})) and
+    (.stream_state_ops == [{"op":"replace","path":"/stream_state/ilm_policy","value":"logs@lifecycle"}]) and
+    (.classification.winner_evidence.matching_set | type == "array") and
+    (.classification.winner_evidence.matching_set | length > 0) and
+    (.classification.winner_evidence.max_priority | type == "number") and
+    (.classification.winner_evidence.unique == true) and
+    (.classification | has("winning_template"))
+  ' "$RUN_DIR/enrollment/fleet-coexist-journal.json" >/dev/null || fail 'Leg-N missing exact stream mapping/lifecycle projection or winner evidence'
+  jq -e --argjson node_width "$node_width" '
+    .fleet_fence.plan["metrics-rigsignal.profiles-default"] |
+    (.classification.status == "L3") and
+    (.projection.ops | any(.[]; . == {"op":"add","path":"/mappings/properties/node.width","value":$node_width})) and
+    (.stream_state_ops == []) and
+    (.classification.winner_evidence.matching_set | type == "array") and
+    (.classification.winner_evidence.matching_set | length > 0) and
+    (.classification.winner_evidence.max_priority | type == "number") and
+    (.classification.winner_evidence.unique == true) and
+    (.classification | has("winning_template"))
+  ' "$RUN_DIR/enrollment/fleet-coexist-journal.json" >/dev/null || fail 'Leg-N missing exact metrics mapping projection or winner evidence'
   owned_template_matches_bundle logs-rigsignal.stream
   owned_template_matches_bundle metrics-rigsignal.profiles
   printf 'Leg-N proof: non-empty L3 D on pre-existing streams proves the old byte-equality fence would have refused its own sanctioned write.\n'
@@ -618,6 +644,29 @@ leg_o() {
   jq -e '.apply_ok == false and .rollback_ok == true and .fleet_fence.external_rollover_observed == true and (.fleet_fence.external_rollovers | length) > 0 and .fleet_fence.failure.layer == "late"' "$RUN_DIR/enrollment/fleet-coexist-journal.json" >/dev/null || fail 'Leg-O journal did not classify honest rollover abort'
   stream_backing_snapshot logs-rigsignal.stream-default >"$RUN_DIR/leg-o-after-rollback-backing.json"
   cmp -s "$RUN_DIR/leg-o-post-rollover-backing.json" "$RUN_DIR/leg-o-after-rollback-backing.json" || fail 'Leg-O rollback restored rather than preserved external rollover backing list'
+}
+
+# Q: R3's live table/projection path.  The old winner has an ILM setting and
+# the bundle winner resolves the sanctioned lifecycle setting; D must contain
+# only the three rooted stream-state paths and the installer must finish.
+leg_q() {
+  setup
+  jq '.template.settings.index.lifecycle.name = "logs-rigsignal-stream-30d"' "$REPO_ROOT/elastic/index-templates/logs-rigsignal.stream.json" >"$RUN_DIR/leg-q-old.json"
+  api PUT '/_index_template/logs-rigsignal.stream' --data-binary "@$RUN_DIR/leg-q-old.json" >/dev/null
+  _installer >"$RUN_DIR/leg-q-install.log" 2>&1 || fail 'Leg-Q sanctioned R3 lifecycle projection refused'
+  jq -e '.fleet_fence.plan["logs-rigsignal.stream-default"].stream_state_ops == [{"op":"replace","path":"/stream_state/ilm_policy","value":"logs@lifecycle"}]' "$RUN_DIR/enrollment/fleet-coexist-journal.json" >/dev/null || fail 'Leg-Q stream-state D was not the exact R3 projection'
+}
+
+# R: E6's template-update-then-rollover race.  The L1 refusal is mandatory;
+# P6 subsequently preserves the hybrid backing index and records its evidence.
+leg_r() {
+  setup
+  jq '.template.settings.index.lifecycle.name = "logs-rigsignal-stream-30d"' "$REPO_ROOT/elastic/index-templates/logs-rigsignal.stream.json" >"$RUN_DIR/leg-r-old.json"
+  api PUT '/_index_template/logs-rigsignal.stream' --data-binary "@$RUN_DIR/leg-r-old.json" >/dev/null
+  RIGSIGNAL_TEST_ROLLOVER_AT='after-first-owned-write:logs-rigsignal.stream-default' _installer >"$RUN_DIR/leg-r-install.log" 2>&1 && fail 'Leg-R accepted rollover under installer template'
+  grep -Fx 'install failed: fleet stream verification:' "$RUN_DIR/leg-r-install.log" >/dev/null || fail 'Leg-R did not refuse at L1'
+  rollback >"$RUN_DIR/leg-r-rollback.log" 2>&1 || fail 'Leg-R rollback failed'
+  jq -e '(.fleet_fence.rollover_under_installer_template | length) > 0 and (.fleet_fence.rollover_under_installer_template[0] | has("settings") and has("mappings") and has("lifecycle"))' "$RUN_DIR/enrollment/fleet-coexist-journal.json" >/dev/null || fail 'Leg-R lacks hybrid rollover evidence'
 }
 
 # P: P3 refuses a non-approved predecessor before any cluster write, while the
@@ -646,4 +695,4 @@ leg_p() {
   PREDECESSOR_MANIFEST="$RUN_DIR/predecessor-good.json" installer || fail 'Leg-P post-retained-pipeline retry did not pass predecessor barrier'
 }
 
-for leg in "${LEGS[@]}"; do case "$leg" in a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p) "leg_$leg" ;; *) fail "unknown leg: $leg"; exit 2 ;; esac; done
+for leg in "${LEGS[@]}"; do case "$leg" in a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r) "leg_$leg" ;; *) fail "unknown leg: $leg"; exit 2 ;; esac; done

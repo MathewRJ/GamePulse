@@ -1517,9 +1517,12 @@ class TransactionJournal:
             "sha256": hashlib.sha256(jcs(snapshot)).hexdigest(), "state": deepcopy(snapshot)}
         self._persist()
 
-    def fleet_fence_failure(self, layer: str, stream: str | None, ops: list[dict]) -> None:
+    def fleet_fence_failure(self, layer: str, stream: str | None, ops: list[dict],
+                            reason: str | None = None) -> None:
         fence = self.value.setdefault("fleet_fence", {"plan": {}, "snapshots": {}})
         fence["failure"] = {"layer": layer, "stream": stream, "ops": deepcopy(ops)}
+        if reason is not None:
+            fence["failure"]["reason"] = reason
         self._persist()
 
     def predecessor_recheck_failure(self, refusal: PredecessorRefusal) -> None:
@@ -2005,8 +2008,13 @@ def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Pat
         journaled_pre = {}
         for stream, entry in plan.items():
             pre = entry.get("pre") if isinstance(entry, dict) else None
-            if isinstance(stream, str) and isinstance(pre, dict) and isinstance(pre.get("backing"), list):
+            if (isinstance(stream, str) and isinstance(pre, dict)
+                    and isinstance(pre.get("backing"), list)):
+                # G3-min compares this durable preimage with a second snapshot
+                # after reversal; backing remains the independent rollover oracle.
                 journaled_pre[stream] = {"backing": deepcopy(pre["backing"])}
+                if isinstance(pre.get("stream_state"), dict):
+                    journaled_pre[stream]["stream_state"] = deepcopy(pre["stream_state"])
         if journaled_pre:
             fleet_before = journaled_pre
     # P6 never restores a data-stream topology.  Observe it once, before the
@@ -2107,6 +2115,46 @@ def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Pat
             journal.value.setdefault("fleet_fence", {})["external_rollover_observed"] = True
             journal.value["fleet_fence"]["external_rollovers"] = changed
             operations.append("external_rollover_observed")
+            plan_entries = plan if isinstance(plan, dict) else {}
+            reports = []
+            for item in changed:
+                entry = plan_entries.get(item["stream"])
+                status = (entry.get("classification", {}).get("status")
+                          if isinstance(entry, dict) else None)
+                if status not in {"L3", "L3-C"}:
+                    continue
+                pre_names = {pair[0] for pair in item["pre_backing"] if isinstance(pair, list) and len(pair) == 2}
+                for pair in item["post_backing"]:
+                    if not isinstance(pair, list) or len(pair) != 2 or pair[0] in pre_names:
+                        continue
+                    index = pair[0]
+                    try:
+                        quoted = urllib.parse.quote(index, safe="")
+                        reports.append({"stream": item["stream"], "index": index,
+                                        "settings": es_json(es_url, "/" + quoted + "/_settings", "GET", authorization),
+                                        "mappings": es_json(es_url, "/" + quoted + "/_mapping", "GET", authorization),
+                                        "lifecycle": es_json(es_url, "/" + quoted + "/_ilm/explain", "GET", authorization)})
+                    except (InputError, RequestFailure) as error:
+                        # R5 reporting must never make a completed reversal fail.
+                        reports.append({"stream": item["stream"], "index": index,
+                                        "evidence_error": str(error)})
+            if reports:
+                journal.value["fleet_fence"]["rollover_under_installer_template"] = reports
+                operations.append("rollover_under_installer_template")
+        # G3-min is intentionally raw/report-only: no causal classification,
+        # restoration, or rollback-completion decision is derived from it.
+        post_reversal = fleet_stream_snapshot(es_url, authorization)
+        stream_state_diffs = []
+        for stream in sorted(fleet_before):
+            before = fleet_before[stream]
+            after = post_reversal.get(stream, {}) if isinstance(post_reversal, dict) else {}
+            if (isinstance(before, dict) and isinstance(before.get("stream_state"), dict)
+                    and isinstance(after, dict)):
+                ops = rfc6901_diff({"stream_state": before.get("stream_state")},
+                                  {"stream_state": after.get("stream_state")})
+                if ops:
+                    stream_state_diffs.append({"stream": stream, "ops": ops})
+        journal.value.setdefault("fleet_fence", {})["post_reversal_stream_state_diffs"] = stream_state_diffs
     journal.value["rollback_ok"] = True
     journal._persist()
     operations.extend(unswept_operations)
@@ -3110,6 +3158,32 @@ def simulate(es_url: str, authorization: str) -> None:
         raise InputError("W1 index simulation differs")
 
 
+STREAM_STATE_FIELDS = ("lifecycle", "failure_store", "ilm_policy", "prefer_ilm",
+                       "next_generation_managed_by", "generation", "hidden", "system",
+                       "allow_custom_routing", "backing")
+PROJECTED_STREAM_STATE_FIELDS = frozenset(("ilm_policy", "prefer_ilm",
+                                           "next_generation_managed_by"))
+
+
+def _normalized_stream_state(stream: dict, backing_state: list[dict]) -> dict:
+    """Return the SI-1 schema: all fields materialize except absent ILM name."""
+    state = {key: deepcopy(stream.get(key)) for key in STREAM_STATE_FIELDS
+             if key not in {"ilm_policy", "prefer_ilm", "backing"}}
+    # The §E probe confirmed ES's absent effective prefer_ilm default on 9.4.3
+    # and 9.4.4.  Keep it materialized so snapshot add/remove is not API-shape drift.
+    prefer = stream.get("prefer_ilm", True)
+    if type(prefer) is not bool:
+        raise InputError("fleet stream prefer_ilm is invalid")
+    state["prefer_ilm"] = prefer
+    if "ilm_policy" in stream:
+        policy = stream["ilm_policy"]
+        if not isinstance(policy, str) or not policy:
+            raise InputError("fleet stream ilm_policy is invalid")
+        state["ilm_policy"] = policy
+    state["backing"] = sorted(backing_state, key=lambda value: (value["index_name"], value["index_uuid"]))
+    return state
+
+
 def fleet_stream_snapshot(es_url: str, authorization: str) -> dict[str, object]:
     """Capture all current RigSignal streams dynamically for the Step-5 fence."""
     response = es_json(es_url, "/_data_stream/*rigsignal*", "GET", authorization)
@@ -3144,11 +3218,10 @@ def fleet_stream_snapshot(es_url: str, authorization: str) -> dict[str, object]:
         # Keep every data-stream field which is a topology/lifecycle contract.
         # Do not retain status/health: those are explicitly volatile.  The
         # simulate normalization below remains the sole TSDB-boundary filter.
-        state = {key: deepcopy(stream.get(key)) for key in (
-            "lifecycle", "failure_store", "ilm_policy", "next_generation_managed_by",
-            "generation", "hidden", "system", "allow_custom_routing") if key in stream}
-        state["backing"] = sorted(backing_state, key=lambda value: (value["index_name"], value["index_uuid"]))
+        state = _normalized_stream_state(stream, backing_state)
         snapshot[name] = {"backing": sorted(pairs), "stream_state": state,
+                          # The matching template name is always materialized
+                          # and is strict compared (R0/SI-1), never projected.
                           "data_stream_template": stream.get("template"), **outcome}
     return snapshot
 
@@ -3179,6 +3252,128 @@ def rfc6901_diff(before: object, after: object, path: str = "") -> list[dict]:
     return []
 
 
+def _lifecycle_setting(settings: object, name: str) -> list[object]:
+    """Read one setting from nested and flattened simulate renderings."""
+    if not isinstance(settings, dict):
+        raise InputError("fleet simulated lifecycle settings are invalid")
+    values = []
+    flat = "index.lifecycle." + name
+    if flat in settings:
+        values.append(settings[flat])
+    index = settings.get("index")
+    if isinstance(index, dict):
+        lifecycle = index.get("lifecycle")
+        if isinstance(lifecycle, dict) and name in lifecycle:
+            values.append(lifecycle[name])
+        flattened = "lifecycle." + name
+        if flattened in index:
+            values.append(index[flattened])
+    elif index is not None:
+        raise InputError("fleet simulated lifecycle settings are invalid")
+    if not values:
+        return []
+    return values
+
+
+def lifecycle_values_from_simulation(settings: object) -> dict[str, object]:
+    """Extract the R2 lifecycle inputs from normalized `_simulate_index` settings."""
+    names = _lifecycle_setting(settings, "name")
+    prefers = _lifecycle_setting(settings, "prefer_ilm")
+    result: dict[str, object] = {}
+    if names:
+        name = names[0]
+        if not isinstance(name, str) or not name:
+            raise InputError("fleet simulated lifecycle name is invalid")
+        if any(value != name for value in names[1:]):
+            raise InputError("fleet simulated lifecycle settings conflict")
+        result["ilm_policy"] = name
+    if not prefers:
+        # Version-pinned by FENCE-V2B §E3 probe: absent => true on ES 9.4.3/9.4.4.
+        result["prefer_ilm"] = True
+    else:
+        normalized = []
+        for prefer in prefers:
+            if type(prefer) is bool:
+                normalized.append(prefer)
+            elif isinstance(prefer, str) and prefer in {"true", "false"}:
+                normalized.append(prefer == "true")
+            else:
+                raise InputError("fleet simulated lifecycle prefer_ilm is invalid")
+        if any(value != normalized[0] for value in normalized[1:]):
+            raise InputError("fleet simulated lifecycle settings conflict")
+        result["prefer_ilm"] = normalized[0]
+    return result
+
+
+def _stream_dsl_enabled(template: object) -> bool:
+    """Read the effective data-stream lifecycle switch from an index template."""
+    if not isinstance(template, dict):
+        raise InputError("fleet simulated data stream lifecycle is invalid")
+    body = template.get("template", template)
+    if not isinstance(body, dict):
+        raise InputError("fleet simulated data stream lifecycle is invalid")
+    options = body.get("data_stream_options")
+    if options is None:
+        return False
+    if not isinstance(options, dict):
+        raise InputError("fleet simulated data stream lifecycle is invalid")
+    lifecycle = options.get("lifecycle")
+    if lifecycle is None:
+        return False
+    if not isinstance(lifecycle, dict) or type(lifecycle.get("enabled")) is not bool:
+        raise InputError("fleet simulated data stream lifecycle is invalid")
+    return lifecycle["enabled"]
+
+
+def projected_next_generation_managed_by(values: dict[str, object], stream_dsl_enabled: object) -> str:
+    """R3's ratified five-row table; inputs outside it are a refusal."""
+    policy = values.get("ilm_policy")
+    prefer = values.get("prefer_ilm")
+    if policy is not None and (not isinstance(policy, str) or not policy):
+        raise InputError("fleet projected lifecycle policy is invalid")
+    if type(prefer) is not bool or type(stream_dsl_enabled) is not bool:
+        raise InputError("fleet projected lifecycle inputs are invalid")
+    if policy is not None and not stream_dsl_enabled:
+        return "Index Lifecycle Management"
+    if policy is not None and stream_dsl_enabled and prefer:
+        return "Index Lifecycle Management"
+    if policy is not None and stream_dsl_enabled and not prefer:
+        return "Data stream lifecycle"
+    if policy is None and stream_dsl_enabled:
+        return "Data stream lifecycle"
+    if policy is None and not stream_dsl_enabled:
+        return "Unmanaged"
+    raise InputError("fleet projected lifecycle combination is unresolved")
+
+
+def _stream_state_projection(pre: object, simulated_settings: object, template: object) -> list[dict]:
+    if not isinstance(pre, dict):
+        raise InputError("fleet stream snapshot is invalid")
+    values = lifecycle_values_from_simulation(simulated_settings)
+    values["next_generation_managed_by"] = projected_next_generation_managed_by(
+        values, _stream_dsl_enabled(template))
+    expected = deepcopy(pre)
+    for field in PROJECTED_STREAM_STATE_FIELDS:
+        if field in values:
+            expected[field] = values[field]
+        else:
+            expected.pop(field, None)
+    return rfc6901_diff({"stream_state": pre}, {"stream_state": expected})
+
+
+def _merge_projection_dict(base: object, override: object) -> dict:
+    """Merge a component's declared template subtree for lifecycle inputs."""
+    if not isinstance(base, dict) or not isinstance(override, dict):
+        raise InputError("fleet component lifecycle projection is invalid")
+    result = deepcopy(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = _merge_projection_dict(result[key], value)
+        else:
+            result[key] = deepcopy(value)
+    return result
+
+
 def _declared_paths(value: object, path: str = "") -> set[str]:
     """Return leaf pointers for a bundle-owned resolved template declaration."""
     if isinstance(value, dict):
@@ -3189,11 +3384,14 @@ def _declared_paths(value: object, path: str = "") -> set[str]:
     return {path}
 
 
-def _fleet_refusal(message: str, stream: str, ops: list[dict] | None = None) -> InputError:
+def _fleet_refusal(message: str, stream: str, ops: list[dict] | None = None,
+                   reason: str | None = None) -> InputError:
     """Attach the per-stream evidence required by the durable fence journal."""
     error = InputError(message)
     error.stream = stream
     error.ops = deepcopy(ops or [])
+    if reason is not None:
+        error.reason = reason
     return error
 
 
@@ -3365,6 +3563,36 @@ def plan_fleet_fence(es_url: str, authorization: str, snapshot: dict[str, object
                 if isinstance(body, dict):
                     declared.update(_declared_paths(body.get("template", {})))
             entry["owned_paths"] = sorted(declared)
+            # A component-only update is still an affected stream (R1).  For
+            # lifecycle declarations, apply the changed component subtree to
+            # the normalized preimage before taking the same R2/R3 projection.
+            # Other component surfaces remain the established L3-C path.
+            projected_settings = deepcopy(record.get("settings"))
+            projected_template = deepcopy(evidence["winning_body"])
+            if not isinstance(projected_settings, dict) or not isinstance(projected_template, dict):
+                raise _fleet_refusal("fleet component lifecycle projection is invalid", stream)
+            component_template: dict = {}
+            for component in closure:
+                asset = next((item for item in bundle.assets
+                              if item.kind == "component_templates" and item.name == component), None)
+                if asset is None:
+                    continue
+                body = parse_json(asset.data, asset.path)
+                template_body = body.get("template") if isinstance(body, dict) else None
+                if not isinstance(template_body, dict):
+                    raise _fleet_refusal("fleet component lifecycle projection is invalid", stream)
+                settings = template_body.get("settings", {})
+                if not isinstance(settings, dict):
+                    raise _fleet_refusal("fleet component lifecycle projection is invalid", stream)
+                projected_settings = _merge_projection_dict(projected_settings, settings)
+                component_template = _merge_projection_dict(component_template, template_body)
+            winner_template = projected_template.get("template", {})
+            if not isinstance(winner_template, dict):
+                raise _fleet_refusal("fleet component lifecycle projection is invalid", stream)
+            # The composable template's own block has ES's final precedence.
+            projected_template["template"] = _merge_projection_dict(component_template, winner_template)
+            entry["stream_state_ops"] = _stream_state_projection(
+                record.get("stream_state"), projected_settings, projected_template)
         if status == "L3":
             if target is None:
                 raise _fleet_refusal("fleet template projection is unavailable", stream)
@@ -3393,10 +3621,44 @@ def plan_fleet_fence(es_url: str, authorization: str, snapshot: dict[str, object
                                    "pre_synth": pre_synth, "post_synth": post_synth,
                                    "ops": rfc6901_diff(pre_synth, post_synth),
                                    "pre_synth_body": pre_bytes, "post_synth_body": post_bytes}
+            entry["stream_state_ops"] = _stream_state_projection(
+                record.get("stream_state"), post_synth.get("settings"), post_body)
         plan[stream] = entry
     if journal is not None:
         journal.pin_fleet_fence(plan)
     return plan
+
+
+def verify_fleet_stream_overrides(es_url: str, authorization: str, plan: dict) -> None:
+    """R1's four-checkpoint precondition: projection inputs have no overrides."""
+    for stream, entry in sorted(plan.items()):
+        status = (entry.get("classification", {}).get("status")
+                  if isinstance(entry, dict) else None)
+        if status not in {"L3", "L3-C"}:
+            continue
+        quoted = urllib.parse.quote(stream, safe="")
+        for suffix, key in (("/_settings", "settings"), ("/_mappings", "mappings")):
+            response = es_json(es_url, "/_data_stream/" + quoted + suffix, "GET", authorization)
+            rows = response.get("data_streams") if isinstance(response, dict) else None
+            if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
+                raise _fleet_refusal("fleet stream overrides are invalid", stream)
+            value = rows[0].get(key)
+            if not isinstance(value, dict) or value:
+                raise _fleet_refusal("fleet stream overrides are present", stream)
+
+
+def verify_fleet_winner_proofs(es_url: str, authorization: str, plan: dict) -> None:
+    """G1's post-write/late TOCTOU proof: identity and uniqueness only."""
+    for stream, entry in sorted(plan.items()):
+        if not isinstance(entry, dict):
+            continue
+        status = entry.get("classification", {}).get("status")
+        expected = entry.get("classification", {}).get("winning_template")
+        if status not in {"L3", "L3-C"} or not isinstance(expected, str):
+            continue
+        evidence = _winner_evidence(es_url, authorization, stream, None)
+        if evidence.get("unique") is not True or evidence.get("winning_template") != expected:
+            raise _fleet_refusal("fleet winner proof differs", stream)
 
 
 def verify_fleet_fence(pre: dict[str, object], post: dict[str, object], plan: dict,
@@ -3414,14 +3676,31 @@ def verify_fleet_fence(pre: dict[str, object], post: dict[str, object], plan: di
             if not isinstance(before, dict) or not isinstance(after, dict):
                 raise _fleet_refusal("fleet stream snapshot drifted", stream,
                                      rfc6901_diff(before, after))
-            if before.get("backing") != after.get("backing") or before.get("stream_state") != after.get("stream_state"):
-                raise _fleet_refusal("fleet L1 drifted", stream,
-                                     rfc6901_diff({"backing": before.get("backing"),
-                                                   "stream_state": before.get("stream_state")},
-                                                  {"backing": after.get("backing"),
-                                                   "stream_state": after.get("stream_state")}))
             entry = plan.get(stream, {})
             status = entry.get("classification", {}).get("status", "L2") if isinstance(entry, dict) else "L2"
+            # R5 is absolute: no L3/L3-C projection can accept a topology move.
+            if before.get("backing") != after.get("backing"):
+                raise _fleet_refusal("fleet L1 drifted", stream,
+                                     rfc6901_diff({"backing": before.get("backing"),
+                                                   "data_stream_template": before.get("data_stream_template")},
+                                                  {"backing": after.get("backing"),
+                                                   "data_stream_template": after.get("data_stream_template")}))
+            # The matching template name was promoted to a strict R0 surface.
+            if before.get("data_stream_template") != after.get("data_stream_template"):
+                raise _fleet_refusal("fleet L1 drifted", stream,
+                                     rfc6901_diff({"data_stream_template": before.get("data_stream_template")},
+                                                  {"data_stream_template": after.get("data_stream_template")}))
+            stream_ops = rfc6901_diff({"stream_state": before.get("stream_state")},
+                                      {"stream_state": after.get("stream_state")})
+            if status == "L3-C" and stream != DIAGNOSIS_STREAM:
+                raise _fleet_refusal("fleet L3-C stream is unattested", stream)
+            if status in {"L3", "L3-C"}:
+                expected = entry.get("stream_state_ops") if isinstance(entry, dict) else None
+                if not isinstance(expected, list) or stream_ops != expected:
+                    raise _fleet_refusal("fleet stream_state projection differs", stream, stream_ops,
+                                         "stream_state_projection")
+            elif stream_ops:
+                raise _fleet_refusal("fleet L1 drifted", stream, stream_ops)
             pre_real = {key: before[key] for key in ("mappings", "settings", "aliases")}
             post_real = {key: after[key] for key in ("mappings", "settings", "aliases")}
             if status == "L2" and jcs(pre_real) != jcs(post_real):
@@ -3454,7 +3733,8 @@ def verify_fleet_fence(pre: dict[str, object], post: dict[str, object], plan: di
             journal.fleet_fence_snapshot(phase, post)
     except InputError as error:
         if journal is not None:
-            journal.fleet_fence_failure(phase, getattr(error, "stream", None), getattr(error, "ops", []))
+            journal.fleet_fence_failure(phase, getattr(error, "stream", None), getattr(error, "ops", []),
+                                        getattr(error, "reason", None))
         raise
 
 
@@ -3474,7 +3754,8 @@ def verify_late_fleet_fence(post: dict[str, object], late: dict[str, object],
             journal.fleet_fence_snapshot("late", late)
     except InputError as error:
         if journal is not None:
-            journal.fleet_fence_failure("late", getattr(error, "stream", None), getattr(error, "ops", []))
+            journal.fleet_fence_failure("late", getattr(error, "stream", None), getattr(error, "ops", []),
+                                        getattr(error, "reason", None))
         raise
 
 
@@ -3967,6 +4248,7 @@ def main() -> int:
                 try:
                     fleet_plan = plan_fleet_fence(es_url, authorization, pre_fleet_snapshot,
                                                    bundle, planned_actions, journal)
+                    verify_fleet_stream_overrides(es_url, authorization, fleet_plan)
                 except (RequestFailure, InputError) as error:
                     journal.fleet_fence_failure("pre", getattr(error, "stream", None),
                                                 getattr(error, "ops", []))
@@ -4005,6 +4287,12 @@ def main() -> int:
                         action = "noop"
                     fault("after-write-intent")
                 if action != "noop":
+                    if (ownership_profile == "fleet-coexist" and asset.kind == "index_templates"):
+                        try:
+                            # R1: repeat immediately before every template PUT.
+                            verify_fleet_stream_overrides(es_url, authorization, fleet_plan)
+                        except (RequestFailure, InputError) as error:
+                            raise ProvisionError("install failed: fleet stream verification:") from error
                     if asset.kind == "dashboard":
                         fault("dashboard-multipart")
                     install_asset(es_url, kb_url, authorization, asset)
@@ -4035,9 +4323,11 @@ def main() -> int:
             ensure_stream(es_url, authorization)
             simulate(es_url, authorization)
             if ownership_profile == "fleet-coexist":
+                verify_fleet_stream_overrides(es_url, authorization, fleet_plan)
                 post_fleet_snapshot = fleet_stream_snapshot(es_url, authorization)
                 verify_fleet_fence(pre_fleet_snapshot or {}, post_fleet_snapshot,
                                    fleet_plan, journal, "post")
+                verify_fleet_winner_proofs(es_url, authorization, fleet_plan)
         except (RequestFailure, InputError) as error:
             raise ProvisionError("install failed: fleet stream verification:") from error
         if pre_put_snapshot is None:
@@ -4132,8 +4422,10 @@ def main() -> int:
             if ownership_profile == "fleet-coexist":
                 if post_fleet_snapshot is None:
                     raise InputError("late fleet snapshot is unavailable")
+                verify_fleet_stream_overrides(es_url, authorization, fleet_plan)
                 verify_late_fleet_fence(post_fleet_snapshot,
                                         fleet_stream_snapshot(es_url, authorization), journal)
+                verify_fleet_winner_proofs(es_url, authorization, fleet_plan)
             post_condition, post_snapshot = remote_stream_condition(es_url, authorization)
             if post_condition != "compatible" or post_snapshot != pre_put_snapshot:
                 raise InputError("pre-publication stream snapshot drifted")

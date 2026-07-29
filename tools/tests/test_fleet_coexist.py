@@ -23,6 +23,10 @@ class FleetCoexistenceTests(unittest.TestCase):
     def _fleet_record(self, *, backing="one", mapping="keyword", lifecycle="ilm-a"):
         return {"backing": [(".ds-" + backing, "uuid-" + backing)],
                 "stream_state": {"generation": 1, "ilm_policy": lifecycle,
+                                 "prefer_ilm": True,
+                                 "next_generation_managed_by": "Index Lifecycle Management",
+                                 "lifecycle": None, "failure_store": None,
+                                 "hidden": None, "system": None, "allow_custom_routing": None,
                                  "backing": [{"index_name": ".ds-" + backing,
                                               "index_uuid": "uuid-" + backing,
                                               "prefer_ilm": True, "managed_by": "Index Lifecycle Management"}]},
@@ -285,8 +289,9 @@ class FleetCoexistenceTests(unittest.TestCase):
             operations, fleet_snapshot = self._rollback_with_fleet_snapshot(root, {stream: live})
             fence = INSTALL.TransactionJournal(root, "fleet-coexist").value["fleet_fence"]
         self.assertIn("external_rollover_observed", operations)
-        fleet_snapshot.assert_called_once_with("https://es", "auth")
+        self.assertEqual(fleet_snapshot.call_count, 2)
         self.assertTrue(fence["external_rollover_observed"])
+        self.assertEqual(fence["post_reversal_stream_state_diffs"], [])
         self.assertEqual(fence["external_rollovers"], [{"stream": stream,
                                                           "pre_backing": [[".ds-one", "uuid-one"]],
                                                           "post_backing": [[".ds-one", "uuid-one"],
@@ -302,7 +307,7 @@ class FleetCoexistenceTests(unittest.TestCase):
             operations, fleet_snapshot = self._rollback_with_fleet_snapshot(root, {stream: deepcopy(pre)})
             fence = INSTALL.TransactionJournal(root, "fleet-coexist").value["fleet_fence"]
         self.assertNotIn("external_rollover_observed", operations)
-        fleet_snapshot.assert_called_once_with("https://es", "auth")
+        self.assertEqual(fleet_snapshot.call_count, 2)
         self.assertNotIn("external_rollover_observed", fence)
         self.assertNotIn("external_rollovers", fence)
 
@@ -318,7 +323,7 @@ class FleetCoexistenceTests(unittest.TestCase):
                 root, {stream: deepcopy(pre), INSTALL.DIAGNOSIS_STREAM: created})
             fence = INSTALL.TransactionJournal(root, "fleet-coexist").value["fleet_fence"]
         self.assertNotIn("external_rollover_observed", operations)
-        fleet_snapshot.assert_called_once_with("https://es", "auth")
+        self.assertEqual(fleet_snapshot.call_count, 2)
         self.assertNotIn("external_rollover_observed", fence)
 
     def test_rollback_without_fence_plan_skips_external_rollover_observation(self):
@@ -347,7 +352,8 @@ class FleetCoexistenceTests(unittest.TestCase):
         l3 = {"logs-rigsignal.events-default": {"classification": {"status": "L3"},
               "projection": {"ops": INSTALL.rfc6901_diff(
                   {key: l3_before[key] for key in ("mappings", "settings", "aliases")},
-                  {key: l3_after[key] for key in ("mappings", "settings", "aliases")})}}}
+                  {key: l3_after[key] for key in ("mappings", "settings", "aliases")})},
+              "stream_state_ops": []}}
         INSTALL.verify_fleet_fence({"logs-rigsignal.events-default": l3_before},
                                    {"logs-rigsignal.events-default": l3_after}, l3)
         with self.assertRaises(INSTALL.InputError):  # leg 4: expected change does not excuse rollover
@@ -359,7 +365,7 @@ class FleetCoexistenceTests(unittest.TestCase):
                                        {"logs-rigsignal.events-default": {
                                            "classification": {"status": "L3-C"}, "owned_paths": ["/mappings"]}})
         l3c = {diagnosis_stream: {"classification": {"status": "L3-C"},
-              "owned_paths": ["/mappings/properties/rigsignal"]}}
+              "owned_paths": ["/mappings/properties/rigsignal"], "stream_state_ops": []}}
         diagnosis_after = self._fleet_record(); diagnosis_after["mappings"] = {
             "properties": {"sample": {"type": "keyword"}, "rigsignal": {"properties": {"diagnosis": {}}}}}
         INSTALL.verify_fleet_fence({diagnosis_stream: before["logs-rigsignal.events-default"]},
@@ -370,6 +376,83 @@ class FleetCoexistenceTests(unittest.TestCase):
         self.assertEqual(ops, [{"op": "replace", "path": "/a~1b", "value": 2},
                                {"op": "remove", "path": "/gone"},
                                {"op": "add", "path": "/til~0de", "value": [1]}])
+
+    def test_v2b_si1_stream_state_schema_matrix_is_complete(self):
+        """Every normalized field has add/remove/replace classification coverage."""
+        sanctioned = {"ilm_policy", "prefer_ilm", "next_generation_managed_by"}
+        self.assertEqual(set(INSTALL.STREAM_STATE_FIELDS), sanctioned | {
+            "lifecycle", "failure_store", "generation", "hidden", "system",
+            "allow_custom_routing", "backing"})
+        stream = "logs-rigsignal.events-default"
+        for field in INSTALL.STREAM_STATE_FIELDS:
+            for operation in ("add", "remove", "replace"):
+                before = self._fleet_record()
+                after = deepcopy(before)
+                if operation == "add":
+                    before["stream_state"].pop(field, None)
+                    after["stream_state"][field] = "added"
+                elif operation == "remove":
+                    after["stream_state"].pop(field, None)
+                else:
+                    after["stream_state"][field] = "replaced"
+                ops = INSTALL.rfc6901_diff({"stream_state": before["stream_state"]},
+                                           {"stream_state": after["stream_state"]})
+                plan = {stream: {"classification": {"status": "L3"},
+                                 "projection": {"ops": []},
+                                 "stream_state_ops": ops if field in sanctioned else []}}
+                if field in sanctioned:
+                    INSTALL.verify_fleet_fence({stream: before}, {stream: after}, plan)
+                else:
+                    with self.assertRaises(INSTALL.InputError):
+                        INSTALL.verify_fleet_fence({stream: before}, {stream: after}, plan)
+
+    def test_v2b_lifecycle_extractor_normalizes_renderings_and_refuses_conflict(self):
+        self.assertEqual(INSTALL.lifecycle_values_from_simulation({
+            "index": {"lifecycle": {"name": "ilm-a", "prefer_ilm": "false"}}}),
+            {"ilm_policy": "ilm-a", "prefer_ilm": False})
+        self.assertEqual(INSTALL.lifecycle_values_from_simulation({
+            "index.lifecycle.name": "ilm-a", "index.lifecycle.prefer_ilm": True}),
+            {"ilm_policy": "ilm-a", "prefer_ilm": True})
+        self.assertEqual(INSTALL.lifecycle_values_from_simulation({
+            "index": {"lifecycle": {"name": "ilm-a", "prefer_ilm": False}},
+            "index.lifecycle.prefer_ilm": "false"}),
+            {"ilm_policy": "ilm-a", "prefer_ilm": False})
+        self.assertEqual(INSTALL.lifecycle_values_from_simulation({}), {"prefer_ilm": True})
+        with self.assertRaises(INSTALL.InputError):
+            INSTALL.lifecycle_values_from_simulation({"index": {"lifecycle": {"name": "a"}},
+                                                       "index.lifecycle.name": "b"})
+
+    def test_v2b_r3_decision_table_and_refusals(self):
+        rows = [
+            ({"ilm_policy": "a", "prefer_ilm": True}, False, "Index Lifecycle Management"),
+            ({"ilm_policy": "a", "prefer_ilm": True}, True, "Index Lifecycle Management"),
+            ({"ilm_policy": "a", "prefer_ilm": False}, True, "Data stream lifecycle"),
+            ({"prefer_ilm": True}, True, "Data stream lifecycle"),
+            ({"prefer_ilm": False}, False, "Unmanaged"),
+        ]
+        for values, dsl, expected in rows:
+            self.assertEqual(INSTALL.projected_next_generation_managed_by(values, dsl), expected)
+        for values, dsl in (({}, False), ({"ilm_policy": "", "prefer_ilm": True}, False),
+                            ({"prefer_ilm": "true"}, False)):
+            with self.assertRaises(INSTALL.InputError):
+                INSTALL.projected_next_generation_managed_by(values, dsl)
+
+    def test_v2b_override_and_winner_reproof_are_scoped_and_fail_closed(self):
+        stream = "logs-rigsignal.events-default"
+        plan = {stream: {"classification": {"status": "L3", "winning_template": "winner"}}}
+        with mock.patch.object(INSTALL, "es_json", side_effect=[
+                {"data_streams": [{"settings": {}}],}, {"data_streams": [{"mappings": {}}]}]):
+            INSTALL.verify_fleet_stream_overrides("https://es", "auth", plan)
+        with mock.patch.object(INSTALL, "es_json", return_value={"data_streams": [{"settings": {"index": {}}}]}):
+            with self.assertRaises(INSTALL.InputError):
+                INSTALL.verify_fleet_stream_overrides("https://es", "auth", plan)
+        with mock.patch.object(INSTALL, "_winner_evidence", return_value={"unique": True,
+                                                                              "winning_template": "winner"}):
+            INSTALL.verify_fleet_winner_proofs("https://es", "auth", plan)
+        with mock.patch.object(INSTALL, "_winner_evidence", return_value={"unique": False,
+                                                                              "winning_template": "winner"}):
+            with self.assertRaises(INSTALL.InputError):
+                INSTALL.verify_fleet_winner_proofs("https://es", "auth", plan)
 
     def test_v2_late_fence_rejects_any_post_candidate_drift(self):
         post = {"logs-rigsignal.events-default": self._fleet_record()}
