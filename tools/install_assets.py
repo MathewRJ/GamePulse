@@ -3665,22 +3665,38 @@ def plan_fleet_fence(es_url: str, authorization: str, snapshot: dict[str, object
     return plan
 
 
-def verify_fleet_stream_overrides(es_url: str, authorization: str, plan: dict) -> None:
-    """R1's four-checkpoint precondition: projection inputs have no overrides."""
-    for stream, entry in sorted(plan.items()):
-        status = (entry.get("classification", {}).get("status")
-                  if isinstance(entry, dict) else None)
-        if status not in {"L3", "L3-C"}:
-            continue
-        quoted = urllib.parse.quote(stream, safe="")
-        for suffix, key in (("/_settings", "settings"), ("/_mappings", "mappings")):
-            response = es_json(es_url, "/_data_stream/" + quoted + suffix, "GET", authorization)
-            rows = response.get("data_streams") if isinstance(response, dict) else None
-            if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
-                raise _fleet_refusal("fleet stream overrides are invalid", stream)
-            value = rows[0].get(key)
-            if not isinstance(value, dict) or value:
-                raise _fleet_refusal("fleet stream overrides are present", stream)
+def verify_fleet_stream_overrides(es_url: str, authorization: str, plan: dict,
+                                  journal: TransactionJournal | None = None,
+                                  phase: str | None = None) -> None:
+    """R1's four-checkpoint precondition: projection inputs have no overrides.
+
+    The refusal is journaled as ``fleet_fence.failure`` at every checkpoint
+    that passes a journal, so the operator can triage layer/source from the
+    durable record rather than transient stderr.
+    """
+    try:
+        for stream, entry in sorted(plan.items()):
+            status = (entry.get("classification", {}).get("status")
+                      if isinstance(entry, dict) else None)
+            if status not in {"L3", "L3-C"}:
+                continue
+            quoted = urllib.parse.quote(stream, safe="")
+            for suffix, key in (("/_settings", "settings"), ("/_mappings", "mappings")):
+                response = es_json(es_url, "/_data_stream/" + quoted + suffix, "GET", authorization)
+                rows = response.get("data_streams") if isinstance(response, dict) else None
+                if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
+                    raise _fleet_refusal("fleet stream overrides are invalid", stream,
+                                         reason="stream_overrides_invalid")
+                value = rows[0].get(key)
+                if not isinstance(value, dict) or value:
+                    raise _fleet_refusal("fleet stream overrides are present", stream,
+                                         reason="stream_overrides_present")
+    except InputError as error:
+        if journal is not None and phase is not None:
+            journal.fleet_fence_failure(phase, getattr(error, "stream", None),
+                                        getattr(error, "ops", []),
+                                        getattr(error, "reason", None))
+        raise
 
 
 def verify_fleet_winner_proofs(es_url: str, authorization: str, plan: dict) -> None:
@@ -4321,7 +4337,8 @@ def main() -> int:
                     if (ownership_profile == "fleet-coexist" and asset.kind == "index_templates"):
                         try:
                             # R1: repeat immediately before every template PUT.
-                            verify_fleet_stream_overrides(es_url, authorization, fleet_plan)
+                            verify_fleet_stream_overrides(es_url, authorization, fleet_plan,
+                                                          journal, "write")
                         except (RequestFailure, InputError) as error:
                             raise ProvisionError("install failed: fleet stream verification:") from error
                     if asset.kind == "dashboard":
@@ -4354,7 +4371,8 @@ def main() -> int:
             ensure_stream(es_url, authorization)
             simulate(es_url, authorization)
             if ownership_profile == "fleet-coexist":
-                verify_fleet_stream_overrides(es_url, authorization, fleet_plan)
+                verify_fleet_stream_overrides(es_url, authorization, fleet_plan,
+                                              journal, "post")
                 post_fleet_snapshot = fleet_stream_snapshot(es_url, authorization)
                 verify_fleet_fence(pre_fleet_snapshot or {}, post_fleet_snapshot,
                                    fleet_plan, journal, "post")
@@ -4453,7 +4471,8 @@ def main() -> int:
             if ownership_profile == "fleet-coexist":
                 if post_fleet_snapshot is None:
                     raise InputError("late fleet snapshot is unavailable")
-                verify_fleet_stream_overrides(es_url, authorization, fleet_plan)
+                verify_fleet_stream_overrides(es_url, authorization, fleet_plan,
+                                              journal, "late")
                 verify_late_fleet_fence(post_fleet_snapshot,
                                         fleet_stream_snapshot(es_url, authorization), journal)
                 verify_fleet_winner_proofs(es_url, authorization, fleet_plan)

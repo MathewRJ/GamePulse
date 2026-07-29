@@ -534,6 +534,22 @@ class FleetCoexistenceTests(unittest.TestCase):
             with self.assertRaises(INSTALL.InputError):
                 INSTALL.verify_fleet_winner_proofs("https://es", "auth", plan)
 
+    def test_v2b_override_refusal_journals_failure_at_late_checkpoints(self):
+        stream = "logs-rigsignal.events-default"
+        plan = {stream: {"classification": {"status": "L3", "winning_template": "winner"}}}
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            with mock.patch.object(INSTALL, "es_json",
+                                   return_value={"data_streams": [{"settings": {"index": {"number_of_replicas": "2"}}}]}):
+                with self.assertRaises(INSTALL.InputError):
+                    INSTALL.verify_fleet_stream_overrides("https://es", "auth", plan,
+                                                          journal, "late")
+            failure = journal.value["fleet_fence"]["failure"]
+        self.assertEqual(failure["layer"], "late")
+        self.assertEqual(failure["stream"], stream)
+        self.assertEqual(failure["reason"], "stream_overrides_present")
+
     def test_v2_late_fence_rejects_any_post_candidate_drift(self):
         post = {"logs-rigsignal.events-default": self._fleet_record()}
         INSTALL.verify_late_fleet_fence(post, deepcopy(post))

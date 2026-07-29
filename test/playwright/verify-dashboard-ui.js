@@ -193,9 +193,15 @@ async function run() {
   console.log(`Dashboard title:    ${title || "(no title)"}`);
   console.log(`Panels in export:   ${panels.length} (${titles.length} with non-blank titles)`);
 
-  // 2. Open with Playwright + storage-state.
+  // 2. Open with Playwright + storage-state. A4_TLS_SPKI pins a private-CA
+  // Kibana's exact served key (Chromium ignores system CA trust here).
   const { chromium } = loadPlaywright();
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({
+    headless: true,
+    args: process.env.A4_TLS_SPKI
+      ? [`--ignore-certificate-errors-spki-list=${process.env.A4_TLS_SPKI}`]
+      : [],
+  });
   const context = await browser.newContext({
     storageState: args.storageState,
     viewport: { width: 1440, height: 1000 },
