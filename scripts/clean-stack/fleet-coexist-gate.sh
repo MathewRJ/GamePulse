@@ -612,7 +612,7 @@ leg_n() {
   jq -e --argjson node_width "$node_width" '
     .fleet_fence.plan["metrics-rigsignal.profiles-default"] |
     (.classification.status == "L3") and
-    (.projection.ops | any(.[]; . == {"op":"add","path":"/mappings/properties/node.width","value":$node_width})) and
+    (.projection.ops | any(.[]; . == {"op":"add","path":"/mappings/properties/node/properties/width","value":$node_width})) and
     (.stream_state_ops == []) and
     (.classification.winner_evidence.matching_set | type == "array") and
     (.classification.winner_evidence.matching_set | length > 0) and
