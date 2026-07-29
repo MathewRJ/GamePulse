@@ -674,9 +674,14 @@ leg_r() {
 # independent proof that no foreign sibling was smuggled into that parent op.
 leg_s() {
   setup
-  api DELETE '/_data_stream/logs-rigsignal.diagnosis-default' >/dev/null
-  api PUT '/_component_template/logs-rigsignal.diagnosis-mappings' --data-binary '{"template":{"mappings":{"properties":{}}}}' >/dev/null
-  api PUT '/_data_stream/logs-rigsignal.diagnosis-default' >/dev/null
+  # Diverge the component AFTER setup created the stream: the backing index
+  # keeps the canonical owned mapping (adoption stays compatible) while the
+  # simulate-space resolution diverges — the only reachable L3-C add shape.
+  # Remove ONLY the rigsignal subtree: deleting host.name too flips ES's
+  # derived logsdb add_host_name_field setting, an unsanctioned delta the
+  # post fence rightly refuses.
+  jq 'del(.template.mappings.properties.rigsignal)' "$REPO_ROOT/elastic/component-templates/logs-rigsignal.diagnosis-mappings.json" >"$RUN_DIR/leg-s-reduced-component.json"
+  api PUT '/_component_template/logs-rigsignal.diagnosis-mappings' --data-binary "@$RUN_DIR/leg-s-reduced-component.json" >/dev/null
   installer || fail 'Leg-S L3-C parent replacement refused'
   jq -e '
     .fleet_fence.plan["logs-rigsignal.diagnosis-default"] |
