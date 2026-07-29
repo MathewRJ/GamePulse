@@ -3384,6 +3384,34 @@ def _declared_paths(value: object, path: str = "") -> set[str]:
     return {path}
 
 
+def _declared_leaf_payloads(value: object, path: str = "") -> dict[str, object]:
+    """Return RFC-6901 leaf pointers and payloads; lists are deliberately atomic."""
+    if isinstance(value, dict):
+        result: dict[str, object] = {}
+        for key, member in value.items():
+            result.update(_declared_leaf_payloads(member, path + "/" + _pointer_escape(key)))
+        return result or {path: {}}
+    return {path: deepcopy(value)}
+
+
+def _l3c_op_matches_owned_payload(op: object, owned: object) -> bool:
+    """Accept an L3-C op only when its complete payload is bundle-declared.
+
+    ``rfc6901_diff`` emits one operation for an added/replaced dictionary.
+    That operation can therefore carry several owned leaves, but it must carry
+    all and only the declared leaves beneath its path.  Lists remain one leaf,
+    matching the differ's atomic-list contract.
+    """
+    if not isinstance(op, dict) or op.get("op") not in {"add", "replace"}:
+        return False
+    path = op.get("path")
+    if not isinstance(path, str) or "value" not in op or not isinstance(owned, dict):
+        return False
+    expected = {leaf: value for leaf, value in owned.items()
+                if isinstance(leaf, str) and (leaf == path or leaf.startswith(path + "/"))}
+    return bool(expected) and _declared_leaf_payloads(op["value"], path) == expected
+
+
 def _fleet_refusal(message: str, stream: str, ops: list[dict] | None = None,
                    reason: str | None = None) -> InputError:
     """Attach the per-stream evidence required by the durable fence journal."""
@@ -3545,6 +3573,7 @@ def plan_fleet_fence(es_url: str, authorization: str, snapshot: dict[str, object
         entry: dict = {"classification": classification, "pre": deepcopy(record)}
         if status == "L3-C":
             declared: set[str] = set()
+            declared_payloads: dict[str, object] = {}
             for component in closure:
                 asset = next((item for item in bundle.assets
                               if item.kind == "component_templates" and item.name == component), None)
@@ -3554,15 +3583,20 @@ def plan_fleet_fence(es_url: str, authorization: str, snapshot: dict[str, object
                     except InputError as error:
                         raise _annotate_fleet_refusal(error, stream) from error
                     if isinstance(body, dict):
-                        declared.update(_declared_paths(body.get("template", {})))
+                        template_body = body.get("template", {})
+                        declared.update(_declared_paths(template_body))
+                        declared_payloads.update(_declared_leaf_payloads(template_body))
             if target is not None:
                 try:
                     body = parse_json(target.data, target.path)
                 except InputError as error:
                     raise _annotate_fleet_refusal(error, stream) from error
                 if isinstance(body, dict):
-                    declared.update(_declared_paths(body.get("template", {})))
+                    template_body = body.get("template", {})
+                    declared.update(_declared_paths(template_body))
+                    declared_payloads.update(_declared_leaf_payloads(template_body))
             entry["owned_paths"] = sorted(declared)
+            entry["owned_leaf_payloads"] = declared_payloads
             # A component-only update is still an affected stream (R1).  For
             # lifecycle declarations, apply the changed component subtree to
             # the normalized preimage before taking the same R2/R3 projection.
@@ -3716,18 +3750,13 @@ def verify_fleet_fence(pre: dict[str, object], post: dict[str, object], plan: di
                 # conservative pointer-equivalent check for this closed W1 set.
                 # The owned diagnosis paths are intentionally the only surface
                 # allowed to move in this class.
-                owned = set(entry.get("owned_paths", []))
+                owned = entry.get("owned_leaf_payloads")
                 if stream != DIAGNOSIS_STREAM:
                     raise _fleet_refusal("fleet L3-C stream is unattested", stream)
-                if not owned:
+                if not isinstance(owned, dict) or not owned:
                     raise _fleet_refusal("fleet L3-C attestation is unavailable", stream)
                 for op in rfc6901_diff(pre_real, post_real):
-                    # A newly introduced owned leaf may necessarily appear as
-                    # one RFC add at its absent object parent.  That parent is
-                    # still within the declared owned subtree; dictionary
-                    # recursion keeps unrelated siblings as separate ops.
-                    if not any(op["path"] == path or op["path"].startswith(path + "/")
-                               or (op["path"] and path.startswith(op["path"] + "/")) for path in owned):
+                    if not _l3c_op_matches_owned_payload(op, owned):
                         raise _fleet_refusal("fleet L3-C outside-owned drifted", stream, [op])
         if journal is not None:
             journal.fleet_fence_snapshot(phase, post)

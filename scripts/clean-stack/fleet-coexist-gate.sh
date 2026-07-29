@@ -9,13 +9,13 @@ source "$SCRIPT_DIR/lib.sh"
 
 ES_VERSION='' KB_VERSION='' BUNDLE='' PREDECESSOR_MANIFEST='' KEEP=0
 declare -a LEGS=()
-usage() { printf '%s\n' 'Usage: fleet-coexist-gate.sh --es-version 9.4.3|9.4.4 [--kb-version VERSION] --leg a..r [--bundle PATH] [--predecessor-manifest PATH] [--all]' 'Solo-screen subset: fleet legs a/b/i/n/o/p/q/r plus adoption leg 1.' >&2; }
+usage() { printf '%s\n' 'Usage: fleet-coexist-gate.sh --es-version 9.4.3|9.4.4 [--kb-version VERSION] --leg a..s [--bundle PATH] [--predecessor-manifest PATH] [--all]' 'Solo-screen subset: fleet legs a/b/i/n/o/p/q/r/s plus adoption leg 1.' >&2; }
 version() { [[ "$1" =~ ^9\.4\.[34]$ ]]; }
 fail() { printf 'ASSERT FAIL %s\n' "$*" >&2; return 1; }
 while (($#)); do case "$1" in
   --es-version) ES_VERSION="${2:-}"; shift 2 ;; --kb-version) KB_VERSION="${2:-}"; shift 2 ;;
   --bundle) BUNDLE="${2:-}"; shift 2 ;; --predecessor-manifest) PREDECESSOR_MANIFEST="${2:-}"; shift 2 ;; --leg) LEGS+=("${2:-}"); shift 2 ;;
-  --all) LEGS=(a b c d e f g h i j k l m n o p q r); shift ;; --keep) KEEP=1; shift ;;
+  --all) LEGS=(a b c d e f g h i j k l m n o p q r s); shift ;; --keep) KEEP=1; shift ;;
   -h|--help) usage; exit 0 ;; *) usage; exit 2 ;; esac; done
 [[ -n "$ES_VERSION" ]] || { usage; exit 2; }; KB_VERSION="${KB_VERSION:-$ES_VERSION}"
 version "$ES_VERSION" && version "$KB_VERSION" && [[ "$ES_VERSION" == "$KB_VERSION" ]] || { usage; exit 2; }
@@ -669,6 +669,29 @@ leg_r() {
   jq -e '(.fleet_fence.rollover_under_installer_template | length) > 0 and (.fleet_fence.rollover_under_installer_template[0] | has("settings") and has("mappings") and has("lifecycle"))' "$RUN_DIR/enrollment/fleet-coexist-journal.json" >/dev/null || fail 'Leg-R lacks hybrid rollover evidence'
 }
 
+# S: L3-C must accept the real parent-level add generated when the diagnosis
+# component restores its mapping subtree.  The journaled leaf payload is the
+# independent proof that no foreign sibling was smuggled into that parent op.
+leg_s() {
+  setup
+  api DELETE '/_data_stream/logs-rigsignal.diagnosis-default' >/dev/null
+  api PUT '/_component_template/logs-rigsignal.diagnosis-mappings' --data-binary '{"template":{"mappings":{"properties":{}}}}' >/dev/null
+  api PUT '/_data_stream/logs-rigsignal.diagnosis-default' >/dev/null
+  installer || fail 'Leg-S L3-C parent replacement refused'
+  jq -e '
+    .fleet_fence.plan["logs-rigsignal.diagnosis-default"] |
+    (.classification.status == "L3-C") and
+    (.owned_leaf_payloads | type == "object" and length > 0) and
+    (.owned_leaf_payloads | keys | any(. == "/mappings/properties/rigsignal/properties/diagnosis/properties/confidence/type"))
+  ' "$RUN_DIR/enrollment/fleet-coexist-journal.json" >/dev/null || fail 'Leg-S lacks L3-C leaf payload attestation'
+  jq -e '
+    .fleet_fence.snapshots.post.state["logs-rigsignal.diagnosis-default"] as $post |
+    .fleet_fence.plan["logs-rigsignal.diagnosis-default"].owned_leaf_payloads as $owned |
+    ($post.mappings.properties.rigsignal | type == "object") and
+    ($owned | length > 0)
+  ' "$RUN_DIR/enrollment/fleet-coexist-journal.json" >/dev/null || fail 'Leg-S did not exercise diagnosis parent payload'
+}
+
 # P: P3 refuses a non-approved predecessor before any cluster write, while the
 # set-valued manifest permits the P6-retained pipeline state on a retry.
 leg_p() {
@@ -695,4 +718,4 @@ leg_p() {
   PREDECESSOR_MANIFEST="$RUN_DIR/predecessor-good.json" installer || fail 'Leg-P post-retained-pipeline retry did not pass predecessor barrier'
 }
 
-for leg in "${LEGS[@]}"; do case "$leg" in a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r) "leg_$leg" ;; *) fail "unknown leg: $leg"; exit 2 ;; esac; done
+for leg in "${LEGS[@]}"; do case "$leg" in a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s) "leg_$leg" ;; *) fail "unknown leg: $leg"; exit 2 ;; esac; done

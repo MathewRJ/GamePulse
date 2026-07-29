@@ -365,11 +365,66 @@ class FleetCoexistenceTests(unittest.TestCase):
                                        {"logs-rigsignal.events-default": {
                                            "classification": {"status": "L3-C"}, "owned_paths": ["/mappings"]}})
         l3c = {diagnosis_stream: {"classification": {"status": "L3-C"},
-              "owned_paths": ["/mappings/properties/rigsignal"], "stream_state_ops": []}}
+              "owned_leaf_payloads": {
+                  "/mappings/properties/rigsignal/properties/diagnosis": {}},
+              "stream_state_ops": []}}
         diagnosis_after = self._fleet_record(); diagnosis_after["mappings"] = {
             "properties": {"sample": {"type": "keyword"}, "rigsignal": {"properties": {"diagnosis": {}}}}}
         INSTALL.verify_fleet_fence({diagnosis_stream: before["logs-rigsignal.events-default"]},
                                    {diagnosis_stream: diagnosis_after}, l3c)
+
+    def test_v2b_l3c_parent_payload_matches_exact_owned_leaves(self):
+        """A parent RFC op is valid only for the exact declared leaf payload."""
+        stream = INSTALL.DIAGNOSIS_STREAM
+        before = self._fleet_record()
+        owned = {
+            "/mappings/properties/rigsignal/properties/diagnosis/type": "keyword",
+            "/mappings/properties/rigsignal/properties/summary/type": "text",
+        }
+        plan = {stream: {"classification": {"status": "L3-C"},
+                         "owned_leaf_payloads": owned, "stream_state_ops": []}}
+
+        def candidate(rigsignal):
+            after = deepcopy(before)
+            after["mappings"]["properties"]["rigsignal"] = rigsignal
+            return after
+
+        exact = {"properties": {"diagnosis": {"type": "keyword"},
+                                "summary": {"type": "text"}}}
+        INSTALL.verify_fleet_fence({stream: before}, {stream: candidate(exact)}, plan)
+
+        with self.assertRaisesRegex(INSTALL.InputError, "fleet L3-C outside-owned drifted"):
+            INSTALL.verify_fleet_fence(
+                {stream: before}, {stream: candidate({"properties": {
+                    **exact["properties"], "foreign": {"type": "long"}}})}, plan)
+        with self.assertRaisesRegex(INSTALL.InputError, "fleet L3-C outside-owned drifted"):
+            INSTALL.verify_fleet_fence(
+                {stream: before}, {stream: candidate({"properties": {
+                    "diagnosis": {"type": "keyword", "properties": {"foreign": {"type": "long"}}},
+                    "summary": {"type": "text"}}})}, plan)
+        with self.assertRaisesRegex(INSTALL.InputError, "fleet L3-C outside-owned drifted"):
+            INSTALL.verify_fleet_fence(
+                {stream: before}, {stream: candidate({"properties": {
+                    "diagnosis": {"type": "keyword"}}})}, plan)
+
+    def test_v2b_l3c_lists_are_atomic_leaf_payloads(self):
+        stream = INSTALL.DIAGNOSIS_STREAM
+        before = self._fleet_record()
+        before["mappings"]["properties"]["rigsignal"] = {"tags": ["old"]}
+        path = "/mappings/properties/rigsignal/tags"
+        plan = {stream: {"classification": {"status": "L3-C"},
+                         "owned_leaf_payloads": {path: ["alpha", "beta"]},
+                         "stream_state_ops": []}}
+        after = deepcopy(before)
+        after["mappings"]["properties"]["rigsignal"]["tags"] = ["alpha", "beta"]
+        self.assertEqual(INSTALL.rfc6901_diff(
+            {key: before[key] for key in ("mappings", "settings", "aliases")},
+            {key: after[key] for key in ("mappings", "settings", "aliases")}),
+            [{"op": "replace", "path": path, "value": ["alpha", "beta"]}])
+        INSTALL.verify_fleet_fence({stream: before}, {stream: after}, plan)
+        after["mappings"]["properties"]["rigsignal"]["tags"] = ["beta", "alpha"]
+        with self.assertRaisesRegex(INSTALL.InputError, "fleet L3-C outside-owned drifted"):
+            INSTALL.verify_fleet_fence({stream: before}, {stream: after}, plan)
 
     def test_v2_rfc6901_ops_include_values_and_escape(self):
         ops = INSTALL.rfc6901_diff({"a/b": 1, "gone": True}, {"a/b": 2, "til~de": [1]})
