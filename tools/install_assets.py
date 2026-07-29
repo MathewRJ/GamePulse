@@ -2123,9 +2123,11 @@ def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Pat
                           if isinstance(entry, dict) else None)
                 if status not in {"L3", "L3-C"}:
                     continue
-                pre_names = {pair[0] for pair in item["pre_backing"] if isinstance(pair, list) and len(pair) == 2}
+                # Journaled pre pairs are JSON lists; the live snapshot builds
+                # tuples — accept both or the loop silently skips every pair.
+                pre_names = {pair[0] for pair in item["pre_backing"] if isinstance(pair, (list, tuple)) and len(pair) == 2}
                 for pair in item["post_backing"]:
-                    if not isinstance(pair, list) or len(pair) != 2 or pair[0] in pre_names:
+                    if not isinstance(pair, (list, tuple)) or len(pair) != 2 or pair[0] in pre_names:
                         continue
                     index = pair[0]
                     try:

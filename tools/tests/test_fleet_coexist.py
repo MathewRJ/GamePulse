@@ -297,6 +297,31 @@ class FleetCoexistenceTests(unittest.TestCase):
                                                           "post_backing": [[".ds-one", "uuid-one"],
                                                                            [".ds-two", "uuid-two"]]}])
 
+    def test_rollback_reports_hybrid_index_evidence_for_l3_stream_with_tuple_backing(self):
+        # The live snapshot builds backing pairs as tuples, not lists; the
+        # report loop must accept both or it silently skips every new index.
+        stream = "logs-rigsignal.events-default"
+        pre = self._fleet_record(backing="one")
+        live = deepcopy(pre)
+        live["backing"] = [(".ds-one", "uuid-one"), (".ds-two", "uuid-two")]
+        evidence = {"/.ds-two/_settings": {"settings": True},
+                    "/.ds-two/_mapping": {"mappings": True},
+                    "/.ds-two/_ilm/explain": {"lifecycle": True}}
+        with tempfile.TemporaryDirectory() as directory:
+            root = INSTALL.secure_root(Path(directory) / "transaction")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            journal.pin_fleet_fence({stream: {"pre": pre,
+                                              "classification": {"status": "L3"}}})
+            with mock.patch.object(INSTALL, "es_json",
+                                   side_effect=lambda url, path, *args, **kwargs: evidence[path]):
+                operations, _ = self._rollback_with_fleet_snapshot(root, {stream: live})
+            fence = INSTALL.TransactionJournal(root, "fleet-coexist").value["fleet_fence"]
+        self.assertIn("rollover_under_installer_template", operations)
+        self.assertEqual(fence["rollover_under_installer_template"],
+                         [{"stream": stream, "index": ".ds-two",
+                           "settings": {"settings": True}, "mappings": {"mappings": True},
+                           "lifecycle": {"lifecycle": True}}])
+
     def test_rollback_does_not_report_unchanged_journaled_pre_backing(self):
         stream = "logs-rigsignal.events-default"
         pre = self._fleet_record()
