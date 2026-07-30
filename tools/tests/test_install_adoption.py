@@ -17,6 +17,20 @@ SPEC.loader.exec_module(INSTALL)
 
 
 class InstallAdoptionTests(unittest.TestCase):
+    def setUp(self):
+        # main() deliberately uses the production boundary of /.  These
+        # integration tests are about adoption, not host namespace ownership.
+        self.ancestor_check = patch.object(INSTALL, "check_install_root_ancestors")
+        self.install_preflight = patch.object(INSTALL, "check_install_preflight",
+                                              return_value=(Path("/canonical/ca.pem"),
+                                                            Path("/canonical/agent")))
+        self.ancestor_check.start()
+        self.install_preflight.start()
+
+    def tearDown(self):
+        self.ancestor_check.stop()
+        self.install_preflight.stop()
+
     def installer_args(self, root: Path, adopt: bool = False) -> SimpleNamespace:
         return SimpleNamespace(
             bundle=Path("unused"), endpoint="https://es.invalid", ca_file=Path("unused"),
@@ -276,6 +290,39 @@ class InstallAdoptionTests(unittest.TestCase):
             self.assertIn("mint_intent", {state["phase"] for state in written_states})
             self.assertIn("candidate_verified", {state["phase"] for state in written_states})
             self.assertIn("committed", {state["phase"] for state in written_states})
+
+    def test_successful_install_creates_no_preflight_artifact(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "enrollment"
+            with ExitStack() as patches:
+                patches.enter_context(patch.object(INSTALL.argparse.ArgumentParser, "parse_args",
+                                                   return_value=self.installer_args(root, True)))
+                patches.enter_context(patch.object(INSTALL, "load_bundle", return_value=INSTALL.Bundle("test", "test", [])))
+                patches.enter_context(patch.object(INSTALL, "role_body", return_value={}))
+                patches.enter_context(patch.object(INSTALL, "configure_https"))
+                patches.enter_context(patch.object(INSTALL, "admin_authorization", return_value="admin"))
+                patches.enter_context(patch.object(INSTALL, "admin_credential_kind", return_value="native_user"))
+                patches.enter_context(patch.object(INSTALL, "cluster_health_gate"))
+                patches.enter_context(patch.object(INSTALL, "cluster_uuid", return_value="KUrXRgwRRQu-RikmIJhm0Q"))
+                patches.enter_context(patch.object(INSTALL, "prerequisites"))
+                patches.enter_context(patch.object(INSTALL, "fence"))
+                patches.enter_context(patch.object(INSTALL, "remote_stream_condition", return_value=("compatible", frozenset())))
+                patches.enter_context(patch.object(INSTALL, "ensure_stream"))
+                patches.enter_context(patch.object(INSTALL, "simulate"))
+                patches.enter_context(patch.object(INSTALL, "recompute_target_generation", return_value="0" * 64))
+                patches.enter_context(patch.object(INSTALL, "mint_key", return_value=("candidate", "encoded")))
+                patches.enter_context(patch.object(INSTALL, "enrollment_files", return_value={}))
+                patches.enter_context(patch.object(INSTALL, "atomic_write"))
+                patches.enter_context(patch.object(INSTALL, "secure_candidate_root", return_value=root))
+                patches.enter_context(patch.object(INSTALL, "verify_stream_behavior"))
+                patches.enter_context(patch.object(INSTALL, "verify_role_matrix"))
+                patches.enter_context(patch.object(INSTALL, "prepublication_asset_fence"))
+                patches.enter_context(patch.object(INSTALL, "atomic_publication"))
+                patches.enter_context(patch.object(INSTALL, "run_handshake"))
+                patches.enter_context(patch.object(INSTALL, "request"))
+                patches.enter_context(patch.object(INSTALL, "verify_asset"))
+                self.assertEqual(INSTALL.main(), 0)
+            self.assertEqual(list(root.glob(".rigsignal-preflight-*")), [])
 
     def test_rolled_back_root_adopts_compatible_stream_for_fresh_transaction(self):
         """Owner ruling 1 extends the clean-root adoption dispatch to audit-only roots."""

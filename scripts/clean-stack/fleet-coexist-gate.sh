@@ -9,13 +9,13 @@ source "$SCRIPT_DIR/lib.sh"
 
 ES_VERSION='' KB_VERSION='' BUNDLE='' PREDECESSOR_MANIFEST='' KEEP=0
 declare -a LEGS=()
-usage() { printf '%s\n' 'Usage: fleet-coexist-gate.sh --es-version 9.4.3|9.4.4 [--kb-version VERSION] --leg a..s [--bundle PATH] [--predecessor-manifest PATH] [--all]' 'Solo-screen subset: fleet legs a/b/i/n/o/p/q/r/s plus adoption leg 1.' >&2; }
+usage() { printf '%s\n' 'Usage: fleet-coexist-gate.sh --es-version 9.4.3|9.4.4 [--kb-version VERSION] --leg a..x [--bundle PATH] [--predecessor-manifest PATH] [--all]' 'Solo-screen subset: fleet legs a/b/i/n/o/p/q/r/s plus adoption leg 1.' >&2; }
 version() { [[ "$1" =~ ^9\.4\.[34]$ ]]; }
 fail() { printf 'ASSERT FAIL %s\n' "$*" >&2; return 1; }
 while (($#)); do case "$1" in
   --es-version) ES_VERSION="${2:-}"; shift 2 ;; --kb-version) KB_VERSION="${2:-}"; shift 2 ;;
   --bundle) BUNDLE="${2:-}"; shift 2 ;; --predecessor-manifest) PREDECESSOR_MANIFEST="${2:-}"; shift 2 ;; --leg) LEGS+=("${2:-}"); shift 2 ;;
-  --all) LEGS=(a b c d e f g h i j k l m n o p q r s); shift ;; --keep) KEEP=1; shift ;;
+  --all) LEGS=(a b c d e f g h i j k l m n o p q r s t u v w x); shift ;; --keep) KEEP=1; shift ;;
   -h|--help) usage; exit 0 ;; *) usage; exit 2 ;; esac; done
 [[ -n "$ES_VERSION" ]] || { usage; exit 2; }; KB_VERSION="${KB_VERSION:-$ES_VERSION}"
 version "$ES_VERSION" && version "$KB_VERSION" && [[ "$ES_VERSION" == "$KB_VERSION" ]] || { usage; exit 2; }
@@ -65,6 +65,19 @@ _installer() {
 }
 installer() { _installer || fail 'installer failed'; }
 rollback() { python3 "${CLEAN_STACK_INSTALLER:-$REPO_ROOT/tools/install_assets.py}" --endpoint "$ES_URL" --ca-file "$CS_CA_FILE" --kibana-endpoint "$KB_URL" --kibana-ca-file "$CS_CA_FILE" --admin-credentials-file "$RUN_DIR/admin.toml" --agent-binary "$CLEAN_STACK_AGENT_BINARY" --profile user --rollback "$RUN_DIR/enrollment"; }
+installer_at_root() {
+  local root="$1"
+  shift
+  local -a args=(--bundle "$BUNDLE" --endpoint "$ES_URL" --ca-file "$CS_CA_FILE" --kibana-endpoint "$KB_URL" --kibana-ca-file "$CS_CA_FILE" --admin-credentials-file "$RUN_DIR/admin.toml" --agent-binary "$CLEAN_STACK_AGENT_BINARY" --profile user --enrollment-root "$root" --ownership-profile fleet-coexist)
+  [[ -f "$root/state.json" ]] || args+=(--adopt-existing-w1-stream)
+  [[ -z "$PREDECESSOR_MANIFEST" ]] || args+=(--predecessor-manifest "$PREDECESSOR_MANIFEST")
+  [[ "${RIGSIGNAL_TEST_EXTERNAL_WRITE:-}" != 1 && -z "${RIGSIGNAL_TEST_PAUSE_AT:-}" ]] || args+=(--unsafe-test-injection)
+  python3 "${CLEAN_STACK_INSTALLER:-$REPO_ROOT/tools/install_assets.py}" "${args[@]}" "$@"
+}
+rollback_at_root() {
+  local root="$1"
+  python3 "${CLEAN_STACK_INSTALLER:-$REPO_ROOT/tools/install_assets.py}" --endpoint "$ES_URL" --ca-file "$CS_CA_FILE" --kibana-endpoint "$KB_URL" --kibana-ca-file "$CS_CA_FILE" --admin-credentials-file "$RUN_DIR/admin.toml" --agent-binary "$CLEAN_STACK_AGENT_BINARY" --profile user --rollback "$root"
+}
 seed_m1_and_streams() {
   local body="$RUN_DIR/m1-anchor-body.json" name
   api PUT '/_component_template/logs-rigsignal.diagnosis-mappings' --data-binary "@$REPO_ROOT/elastic/component-templates/logs-rigsignal.diagnosis-mappings.json" >/dev/null
@@ -203,6 +216,7 @@ origin_export() { origin_seed export "$1" "$2"; }
 origin_assert_clean_refusal() {
   space_absent rigsignal || fail 'topology refusal created rigsignal space'
   [[ ! -e "$RUN_DIR/enrollment" ]] || fail 'topology refusal created any journal/profile/body root'
+  [[ ! -e "$RUN_DIR/.rigsignal-publication-enrollment" ]] || fail 'topology refusal created publication stage sibling'
   if api GET '/_component_template/rigsignal-bundle-meta' >"$RUN_DIR/origin-marker.json" 2>&1; then fail 'topology refusal wrote remote marker'; fi
   origin_export default "$RUN_DIR/default-after-refusal.ndjson"
   cmp -s "$RUN_DIR/default-before-refusal.ndjson" "$RUN_DIR/default-after-refusal.ndjson" || fail 'topology refusal changed default objects'
@@ -474,15 +488,111 @@ leg_k() {
 # L: a retained {apply_ok:false,rollback_ok:true} transaction is archivable and
 # its next install is a fresh, fully-accounted transaction (D-12 invocation).
 leg_l() {
+  local root="$RUN_DIR/leg-l-live/.local/state/rigsignal/enrollment"
   setup
-  if RIGSIGNAL_TEST_CRASH_AT=after-remote-mutation _installer >"$RUN_DIR/leg-l-crash.log" 2>&1; then fail 'Leg-L after-remote-mutation fault did not crash'; fi
-  rollback >"$RUN_DIR/leg-l-first-rollback.log" 2>&1 || fail 'Leg-L first rollback failed'
-  jq -e '.apply_ok == false and .rollback_ok == true' "$RUN_DIR/enrollment/fleet-coexist-journal.json" >/dev/null || fail 'Leg-L did not retain the deadlock live shape'
-  _installer >"$RUN_DIR/leg-l-reinstall.log" 2>&1 || fail 'Leg-L reinstall from retained root failed'
+  if RIGSIGNAL_TEST_CRASH_AT=after-remote-mutation installer_at_root "$root" >"$RUN_DIR/leg-l-crash.log" 2>&1; then fail 'Leg-L after-remote-mutation fault did not crash'; fi
+  rollback_at_root "$root" >"$RUN_DIR/leg-l-first-rollback.log" 2>&1 || fail 'Leg-L first rollback failed'
+  jq -e '.apply_ok == false and .rollback_ok == true' "$root/fleet-coexist-journal.json" >/dev/null || fail 'Leg-L did not retain the deadlock live shape'
+  installer_at_root "$root" >"$RUN_DIR/leg-l-reinstall.log" 2>&1 || fail 'Leg-L reinstall from retained root failed'
   origin_assert_full_accounting "$RUN_DIR/leg-l-reinstall.log"
-  jq -e '(.transactions|length) == 1 and .transactions[0].apply_ok == false and .transactions[0].rollback_ok == true and .apply_ok == true' "$RUN_DIR/enrollment/fleet-coexist-journal.json" >/dev/null || fail 'Leg-L did not archive then open a fresh transaction'
-  rollback >"$RUN_DIR/leg-l-second-rollback.log" 2>&1 || fail 'Leg-L second rollback failed'
-  jq -e '.rollback_ok == true and (.transactions|length) == 1 and .transactions[0].rollback_ok == true' "$RUN_DIR/enrollment/fleet-coexist-journal.json" >/dev/null || fail 'Leg-L second rollback did not stay in active transaction'
+  jq -e '(.transactions|length) == 1 and .transactions[0].apply_ok == false and .transactions[0].rollback_ok == true and .apply_ok == true' "$root/fleet-coexist-journal.json" >/dev/null || fail 'Leg-L did not archive then open a fresh transaction'
+  rollback_at_root "$root" >"$RUN_DIR/leg-l-second-rollback.log" 2>&1 || fail 'Leg-L second rollback failed'
+  jq -e '.rollback_ok == true and (.transactions|length) == 1 and .transactions[0].rollback_ok == true' "$root/fleet-coexist-journal.json" >/dev/null || fail 'Leg-L second rollback did not stay in active transaction'
+}
+
+# T: the live-window shape must refuse before configure_https or any remote
+# preflight, and it must leave neither the root nor its predictable stage name.
+leg_t() {
+  local parent="$RUN_DIR/badparent" root="$RUN_DIR/badparent/enrollment" pre_fix="$RUN_DIR/pre-fix-install_assets.py" rc
+  setup
+  mkdir "$parent"
+  chmod 0775 "$parent"
+  : >"$RUN_DIR/leg-t-http.log"
+  set +e
+  RIGSIGNAL_HTTP_AUDIT_LOG="$RUN_DIR/leg-t-http.log" installer_at_root "$root" >"$RUN_DIR/leg-t-current.log" 2>&1
+  rc=$?
+  set -e
+  [[ "$rc" != 0 ]] || fail 'Leg-T unsafe parent unexpectedly installed'
+  grep -E '^install refused: enrollment ancestor is not protected(:|$)' "$RUN_DIR/leg-t-current.log" >/dev/null || { cat "$RUN_DIR/leg-t-current.log" >&2; fail 'Leg-T wrong refusal token'; }
+  [[ ! -s "$RUN_DIR/leg-t-http.log" ]] || fail 'Leg-T refusal made an HTTP request'
+  [[ ! -e "$root" ]] || fail 'Leg-T refusal created enrollment root'
+  [[ ! -e "$parent/.rigsignal-publication-enrollment" ]] || fail 'Leg-T refusal created publication stage sibling'
+
+  # Anti-vacuity: run exactly the pre-fix installer from its own temporary
+  # source path.  It has no early ancestor check, so it must reach HTTP rather
+  # than emit the new refusal.  PYTHONPATH supplies its unchanged sibling
+  # module without altering any reviewed tools/ source.
+  git show 64b5337:tools/install_assets.py >"$pre_fix"
+  : >"$RUN_DIR/leg-t-pre-fix-http.log"
+  set +e
+  RIGSIGNAL_HTTP_AUDIT_LOG="$RUN_DIR/leg-t-pre-fix-http.log" PYTHONPATH="$REPO_ROOT/tools${PYTHONPATH:+:$PYTHONPATH}" python3 "$pre_fix" --bundle "$BUNDLE" --endpoint "$ES_URL" --ca-file "$CS_CA_FILE" --kibana-endpoint "$KB_URL" --kibana-ca-file "$CS_CA_FILE" --admin-credentials-file "$RUN_DIR/admin.toml" --agent-binary "$CLEAN_STACK_AGENT_BINARY" --profile user --enrollment-root "$root" --ownership-profile fleet-coexist --adopt-existing-w1-stream >"$RUN_DIR/leg-t-pre-fix.log" 2>&1
+  rc=$?
+  set -e
+  [[ "$rc" != 0 ]] || fail 'Leg-T pre-fix installer unexpectedly succeeded'
+  ! grep -E '^install refused: enrollment ancestor is not protected(:|$)' "$RUN_DIR/leg-t-pre-fix.log" >/dev/null || fail 'Leg-T pre-fix installer emitted the new refusal'
+  [[ -s "$RUN_DIR/leg-t-pre-fix-http.log" ]] || fail 'Leg-T pre-fix installer did not proceed to HTTP'
+}
+
+# U: prepare_install_root must create every missing component privately even
+# under the operator umask that produced the live-window parent chain.
+leg_u() {
+  local root="$RUN_DIR/fresh/a/b/c/enrollment" component saved_umask
+  setup
+  saved_umask="$(umask)"
+  umask 0002
+  installer_at_root "$root" >"$RUN_DIR/leg-u-install.log" 2>&1 || fail 'Leg-U install failed'
+  umask "$saved_umask"
+  for component in "$RUN_DIR/fresh/a" "$RUN_DIR/fresh/a/b" "$RUN_DIR/fresh/a/b/c" "$root"; do
+    [[ "$(stat -c '%a' "$component")" == 700 ]] || fail "Leg-U component is not 0700: $component"
+  done
+}
+
+# V: retain the publication-time parent validation as a race defence after the
+# earlier read-only ancestor walk has already completed.
+leg_v() {
+  local parent="$RUN_DIR/late-parent" root="$RUN_DIR/late-parent/enrollment" pid n
+  setup
+  mkdir -m 0700 "$parent"
+  rm -f "$RUN_DIR/pause.resume"
+  RIGSIGNAL_TEST_PAUSE_AT=after-topology-preflight RIGSIGNAL_TEST_PAUSE_SENTINEL="$RUN_DIR/pause.resume" installer_at_root "$root" >"$RUN_DIR/leg-v-install.log" 2>&1 &
+  pid=$!
+  for ((n = 0; n < 200; n++)); do
+    grep -Fx 'RIGSIGNAL_TEST_PAUSE_REACHED after-topology-preflight' "$RUN_DIR/leg-v-install.log" >/dev/null 2>&1 && break
+    sleep 0.05
+  done
+  ((n < 200)) || fail 'Leg-V topology pause hook was not reached'
+  chmod g+w "$parent"
+  : >"$RUN_DIR/pause.resume"
+  if wait "$pid"; then fail 'Leg-V late parent change unexpectedly installed'; fi
+  grep -Fx 'install failed: enrollment output:' "$RUN_DIR/leg-v-install.log" >/dev/null || fail 'Leg-V missing sanitized enrollment failure'
+  grep -Fx 'RIGSIGNAL_FAILURE_SITE publication_stage' "$RUN_DIR/leg-v-install.log" >/dev/null || fail 'Leg-V missing publication-stage failure site'
+}
+
+# W: prove this gate filesystem supports the exchange/fsync publication path.
+leg_w() {
+  local member
+  setup
+  installer || fail 'Leg-W install failed'
+  for member in credentials.toml handshake.toml shipping-policy-v1.toml state.json; do
+    [[ "$(stat -c '%a' "$RUN_DIR/enrollment/$member")" == 600 ]] || fail "Leg-W published member is not 0600: $member"
+  done
+  [[ ! -e "$RUN_DIR/.rigsignal-publication-enrollment" ]] || fail 'Leg-W left publication stage residue'
+}
+
+# X: the same-class NAME_MAX preflight must refuse before publication or HTTP.
+leg_x() {
+  local long_name root rc
+  setup
+  long_name="$(printf '%0250d' 0 | tr '0' x)"
+  root="$RUN_DIR/$long_name"
+  : >"$RUN_DIR/leg-x-http.log"
+  set +e
+  RIGSIGNAL_HTTP_AUDIT_LOG="$RUN_DIR/leg-x-http.log" installer_at_root "$root" >"$RUN_DIR/leg-x-install.log" 2>&1
+  rc=$?
+  set -e
+  [[ "$rc" != 0 ]] || fail 'Leg-X over-long derived publication name unexpectedly installed'
+  grep -E '^install refused: ' "$RUN_DIR/leg-x-install.log" >/dev/null || fail 'Leg-X did not refuse before publication'
+  [[ ! -s "$RUN_DIR/leg-x-http.log" ]] || fail 'Leg-X made HTTP before NAME_MAX refusal'
 }
 
 # M: pause-created collisions, lost responses, and per-delete resume cover both
@@ -723,4 +833,4 @@ leg_p() {
   PREDECESSOR_MANIFEST="$RUN_DIR/predecessor-good.json" installer || fail 'Leg-P post-retained-pipeline retry did not pass predecessor barrier'
 }
 
-for leg in "${LEGS[@]}"; do case "$leg" in a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s) "leg_$leg" ;; *) fail "unknown leg: $leg"; exit 2 ;; esac; done
+for leg in "${LEGS[@]}"; do case "$leg" in a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x) "leg_$leg" ;; *) fail "unknown leg: $leg"; exit 2 ;; esac; done

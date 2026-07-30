@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import socket
 import ssl
 import stat
@@ -24,6 +25,7 @@ import urllib.request
 import uuid
 from copy import deepcopy
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 
 TOOLS_DIR = Path(__file__).resolve().parent
@@ -74,6 +76,8 @@ OWNERSHIP_PROFILE_FILE = "ownership-profile.json"
 UUID_RE = re.compile(r"[A-Za-z0-9_-]{22}\Z")
 HEX_RE = re.compile(r"[0-9a-f]{64}\Z")
 OWNERSHIP_TABLE_VERSION = "fleet-coexist-v1"
+RENAME_EXCHANGE_FILESYSTEMS = frozenset(("btrfs", "ext4", "overlay", "tmpfs", "xfs"))
+LOCAL_TRANSACTION_MIN_AVAILABLE_BLOCKS = 16
 
 # This is deliberately an identity table, rather than a live `_meta` heuristic.
 # A bundle addition has no safe default under the coexistence profile.
@@ -152,6 +156,49 @@ class ProvisionError(Exception):
     def __init__(self, prefix: str):
         self.prefix = prefix
         super().__init__(prefix)
+
+
+class FailureSite(Enum):
+    PREFLIGHT = "preflight"
+    ROOT_PREPARE = "root_prepare"
+    ASSET_APPLY = "asset_apply"
+    CANDIDATE_STAGE = "candidate_stage"
+    PUBLICATION_STAGE = "publication_stage"
+    PUBLICATION_EXCHANGE = "publication_exchange"
+    PUBLISHED_PROBE = "published_probe"
+    LOCAL_COMMIT = "local_commit"
+
+
+class FailureSiteTracker:
+    """Invocation-local, credential-safe location for an enrollment failure."""
+    def __init__(self):
+        self.site = FailureSite.PREFLIGHT
+        self.journal = None
+
+    def attach_journal(self, journal) -> None:
+        self.journal = journal
+
+    def mark(self, site: FailureSite) -> None:
+        if not isinstance(site, FailureSite):
+            raise TypeError("failure site must be a FailureSite")
+        self.site = site
+
+    def persist(self) -> None:
+        """Best-effort journal retention, after the original operation failed."""
+        if self.journal is not None:
+            try:
+                self.journal.failure_site(self.site)
+            except Exception:
+                # Failure-site persistence is diagnostic only.  In particular,
+                # a broken journal must never mask the original failure.
+                pass
+
+
+def report_failure_site(site: FailureSite) -> None:
+    """Emit only a coarse, non-secret failure classification."""
+    if not isinstance(site, FailureSite):
+        raise TypeError("failure site must be a FailureSite")
+    print("RIGSIGNAL_FAILURE_SITE " + site.value, file=sys.stderr)
 
 
 class StateBindingError(InputError):
@@ -1262,6 +1309,239 @@ def _reject_symlinked_path(root: Path) -> None:
             raise InputError("enrollment root is not protected")
 
 
+def _ancestor_component_safe(st: os.stat_result) -> bool:
+    """Return whether one existing enrollment-root ancestor is protected."""
+    mode = st.st_mode
+    return bool(stat.S_ISDIR(mode) and not stat.S_ISLNK(mode)
+                and st.st_uid in (os.geteuid(), 0)
+                and ((mode & 0o022) == 0 or (mode & stat.S_ISVTX and st.st_uid == 0)))
+
+
+def _enrollment_parent_safe(st: os.stat_result) -> bool:
+    """Return whether the directory that will contain the root is protected."""
+    mode = st.st_mode
+    return bool(stat.S_ISDIR(mode) and not stat.S_ISLNK(mode)
+                and st.st_uid == os.geteuid() and (mode & 0o022) == 0)
+
+
+def check_install_root_ancestors(root: Path, *, boundary: Path = Path("/")) -> None:
+    """Refuse an install root beneath an unsafe existing lexical component."""
+    try:
+        root_path = Path(os.path.abspath(os.fspath(root)))
+        boundary_path = Path(os.path.abspath(os.fspath(boundary)))
+        relative = root_path.relative_to(boundary_path)
+    except (TypeError, ValueError, OSError) as error:
+        raise ProvisionError("install refused: enrollment ancestor is not protected:") from error
+    # The immediate parent will hold the exchange staging sibling and needs
+    # atomic_publication's stricter ownership rule.  Higher ancestors may be
+    # root-owned sticky directories such as /tmp.
+    components = []
+    current = root_path if root_path == boundary_path else root_path.parent
+    while True:
+        components.append(current)
+        if current == boundary_path:
+            break
+        current = current.parent
+    for position, component in enumerate(components):
+        try:
+            component_st = os.lstat(component)
+        except FileNotFoundError:
+            continue
+        except OSError as error:
+            raise ProvisionError("install refused: enrollment ancestor is not protected:") from error
+        safe = _enrollment_parent_safe(component_st) if position == 0 else _ancestor_component_safe(component_st)
+        if not safe:
+            raise ProvisionError("install refused: enrollment ancestor is not protected:")
+
+
+def _nearest_existing_ancestor(path: Path) -> Path:
+    """Return an existing lexical ancestor without following a missing tail."""
+    try:
+        current = Path(os.path.abspath(os.fspath(path)))
+    except (TypeError, ValueError, OSError) as error:
+        raise ProvisionError("install refused: enrollment preflight unavailable") from error
+    while True:
+        try:
+            os.lstat(current)
+            return current
+        except FileNotFoundError:
+            if current == current.parent:
+                raise ProvisionError("install refused: enrollment preflight unavailable")
+            current = current.parent
+        except OSError as error:
+            raise ProvisionError("install refused: enrollment preflight unavailable") from error
+
+
+def _mountinfo_unescape(value: str) -> str:
+    return re.sub(r"\\([0-7]{3})", lambda match: chr(int(match.group(1), 8)), value)
+
+
+def _mount_filesystem_type(path: Path) -> str:
+    """Read the mount type for path from Linux's authoritative mount table."""
+    target = os.path.abspath(os.fspath(path))
+    best: tuple[int, str] | None = None
+    try:
+        with open("/proc/self/mountinfo", encoding="utf-8") as handle:
+            for line in handle:
+                fields = line.rstrip("\n").split()
+                try:
+                    separator = fields.index("-")
+                    mountpoint = _mountinfo_unescape(fields[4])
+                    filesystem = fields[separator + 1]
+                    common = os.path.commonpath((target, mountpoint))
+                except (IndexError, ValueError, OSError):
+                    continue
+                if common == mountpoint and (best is None or len(mountpoint) > best[0]):
+                    best = (len(mountpoint), filesystem)
+    except (OSError, UnicodeError, ValueError) as error:
+        raise ProvisionError("install refused: atomic_publication_filesystem_unsupported") from error
+    if best is None:
+        raise ProvisionError("install refused: atomic_publication_filesystem_unsupported")
+    return best[1]
+
+
+def _rename_exchange_symbol_available() -> bool:
+    try:
+        ctypes.CDLL(None, use_errno=True).renameat2
+    except (AttributeError, OSError):
+        return False
+    return True
+
+
+def _check_agent_binary(agent: Path) -> Path:
+    try:
+        raw_agent = os.fspath(agent)
+        resolved = Path(raw_agent) if os.path.isabs(raw_agent) else shutil.which(raw_agent)
+        if resolved is None:
+            raise OSError("agent is not launchable")
+        resolved = Path(resolved).resolve(strict=True)
+        agent_st = os.lstat(resolved)
+        if (not stat.S_ISREG(agent_st.st_mode) or stat.S_ISLNK(agent_st.st_mode)
+                or not os.access(resolved, os.R_OK) or not os.access(resolved, os.X_OK)):
+            raise OSError("agent is not launchable")
+        result = subprocess.run([os.fspath(resolved), "--version"], stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, check=False)
+        if result.returncode != 0:
+            raise OSError("agent version failed")
+        return resolved
+    except (OSError, RuntimeError) as error:
+        raise ProvisionError("install refused: agent_binary_unlaunchable") from error
+
+
+def _check_publication_stage_path(root: Path, ancestor: Path) -> None:
+    """Reject a stage path that mkdir(2) would reject after remote mutation."""
+    try:
+        canonical_root = Path(os.path.realpath(os.fspath(root)))
+        stage = _publication_stage(canonical_root)
+        if len(os.fsencode(stage.name)) > os.pathconf(ancestor, "PC_NAME_MAX"):
+            raise ProvisionError("install refused: enrollment_publication_path_too_long")
+        if len(os.fsencode(os.fspath(stage))) >= os.pathconf(ancestor, "PC_PATH_MAX"):
+            raise ProvisionError("install refused: enrollment_publication_path_too_long")
+    except ProvisionError:
+        raise
+    except (OSError, UnicodeError, ValueError) as error:
+        raise ProvisionError("install refused: enrollment_publication_path_too_long") from error
+
+
+def _check_parent_fsync(ancestor: Path, eventual_parent: Path) -> None:
+    """Exercise directory fsync only when this ancestor is the parent's device."""
+    try:
+        try:
+            parent_st = os.lstat(eventual_parent)
+        except FileNotFoundError:
+            parent_st = None
+        ancestor_st = os.lstat(ancestor)
+        if parent_st is not None and parent_st.st_dev != ancestor_st.st_dev:
+            return
+        descriptor = os.open(ancestor, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+    except OSError as error:
+        raise ProvisionError("install refused: enrollment_parent_fsync_unsupported") from error
+
+
+def _check_local_transaction_readiness(ancestor: Path) -> None:
+    try:
+        values = os.statvfs(ancestor)
+        readonly = getattr(os, "ST_RDONLY", 1)
+        if (values.f_flag & readonly or values.f_bavail < LOCAL_TRANSACTION_MIN_AVAILABLE_BLOCKS
+                or not os.access(ancestor, os.W_OK | os.X_OK)):
+            raise ProvisionError("install refused: local_transaction_storage_unavailable")
+    except ProvisionError:
+        raise
+    except OSError as error:
+        raise ProvisionError("install refused: local_transaction_storage_unavailable") from error
+
+
+def resolve_enrollment_ca_file(ca_file: Path) -> Path:
+    """Validate the one canonical CA pathname emitted to enrollment TOML."""
+    try:
+        resolved = ca_file.resolve(strict=True)
+        if not resolved.is_absolute():
+            raise ValueError("CA path is not absolute")
+        if protected_regular_file(resolved) != protected_regular_file(ca_file):
+            raise ValueError("CA path changed while resolving")
+        ancestor = _nearest_existing_ancestor(resolved)
+        if len(os.fsencode(os.fspath(resolved))) > os.pathconf(ancestor, "PC_PATH_MAX"):
+            raise ValueError("CA path is too long")
+        return resolved
+    except (InputError, OSError, UnicodeError, ValueError) as error:
+        raise ProvisionError("install refused: enrollment_ca_path_invalid") from error
+
+
+def check_install_preflight(root: Path, agent: Path, ca_file: Path) -> tuple[Path, Path]:
+    """Run every non-mutating enrollment precondition before the first HTTP call."""
+    canonical_root = Path(os.path.realpath(os.fspath(root)))
+    ancestor = _nearest_existing_ancestor(canonical_root.parent)
+    resolved_agent = _check_agent_binary(agent)
+    if not _rename_exchange_symbol_available():
+        raise ProvisionError("install refused: atomic_publication_filesystem_unsupported")
+    if _mount_filesystem_type(ancestor) not in RENAME_EXCHANGE_FILESYSTEMS:
+        raise ProvisionError("install refused: atomic_publication_filesystem_unsupported")
+    _check_publication_stage_path(canonical_root, ancestor)
+    _check_parent_fsync(ancestor, canonical_root.parent)
+    _check_local_transaction_readiness(ancestor)
+    return resolve_enrollment_ca_file(ca_file), resolved_agent
+
+
+def prepare_install_root(root: Path) -> Path:
+    """Create each missing install-root component privately before secure_root()."""
+    _reject_symlinked_path(root)
+    try:
+        current = Path(os.path.abspath(os.fspath(root)))
+    except (TypeError, ValueError, OSError) as error:
+        raise InputError("enrollment root is not protected") from error
+    missing = []
+    while True:
+        try:
+            os.lstat(current)
+            break
+        except FileNotFoundError:
+            missing.append(current)
+            if current == current.parent:
+                raise InputError("enrollment root is not protected")
+            current = current.parent
+        except OSError as error:
+            raise InputError("enrollment root is not protected") from error
+    for component in reversed(missing):
+        try:
+            component.mkdir(mode=0o700)
+        except FileExistsError:
+            pass
+        except OSError as error:
+            raise InputError("enrollment root is not protected") from error
+        try:
+            component_st = os.lstat(component)
+        except OSError as error:
+            raise InputError("enrollment root is not protected") from error
+        if (not stat.S_ISDIR(component_st.st_mode) or stat.S_ISLNK(component_st.st_mode)
+                or component_st.st_uid != os.geteuid() or component_st.st_mode & 0o077):
+            raise InputError("enrollment root is not protected")
+    return secure_root(root)
+
+
 def secure_root(root: Path) -> Path:
     _reject_symlinked_path(root)
     try:
@@ -1528,6 +1808,11 @@ class TransactionJournal:
     def predecessor_recheck_failure(self, refusal: PredecessorRefusal) -> None:
         entries = self.value.setdefault("predecessor_manifest", {})
         entries.setdefault(refusal.asset, {})["recheck_failure"] = refusal.record()
+        self._persist()
+
+    def failure_site(self, site: FailureSite) -> None:
+        """Retain the latest coarse local failure site as transaction evidence."""
+        self.value["failure_site"] = site.value
         self._persist()
 
     def apply_ok(self) -> None:
@@ -2163,7 +2448,8 @@ def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Pat
     return operations
 
 
-def atomic_publication(root: Path, files: dict[str, bytes]) -> None:
+def atomic_publication(root: Path, files: dict[str, bytes],
+                       failure_tracker: FailureSiteTracker | None = None) -> None:
     """Atomically exchange the whole consumer-visible enrollment generation.
 
     Four independent ``rename`` calls still permit a reader to observe a mixed
@@ -2171,14 +2457,15 @@ def atomic_publication(root: Path, files: dict[str, bytes]) -> None:
     gives the directory path one atomic old-or-new transition; all member files
     are fsynced in a private sibling before that transition.
     """
+    if failure_tracker is not None:
+        failure_tracker.mark(FailureSite.PUBLICATION_STAGE)
     secure_root(root)
     parent = root.parent
     try:
         parent_st = parent.lstat()
     except OSError as error:
         raise InputError("cannot publish enrollment output") from error
-    if (not stat.S_ISDIR(parent_st.st_mode) or stat.S_ISLNK(parent_st.st_mode)
-            or parent_st.st_uid != os.geteuid() or parent_st.st_mode & 0o022):
+    if not _enrollment_parent_safe(parent_st):
         raise InputError("enrollment parent is not protected")
     stage = _publication_stage(root)
     try:
@@ -2203,6 +2490,8 @@ def atomic_publication(root: Path, files: dict[str, bytes]) -> None:
                 if not body.is_file() or body.is_symlink():
                     raise InputError("transaction journal body is invalid")
                 atomic_write(stage, body.name, secure_read(body) or b"")
+        if failure_tracker is not None:
+            failure_tracker.mark(FailureSite.PUBLICATION_EXCHANGE)
         _rename_exchange(root, stage)
         exchanged = True
         fault("publication-exchange")
@@ -4012,7 +4301,7 @@ def enrollment_files(endpoint: str, ca_file: Path, root: Path, uuid_value: str, 
     q = lambda value: json.dumps(value, ensure_ascii=False)
     return {"credentials.toml": ("[elasticsearch]\napi_key = " + q(encoded) + "\n").encode(),
             "handshake.toml": ("[elasticsearch]\nendpoint = " + q(endpoint) + "\nca_cert = "
-                               + q(str(ca_file.resolve())) + "\n").encode(),
+                               + q(str(ca_file)) + "\n").encode(),
             "shipping-policy-v1.toml": ("ship_mode = \"on\"\ninstall_profile = \"user\"\noutbox_root = "
                                         + q(str(root.parent / "outbox")) + "\ntarget_generation = \"" + generation
                                         + "\"\nexpected_cluster_uuid = \"" + uuid_value + "\"\n").encode(),
@@ -4162,6 +4451,7 @@ def main() -> int:
         print(f"source assets: {total}")
         return 0
 
+    failure_tracker = FailureSiteTracker()
     try:
         requested_root = args.enrollment_root or default_root()
         condition = enrollment_condition(requested_root)
@@ -4170,7 +4460,18 @@ def main() -> int:
         adopt_requested = getattr(args, "adopt_existing_w1_stream", False)
         if adopt_requested and condition in {"committed", "incomplete"}:
             raise ProvisionError("install refused: adoption_flag_state_present")
-        configure_https(args.ca_file)
+        # Default to the no-HTTP publication guard.  Incomplete is the sole
+        # exception: it must first reach its durable key-recovery path, so a
+        # new local refusal cannot strand that key.  A future condition is
+        # therefore fail-closed by preflighting rather than silently skipping
+        # the guard as committed once did.
+        enrollment_ca_file = args.ca_file
+        resolved_agent: Path | None = None
+        if condition != "incomplete":
+            check_install_root_ancestors(requested_root)
+            enrollment_ca_file, resolved_agent = check_install_preflight(
+                requested_root, args.agent_binary, args.ca_file)
+        configure_https(enrollment_ca_file)
         configure_https(args.kibana_ca_file)
         authorization = admin_authorization(args.admin_credentials_file)
         if admin_credential_kind(args.admin_credentials_file) != "native_user":
@@ -4190,7 +4491,8 @@ def main() -> int:
                                        raw_ownership_profile is None)
         run_topology_preflight(bundle, es_url, kb_url, authorization, ownership_profile)
         test_pause("after-topology-preflight", args.unsafe_test_injection)
-        root = secure_root(requested_root)
+        failure_tracker.mark(FailureSite.ROOT_PREPARE)
+        root = prepare_install_root(requested_root)
         try:
             prior = load_state(root)
         except StateBindingError as error:
@@ -4206,24 +4508,18 @@ def main() -> int:
             # v2.4 rerun refusal, with the same no-mutation contract as an
             # incompatible existing diagnosis stream.
             raise ProvisionError("install refused: existing diagnosis stream is not W1; migration is required")
+        published_recovery = None
         if prior is not None and prior["phase"] != "committed":
             # candidate_verified with candidate already named as active is the
             # only recoverable post-publication state: credentials/configuration
             # were atomically released and only old-key cleanup was interrupted.
             if (prior["phase"] == "candidate_verified" and prior["candidate_key_id"]
                     and prior["active_key_id"] == prior["candidate_key_id"]):
-                try:
-                    # The exchanged directory is coherent, but a crash may
-                    # have happened before Step 10's zero-environment probe.
-                    # Do not declare it committed until that exact consumer
-                    # check succeeds on the published paths.
-                    run_handshake(args.agent_binary, root)
-                    invalidate(es_url, authorization, prior["pending_revoke_ids"])
-                except (InputError, RequestFailure) as error:
-                    raise ProvisionError("install failed: old shipper API key revocation:") from error
-                prior = state_template(uuid_value, prior["target_generation"], prior["active_key_id"],
-                                       prior["enrollment_root"])
-                atomic_write(root, "state.json", jcs(prior) + b"\n")
+                # The exchanged directory is coherent, but a crash may have
+                # happened before Step 10's zero-environment probe.  Defer the
+                # probe until the incomplete-path preflight has returned the
+                # verified agent identity below.
+                published_recovery = prior
             else:
                 # mint_intent is durable before the request.  A returned key ID
                 # is therefore insufficient for recovery: a crash after the
@@ -4254,6 +4550,28 @@ def main() -> int:
             # are durable; adoption is one-shot and was already rejected above.
             dispatch_clean_root(es_url, authorization, False)
 
+        if condition == "incomplete":
+            # Recovery has now invalidated the unfinished candidate (or made
+            # its successor state durable), so any same-class refusal below
+            # cannot make an uncommitted minted key unreachable.
+            check_install_root_ancestors(requested_root)
+            enrollment_ca_file, resolved_agent = check_install_preflight(root, args.agent_binary, args.ca_file)
+            configure_https(enrollment_ca_file)
+        if resolved_agent is None:
+            raise ProvisionError("install refused: agent_binary_unlaunchable")
+        if published_recovery is not None:
+            try:
+                # Do not declare the recovered exchange committed until this
+                # exact consumer check succeeds on the published paths.
+                run_handshake(resolved_agent, root)
+                invalidate(es_url, authorization, published_recovery["pending_revoke_ids"])
+            except (InputError, RequestFailure) as error:
+                raise ProvisionError("install failed: old shipper API key revocation:") from error
+            prior = state_template(uuid_value, published_recovery["target_generation"],
+                                   published_recovery["active_key_id"],
+                                   published_recovery["enrollment_root"])
+            atomic_write(root, "state.json", jcs(prior) + b"\n")
+        failure_tracker.mark(FailureSite.ASSET_APPLY)
         prerequisites(es_url, kb_url, authorization)  # Step 3
         cluster_health_gate(es_url, authorization)  # protocol invariant, all profiles
         fence(es_url, authorization, prior, uuid_value, root, adoption)  # Step 4, before W1 PUT
@@ -4282,6 +4600,7 @@ def main() -> int:
                 pre_fleet_snapshot = fleet_stream_snapshot(es_url, authorization)
                 test_rollover("after-fleet-snapshot", es_url, authorization, pre_fleet_snapshot)
                 journal = TransactionJournal(root, ownership_profile, new_transaction=True)
+                failure_tracker.attach_journal(journal)
                 journal.pin_bundle(args.bundle, bundle)
                 if not journal.value.get("m1_anchors"):
                     journal.pin_m1_anchors(m1_anchor_pins(es_url, authorization))
@@ -4410,6 +4729,7 @@ def main() -> int:
             mint_name = "rigsignal-provision-" + uuid.uuid4().hex
             intent = state_template(uuid_value, generation, old_id, str(root))
             intent.update(phase="mint_intent", pending_mint_name=mint_name)
+            failure_tracker.mark(FailureSite.CANDIDATE_STAGE)
             atomic_write(root, "state.json", jcs(intent) + b"\n")
             mint_journal = None
             if journal is not None:
@@ -4428,10 +4748,13 @@ def main() -> int:
             fault("after-mint-response")
             staged = dict(intent)
             staged.update(phase="candidate_staged", candidate_key_id=candidate_id)
+            failure_tracker.mark(FailureSite.CANDIDATE_STAGE)
             atomic_write(root, "state.json", jcs(staged) + b"\n")
+            failure_tracker.mark(FailureSite.CANDIDATE_STAGE)
             candidate_root = secure_candidate_root(root)
-            candidate_files = enrollment_files(es_url, args.ca_file, root, uuid_value, generation, encoded, staged)
+            candidate_files = enrollment_files(es_url, enrollment_ca_file, root, uuid_value, generation, encoded, staged)
             for name, contents in candidate_files.items():
+                failure_tracker.mark(FailureSite.CANDIDATE_STAGE)
                 atomic_write(candidate_root, name, contents)
             fault("candidate-write")
             try:
@@ -4446,6 +4769,7 @@ def main() -> int:
                 invalidate(es_url, authorization, [candidate_id])
                 raise ProvisionError("install failed: shipper credential verification:")
             staged["phase"] = "candidate_verified"
+            failure_tracker.mark(FailureSite.CANDIDATE_STAGE)
             atomic_write(root, "state.json", jcs(staged) + b"\n")
             fault("candidate-verify")
         else:
@@ -4499,19 +4823,23 @@ def main() -> int:
                        candidate_key_id=candidate_id)
         if old_id and old_id != candidate_id:
             publish["pending_revoke_ids"] = [old_id]
-        publication_files = enrollment_files(es_url, args.ca_file, root, uuid_value, generation, encoded, publish)
+        publication_files = enrollment_files(es_url, enrollment_ca_file, root, uuid_value, generation, encoded, publish)
         # A minted candidate is staged under the private candidate directory
         # before any named consumer file is touched.  Reuse has no new secret
         # to stage, so render the equivalent already-proved generation here.
         if not reuse:
+            failure_tracker.mark(FailureSite.CANDIDATE_STAGE)
             candidate_root = secure_candidate_root(root)
             for name in publication_files:
+                failure_tracker.mark(FailureSite.CANDIDATE_STAGE)
                 atomic_write(candidate_root, name, publication_files[name])
-        atomic_publication(root, publication_files)
+        failure_tracker.mark(FailureSite.PUBLICATION_STAGE)
+        atomic_publication(root, publication_files, failure_tracker)
         fault("published-state")
 
         # Step 10 has no endpoint/credential environment fallback.
-        run_handshake(args.agent_binary, root)
+        failure_tracker.mark(FailureSite.PUBLISHED_PROBE)
+        run_handshake(resolved_agent, root)
         if old_id and old_id != candidate_id:
             try:
                 fault("before-revoke")
@@ -4519,6 +4847,7 @@ def main() -> int:
                 fault("after-revoke")
             except (InputError, RequestFailure) as error:
                 raise ProvisionError("install failed: old shipper API key revocation:") from error
+        failure_tracker.mark(FailureSite.LOCAL_COMMIT)
         atomic_write(root, "state.json", jcs(final) + b"\n")
         remove_candidate_root(root)
 
@@ -4544,10 +4873,12 @@ def main() -> int:
     except ProvisionError as error:
         print(error.prefix, file=sys.stderr)
         return 1
-    except (InputError, RequestFailure, OSError) as error:
+    except (InputError, RequestFailure, OSError):
         # The public contract deliberately avoids exposing response bodies and
         # exception text, which could contain credentials or cluster data.
         print("install failed: enrollment output:", file=sys.stderr)
+        failure_tracker.persist()
+        report_failure_site(failure_tracker.site)
         return 1
 
 
