@@ -522,7 +522,17 @@ leg_t() {
   # source path.  It has no early ancestor check, so it must reach HTTP rather
   # than emit the new refusal.  PYTHONPATH supplies its unchanged sibling
   # module without altering any reviewed tools/ source.
-  git show 64b5337:tools/install_assets.py >"$pre_fix"
+  #
+  # Resolve against $REPO_ROOT, never the caller's cwd: this leg is invoked by
+  # chain drivers that run from outside the repo.  The ref is overridable, and
+  # the resolved source is then asserted to actually predate the fix -- a ref
+  # that silently resolved to fixed source would make this control vacuous,
+  # which is the exact failure mode it exists to prevent.
+  local pre_fix_ref="${LEG_T_PRE_FIX_REF:-64b533757f6d04a9578da4c53ece715a64f4cadd}"
+  git -C "$REPO_ROOT" show "$pre_fix_ref:tools/install_assets.py" >"$pre_fix" 2>/dev/null \
+    || fail "Leg-T could not resolve pre-fix installer at $pre_fix_ref"
+  ! grep -q '_enrollment_parent_safe' "$pre_fix" \
+    || fail "Leg-T pre-fix source at $pre_fix_ref already contains the fix; control is vacuous"
   : >"$RUN_DIR/leg-t-pre-fix-http.log"
   set +e
   RIGSIGNAL_HTTP_AUDIT_LOG="$RUN_DIR/leg-t-pre-fix-http.log" PYTHONPATH="$REPO_ROOT/tools${PYTHONPATH:+:$PYTHONPATH}" python3 "$pre_fix" --bundle "$BUNDLE" --endpoint "$ES_URL" --ca-file "$CS_CA_FILE" --kibana-endpoint "$KB_URL" --kibana-ca-file "$CS_CA_FILE" --admin-credentials-file "$RUN_DIR/admin.toml" --agent-binary "$CLEAN_STACK_AGENT_BINARY" --profile user --enrollment-root "$root" --ownership-profile fleet-coexist --adopt-existing-w1-stream >"$RUN_DIR/leg-t-pre-fix.log" 2>&1
