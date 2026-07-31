@@ -35,15 +35,21 @@ configuration against hardware state directly — the first of which is D6.
 
 ## Quick start
 
-### Linux — one-line installer (recommended, includes eBPF)
+### Linux installer channels (recommended; agent-only by default)
 
 ```bash
+# Latest channel (mutable; resolves the current release payload)
 curl -sSfL https://mathewrj.github.io/RigSignal-Integration/install.sh | sh
+
+# Reproducible release (pins both the installer and payload)
+VERSION=<release-version>
+curl -sSfL "https://github.com/MathewRJ/RigSignal/releases/download/v${VERSION}/install.sh" | sh -s -- --version "${VERSION}"
 ```
 
 Installs `rigsignal-agent` and the `rigsignal` launcher to `~/.local/bin`
-(no root required), sets up the user systemd service, and installs + starts
-the pre-built eBPF daemon with one `sudo` prompt (skip with `--no-ebpf`).
+(no root required) and sets up the user systemd service. The default install
+is agent-only; add `--with-ebpf` to install and start the pre-built eBPF
+service with one `sudo` prompt.
 Works on SteamOS and other read-only-root distros — this is the recommended
 path on Steam Deck.
 

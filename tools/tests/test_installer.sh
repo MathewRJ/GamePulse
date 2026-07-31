@@ -553,7 +553,6 @@ test_launcher_contains_no_tls_bypass() {
 fixture_arch() {
     case "$(uname -m)" in
         x86_64|amd64) printf 'x86_64' ;;
-        aarch64|arm64) printf 'aarch64' ;;
         *) return 1 ;;
     esac
 }
@@ -592,6 +591,138 @@ test_checksum_mismatch_aborts_before_unpack() {
     # must fail BECAUSE of the checksum, not for an unrelated reason (e.g. exec bit)
     grep -qi 'checksum' "$TEST_TMP/checksum.out" || return 1
     [[ ! -e "$stage$home/.local/bin/rigsignal" ]]
+}
+
+test_architecture_refusal_precedes_release_requests() {
+    local shim="$TEST_TMP/unsupported-arch-bin"
+    local requests="$TEST_TMP/unsupported-arch-requests"
+    mkdir -p "$shim"
+    printf '%s\n' \
+        '#!/bin/sh' \
+        '[ "$1" = "-m" ] && { printf "%s\\n" aarch64; exit 0; }' \
+        'exec /usr/bin/uname "$@"' >"$shim/uname"
+    printf '#!/bin/sh\nprintf curl >>"$RIGSIGNAL_TEST_REQUESTS"\nexit 1\n' >"$shim/curl"
+    printf '#!/bin/sh\nprintf wget >>"$RIGSIGNAL_TEST_REQUESTS"\nexit 1\n' >"$shim/wget"
+    chmod +x "$shim/uname" "$shim/curl" "$shim/wget"
+    : >"$requests"
+    if HOME="$TEST_TMP/home-unsupported-arch" PATH="$shim:$PATH" \
+        RIGSIGNAL_TEST_REQUESTS="$requests" "$INSTALLER" --version 1.2.3 \
+        >"$TEST_TMP/unsupported-arch.out" 2>&1; then
+        return 1
+    fi
+    grep -Fq 'Unsupported architecture: aarch64. RigSignal release builds support Linux x86_64 only.' \
+        "$TEST_TMP/unsupported-arch.out" \
+        && [[ ! -s "$requests" ]]
+}
+
+test_x86_64_architecture_installs_fixture() {
+    local release="$TEST_TMP/release-x86_64"
+    local home="$TEST_TMP/home-x86_64"
+    local stage="$TEST_TMP/stage-x86_64"
+    local shim="$TEST_TMP/x86_64-arch-bin"
+    local tarball digest
+    mkdir -p "$shim"
+    printf '%s\n' \
+        '#!/bin/sh' \
+        '[ "$1" = "-m" ] && { printf "%s\\n" x86_64; exit 0; }' \
+        'exec /usr/bin/uname "$@"' >"$shim/uname"
+    chmod +x "$shim/uname"
+    make_release_fixture "$release" 1.2.5 valid || return 1
+    tarball='rigsignal-1.2.5-linux-x86_64.tar.gz'
+    digest=$(sha256sum "$release/$tarball") || return 1
+    digest=${digest%% *}
+    printf '%s *%s\n' "$digest" "$tarball" >"$release/$tarball.sha256"
+    HOME="$home" DESTDIR="$stage" RIGSIGNAL_INSTALL_LOCAL_DIR="$release" PATH="$shim:$PATH" \
+        "$INSTALLER" --version 1.2.5 >"$TEST_TMP/x86_64.out" 2>&1 \
+        && [[ -x "$stage$home/.local/bin/rigsignal" ]]
+}
+
+test_python_preflight_rejects_missing_or_broken_python() {
+    local mode shim output
+    for mode in missing broken; do
+        shim="$TEST_TMP/python-${mode}-bin"
+        output="$TEST_TMP/python-${mode}.out"
+        mkdir -p "$shim"
+        printf '%s\n' \
+            '#!/bin/sh' \
+            '[ "$1" = "-m" ] && { printf "%s\\n" x86_64; exit 0; }' \
+            'exec /usr/bin/uname "$@"' >"$shim/uname"
+        if [[ "$mode" == broken ]]; then
+            printf '#!/bin/sh\nexit 1\n' >"$shim/python3"
+            chmod +x "$shim/python3"
+        fi
+        chmod +x "$shim/uname"
+        if HOME="$TEST_TMP/home-python-${mode}" PATH="$shim" "$INSTALLER" --version 1.2.3 >"$output" 2>&1; then
+            return 1
+        fi
+        grep -qi 'Python 3' "$output" || return 1
+    done
+}
+
+test_sidecar_rejects_noncanonical_records() {
+    local release="$TEST_TMP/release-malformed-sidecars"
+    local home="$TEST_TMP/home-malformed-sidecars"
+    local shim="$TEST_TMP/malformed-sidecar-bin"
+    local tarball digest mode stage
+    make_release_fixture "$release" 1.2.6 valid || return 1
+    tarball='rigsignal-1.2.6-linux-x86_64.tar.gz'
+    digest=$(sha256sum "$release/$tarball") || return 1
+    digest=${digest%% *}
+    # These files make the wrong-target records valid to the legacy
+    # sha256sum -c verifier.  The cp shim puts them in the installer's fresh
+    # temporary directory as well, so these controls exercise parser
+    # strictness rather than a missing-file failure.
+    cp "$release/$tarball" "$release/wrong.tar.gz" || return 1
+    cp "$release/$tarball" "$release/another.tar.gz" || return 1
+    cp "$release/$tarball" "$release/rigsignal-1.2.6-linux-*.tar.gz" || return 1
+    mkdir -p "$shim"
+    printf '%s\n' \
+        '#!/bin/sh' \
+        '/bin/cp "$@" || exit $?' \
+        'case "$1" in' \
+        '  *rigsignal-1.2.6-linux-x86_64.tar.gz)' \
+        '    target_dir=${2%/*}' \
+        '    /bin/cp "$2" "$target_dir/wrong.tar.gz"' \
+        '    /bin/cp "$2" "$target_dir/another.tar.gz"' \
+        '    /bin/cp "$2" "$target_dir/rigsignal-1.2.6-linux-*.tar.gz"' \
+        '    ;;' \
+        'esac' >"$shim/cp"
+    chmod +x "$shim/cp"
+    for mode in wrong-basename extra-record missing-newline uppercase short glob-lookalike; do
+        case "$mode" in
+            wrong-basename)
+                printf '%s  wrong.tar.gz\n' "$digest" >"$release/$tarball.sha256" ;;
+            extra-record)
+                printf '%s  %s\n%s  another.tar.gz\n' "$digest" "$tarball" "$digest" >"$release/$tarball.sha256" ;;
+            missing-newline)
+                printf '%s  %s' "$digest" "$tarball" >"$release/$tarball.sha256" ;;
+            uppercase)
+                printf '%s  %s\n' "${digest^^}" "$tarball" >"$release/$tarball.sha256" ;;
+            short)
+                printf '%s  %s\n' "${digest:1}" "$tarball" >"$release/$tarball.sha256" ;;
+            glob-lookalike)
+                printf '%s  rigsignal-1.2.6-linux-*.tar.gz\n' "$digest" >"$release/$tarball.sha256" ;;
+        esac
+        case "$mode" in
+            wrong-basename|extra-record|glob-lookalike)
+                (cd "$release" && sha256sum -c "$tarball.sha256" >/dev/null) || return 1 ;;
+        esac
+        stage="$TEST_TMP/stage-malformed-sidecar-$mode"
+        if HOME="$home" DESTDIR="$stage" RIGSIGNAL_INSTALL_LOCAL_DIR="$release" \
+            PATH="$shim:$PATH" "$INSTALLER" --version 1.2.6 >"$TEST_TMP/malformed-sidecar-$mode.out" 2>&1; then
+            return 1
+        fi
+        grep -qi 'checksum' "$TEST_TMP/malformed-sidecar-$mode.out" || return 1
+        [[ ! -e "$stage$home/.local/bin/rigsignal" ]] || return 1
+    done
+}
+
+test_package_dependencies_declare_python3() {
+    grep -qx 'depends = "$auto, python3"' "$REPO_ROOT/src/Cargo.toml" || return 1
+    grep -qx 'requires = \["python3"\]' "$REPO_ROOT/src/Cargo.toml" || return 1
+    grep -qx "depends=('python3')" "$REPO_ROOT/packaging/PKGBUILD" || return 1
+    grep -qx "depends=('python3')" "$REPO_ROOT/packaging/aur/PKGBUILD" || return 1
+    grep -qx "depends=('python3')" "$REPO_ROOT/.github/packaging/PKGBUILD"
 }
 
 test_uninstall_removes_staged_install() {
@@ -890,6 +1021,11 @@ run_test setup_fsync_failure_rolls_back_before_replacement test_setup_fsync_fail
 run_test launcher_contains_no_tls_bypass test_launcher_contains_no_tls_bypass
 run_test setup_reauth_uses_persisted_ca_without_prompting test_setup_reauth_uses_persisted_ca_without_prompting
 run_test checksum_mismatch_aborts_before_unpack test_checksum_mismatch_aborts_before_unpack
+run_test architecture_refusal_precedes_release_requests test_architecture_refusal_precedes_release_requests
+run_test x86_64_architecture_installs_fixture test_x86_64_architecture_installs_fixture
+run_test python_preflight_rejects_missing_or_broken_python test_python_preflight_rejects_missing_or_broken_python
+run_test sidecar_rejects_noncanonical_records test_sidecar_rejects_noncanonical_records
+run_test package_dependencies_declare_python3 test_package_dependencies_declare_python3
 run_test uninstall_removes_staged_install test_uninstall_removes_staged_install
 run_test package_user_unit_uses_user_config_and_detects_packaged_ebpf test_package_user_unit_uses_user_config_and_detects_packaged_ebpf
 run_test elevated_install_failure_rolls_back_and_restores_readonly test_elevated_install_failure_rolls_back_and_restores_readonly

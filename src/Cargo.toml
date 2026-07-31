@@ -84,7 +84,7 @@ section = "utils"
 priority = "optional"
 # Binary auto-inclusion is disabled when assets is set; list it explicitly.
 # $auto resolves shared-library dependencies (glibc, etc.) from the binary.
-depends = "$auto"
+depends = "$auto, python3"
 # cargo-deb's default Debian revision is "1", so 0.3.0-1 is the last
 # package version that shipped /etc/rigsignal/rigsignal.toml as a conffile.
 maintainer-scripts = "debian"
@@ -118,6 +118,7 @@ eula         = false
 [package.metadata.generate-rpm]
 license = "Apache-2.0"
 summary = "RigSignal gaming performance telemetry agent"
+requires = ["python3"]
 assets = [
     { source = "../target/release/rigsignal-agent", dest = "/usr/bin/rigsignal-agent", mode = "755" },
     { source = "../dist/engine/install_assets.py", dest = "/usr/lib/rigsignal/engine/install_assets.py", mode = "755" },

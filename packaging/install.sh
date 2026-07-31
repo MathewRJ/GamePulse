@@ -4,8 +4,11 @@
 # Installs to ~/.local/bin/ — no root required, survives SteamOS / immutable-OS updates.
 #
 # Usage:
+#   # Latest channel (mutable; resolves the current release payload):
 #   curl -sSfL https://mathewrj.github.io/RigSignal-Integration/install.sh | sh
-#   curl -sSfL https://mathewrj.github.io/RigSignal-Integration/install.sh | sh -s -- --version 0.2.4
+#   # Reproducible release (pins both this script and its payload):
+#   VERSION=<release-version>
+#   curl -sSfL "https://github.com/MathewRJ/RigSignal/releases/download/v${VERSION}/install.sh" | sh -s -- --version "${VERSION}"
 #
 # After install:
 #   rigsignal setup    # configure Elasticsearch endpoint + API key
@@ -67,8 +70,7 @@ download() {
 ARCH=$(uname -m)
 case "$ARCH" in
     x86_64|amd64)   ARCH="x86_64" ;;
-    aarch64|arm64)  ARCH="aarch64" ;;
-    *) err "Unsupported architecture: $ARCH. Only x86_64 and aarch64 are supported." ;;
+    *) err "Unsupported architecture: $ARCH. RigSignal release builds support Linux x86_64 only." ;;
 esac
 
 OS=$(uname -s)
@@ -76,6 +78,13 @@ case "$OS" in
     Linux) ;;
     *) err "This installer is for Linux only. For Windows, download the .msi from GitHub Releases." ;;
 esac
+
+# The installed launcher and uninstaller require Python's standard library.
+# Check it before release lookup, download, or any installation side effects.
+command -v python3 >/dev/null 2>&1 \
+    || err "Python 3 is required. Install python3 and retry."
+python3 -c 'import sys, ssl, tomllib' >/dev/null 2>&1 \
+    || err "A usable Python 3 standard library (including ssl and tomllib) is required. Install or repair python3 and retry."
 
 # ── Resolve version ───────────────────────────────────────────────────────────
 
@@ -102,7 +111,7 @@ fi
 
 # ── Download ──────────────────────────────────────────────────────────────────
 
-TARBALL="rigsignal-${VERSION}-linux-${ARCH}.tar.gz"
+TARBALL="rigsignal-${VERSION}-linux-x86_64.tar.gz"
 DOWNLOAD_URL="${GITHUB_RELEASES}/v${VERSION}/${TARBALL}"
 CHECKSUM_FILE="${TARBALL}.sha256"
 CHECKSUM_URL="${GITHUB_RELEASES}/v${VERSION}/${CHECKSUM_FILE}"
@@ -124,7 +133,24 @@ fi
 
 command -v sha256sum >/dev/null 2>&1 || err "sha256sum is required to verify the release tarball."
 info "Verifying ${TARBALL} checksum..."
-(cd "$TMP" && sha256sum -c "$CHECKSUM_FILE") \
+EXPECTED_DIGEST=$(python3 - "$TMP/$CHECKSUM_FILE" "$TARBALL" <<'PY'
+import pathlib
+import re
+import sys
+
+sidecar = pathlib.Path(sys.argv[1]).read_bytes()
+basename = sys.argv[2].encode("ascii")
+record = re.compile(rb"([0-9a-f]{64}) (?: |\*)" + re.escape(basename) + rb"\n")
+match = record.fullmatch(sidecar)
+if match is None:
+    raise SystemExit(1)
+print(match.group(1).decode("ascii"))
+PY
+) || err "Checksum sidecar must contain exactly one lowercase SHA-256 record for ${TARBALL}; refusing to unpack it."
+ACTUAL_DIGEST=$(sha256sum "$TMP/$TARBALL") \
+    || err "Could not calculate checksum for ${TARBALL}; refusing to unpack it."
+ACTUAL_DIGEST=${ACTUAL_DIGEST%% *}
+[ "$ACTUAL_DIGEST" = "$EXPECTED_DIGEST" ] \
     || err "Checksum verification failed for ${TARBALL}; refusing to unpack it."
 tar -xzf "$TMP/$TARBALL" -C "$TMP" --strip-components=1
 

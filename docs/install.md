@@ -3,11 +3,15 @@
 ## Quick start
 
 ```bash
-# Linux — recommended; eBPF is opt-in
+# Latest channel (mutable; resolves the current release payload)
 curl -sSfL https://mathewrj.github.io/RigSignal-Integration/install.sh | sh
 
-# Explicitly opt in to the privileged eBPF daemon
+# Explicitly opt in to the privileged eBPF daemon on the latest channel
 curl -sSfL https://mathewrj.github.io/RigSignal-Integration/install.sh | sh -s -- --with-ebpf
+
+# Reproducible release (pins both the installer and payload)
+VERSION=<release-version>
+curl -sSfL "https://github.com/MathewRJ/RigSignal/releases/download/v${VERSION}/install.sh" | sh -s -- --version "${VERSION}"
 
 # Arch Linux / CachyOS / Manjaro (AUR, builds from source incl. eBPF)
 yay -S rigsignal-git
@@ -286,6 +290,8 @@ sudo install -m 644 target/bpfel-unknown-none/release/rigsignal-ebpf-probes \
 ---
 
 ## Windows installer
+
+Windows is agent-only: assets are installed from a Linux administrator host.
 
 Download `rigsignal-0.3.0-x86_64.msi` from the
 [GitHub Releases page](https://github.com/MathewRJ/RigSignal/releases) and run it,
