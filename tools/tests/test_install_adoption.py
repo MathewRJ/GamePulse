@@ -84,10 +84,11 @@ class InstallAdoptionTests(unittest.TestCase):
             INSTALL.atomic_write(root, "state.json", INSTALL.jcs(state) + b"\n")
             INSTALL.secure_candidate_root(root)
             snapshot = frozenset({(".ds-recovered", "recovered-uuid")})
+            expected_bundle = INSTALL.Bundle("test", "test", [])
             with ExitStack() as patches:
                 patches.enter_context(patch.object(INSTALL.argparse.ArgumentParser, "parse_args",
                                                    return_value=self.installer_args(root)))
-                patches.enter_context(patch.object(INSTALL, "load_bundle", return_value=INSTALL.Bundle("test", "test", [])))
+                patches.enter_context(patch.object(INSTALL, "load_bundle", return_value=expected_bundle))
                 patches.enter_context(patch.object(INSTALL, "role_body", return_value={}))
                 patches.enter_context(patch.object(INSTALL, "configure_https"))
                 patches.enter_context(patch.object(INSTALL, "admin_authorization", return_value="admin"))
@@ -106,7 +107,7 @@ class InstallAdoptionTests(unittest.TestCase):
             invalidate_name.assert_called_once_with("https://es.invalid", "admin", "unfinished")
             invalidate.assert_called_once_with("https://es.invalid", "admin", ["candidate"])
             self.assertEqual(stderr.getvalue(), "install refused: adoption_required\n")
-            remote.assert_called_once_with("https://es.invalid", "admin")
+            remote.assert_called_once_with("https://es.invalid", "admin", expected_bundle)
             self.assertFalse((root / "candidate").exists())
             self.assertFalse((root / "state.json").exists())
 
@@ -328,11 +329,12 @@ class InstallAdoptionTests(unittest.TestCase):
         """Owner ruling 1 extends the clean-root adoption dispatch to audit-only roots."""
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw) / "enrollment"
+            bundle = INSTALL.Bundle("test", "test", [])
             with ExitStack() as patches:
                 patches.enter_context(patch.object(INSTALL.argparse.ArgumentParser, "parse_args",
                                                    return_value=self.installer_args(root, True)))
                 patches.enter_context(patch.object(INSTALL, "enrollment_condition", return_value="rolled-back"))
-                patches.enter_context(patch.object(INSTALL, "load_bundle", return_value=INSTALL.Bundle("test", "test", [])))
+                patches.enter_context(patch.object(INSTALL, "load_bundle", return_value=bundle))
                 patches.enter_context(patch.object(INSTALL, "role_body", return_value={}))
                 patches.enter_context(patch.object(INSTALL, "configure_https"))
                 patches.enter_context(patch.object(INSTALL, "admin_authorization", return_value="admin"))
@@ -361,7 +363,8 @@ class InstallAdoptionTests(unittest.TestCase):
                 self.assertEqual(INSTALL.main(), 0)
             self.assertEqual(remote.call_count, 3)
             fence.assert_called_once()
-            self.assertTrue(fence.call_args.args[-1])
+            self.assertTrue(fence.call_args.args[-2])
+            self.assertIs(fence.call_args.args[-1], bundle)
 
     def test_fresh_main_dispatch_runs_full_transaction_after_absent_stream(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -400,7 +403,7 @@ class InstallAdoptionTests(unittest.TestCase):
                 self.assertEqual(INSTALL.main(), 0)
             self.assertEqual(remote.call_count, 4)
             fence.assert_called_once()
-            self.assertFalse(fence.call_args.args[-1])
+            self.assertFalse(fence.call_args.args[-2])
             ensure_stream.assert_called_once()
             publication.assert_called_once()
             handshake.assert_called_once()

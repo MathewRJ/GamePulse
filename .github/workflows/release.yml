@@ -185,6 +185,11 @@ jobs:
           cp target/ebpf/rigsignal-ebpf-probes                         "dist-tar/${DIR}/rigsignal-ebpf-probes"
           cp packaging/systemd/rigsignal-ebpf.user-install.service     "dist-tar/${DIR}/rigsignal-ebpf.service"
 
+          python3 tools/build_asset_bundle.py \
+            --version "$VERSION" \
+            --source-commit "${GITHUB_SHA}" \
+            --engine-output "dist-tar/${DIR}/engine"
+
           chmod +x "dist-tar/${DIR}/rigsignal-agent" \
                    "dist-tar/${DIR}/rigsignal" \
                    "dist-tar/${DIR}/rigsignal-uninstall" \
@@ -261,6 +266,13 @@ jobs:
       - name: Mark binary executable
         run: chmod +x target/release/rigsignal-agent
 
+      - name: Stage asset engine
+        run: |
+          python3 tools/build_asset_bundle.py \
+            --version "${{ needs.setup.outputs.version }}" \
+            --source-commit "${GITHUB_SHA}" \
+            --engine-output dist/engine
+
       - name: Install cargo-binstall (fast binary installer)
         uses: cargo-bins/cargo-binstall@main
 
@@ -295,6 +307,13 @@ jobs:
 
       - name: Mark binary executable
         run: chmod +x target/release/rigsignal-agent
+
+      - name: Stage asset engine
+        run: |
+          python3 tools/build_asset_bundle.py \
+            --version "${{ needs.setup.outputs.version }}" \
+            --source-commit "${GITHUB_SHA}" \
+            --engine-output dist/engine
 
       - name: Install cargo-binstall
         uses: cargo-bins/cargo-binstall@main
@@ -331,6 +350,13 @@ jobs:
 
       - name: Mark binary executable
         run: chmod +x target/release/rigsignal-agent
+
+      - name: Stage asset engine
+        run: |
+          python3 tools/build_asset_bundle.py \
+            --version "${{ needs.setup.outputs.version }}" \
+            --source-commit "${GITHUB_SHA}" \
+            --engine-output dist/engine
 
       - name: Create unprivileged build user (makepkg refuses to run as root)
         run: |

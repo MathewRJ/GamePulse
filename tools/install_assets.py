@@ -67,7 +67,14 @@ TARGET_GENERATION_KAT = "a7ed20a4b4bfe0b2e5597a065e8bdaa5161b0d962e1a502d3db3bbc
 ROLE_JCS_SHA256 = "05b58b8369bc4212fcffa0ea81621ef10d6d57f1de464fbc3f562842a9cbafd7"
 DIAGNOSIS_STREAM = "logs-rigsignal.diagnosis-default"
 W1_LIFECYCLE_POLICY = "logs@lifecycle"
-PROBE_FIXTURE = ROOT / "fixtures/diagnosis_event/v1/positive/15-diagnosis-non-finding-conditional.expected.json"
+PROBE_FIXTURE_PATH = "fixtures/diagnosis_event/v1/positive/15-diagnosis-non-finding-conditional.expected.json"
+# Compatibility handle for source-tree test and owner tooling.  Production
+# proof construction deliberately uses bundle_resource(), never this pathname.
+PROBE_FIXTURE = ROOT / PROBE_FIXTURE_PATH
+CANONICAL_COMPONENT_PATH = "elastic/component-templates/logs-rigsignal.diagnosis-mappings.json"
+CANONICAL_INDEX_PATH = "elastic/index-templates/logs-rigsignal.diagnosis.json"
+AUXILIARY_PATHS = frozenset((PROBE_FIXTURE_PATH,))
+SEMVER_TOKEN = re.compile(r"(?<![0-9A-Za-z])([0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)(?![0-9A-Za-z])")
 STATE_KEYS = frozenset(("version", "phase", "expected_cluster_uuid", "target_generation",
                         "role_jcs_sha256", "enrollment_root", "active_key_id", "pending_revoke_ids",
                         "pending_mint_name", "candidate_key_id"))
@@ -243,6 +250,7 @@ class Bundle:
     version: str
     source_commit: str
     assets: list[Asset]
+    files: dict[str, bytes] | None = None
 
 
 def ownership_for_assets(bundle: Bundle, profile: str) -> dict[tuple[str, str], str]:
@@ -364,7 +372,11 @@ def cargo_version() -> str:
     candidates = [ROOT / "Cargo.toml"] + sorted(ROOT.glob("*/Cargo.toml"))
     for path in candidates:
         in_package = False
-        for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError as error:
+            raise InputError("source Cargo.toml cannot be read") from error
+        for line in lines:
             stripped = line.strip()
             if stripped.startswith("[") and stripped.endswith("]"):
                 in_package = stripped == "[package]"
@@ -373,6 +385,106 @@ def cargo_version() -> str:
                 if match:
                     return match.group(1)
     raise InputError("no [package] version found in Cargo.toml")
+
+
+def engine_version() -> str:
+    """Return the build stamp, falling back only for a source-tree invocation."""
+    stamp = TOOLS_DIR / "_version.py"
+    if stamp.is_file():
+        try:
+            match = re.search(r'^ENGINE_VERSION = (["\'])([^"\']+)\1$',
+                              stamp.read_text(encoding="utf-8"), re.MULTILINE)
+        except OSError as error:
+            raise InputError("engine version stamp cannot be read") from error
+        if match is None:
+            raise InputError("engine version stamp is invalid")
+        return match.group(2)
+    if not (ROOT / "Cargo.toml").is_file():
+        raise InputError("engine version stamp is missing")
+    return cargo_version()
+
+
+def engine_source_commit() -> str | None:
+    """Return the immutable engine commit, if this is a staged engine.
+
+    A source-tree invocation intentionally has no release commit fence: its
+    Cargo version remains the developer fallback.  A staged engine, however,
+    must carry a non-empty commit stamp so a same-semver bundle from another
+    source revision cannot cross the release boundary.
+    """
+    stamp = TOOLS_DIR / "_version.py"
+    if not stamp.is_file():
+        return None
+    try:
+        match = re.search(r'^SOURCE_COMMIT = (["\'])([^"\']*)\1$',
+                          stamp.read_text(encoding="utf-8"), re.MULTILINE)
+    except OSError as error:
+        raise InputError("engine version stamp cannot be read") from error
+    return match.group(2) if match is not None and match.group(2) else None
+
+
+def agent_version(agent: Path) -> str:
+    """Read one unambiguous semver token from the agent's version output."""
+    try:
+        result = subprocess.run([os.fspath(agent), "--version"], text=False,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+    except (OSError, RuntimeError) as error:
+        raise ProvisionError("install refused: agent_binary_unlaunchable") from error
+    if result.returncode != 0:
+        raise ProvisionError("install refused: agent_binary_unlaunchable")
+    try:
+        stdout = (result.stdout or b"").decode("utf-8")
+        stderr = (result.stderr or b"").decode("utf-8")
+    except UnicodeError as error:
+        raise ProvisionError("install refused: agent_version_unparseable") from error
+    found = set(SEMVER_TOKEN.findall(stdout + "\n" + stderr))
+    if len(found) != 1:
+        raise ProvisionError("install refused: agent_version_unparseable")
+    return found.pop()
+
+
+def fence_versions(bundle: Bundle | None, agent: Path) -> None:
+    """Require engine, agent, and verified manifest versions before HTTP."""
+    engine, installed_agent = engine_version(), agent_version(agent)
+    manifest = bundle.version if bundle is not None else "none"
+    if engine != installed_agent or (bundle is not None and engine != manifest):
+        raise ProvisionError("install refused: version_skew; "
+                             f"engine={engine}; agent={installed_agent}; bundle={manifest}")
+    if bundle is not None:
+        stamped_commit = engine_source_commit()
+        if stamped_commit is not None and stamped_commit == bundle.source_commit:
+            return
+        # A source tree is deliberately not a release artifact, so retain its
+        # version-only development fallback.  A staged engine has _version.py
+        # and therefore a missing/blank SOURCE_COMMIT is a fence failure too.
+        if (TOOLS_DIR / "_version.py").is_file():
+            raise ProvisionError("install refused: version_skew; "
+                                 f"engine={engine}; agent={installed_agent}; bundle={manifest}; "
+                                 f"engine_commit={stamped_commit or 'missing'}; "
+                                 f"bundle_commit={bundle.source_commit}")
+
+
+def check_version_fence(bundle: Bundle | None, agent: Path) -> None:
+    """Run the version-only preflight before any recovery-side HTTP mutation."""
+    # Direct unit callers can construct a Bundle without its verified member
+    # map.  Every production load_bundle() result has one, and only that path
+    # enters main(), so this keeps legacy unit fixtures from pretending to be
+    # release bundles.
+    if bundle is None or bundle.files is not None:
+        fence_versions(bundle, _check_agent_binary(agent))
+
+
+def bundle_resource(bundle: Bundle | None, path: str, context: str) -> bytes:
+    """Resolve proof inputs from verified bundle bytes, or the source tree only."""
+    if bundle is not None and bundle.files is not None:
+        data = bundle.files.get(path)
+        if data is None:
+            raise InputError(f"bundle resource missing: {path}")
+        return data
+    try:
+        return (ROOT / path).read_bytes()
+    except OSError as error:
+        raise InputError(f"source resource cannot be read: {context}") from error
 
 
 def source_commit() -> str:
@@ -437,7 +549,9 @@ def load_source() -> Bundle:
     if not dashboards:
         raise InputError(f"dashboard glob matched zero files: {DASHBOARD_DIR / '*.ndjson'}")
     assets.extend(path_to_asset(path.relative_to(ROOT).as_posix(), path.read_bytes()) for path in dashboards)
-    return Bundle(cargo_version(), source_commit(), ordered_assets(assets))
+    files = {asset.path: asset.data for asset in assets}
+    files.update({path: bundle_resource(None, path, "source auxiliary") for path in AUXILIARY_PATHS})
+    return Bundle(cargo_version(), source_commit(), ordered_assets(assets), files)
 
 
 def load_bundle(bundle_path: Path) -> Bundle:
@@ -464,6 +578,7 @@ def load_bundle(bundle_path: Path) -> Bundle:
             if set(members) != set(checksums):
                 raise InputError("bundle files do not exactly match manifest sha256 entries")
             assets = []
+            files = {}
             for path, expected in checksums.items():
                 member = members.get(path)
                 if member is None:
@@ -474,7 +589,9 @@ def load_bundle(bundle_path: Path) -> Bundle:
                 data = payload.read()
                 if hashlib.sha256(data).hexdigest() != expected:
                     raise InputError(f"sha256 mismatch for bundle input: {path}")
-                assets.append(path_to_asset(path, data))
+                files[path] = data
+                if path not in AUXILIARY_PATHS:
+                    assets.append(path_to_asset(path, data))
     except (OSError, tarfile.TarError, json.JSONDecodeError) as error:
         raise InputError(f"cannot read bundle: {error}") from error
     counts = manifest.get("counts")
@@ -485,11 +602,13 @@ def load_bundle(bundle_path: Path) -> Bundle:
     actual_dashboards = sorted(asset.path for asset in assets if asset.kind == "dashboard")
     if dashboards != actual_dashboards:
         raise InputError("bundle manifest dashboard list does not match its input files")
+    if manifest.get("auxiliary") != sorted(AUXILIARY_PATHS):
+        raise InputError("bundle manifest auxiliary inputs are invalid")
     version, commit = manifest.get("bundle_version"), manifest.get("source_commit")
     if not isinstance(version, str) or not isinstance(commit, str):
         raise InputError("bundle manifest lacks version or source_commit")
     validate_w1_manifest(manifest, {asset.path: asset.data for asset in assets})
-    return Bundle(version, commit, ordered_assets(assets))
+    return Bundle(version, commit, ordered_assets(assets), files)
 
 
 def bundle_sha256(bundle_path: Path) -> str:
@@ -1927,30 +2046,57 @@ def _rollback_source_mismatch(source_commit: str) -> ProvisionError:
                           f"for recorded source_commit {source_commit}")
 
 
-def verify_rollback_external_baselines(es_url: str, authorization: str, journal: TransactionJournal,
-                                      bundle_path: Path | None = None) -> None:
-    """Re-run the external oracle using the applied source, never an unchecked tree."""
+def _rollback_source_unavailable() -> ProvisionError:
+    return ProvisionError("install refused: rollback_source_unavailable; provide the applied bundle")
+
+
+def _source_tree_available() -> bool:
+    """Whether this engine is executing from a complete source checkout."""
+    return ((ROOT / "Cargo.toml").is_file() and ASSET_DIR.is_dir()
+            and DASHBOARD_DIR.is_dir())
+
+
+def rollback_verified_bundle(journal: TransactionJournal, bundle_path: Path | None = None) -> Bundle:
+    """Resolve rollback oracle inputs without reading an installed engine's ROOT.
+
+    A supplied archive is verified by its transaction pin.  The source-tree
+    fallback exists only for in-repository owner recovery; staged engines carry
+    neither the asset tree nor authority to substitute it for the applied
+    bundle.
+    """
     pin = journal.value.get("bundle_pin")
-    if pin is None:
-        # Transactions created before bundle pins intentionally retain the
-        # established working-tree rollback behavior for backward compatibility.
-        bundle = load_source()
-    else:
-        if (not isinstance(pin, dict) or not isinstance(pin.get("sha256"), str)
-                or not isinstance(pin.get("source_commit"), str)
-                or not isinstance(pin.get("asset_set_sha256"), str)):
-            raise ProvisionError("install refused: rollback_source_mismatch")
-        try:
-            if bundle_path is not None:
-                if bundle_sha256(bundle_path) != pin["sha256"]:
-                    raise _rollback_source_mismatch(pin["source_commit"])
-                bundle = load_bundle(bundle_path)
-            else:
-                bundle = load_source()
-                if asset_set_sha256(bundle) != pin["asset_set_sha256"]:
-                    raise _rollback_source_mismatch(pin["source_commit"])
-        except InputError as error:
+    if pin is not None and (not isinstance(pin, dict) or not isinstance(pin.get("sha256"), str)
+                            or not isinstance(pin.get("source_commit"), str)
+                            or not isinstance(pin.get("asset_set_sha256"), str)):
+        raise ProvisionError("install refused: rollback_source_mismatch")
+    try:
+        if bundle_path is not None:
+            if pin is not None and bundle_sha256(bundle_path) != pin["sha256"]:
+                raise _rollback_source_mismatch(pin["source_commit"])
+            bundle = load_bundle(bundle_path)
+        else:
+            if not _source_tree_available():
+                raise _rollback_source_unavailable()
+            bundle = load_source()
+    except InputError as error:
+        if pin is not None:
             raise _rollback_source_mismatch(pin["source_commit"]) from error
+        raise _rollback_source_unavailable() from error
+    if pin is not None:
+        if (bundle.source_commit != pin["source_commit"]
+                or asset_set_sha256(bundle) != pin["asset_set_sha256"]):
+            raise _rollback_source_mismatch(pin["source_commit"])
+    return bundle
+
+
+def verify_rollback_external_baselines(es_url: str, authorization: str, journal: TransactionJournal,
+                                      bundle_path: Path | None = None,
+                                      bundle: Bundle | None = None) -> None:
+    """Re-run the external oracle using the applied source, never an unchecked tree."""
+    if bundle is None:
+        bundle = rollback_verified_bundle(journal, bundle_path)
+    pin = journal.value.get("bundle_pin")
+    if pin is not None:
         try:
             ownership = ownership_for_assets(bundle, "fleet-coexist")
         except InputError as error:
@@ -2305,6 +2451,10 @@ def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Pat
     """
     journal = TransactionJournal(root, "fleet-coexist")
     active = newest_non_rolled_back_transaction(journal)
+    # Resolve all canonical/fixture authority before even recovery reads.  In
+    # particular, a staged engine must never discover after a DELETE/PUT that
+    # it was about to substitute its absent ROOT tree for the applied bundle.
+    verified_bundle = rollback_verified_bundle(journal, bundle_path)
     fleet_before = None
     fence = active.get("fleet_fence")
     plan = fence.get("plan") if isinstance(fence, dict) else None
@@ -2325,7 +2475,7 @@ def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Pat
     # reversal, then compare it with the transaction's durable pre-window plan.
     fleet_after = fleet_stream_snapshot(es_url, authorization) if fleet_before is not None else None
     unswept_operations = _recovery_sweep(kb_url, authorization, active)
-    verify_rollback_external_baselines(es_url, authorization, journal, bundle_path)
+    verify_rollback_external_baselines(es_url, authorization, journal, bundle_path, verified_bundle)
     actions = journal_recovery_actions(journal,
         lambda intent: _rollback_live_hash(es_url, kb_url, authorization, intent))
     operations: list[str] = []
@@ -3283,14 +3433,14 @@ def simulated_owned_mapping_projection(es_url: str, authorization: str) -> dict:
     return owned_mapping_projection(mappings, ignore_malformed, failure_store_enabled)
 
 
-def canonical_owned_mapping_projection() -> dict:
+def canonical_owned_mapping_projection(bundle: Bundle | None = None) -> dict:
     """The fixed W1 owned surface, independent of live template simulation."""
     component = parse_json(
-        (ROOT / "elastic/component-templates/logs-rigsignal.diagnosis-mappings.json").read_bytes(),
+        bundle_resource(bundle, CANONICAL_COMPONENT_PATH, "canonical W1 component"),
         "canonical W1 component",
     )
     index = parse_json(
-        (ROOT / "elastic/index-templates/logs-rigsignal.diagnosis.json").read_bytes(),
+        bundle_resource(bundle, CANONICAL_INDEX_PATH, "canonical W1 index template"),
         "canonical W1 index template",
     )
     mappings = required_path(component, ("template", "mappings"))
@@ -3352,7 +3502,8 @@ def _index_lifecycle_is_compatible(es_url: str, authorization: str, index_name: 
     return isinstance(explained, dict) and explained.get("managed") is True and explained.get("policy") == W1_LIFECYCLE_POLICY
 
 
-def stream_compatibility_snapshot(es_url: str, authorization: str, response: object) -> frozenset[tuple[str, str]] | None:
+def stream_compatibility_snapshot(es_url: str, authorization: str, response: object,
+                                  bundle: Bundle | None = None) -> frozenset[tuple[str, str]] | None:
     """Validate the remote W1 shape and return its immutable backing snapshot.
 
     ``None`` deliberately covers every malformed or incompatible response.  The
@@ -3371,7 +3522,7 @@ def stream_compatibility_snapshot(es_url: str, authorization: str, response: obj
         phases = policy_body.get("policy", {}).get("phases") if isinstance(policy_body, dict) else None
         if not isinstance(phases, dict) or "delete" in phases:
             return None
-        desired = canonical_owned_mapping_projection()
+        desired = canonical_owned_mapping_projection(bundle) if bundle is not None else canonical_owned_mapping_projection()
         for index_name, index_uuid in pairs:
             if not _index_lifecycle_is_compatible(es_url, authorization, index_name, index_uuid):
                 return None
@@ -3383,7 +3534,8 @@ def stream_compatibility_snapshot(es_url: str, authorization: str, response: obj
 
 
 def existing_stream_is_compatible(es_url: str, authorization: str, state: dict | None, uuid_value: str,
-                                  root: Path | None = None, adopt_existing: bool = False) -> bool:
+                                  root: Path | None = None, adopt_existing: bool = False,
+                                  bundle: Bundle | None = None) -> bool:
     if state is not None:
         if root is None:
             raise InputError("enrollment root is required for state ownership")
@@ -3404,13 +3556,15 @@ def existing_stream_is_compatible(es_url: str, authorization: str, state: dict |
     if not adopt_existing and (state is None or state["phase"] != "committed"
                                or state["expected_cluster_uuid"] != uuid_value):
         return False
-    return stream_compatibility_snapshot(es_url, authorization, response) is not None
+    return stream_compatibility_snapshot(es_url, authorization, response, bundle) is not None
 
 
 def fence(es_url: str, authorization: str, state: dict | None, uuid_value: str,
-          root: Path | None = None, adopt_existing: bool = False) -> None:
+          root: Path | None = None, adopt_existing: bool = False,
+          bundle: Bundle | None = None) -> None:
     try:
-        compatible = existing_stream_is_compatible(es_url, authorization, state, uuid_value, root, adopt_existing)
+        compatible = existing_stream_is_compatible(es_url, authorization, state, uuid_value, root, adopt_existing,
+                                                   bundle)
     except StateBindingError as error:
         raise ProvisionError("install refused: enrollment_remediation_required") from error
     except (RequestFailure, InputError) as error:
@@ -3419,7 +3573,8 @@ def fence(es_url: str, authorization: str, state: dict | None, uuid_value: str,
         raise ProvisionError("install refused: existing diagnosis stream is not W1; migration is required")
 
 
-def remote_stream_condition(es_url: str, authorization: str) -> tuple[str, frozenset[tuple[str, str]] | None]:
+def remote_stream_condition(es_url: str, authorization: str,
+                            bundle: Bundle | None = None) -> tuple[str, frozenset[tuple[str, str]] | None]:
     """Return absent, compatible, or incompatible without mutating the cluster."""
     try:
         response = es_json(es_url, "/_data_stream/" + DIAGNOSIS_STREAM, "GET", authorization)
@@ -3427,13 +3582,14 @@ def remote_stream_condition(es_url: str, authorization: str) -> tuple[str, froze
         if error.status == 404:
             return "absent", None
         raise
-    snapshot = stream_compatibility_snapshot(es_url, authorization, response)
+    snapshot = stream_compatibility_snapshot(es_url, authorization, response, bundle)
     return ("compatible", snapshot) if snapshot is not None else ("incompatible", None)
 
 
-def dispatch_clean_root(es_url: str, authorization: str, adopt_requested: bool) -> bool:
+def dispatch_clean_root(es_url: str, authorization: str, adopt_requested: bool,
+                        bundle: Bundle | None = None) -> bool:
     """Apply the clean-root adoption matrix and return whether adoption is enabled."""
-    remote_condition, _snapshot = remote_stream_condition(es_url, authorization)
+    remote_condition, _snapshot = remote_stream_condition(es_url, authorization, bundle)
     if adopt_requested:
         if remote_condition == "absent":
             raise ProvisionError("install refused: adoption_flag_stream_absent")
@@ -3459,12 +3615,12 @@ def ensure_stream(es_url: str, authorization: str) -> None:
         raise InputError("exact diagnosis stream did not resolve")
 
 
-def simulate(es_url: str, authorization: str) -> None:
+def simulate(es_url: str, authorization: str, bundle: Bundle | None = None) -> None:
     try:
         actual = simulated_owned_mapping_projection(es_url, authorization)
     except InputError as error:
         raise InputError("W1 index simulation failed")
-    if jcs(actual) != jcs(canonical_owned_mapping_projection()):
+    if jcs(actual) != jcs(canonical_owned_mapping_projection(bundle)):
         raise InputError("W1 index simulation differs")
 
 
@@ -4168,8 +4324,9 @@ def invalidate_mint_name(es_url: str, authorization: str, mint_name: str) -> Non
     invalidate(es_url, authorization, sorted(set(ids)))
 
 
-def candidate_document(suffix: str) -> dict:
-    document = parse_json(PROBE_FIXTURE.read_bytes(), "provision proof fixture")
+def candidate_document(suffix: str, bundle: Bundle | None = None) -> dict:
+    document = parse_json(bundle_resource(bundle, PROBE_FIXTURE_PATH, "provision proof fixture"),
+                          "provision proof fixture")
     if not isinstance(document, dict):
         raise InputError("provision proof fixture is invalid")
     event_id = "provision-" + suffix
@@ -4230,8 +4387,9 @@ def assert_mapping_rejection(status: int, response: object, error_type: str,
 
 
 def verify_stream_behavior(es_url: str, authorization: str, admin_authorization: str, suffix: str,
-                           journal: TransactionJournal | None = None) -> None:
-    document = candidate_document(suffix)
+                           journal: TransactionJournal | None = None,
+                           bundle: Bundle | None = None) -> None:
+    document = candidate_document(suffix, bundle)
     event_id = document["event"]["id"]
     path = "/" + DIAGNOSIS_STREAM + "/_create/" + event_id + "?refresh=wait_for"
     proof_record = journal.proof_intent(event_id) if journal is not None else None
@@ -4273,8 +4431,9 @@ def verify_stream_behavior(es_url: str, authorization: str, admin_authorization:
     assert_no_failure_store_document(es_url, admin_authorization, malformed_id)
 
 
-def verify_role_matrix(es_url: str, authorization: str, suffix: str) -> None:
-    document = candidate_document(suffix)
+def verify_role_matrix(es_url: str, authorization: str, suffix: str,
+                       bundle: Bundle | None = None) -> None:
+    document = candidate_document(suffix, bundle)
     path = "/" + DIAGNOSIS_STREAM + "/_create/provision-" + suffix
     # Exact CAN rows and deny matrix.  A duplicate _create is delivery idempotency
     # (409), while PUT to the existing ID must be an authorization failure (403).
@@ -4414,6 +4573,11 @@ def main() -> int:
             rollback_root = secure_root(args.rollback)
             if args.dry_run:
                 raise InputError("rollback dry-run is unsupported")
+            # The rollback boundary is fenced before any remote recovery work.
+            # With no archive it still binds the staged engine to the agent;
+            # a supplied archive additionally binds both version and commit.
+            rollback_bundle = load_bundle(args.bundle) if args.bundle is not None else None
+            check_version_fence(rollback_bundle, args.agent_binary)
             configure_https(args.ca_file)
             configure_https(args.kibana_ca_file)
             authorization = admin_authorization(args.admin_credentials_file)
@@ -4511,6 +4675,7 @@ def main() -> int:
         adopt_requested = getattr(args, "adopt_existing_w1_stream", False)
         if adopt_requested and condition in {"committed", "incomplete"}:
             raise ProvisionError("install refused: adoption_flag_state_present")
+        check_version_fence(bundle, args.agent_binary)
         # Default to the no-HTTP publication guard.  Incomplete is the sole
         # exception: it must first reach its durable key-recovery path, so a
         # new local refusal cannot strand that key.  A future condition is
@@ -4533,7 +4698,7 @@ def main() -> int:
         # A clean root or the owner-ratified rolled-back audit-only root can
         # adopt a compatible remote stream.  Decide it before creating the
         # root or running recovery.
-        adoption = (dispatch_clean_root(es_url, authorization, adopt_requested)
+        adoption = (dispatch_clean_root(es_url, authorization, adopt_requested, bundle)
                      if condition in {"clean", "rolled-back"} else False)
 
         # The marker survives local rollback and a fresh enrollment root.  It
@@ -4600,7 +4765,7 @@ def main() -> int:
             # A null-active recovery restores the clean-root condition.  Apply
             # the same remote decision matrix now that recovery side effects
             # are durable; adoption is one-shot and was already rejected above.
-            dispatch_clean_root(es_url, authorization, False)
+            dispatch_clean_root(es_url, authorization, False, bundle)
 
         if condition == "incomplete":
             # Recovery has now invalidated the unfinished candidate (or made
@@ -4627,8 +4792,8 @@ def main() -> int:
         failure_tracker.mark(FailureSite.ASSET_APPLY)
         prerequisites(es_url, kb_url, authorization)  # Step 3
         cluster_health_gate(es_url, authorization)  # protocol invariant, all profiles
-        fence(es_url, authorization, prior, uuid_value, root, adoption)  # Step 4, before W1 PUT
-        pre_put_condition, pre_put_snapshot = remote_stream_condition(es_url, authorization)
+        fence(es_url, authorization, prior, uuid_value, root, adoption, bundle)  # Step 4, before W1 PUT
+        pre_put_condition, pre_put_snapshot = remote_stream_condition(es_url, authorization, bundle)
         if pre_put_condition == "absent":
             pre_put_snapshot = None
         elif pre_put_condition != "compatible":
@@ -4741,7 +4906,7 @@ def main() -> int:
                 raise ProvisionError("install failed: " + category) from error
         try:
             ensure_stream(es_url, authorization)
-            simulate(es_url, authorization)
+            simulate(es_url, authorization, bundle)
             if ownership_profile == "fleet-coexist":
                 verify_fleet_stream_overrides(es_url, authorization, fleet_plan,
                                               journal, "post")
@@ -4754,7 +4919,7 @@ def main() -> int:
         if pre_put_snapshot is None:
             # Fresh installation has no stream to snapshot before its W1
             # creates; from here on it receives the same drift protection.
-            _, pre_put_snapshot = remote_stream_condition(es_url, authorization)
+            _, pre_put_snapshot = remote_stream_condition(es_url, authorization, bundle)
             if pre_put_snapshot is None:
                 raise ProvisionError("install failed: diagnosis stream verification:")
 
@@ -4772,8 +4937,8 @@ def main() -> int:
                 if not isinstance(encoded, str):
                     raise ValueError()
                 proof_suffix = uuid.uuid4().hex
-                verify_stream_behavior(es_url, "ApiKey " + encoded, authorization, proof_suffix, journal)
-                verify_role_matrix(es_url, "ApiKey " + encoded, proof_suffix)
+                verify_stream_behavior(es_url, "ApiKey " + encoded, authorization, proof_suffix, journal, bundle)
+                verify_role_matrix(es_url, "ApiKey " + encoded, proof_suffix, bundle)
             except (InputError, ValueError, KeyError, TypeError, RequestFailure):
                 reuse = False
                 encoded = None
@@ -4812,12 +4977,12 @@ def main() -> int:
             fault("candidate-write")
             try:
                 proof_suffix = uuid.uuid4().hex
-                verify_stream_behavior(es_url, "ApiKey " + encoded, authorization, proof_suffix, journal)  # Step 7
+                verify_stream_behavior(es_url, "ApiKey " + encoded, authorization, proof_suffix, journal, bundle)  # Step 7
             except (InputError, RequestFailure):
                 invalidate(es_url, authorization, [candidate_id])
                 raise ProvisionError("install failed: diagnosis stream verification:")
             try:
-                verify_role_matrix(es_url, "ApiKey " + encoded, proof_suffix)  # Step 8
+                verify_role_matrix(es_url, "ApiKey " + encoded, proof_suffix, bundle)  # Step 8
             except (InputError, RequestFailure):
                 invalidate(es_url, authorization, [candidate_id])
                 raise ProvisionError("install failed: shipper credential verification:")
@@ -4844,7 +5009,7 @@ def main() -> int:
             prepublication_asset_fence(es_url, kb_url, authorization, bundle,
                                        ownership_profile, ownership,
                                        journal.value.get("external_baselines") if journal is not None else None)
-            simulate(es_url, authorization)
+            simulate(es_url, authorization, bundle)
             if ownership_profile == "fleet-coexist":
                 if post_fleet_snapshot is None:
                     raise InputError("late fleet snapshot is unavailable")
@@ -4853,7 +5018,7 @@ def main() -> int:
                 verify_late_fleet_fence(post_fleet_snapshot,
                                         fleet_stream_snapshot(es_url, authorization), journal)
                 verify_fleet_winner_proofs(es_url, authorization, fleet_plan)
-            post_condition, post_snapshot = remote_stream_condition(es_url, authorization)
+            post_condition, post_snapshot = remote_stream_condition(es_url, authorization, bundle)
             if post_condition != "compatible" or post_snapshot != pre_put_snapshot:
                 raise InputError("pre-publication stream snapshot drifted")
             if journal is not None:

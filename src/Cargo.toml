@@ -90,6 +90,9 @@ depends = "$auto"
 maintainer-scripts = "debian"
 assets = [
     ["../target/release/rigsignal-agent", "usr/bin/rigsignal-agent", "755"],
+    ["../dist/engine/install_assets.py", "usr/lib/rigsignal/engine/install_assets.py", "755"],
+    ["../dist/engine/asset_adapters.py", "usr/lib/rigsignal/engine/asset_adapters.py", "644"],
+    ["../dist/engine/_version.py", "usr/lib/rigsignal/engine/_version.py", "644"],
     ["../packaging/rigsignal-launcher.sh", "usr/bin/rigsignal", "755"],
     ["../packaging/systemd/rigsignal-agent.service", "usr/lib/systemd/user/rigsignal-agent.service", "644"],
     ["../packaging/config/rigsignal.toml.example", "usr/share/rigsignal/examples/rigsignal.toml.example", "644"],
@@ -117,6 +120,9 @@ license = "Apache-2.0"
 summary = "RigSignal gaming performance telemetry agent"
 assets = [
     { source = "../target/release/rigsignal-agent", dest = "/usr/bin/rigsignal-agent", mode = "755" },
+    { source = "../dist/engine/install_assets.py", dest = "/usr/lib/rigsignal/engine/install_assets.py", mode = "755" },
+    { source = "../dist/engine/asset_adapters.py", dest = "/usr/lib/rigsignal/engine/asset_adapters.py", mode = "644" },
+    { source = "../dist/engine/_version.py", dest = "/usr/lib/rigsignal/engine/_version.py", mode = "644" },
     { source = "../packaging/rigsignal-launcher.sh", dest = "/usr/bin/rigsignal", mode = "755" },
     { source = "../packaging/systemd/rigsignal-agent.service", dest = "/usr/lib/systemd/user/rigsignal-agent.service", mode = "644" },
     { source = "../packaging/config/rigsignal.toml.example", dest = "/usr/share/rigsignal/examples/rigsignal.toml.example", mode = "644" },

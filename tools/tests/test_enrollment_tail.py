@@ -698,10 +698,13 @@ class MainPreflightRecoveryTests(unittest.TestCase):
             parent.mkdir(mode=0o775)
             parent.chmod(0o775)
             root = INSTALL.secure_root(parent / "enrollment")
+            rollback_args = self.args(root, rollback=root)
+            rollback_args.bundle = None
             with patch.object(INSTALL.argparse.ArgumentParser, "parse_args",
-                              return_value=self.args(root, rollback=root)), \
+                              return_value=rollback_args), \
                  patch.object(INSTALL, "configure_https"), \
                  patch.object(INSTALL, "admin_authorization", return_value="admin"), \
+                 patch.object(INSTALL, "check_version_fence"), \
                  patch.object(INSTALL, "fence_remote_ownership_profile"), \
                  patch.object(INSTALL, "rollback_transaction", return_value=[]), \
                  patch.object(INSTALL, "check_install_root_ancestors") as ancestors:

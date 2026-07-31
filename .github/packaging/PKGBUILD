@@ -32,6 +32,13 @@ package() {
     install -Dm755 "${_reporoot}/target/release/rigsignal-agent" \
         "${pkgdir}/usr/bin/rigsignal-agent"
 
+    install -Dm755 "${_reporoot}/dist/engine/install_assets.py" \
+        "${pkgdir}/usr/lib/rigsignal/engine/install_assets.py"
+    install -Dm644 "${_reporoot}/dist/engine/asset_adapters.py" \
+        "${pkgdir}/usr/lib/rigsignal/engine/asset_adapters.py"
+    install -Dm644 "${_reporoot}/dist/engine/_version.py" \
+        "${pkgdir}/usr/lib/rigsignal/engine/_version.py"
+
     install -Dm755 "${_reporoot}/packaging/rigsignal-launcher.sh" \
         "${pkgdir}/usr/bin/rigsignal"
 

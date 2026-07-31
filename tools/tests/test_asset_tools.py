@@ -775,6 +775,210 @@ i.atomic_publication(r, {n: ('new-' + n).encode() for n in ('credentials.toml','
         self.assertIn(("POST", "/api/saved_objects/_import?overwrite=true"), calls)
         self.assertFalse(any("/s/rigsignal/" in path for _method, path in calls))
 
+    def test_s5_staged_engine_uses_verified_bundle_resources_without_repo_tree(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            bundle, engine = root / "assets.tar.gz", root / "engine"
+            result = subprocess.run([
+                sys.executable, str(ROOT / "tools/build_asset_bundle.py"), "--version", "0.3.0",
+                "--source-commit", "test-commit", "--output", str(bundle), "--engine-output", str(engine),
+            ], cwd=ROOT, text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            program = """import importlib.util, json, sys
+from pathlib import Path
+engine, archive = map(Path, sys.argv[1:])
+spec = importlib.util.spec_from_file_location('staged_install_assets', engine / 'install_assets.py')
+module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+bundle = module.load_bundle(archive)
+assert module.engine_version() == '0.3.0'
+assert module.candidate_document('out-of-tree', bundle)['event']['id'] == 'provision-out-of-tree'
+assert module.canonical_owned_mapping_projection(bundle)['mappings']['dynamic'] == 'strict'
+del bundle.files[module.PROBE_FIXTURE_PATH]
+try:
+    module.candidate_document('missing-resource', bundle)
+except module.InputError as error:
+    assert str(error) == 'bundle resource missing: ' + module.PROBE_FIXTURE_PATH
+else:
+    raise AssertionError('missing bundle resource was accepted')
+print('bundle-resources-ok')
+"""
+            result = subprocess.run([sys.executable, "-c", program, str(engine), str(bundle)], cwd=root,
+                                    text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, "bundle-resources-ok\n")
+            self.assertEqual((engine / "_version.py").read_text().splitlines()[1],
+                             'ENGINE_VERSION = "0.3.0"')
+
+    def test_s5_version_skew_refuses_before_remote_work(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            bundle, engine, agent = root / "assets.tar.gz", root / "engine", root / "agent"
+            result = subprocess.run([
+                sys.executable, str(ROOT / "tools/build_asset_bundle.py"), "--version", "0.3.0",
+                "--source-commit", "test-commit", "--output", str(bundle), "--engine-output", str(engine),
+            ], cwd=ROOT, text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            agent.write_text("#!/bin/sh\nprintf 'rigsignal-agent 9.9.9\\n'\n")
+            agent.chmod(0o755)
+            sentinel = root / "unexpected-http-mutation"
+            program = """import importlib.util, sys
+from pathlib import Path
+engine, archive, agent, enrollment, sentinel = map(Path, sys.argv[1:])
+spec = importlib.util.spec_from_file_location('staged_install_assets', engine / 'install_assets.py')
+module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+def probe(*args, **kwargs):
+    method = args[2] if len(args) > 2 else kwargs.get('method')
+    if method in {'PUT', 'POST', 'DELETE'}:
+        sentinel.write_text(method)
+    raise AssertionError('HTTP reached version fence')
+module.request = probe; module.es_json = probe; module.es_json_status = probe
+sys.argv = [str(engine / 'install_assets.py'), '--bundle', str(archive),
+            '--endpoint', 'https://es.invalid', '--ca-file', str(engine / 'missing-ca.pem'),
+            '--kibana-endpoint', 'https://kb.invalid', '--kibana-ca-file', str(engine / 'missing-kb-ca.pem'),
+            '--admin-credentials-file', str(engine / 'missing-admin.toml'), '--agent-binary', str(agent),
+            '--profile', 'user', '--enrollment-root', str(enrollment)]
+sys.exit(module.main())
+"""
+            result = subprocess.run([
+                sys.executable, "-c", program, str(engine), str(bundle), str(agent),
+                str(root / "enrollment"), str(sentinel),
+            ], cwd=root, text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.stderr,
+                             "install refused: version_skew; engine=0.3.0; agent=9.9.9; bundle=0.3.0\n")
+            self.assertFalse(sentinel.exists(), "version fence allowed an HTTP mutation")
+
+    def test_s5_rollback_skew_refuses_before_remote_mutation(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            _bundle, engine, agent = root / "assets.tar.gz", root / "engine", root / "agent"
+            result = subprocess.run([
+                sys.executable, str(ROOT / "tools/build_asset_bundle.py"), "--version", "0.3.0",
+                "--source-commit", "test-commit", "--output", str(_bundle), "--engine-output", str(engine),
+            ], cwd=ROOT, text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            agent.write_text("#!/bin/sh\nprintf 'rigsignal-agent 9.9.9\\n'\n")
+            agent.chmod(0o755)
+            sentinel, rollback = root / "unexpected-http-mutation", root / "transaction"
+            rollback.mkdir()
+            rollback.chmod(0o700)
+            program = """import importlib.util, sys
+from pathlib import Path
+engine, agent, rollback, sentinel = map(Path, sys.argv[1:])
+spec = importlib.util.spec_from_file_location('staged_install_assets', engine / 'install_assets.py')
+module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+def probe(*args, **kwargs):
+    method = args[2] if len(args) > 2 else kwargs.get('method')
+    if method in {'PUT', 'POST', 'DELETE'}:
+        sentinel.write_text(method)
+    raise AssertionError('HTTP reached rollback version fence')
+module.request = probe; module.es_json = probe; module.es_json_status = probe
+sys.argv = [str(engine / 'install_assets.py'), '--endpoint', 'https://es.invalid',
+            '--ca-file', str(engine / 'missing-ca.pem'), '--kibana-endpoint', 'https://kb.invalid',
+            '--kibana-ca-file', str(engine / 'missing-kb-ca.pem'), '--admin-credentials-file',
+            str(engine / 'missing-admin.toml'), '--agent-binary', str(agent), '--profile', 'user',
+            '--rollback', str(rollback)]
+sys.exit(module.main())
+"""
+            result = subprocess.run([sys.executable, "-c", program, str(engine), str(agent),
+                                     str(rollback), str(sentinel)], cwd=root, text=True,
+                                    capture_output=True, check=False)
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.stderr,
+                             "install refused: version_skew; engine=0.3.0; agent=9.9.9; bundle=none\n")
+            self.assertFalse(sentinel.exists(), "rollback fence allowed an HTTP mutation")
+
+    def test_s5_source_commit_mismatch_refuses_before_remote_work(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            bundle, mismatched, engine, agent = (root / "assets.tar.gz", root / "mismatched.tar.gz",
+                                                  root / "engine", root / "agent")
+            result = subprocess.run([
+                sys.executable, str(ROOT / "tools/build_asset_bundle.py"), "--version", "0.3.0",
+                "--source-commit", "engine-commit", "--output", str(bundle), "--engine-output", str(engine),
+            ], cwd=ROOT, text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            rewrite_bundle(bundle, mismatched,
+                           lambda manifest: manifest.__setitem__("source_commit", "bundle-commit"))
+            agent.write_text("#!/bin/sh\nprintf 'rigsignal-agent 0.3.0\\n'\n")
+            agent.chmod(0o755)
+            sentinel = root / "unexpected-http-mutation"
+            program = """import importlib.util, sys
+from pathlib import Path
+engine, archive, agent, enrollment, sentinel = map(Path, sys.argv[1:])
+spec = importlib.util.spec_from_file_location('staged_install_assets', engine / 'install_assets.py')
+module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+def probe(*args, **kwargs):
+    method = args[2] if len(args) > 2 else kwargs.get('method')
+    if method in {'PUT', 'POST', 'DELETE'}:
+        sentinel.write_text(method)
+    raise AssertionError('HTTP reached source-commit fence')
+module.request = probe; module.es_json = probe; module.es_json_status = probe
+sys.argv = [str(engine / 'install_assets.py'), '--bundle', str(archive),
+            '--endpoint', 'https://es.invalid', '--ca-file', str(engine / 'missing-ca.pem'),
+            '--kibana-endpoint', 'https://kb.invalid', '--kibana-ca-file', str(engine / 'missing-kb-ca.pem'),
+            '--admin-credentials-file', str(engine / 'missing-admin.toml'), '--agent-binary', str(agent),
+            '--profile', 'user', '--enrollment-root', str(enrollment)]
+sys.exit(module.main())
+"""
+            result = subprocess.run([sys.executable, "-c", program, str(engine), str(mismatched), str(agent),
+                                     str(root / "enrollment"), str(sentinel)],
+                                    cwd=root, text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.stderr, "install refused: version_skew; engine=0.3.0; agent=0.3.0; "
+                             "bundle=0.3.0; engine_commit=engine-commit; bundle_commit=bundle-commit\n")
+            self.assertFalse(sentinel.exists(), "source-commit fence allowed an HTTP mutation")
+
+    def test_s5_rollback_staged_engine_requires_verified_source(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root, engine = Path(raw), Path(raw) / "engine"
+            bundle = root / "assets.tar.gz"
+            result = subprocess.run([
+                sys.executable, str(ROOT / "tools/build_asset_bundle.py"), "--version", "0.3.0",
+                "--source-commit", "test-commit", "--output", str(bundle), "--engine-output", str(engine),
+            ], cwd=ROOT, text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            sentinel = root / "unexpected-http-mutation"
+            agent = root / "agent"
+            agent.write_text("#!/bin/sh\nprintf 'rigsignal-agent 0.3.0\\n'\n")
+            agent.chmod(0o755)
+            program = """import importlib.util, sys
+from pathlib import Path
+engine, transaction, agent, sentinel = map(Path, sys.argv[1:])
+spec = importlib.util.spec_from_file_location('staged_install_assets', engine / 'install_assets.py')
+module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+def probe(*args, **kwargs):
+    method = args[2] if len(args) > 2 else kwargs.get('method')
+    if method in {'PUT', 'POST', 'DELETE'}:
+        sentinel.write_text(method)
+    raise AssertionError('HTTP reached staged rollback source fence')
+module.request = probe; module.es_json = probe; module.es_json_status = probe
+module.configure_https = lambda _path: None
+module.admin_authorization = lambda _path: 'admin'
+module.fence_remote_ownership_profile = lambda *_args: None
+sys.argv = [str(engine / 'install_assets.py'), '--endpoint', 'https://es.invalid',
+            '--ca-file', str(engine / 'missing-ca.pem'), '--kibana-endpoint', 'https://kb.invalid',
+            '--kibana-ca-file', str(engine / 'missing-kb-ca.pem'), '--admin-credentials-file',
+            str(engine / 'missing-admin.toml'), '--agent-binary', str(agent), '--profile', 'user',
+            '--rollback', str(transaction)]
+sys.exit(module.main())
+"""
+            result = subprocess.run([sys.executable, "-c", program, str(engine), str(root / "transaction"),
+                                     str(agent), str(sentinel)],
+                                    cwd=root, text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.stderr,
+                             "install refused: rollback_source_unavailable; provide the applied bundle\n")
+            self.assertFalse(sentinel.exists(), "staged rollback mutated before source refusal")
+
+    def test_s5_malformed_agent_version_is_named_refusal(self):
+        with tempfile.TemporaryDirectory() as raw:
+            agent = Path(raw) / "agent"
+            agent.write_bytes(b"#!/bin/sh\nprintf 'rigsignal-agent 0.3.0\\377\\n'\n")
+            agent.chmod(0o755)
+            with self.assertRaisesRegex(INSTALL.ProvisionError, "agent_version_unparseable"):
+                INSTALL.agent_version(agent)
+
 
 if __name__ == "__main__":
     unittest.main()
