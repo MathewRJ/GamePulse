@@ -152,14 +152,32 @@ rigsignal setup
 # API key: <the encoded value from above>
 ```
 
-If you see a TLS certificate error with a locally-issued cert, add this to `~/.config/rigsignal/rigsignal.toml`:
+For a locally-issued Elasticsearch certificate, provide its CA PEM bundle during
+setup. The optional digest authenticates the exact bytes before setup makes a
+network request:
 
-```toml
-[elasticsearch]
-tls_skip_verify = true
+```bash
+rigsignal setup --ca-file ./http_ca.crt
+rigsignal setup --ca-file ./http_ca.crt --ca-sha256 "$(sha256sum ./http_ca.crt | awk '{print $1}')"
 ```
 
-This is fine for a local dev machine. Do not use it for shared or remote instances.
+Setup structurally validates a non-empty, strict PEM certificate bundle:
+certificate blocks may be concatenated with whitespace, but any other leading,
+embedded, or trailing data is refused before a network request. X.509 validity
+and trust authority are deferred to the Elasticsearch TLS handshake and agent
+preflight; hostname verification remains enabled. It stores the accepted bytes at
+`${XDG_CONFIG_HOME:-$HOME/.config}/rigsignal/certs/elasticsearch-ca.pem` and records that durable path
+as `elasticsearch.ca_cert` in `${XDG_CONFIG_HOME:-$HOME/.config}/rigsignal/rigsignal.toml`. Replace a
+CA by rerunning `rigsignal setup --ca-file <path>` (and an optional pin).
+
+When the optional eBPF daemon is installed, setup installs the accepted CA
+snapshot at `/etc/rigsignal/certs/elasticsearch-ca.pem` and rewrites only the
+system TOML `ca_cert` path to that `/etc` location. For ordinary installation,
+durability, and restart failures it restores the staged `/etc` files before
+rolling back the matching user files. If it cannot prove the `/etc` restoration,
+it leaves the user transaction in place and reports the failure rather than
+claiming a cross-scope rollback; rerun setup after correcting the system error.
+It never leaves a home-relative certificate path for the root daemon.
 
 ### 4. Install Kibana (for dashboards)
 

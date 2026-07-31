@@ -33,9 +33,11 @@ impl EsShipper {
         if let Some(path) = ca_cert {
             let pem = std::fs::read(path)
                 .with_context(|| format!("reading Elasticsearch CA cert: {}", path.display()))?;
-            let cert = Certificate::from_pem(&pem)
+            let certificates = ca_certificate_bundle(&pem)
                 .with_context(|| format!("parsing Elasticsearch CA cert: {}", path.display()))?;
-            builder = builder.add_root_certificate(cert);
+            for certificate in certificates {
+                builder = builder.add_root_certificate(certificate);
+            }
         }
 
         let client = builder.build().context("building HTTP client")?;
@@ -144,6 +146,29 @@ impl EsShipper {
     }
 }
 
+fn ca_certificate_bundle(bytes: &[u8]) -> Result<Vec<Certificate>> {
+    const BEGIN: &str = "-----BEGIN CERTIFICATE-----";
+    const END: &str = "-----END CERTIFICATE-----";
+    let mut remainder = std::str::from_utf8(bytes)?.trim();
+    if remainder.is_empty() {
+        anyhow::bail!("CA bundle is empty");
+    }
+    while !remainder.is_empty() {
+        let certificate = remainder
+            .strip_prefix(BEGIN)
+            .ok_or_else(|| anyhow::anyhow!("CA bundle contains non-certificate data"))?;
+        let end = certificate
+            .find(END)
+            .ok_or_else(|| anyhow::anyhow!("CA bundle has an unterminated certificate"))?
+            + END.len();
+        remainder = certificate[end..].trim();
+    }
+    let certificates = Certificate::from_pem_bundle(bytes)?;
+    (!certificates.is_empty())
+        .then_some(certificates)
+        .ok_or_else(|| anyhow::anyhow!("CA bundle is empty"))
+}
+
 /// Drops documents from unsupported probes before they can create an ES series.
 /// The warning is rate-limited per unsupported probe to once every five minutes;
 /// the probe value itself is deliberately omitted from the diagnostic.
@@ -204,7 +229,7 @@ fn build_bulk_body(docs: &[EbpfDocument]) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::filter_supported_docs;
+    use super::{ca_certificate_bundle, filter_supported_docs};
     use crate::{
         aggregator::{RawSchedEvent, SchedAggregator, EVENT_SWITCH},
         es_model::{EbpfDocument, NAMED_PROBES},
@@ -227,6 +252,15 @@ mod tests {
             metric.rigsignal.ebpf.probe = probe;
         }
         doc
+    }
+
+    const TEST_CA: &[u8] = b"-----BEGIN CERTIFICATE-----\nMIIBcTCCARegAwIBAgIUFcCd4QbbalB9vcqsIBvd3Tbhx7kwCgYIKoZIzj0EAwIw\nDjEMMAoGA1UEAwwDb25lMB4XDTI2MDczMTA4MDU0MloXDTI2MDgwMTA4MDU0Mlow\nDjEMMAoGA1UEAwwDb25lMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEBB9OC7xC\n6hGn6GNVbHVnsGwfmI0MJHSAiZDAjyHYn71C2EufTKa9yMy9EK53OEhSiOXTm8ob\nK3Z1F8FoTaUWa6NTMFEwHQYDVR0OBBYEFAiHcI/D49ZptsjDCKqSp8S+M5V+MB8G\nA1UdIwQYMBaAFAiHcI/D49ZptsjDCKqSp8S+M5V+MA8GA1UdEwEB/wQFMAMBAf8w\nCgYIKoZIzj0EAwIDSAAwRQIgSu9o44gWsyAvtbeXKuhIi4vUxSn6TU8N/SCPNVag\n5a0CIQD0jGGCQNjrdXYdp+Ai9qnxDgPWuP5S2f6YglCV2U2+LQ==\n-----END CERTIFICATE-----\n";
+
+    #[test]
+    fn ca_bundle_accepts_two_certificates_and_rejects_empty_or_garbage() {
+        assert_eq!(ca_certificate_bundle(&[TEST_CA, TEST_CA].concat()).unwrap().len(), 2);
+        assert!(ca_certificate_bundle(b"").is_err());
+        assert!(ca_certificate_bundle(b"not a certificate").is_err());
     }
 
     #[test]

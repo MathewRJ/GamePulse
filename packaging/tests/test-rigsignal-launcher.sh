@@ -70,7 +70,7 @@ printf '%s\n' '#!/usr/bin/env bash' \
 chmod +x "$test_bin/python3"
 if ! (
     cd "$test_tmp"
-    printf 'http://mock.invalid\ntest-api-key\n' | \
+    printf 'http://127.0.0.1:9200\ntest-api-key\n' | \
         env SUDO_USER='' HOME="$test_home" XDG_CONFIG_HOME='relative/config' \
         RIGSIGNAL_DEBUG=0 PATH="$test_bin:/usr/bin:/bin" "$launcher" setup
 ); then

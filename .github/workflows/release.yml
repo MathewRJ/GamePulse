@@ -51,6 +51,9 @@ jobs:
       - name: Run launcher packaging tests
         run: bash packaging/tests/test-rigsignal-launcher.sh
 
+      - name: Run eBPF workspace tests
+        run: cargo test --manifest-path ebpf/Cargo.toml --locked
+
       - name: Run workspace tests
         run: cargo test --workspace --locked
 
