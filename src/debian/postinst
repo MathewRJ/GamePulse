@@ -1,0 +1,6 @@
+#!/bin/sh
+set -e
+
+# Complete removal of the obsolete conffile from versions through 0.3.0-1.
+# Unmodified files are removed; modified files are retained as .dpkg-bak.
+dpkg-maintscript-helper rm_conffile /etc/rigsignal/rigsignal.toml 0.3.0-1 -- "$@"

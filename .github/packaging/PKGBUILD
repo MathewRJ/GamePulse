@@ -19,9 +19,9 @@ pkgdesc="RigSignal gaming performance telemetry agent — ships CPU/GPU/memory/f
 arch=('x86_64')
 url="https://github.com/MathewRJ/RigSignal"
 license=('Apache')
-depends=()
+depends=('python3')
 optdepends=('mangohud: frame timing data collection')
-backup=('etc/rigsignal/rigsignal.toml')
+install=rigsignal.install
 source=()
 sha256sums=()
 
@@ -38,11 +38,8 @@ package() {
     install -Dm644 "${_reporoot}/packaging/systemd/rigsignal-agent.service" \
         "${pkgdir}/usr/lib/systemd/user/rigsignal-agent.service"
 
-    install -Dm644 "${_reporoot}/packaging/systemd/rigsignal-ebpf.service" \
-        "${pkgdir}/usr/lib/systemd/system/rigsignal-ebpf.service"
-
     install -Dm644 "${_reporoot}/packaging/config/rigsignal.toml.example" \
-        "${pkgdir}/etc/rigsignal/rigsignal.toml"
+        "${pkgdir}/usr/share/rigsignal/examples/rigsignal.toml.example"
 
     # ---- Starter game profiles ----
     for _profile in "${_reporoot}"/profiles/*.toml; do

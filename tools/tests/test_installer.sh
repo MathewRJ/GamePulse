@@ -238,12 +238,17 @@ test_package_user_unit_uses_user_config_and_detects_packaged_ebpf() {
     cmp -s "$TEST_TMP/packaged-unit-without-exec" "$TEST_TMP/tarball-unit-without-exec" || return 1
     [[ -f "$example" && ! -e "$stage/etc/rigsignal/rigsignal.toml" ]] || return 1
     local pkgbuild
-    for pkgbuild in "$REPO_ROOT/packaging/PKGBUILD" "$REPO_ROOT/packaging/aur/PKGBUILD"; do
+    for pkgbuild in "$REPO_ROOT/packaging/PKGBUILD" "$REPO_ROOT/packaging/aur/PKGBUILD" "$REPO_ROOT/.github/packaging/PKGBUILD"; do
         grep -qx 'install=rigsignal.install' "$pkgbuild" || return 1
         grep -q 'usr/share/rigsignal/examples/rigsignal.toml.example' "$pkgbuild" || return 1
         ! grep -q '^backup=' "$pkgbuild" || return 1
     done
+    grep -qx "depends=('python3')" "$REPO_ROOT/.github/packaging/PKGBUILD" || return 1
+    ! grep -q 'rigsignal-ebpf.service' "$REPO_ROOT/.github/packaging/PKGBUILD" || return 1
+    grep -q 'packaging/systemd/rigsignal-agent.service' "$REPO_ROOT/.github/packaging/PKGBUILD" || return 1
+    grep -q 'usr/lib/systemd/user/rigsignal-agent.service' "$REPO_ROOT/.github/packaging/PKGBUILD" || return 1
     cmp -s "$REPO_ROOT/packaging/rigsignal.install" "$REPO_ROOT/packaging/aur/rigsignal.install" || return 1
+    cmp -s "$REPO_ROOT/packaging/rigsignal.install" "$REPO_ROOT/.github/packaging/rigsignal.install" || return 1
 
     # Exercise the Arch upgrade hook under a staged /etc: it removes known
     # pristine examples but leaves an operator-modified pacsave untouched.
@@ -282,6 +287,18 @@ test_package_user_unit_uses_user_config_and_detects_packaged_ebpf() {
         && grep -q '^install -m 600 ' "$sudo_log"
 }
 
+test_deb_obsolete_conffile_transition_is_wired() {
+    local manifest="$REPO_ROOT/src/Cargo.toml"
+    local script
+
+    grep -qx 'maintainer-scripts = "debian"' "$manifest" || return 1
+    for script in preinst postinst postrm; do
+        [[ -f "$REPO_ROOT/src/debian/$script" ]] || return 1
+        grep -qx 'dpkg-maintscript-helper rm_conffile /etc/rigsignal/rigsignal.toml 0.3.0-1 -- "$@"' \
+            "$REPO_ROOT/src/debian/$script" || return 1
+    done
+}
+
 run_test setup_fails_on_401 test_setup_fails_on_401
 run_test setup_preserves_collection_on_reauth test_setup_preserves_collection_on_reauth
 run_test setup_fails_without_create_doc test_setup_fails_without_create_doc
@@ -289,6 +306,7 @@ run_test setup_succeeds_with_required_privileges test_setup_succeeds_with_requir
 run_test checksum_mismatch_aborts_before_unpack test_checksum_mismatch_aborts_before_unpack
 run_test uninstall_removes_staged_install test_uninstall_removes_staged_install
 run_test package_user_unit_uses_user_config_and_detects_packaged_ebpf test_package_user_unit_uses_user_config_and_detects_packaged_ebpf
+run_test deb_obsolete_conffile_transition_is_wired test_deb_obsolete_conffile_transition_is_wired
 
 printf 'TEST RESULT %d passed, %d failed\n' "$PASS_COUNT" "$FAIL_COUNT"
 [[ "$FAIL_COUNT" -eq 0 ]]

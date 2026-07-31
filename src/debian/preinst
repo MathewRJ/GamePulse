@@ -1,0 +1,6 @@
+#!/bin/sh
+set -e
+
+# Remove the obsolete conffile from versions through 0.3.0-1.  dpkg removes an
+# unmodified file; it preserves a modified file for postinst as .dpkg-bak.
+dpkg-maintscript-helper rm_conffile /etc/rigsignal/rigsignal.toml 0.3.0-1 -- "$@"

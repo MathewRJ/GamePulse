@@ -1,0 +1,6 @@
+#!/bin/sh
+set -e
+
+# Restore on an aborted upgrade or finish purge of the obsolete conffile from
+# versions through 0.3.0-1; modified files are retained as .dpkg-bak otherwise.
+dpkg-maintscript-helper rm_conffile /etc/rigsignal/rigsignal.toml 0.3.0-1 -- "$@"
