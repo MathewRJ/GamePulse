@@ -763,9 +763,11 @@ fn build_client(config: &Config) -> Result<Client> {
     if let Some(path) = &config.elasticsearch.ca_cert {
         let pem = std::fs::read(path)
             .with_context(|| format!("reading Elasticsearch CA cert: {}", path.display()))?;
-        let cert =
-            reqwest::Certificate::from_pem(&pem).context("parsing Elasticsearch CA cert PEM")?;
-        builder = builder.add_root_certificate(cert);
+        let certificates = crate::handshake::ca_certificate_bundle(&pem)
+            .map_err(|_| anyhow::anyhow!("parsing Elasticsearch CA cert PEM"))?;
+        for certificate in certificates {
+            builder = builder.add_root_certificate(certificate);
+        }
     }
     builder.build().context("building HTTP client")
 }
@@ -1050,6 +1052,9 @@ mod tests {
     use std::fs;
     use std::time::Duration;
 
+    const CA_ONE: &[u8] = b"-----BEGIN CERTIFICATE-----\nMIIBcTCCARegAwIBAgIUFcCd4QbbalB9vcqsIBvd3Tbhx7kwCgYIKoZIzj0EAwIw\nDjEMMAoGA1UEAwwDb25lMB4XDTI2MDczMTA4MDU0MloXDTI2MDgwMTA4MDU0Mlow\nDjEMMAoGA1UEAwwDb25lMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEBB9OC7xC\n6hGn6GNVbHVnsGwfmI0MJHSAiZDAjyHYn71C2EufTKa9yMy9EK53OEhSiOXTm8ob\nK3Z1F8FoTaUWa6NTMFEwHQYDVR0OBBYEFAiHcI/D49ZptsjDCKqSp8S+M5V+MB8G\nA1UdIwQYMBaAFAiHcI/D49ZptsjDCKqSp8S+M5V+MA8GA1UdEwEB/wQFMAMBAf8w\nCgYIKoZIzj0EAwIDSAAwRQIgSu9o44gWsyAvtbeXKuhIi4vUxSn6TU8N/SCPNVag\n5a0CIQD0jGGCQNjrdXYdp+Ai9qnxDgPWuP5S2f6YglCV2U2+LQ==\n-----END CERTIFICATE-----\n";
+    const CA_TWO: &[u8] = b"-----BEGIN CERTIFICATE-----\nMIIBcjCCARegAwIBAgIUQfddtbOce+qPSqLwrmjPDM7TXD0wCgYIKoZIzj0EAwIw\nDjEMMAoGA1UEAwwDdHdvMB4XDTI2MDczMTA4MDU0MloXDTI2MDgwMTA4MDU0Mlow\nDjEMMAoGA1UEAwwDdHdvMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEPTzsI0t3\nHnoK21Lj7cZyyvdk1j+1FTr1j4pFqAzj4fCmkzL6b5/DvDGd6W6/cNWsudThEd/W\n5weWjjQ/pkwsV6NTMFEwHQYDVR0OBBYEFDEX3FfU9i6bRINlvF3qv8Q3EjXZMB8G\nA1UdIwQYMBaAFDEX3FfU9i6bRINlvF3qv8Q3EjXZMA8GA1UdEwEB/wQFMAMBAf8w\nCgYIKoZIzj0EAwIDSQAwRgIhAPoTor2MMq2xCgXZ//ppUjVWMS0nguvbUWX8GFkz\neyyNAiEAmG6bMDUDTMtCc1a7VEdLeUHlJEpJb9sWDAouMyVfveQ=\n-----END CERTIFICATE-----\n";
+
     fn temp_spool_dir(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!(
             "rigsignal-{}-{}-{}",
@@ -1057,6 +1062,27 @@ mod tests {
             std::process::id(),
             unix_millis().expect("system clock should be after Unix epoch")
         ))
+    }
+
+    #[test]
+    fn build_client_accepts_and_applies_every_certificate_in_a_ca_bundle() -> Result<()> {
+        let ca_path = temp_spool_dir("ca-bundle").with_extension("pem");
+        let bundle = [CA_ONE, CA_TWO].concat();
+        fs::write(&ca_path, &bundle)?;
+        assert_eq!(
+            crate::handshake::ca_certificate_bundle(&bundle)
+                .unwrap()
+                .len(),
+            2
+        );
+
+        let mut config: Config =
+            toml::from_str("[elasticsearch]\nendpoint = 'https://example.test'\n")?;
+        config.elasticsearch.ca_cert = Some(ca_path.clone());
+        assert!(build_client(&config).is_ok());
+
+        fs::remove_file(ca_path)?;
+        Ok(())
     }
 
     #[test]

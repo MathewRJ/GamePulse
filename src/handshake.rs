@@ -249,7 +249,7 @@ enum Affinity {
 }
 pub(crate) struct Preflight {
     origin: String,
-    ca: Option<Vec<u8>>,
+    ca: Option<Vec<reqwest::Certificate>>,
     credential: Credentials,
     affinity: Affinity,
     generation: TargetGeneration,
@@ -467,10 +467,13 @@ fn preflight(environment: &impl Environment, args: &CheckArgs) -> Result<Preflig
     };
     let ca = match ca_path {
         Some(path) => {
-            let ca = environment.read_public(&path)?;
+            let ca = ca_certificate_bundle(&environment.read_public(&path)?)?;
             // Validate before a report is allowed to expose any preflight value.
-            valid_pem_certificate(&ca).then_some(()).ok_or(())?;
-            reqwest::Certificate::from_pem(&ca).map_err(|_| ())?;
+            let mut builder = reqwest::Client::builder().redirect(Policy::none());
+            for certificate in &ca {
+                builder = builder.add_root_certificate(certificate.clone());
+            }
+            builder.build().map_err(|_| ())?;
             Some(ca)
         }
         None => None,
@@ -493,30 +496,20 @@ fn preflight(environment: &impl Environment, args: &CheckArgs) -> Result<Preflig
         generation,
     })
 }
-fn valid_pem_certificate(bytes: &[u8]) -> bool {
-    const BEGIN: &[u8] = b"-----BEGIN CERTIFICATE-----";
-    const END: &[u8] = b"-----END CERTIFICATE-----";
-    let Ok(text) = std::str::from_utf8(bytes) else {
-        return false;
-    };
-    let text = text.trim();
-    let Some(rest) = text.strip_prefix(std::str::from_utf8(BEGIN).unwrap()) else {
-        return false;
-    };
-    let Some(encoded) = rest.strip_suffix(std::str::from_utf8(END).unwrap()) else {
-        return false;
-    };
-    let encoded: Vec<u8> = encoded
-        .bytes()
-        .filter(|byte| !byte.is_ascii_whitespace())
-        .collect();
-    encoded.len() >= 4
-        && encoded.len().is_multiple_of(4)
-        && encoded.iter().enumerate().all(|(index, byte)| {
-            byte.is_ascii_alphanumeric()
-                || matches!(byte, b'+' | b'/')
-                || (*byte == b'=' && index + 2 >= encoded.len())
-        })
+pub(crate) fn ca_certificate_bundle(bytes: &[u8]) -> Result<Vec<reqwest::Certificate>, ()> {
+    const BEGIN: &str = "-----BEGIN CERTIFICATE-----";
+    const END: &str = "-----END CERTIFICATE-----";
+    let mut remainder = std::str::from_utf8(bytes).map_err(|_| ())?.trim();
+    if remainder.is_empty() {
+        return Err(());
+    }
+    while !remainder.is_empty() {
+        let certificate = remainder.strip_prefix(BEGIN).ok_or(())?;
+        let end = certificate.find(END).ok_or(())? + END.len();
+        remainder = certificate[end..].trim();
+    }
+    let certificates = reqwest::Certificate::from_pem_bundle(bytes).map_err(|_| ())?;
+    (!certificates.is_empty()).then_some(certificates).ok_or(())
 }
 fn resolve_affinity(
     environment: &impl Environment,
@@ -764,9 +757,10 @@ pub(crate) struct ReqwestTransport {
 impl Transport for ReqwestTransport {
     fn prepare(&mut self, preflight: &Preflight) -> Result<(), ()> {
         let mut builder = reqwest::Client::builder().redirect(Policy::none());
-        if let Some(ca) = &preflight.ca {
-            builder =
-                builder.add_root_certificate(reqwest::Certificate::from_pem(ca).map_err(|_| ())?);
+        if let Some(certificates) = &preflight.ca {
+            for certificate in certificates {
+                builder = builder.add_root_certificate(certificate.clone());
+            }
         }
         self.client = Some(builder.build().map_err(|_| ())?);
         self.origin = preflight.origin.clone();
@@ -1825,6 +1819,53 @@ mod tests {
             .unwrap();
         assert_eq!(report.json_line().unwrap(), "{\"probe_schema_version\":1,\"diagnosis_schema_version\":1,\"outcome\":\"failed\",\"reason\":\"local_config\",\"failed_stage\":\"local\",\"target_generation\":null,\"observed_cluster_uuid\":null,\"accepted_set_digest\":null}\n");
         assert!(transport.paths.is_empty());
+    }
+
+    const CA_ONE: &[u8] = b"-----BEGIN CERTIFICATE-----\nMIIC/TCCAeWgAwIBAgIUNuVEiOSIO+MeY0tGUf7Rb2eA6DAwDQYJKoZIhvcNAQEL\nBQAwDjEMMAoGA1UEAwwDb25lMB4XDTI2MDczMTA3NTgwOFoXDTI2MDgwMTA3NTgw\nOFowDjEMMAoGA1UEAwwDb25lMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC\nAQEAu13Avf5Xg8yJKV7Hn/cVH7EL3ukUcgVhv5dLAnRh/D30vJXDzUtxC616YvPZ\ntrA5gfQtY5T+wSNqNtgCOxLtMokcCL4ztKecl1Bfc53RG4ZLyfwC4dctlzibONlt\njjIdEVvCHgvBcxxulNdQPjbhr9ojzyxufnW3Qe7tmAPCp6vAF7aF01eDT7TGxMOP\nZFuWIgddCh5++6srD/GWnACGYi7W7K1MiHPVi76nrCdFm7Hz3PU5NX8yXUdqZnxS\nQUdlpyZFPGZEKj7vkr5/326JYaSQV0aAxb4Th59FuygpRcJBveQyDoz9eIBveUAQ\n515potgPkOW8MJGRWncYog5JLwIDAQABo1MwUTAdBgNVHQ4EFgQUW5sFmg3PLdp5\n5TH8AdGJ42i5keIwHwYDVR0jBBgwFoAUW5sFmg3PLdp55TH8AdGJ42i5keIwDwYD\nVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAO2ijKSGHun5zFsuym24r\nXG8AFWOFdmcS71waIAQYhnabaOcgao1yKIuXm29EECWe91NfKqphuEOOOWBuTvhi\n0awbR/cjNoClj+rz34Nf0gs7sbCmtzFhYR03OzftvPdO7xUu9l5AbV4ygxhL22E9\nANAFiJFQC21zk3ggM2sgug8YixLst22RPufAPRKT/fw7SPdSb3/Pu1Fct7ytfRe+\nZAoADS2RqkcDHNZt37SE6KyfkqUG//MIpYcEkSNuo27pDTHverlI799Ivn8I53Eu\nw1wiyPx3+TbNwxavRwy2yIBfd3/v1dOxfNvUUhOVdQYIh2cYroiW94Bk+ROtzhf+\ngg==\n-----END CERTIFICATE-----\n";
+    const CA_TWO: &[u8] = b"-----BEGIN CERTIFICATE-----\nMIIC/TCCAeWgAwIBAgIUD8IdcYEKVQp0Z6tvR8hLQWBy++cwDQYJKoZIhvcNAQEL\nBQAwDjEMMAoGA1UEAwwDdHdvMB4XDTI2MDczMTA3NTgwOFoXDTI2MDgwMTA3NTgw\nOFowDjEMMAoGA1UEAwwDdHdvMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC\nAQEAkJbqFlqs0sWFsuRmcJMgEEdU1Cpf0LJLty/5h920NTS8Kc2OsQ/kJL5WzPdv\n1WgEo9n+WIQqfu9R/laK34e0cCi+2ckGHqwEro1X3PITooaRUoCxTZOKAyngnd1A\n90Qw31Qv/4/fVibqrR0WHWkd6hT12j2tmiY36/K5oOikYjSO4bkWX0P7nfe23LaQ\nY7b+YZjA4lDyrbKN4gE6Cdfts5Gfd2LcclWp4sooVbgvIyhu7mQq2Aa6I/QQWxgl\nbPJkW6uz69XCfz8aN8G3gUQUzS+PBpfxbdsEwwwy+J65Y4Y0Ihf0/aYUt3JV3clH\nKB+aL2SM7jGCfYFNljmTfIwuMQIDAQABo1MwUTAdBgNVHQ4EFgQUuguqua9iEiqi\n6hFW0D2vx1CDt0wwHwYDVR0jBBgwFoAUuguqua9iEiqi6hFW0D2vx1CDt0wwDwYD\nVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAUX/NA+mC9sgjZDI8/6xo\nZ2Cntvg/g+78ekBvZnH+EtT9kHqTjfu0R5BeTc1y20Alu3Dy0V9McCfpTQKCgQH6\nxsg80Dh4dtfysZtxRcYuk+hWCpWj0Ms1EfowyWrf1xHdXtXGhaU5RVfFo92z4PNm\nBmCtit2n+VietNHpcBPEdN1G3RiN/xdD/6yP6dDmoQmwkrPj6uZoY2Mn42KBQznI\nuQOXAMa318rGM7u8ZbJ9MgY8d7hCGp+oV6aXnUOb+Bhu7DbgRlmfgE/+z+0CAFWW\nDFJ9gmBMfXV2dMjhJ9IQpq3yvJpLfeBESTuKPcpRMVizUpZc96E904TecZerss58\nXg==\n-----END CERTIFICATE-----\n";
+
+    #[tokio::test]
+    async fn two_certificate_ca_bundle_is_accepted() {
+        let mut environment = TestEnvironment::default();
+        environment
+            .public
+            .insert(PathBuf::from("ca-bundle.pem"), [CA_ONE, CA_TWO].concat());
+        let mut check_args = args(false);
+        check_args.ca_file = Some("ca-bundle.pem".into());
+        let mut transport = ScriptedTransport::new(vec![Ok(root()), Ok(template()), Ok(mapping())]);
+        let report = run_check(check_args, &environment, &SystemClock, &mut transport)
+            .await
+            .unwrap();
+        assert_eq!(report.reason, Reason::Ready);
+        assert_eq!(transport.paths, ["/", TEMPLATE_PATH, MAPPING_PATH]);
+    }
+
+    #[tokio::test]
+    async fn empty_or_malformed_ca_bundle_is_local_before_transport() {
+        for (name, ca) in [
+            ("empty.pem", Vec::new()),
+            ("garbage.pem", b"not a PEM certificate".to_vec()),
+            ("trailing.pem", [CA_ONE, b"trailing junk"].concat()),
+            (
+                "private-key.pem",
+                [
+                    CA_ONE,
+                    b"-----BEGIN PRIVATE KEY-----\njunk\n-----END PRIVATE KEY-----\n",
+                ]
+                .concat(),
+            ),
+        ] {
+            let mut environment = TestEnvironment::default();
+            environment.public.insert(PathBuf::from(name), ca);
+            let mut check_args = args(false);
+            check_args.ca_file = Some(name.into());
+            let mut transport = ScriptedTransport::new(vec![Ok(root())]);
+            let report = run_check(check_args, &environment, &SystemClock, &mut transport)
+                .await
+                .unwrap();
+            assert_eq!(report.json_line().unwrap(), "{\"probe_schema_version\":1,\"diagnosis_schema_version\":1,\"outcome\":\"failed\",\"reason\":\"local_config\",\"failed_stage\":\"local\",\"target_generation\":null,\"observed_cluster_uuid\":null,\"accepted_set_digest\":null}\n");
+            assert!(transport.paths.is_empty());
+        }
     }
 
     #[tokio::test]

@@ -75,6 +75,78 @@ class AncestorPredicateTests(unittest.TestCase):
                 INSTALL.check_install_root_ancestors(Path("/tmp/enrollment"), boundary=Path("/tmp"))
 
 
+class OutboxPreflightTests(unittest.TestCase):
+    def test_absent_and_safe_outbox_proceed(self):
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            absent = base / "absent"
+            safe = base / "safe"
+            safe.mkdir(mode=0o700)
+            safe.chmod(0o700)
+            with patch.object(INSTALL, "check_install_root_ancestors") as ancestors:
+                INSTALL.check_outbox_root(absent)
+                INSTALL.check_outbox_root(safe)
+            self.assertEqual(ancestors.call_args_list,
+                             [((absent,), {}), ((safe,), {})])
+
+    def test_unsafe_outbox_terminal_refuses(self):
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            target = base / "target"
+            target.mkdir(mode=0o700)
+            target.chmod(0o700)
+            symlink = base / "symlink"
+            symlink.symlink_to(target, target_is_directory=True)
+            writable = base / "writable"
+            writable.mkdir(mode=0o775)
+            writable.chmod(0o775)
+            regular = base / "regular"
+            regular.write_text("not a directory")
+            for path in (symlink, writable, regular):
+                with self.subTest(path=path.name), self.assertRaisesRegex(
+                        INSTALL.ProvisionError, "install refused: outbox preflight:"):
+                    INSTALL.check_outbox_root(path)
+
+    @unittest.skipUnless(os.geteuid() == 0, "requires root to create a foreign-owned directory")
+    def test_foreign_owned_outbox_refuses(self):
+        with tempfile.TemporaryDirectory() as raw:
+            outbox = Path(raw) / "outbox"
+            outbox.mkdir(mode=0o700)
+            outbox.chown(1, -1)
+            with self.assertRaisesRegex(INSTALL.ProvisionError, "install refused: outbox preflight:"):
+                INSTALL.check_outbox_root(outbox)
+
+
+class HandshakeDiagnosisTests(unittest.TestCase):
+    def test_failed_handshake_records_full_diagnosis_and_reports_whitelist(self):
+        line = ('{"probe_schema_version":1,"diagnosis_schema_version":1,"outcome":"failed",'
+                '"reason":"local_config","failed_stage":"local",'
+                '"target_generation":null,"observed_cluster_uuid":null,'
+                '"accepted_set_digest":null}\n')
+        with tempfile.TemporaryDirectory() as raw:
+            root = INSTALL.secure_root(Path(raw) / "enrollment")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            agent = Path(raw) / "agent"
+            agent.write_text("#!/bin/sh\nprintf '%s' '" + line + "'\nexit 1\n")
+            agent.chmod(0o700)
+            with self.assertRaisesRegex(
+                    INSTALL.InputError,
+                    "published handshake failed: outcome=failed reason=local_config failed_stage=local") as error:
+                INSTALL.run_handshake(agent, root, journal)
+            self.assertEqual(journal.value["published_probe_diagnosis"], line)
+            self.assertNotIn("target_generation", str(error.exception))
+
+    def test_successful_handshake_records_no_diagnosis(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = INSTALL.secure_root(Path(raw) / "enrollment")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            agent = Path(raw) / "agent"
+            agent.write_text("#!/bin/sh\necho ignored\nexit 0\n")
+            agent.chmod(0o700)
+            INSTALL.run_handshake(agent, root, journal)
+            self.assertNotIn("published_probe_diagnosis", journal.value)
+
+
 class InstallRootPreparationTests(unittest.TestCase):
     def test_prepare_install_root_creates_every_component_private_under_umask_0002(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -478,6 +550,26 @@ class MainPreflightRecoveryTests(unittest.TestCase):
             self.assertEqual(stderr.getvalue(), "install refused: boundary_stop\n")
             agent.assert_called_once_with(Path("agent"))
             stage.assert_called_once()
+
+    def test_outbox_refusal_precedes_http_dispatch(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "enrollment"
+            refusal = INSTALL.ProvisionError("install refused: outbox preflight:")
+            with patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=self.args(root)), \
+                 patch.object(INSTALL, "load_bundle", return_value=INSTALL.Bundle("test", "test", [])), \
+                 patch.object(INSTALL, "role_body", return_value={}), \
+                 patch.object(INSTALL, "check_install_root_ancestors"), \
+                 patch.object(INSTALL, "check_outbox_root", side_effect=refusal), \
+                 patch.object(INSTALL, "check_install_preflight") as preflight, \
+                 patch.object(INSTALL, "configure_https") as configure, \
+                 patch.object(INSTALL, "admin_authorization") as transport:
+                stderr = io.StringIO()
+                with redirect_stderr(stderr):
+                    self.assertEqual(INSTALL.main(), 1)
+            self.assertEqual(stderr.getvalue(), "install refused: outbox preflight:\n")
+            preflight.assert_not_called()
+            configure.assert_not_called()
+            transport.assert_not_called()
 
     def test_incomplete_recovery_precedes_preflight_refusal(self):
         with tempfile.TemporaryDirectory() as raw:

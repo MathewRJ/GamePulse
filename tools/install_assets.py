@@ -1354,6 +1354,20 @@ def check_install_root_ancestors(root: Path, *, boundary: Path = Path("/")) -> N
             raise ProvisionError("install refused: enrollment ancestor is not protected:")
 
 
+def check_outbox_root(outbox_root: Path) -> None:
+    """Refuse an existing outbox terminal that cannot be safely used later."""
+    try:
+        terminal = os.lstat(outbox_root)
+    except FileNotFoundError:
+        pass
+    except OSError as error:
+        raise ProvisionError("install refused: outbox preflight:") from error
+    else:
+        if not _enrollment_parent_safe(terminal):
+            raise ProvisionError("install refused: outbox preflight:")
+    check_install_root_ancestors(outbox_root)
+
+
 def _nearest_existing_ancestor(path: Path) -> Path:
     """Return an existing lexical ancestor without following a missing tail."""
     try:
@@ -1813,6 +1827,11 @@ class TransactionJournal:
     def failure_site(self, site: FailureSite) -> None:
         """Retain the latest coarse local failure site as transaction evidence."""
         self.value["failure_site"] = site.value
+        self._persist()
+
+    def published_probe_diagnosis(self, line: str) -> None:
+        """Retain the agent's credential-free published-file diagnosis."""
+        self.value["published_probe_diagnosis"] = line
         self._persist()
 
     def apply_ok(self) -> None:
@@ -4308,15 +4327,34 @@ def enrollment_files(endpoint: str, ca_file: Path, root: Path, uuid_value: str, 
             "state.json": jcs(state) + b"\n"}
 
 
-def run_handshake(agent: Path, root: Path) -> None:
+def run_handshake(agent: Path, root: Path, journal: TransactionJournal | None = None) -> None:
     environment = os.environ.copy()
     for key in ("RIGSIGNAL_ENDPOINT", "RIGSIGNAL_CA_FILE", "RIGSIGNAL_EXPECTED_CLUSTER_UUID",
                 "RIGSIGNAL_PENDING_ENROLLMENT", "RIGSIGNAL_TARGET_GENERATION", "RIGSIGNAL_API_KEY"):
         environment.pop(key, None)
     result = subprocess.run([str(agent), "handshake", "check", "--config", str(root / "handshake.toml"),
                              "--credentials-file", str(root / "credentials.toml")], env=environment,
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False)
     if result.returncode != 0:
+        try:
+            line = result.stdout.decode("utf-8")
+            diagnosis = json.loads(line)
+        except (AttributeError, UnicodeDecodeError, json.JSONDecodeError):
+            diagnosis = None
+        if isinstance(diagnosis, dict) and line.endswith("\n") and line.count("\n") == 1:
+            if journal is not None:
+                journal.published_probe_diagnosis(line)
+            fields = [(name, diagnosis.get(name)) for name in
+                      ("outcome", "reason", "failed_stage")]
+            allowed = {
+                "outcome": {"failed", "ready", "pending_enrollment"},
+                "reason": {"ready", "pending_enrollment", "local_config", "connectivity", "auth",
+                           "destination", "compatibility", "unclassified_4xx"},
+                "failed_stage": {"none", "local", "root_info", "template_read", "mapping_read"},
+            }
+            if all(value in allowed[name] for name, value in fields):
+                raise InputError("published handshake failed: " + " ".join(
+                    name + "=" + value for name, value in fields))
         raise InputError("published handshake failed")
 
 
@@ -4469,6 +4507,7 @@ def main() -> int:
         resolved_agent: Path | None = None
         if condition != "incomplete":
             check_install_root_ancestors(requested_root)
+            check_outbox_root(requested_root.parent / "outbox")
             enrollment_ca_file, resolved_agent = check_install_preflight(
                 requested_root, args.agent_binary, args.ca_file)
         configure_https(enrollment_ca_file)
@@ -4555,6 +4594,7 @@ def main() -> int:
             # its successor state durable), so any same-class refusal below
             # cannot make an uncommitted minted key unreachable.
             check_install_root_ancestors(requested_root)
+            check_outbox_root(requested_root.parent / "outbox")
             enrollment_ca_file, resolved_agent = check_install_preflight(root, args.agent_binary, args.ca_file)
             configure_https(enrollment_ca_file)
         if resolved_agent is None:
@@ -4839,7 +4879,10 @@ def main() -> int:
 
         # Step 10 has no endpoint/credential environment fallback.
         failure_tracker.mark(FailureSite.PUBLISHED_PROBE)
-        run_handshake(resolved_agent, root)
+        if journal is None:
+            run_handshake(resolved_agent, root)
+        else:
+            run_handshake(resolved_agent, root, journal)
         if old_id and old_id != candidate_id:
             try:
                 fault("before-revoke")
