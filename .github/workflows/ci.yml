@@ -15,6 +15,32 @@ env:
   RUSTFLAGS: -D warnings
 
 jobs:
+  packaging-tests:
+    name: packaging tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run installer packaging tests
+        run: bash tools/tests/test_installer.sh
+
+      - name: Run launcher packaging tests
+        run: bash packaging/tests/test-rigsignal-launcher.sh
+
+  enrollment-tail-root:
+    name: enrollment tail tests (root)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run enrollment tail tests as root
+        run: |
+          set -o pipefail
+          sudo python3 tools/tests/test_enrollment_tail.py -v 2>&1 | tee enrollment-tail-root.log
+          grep -E 'test_foreign_owned_outbox_refuses.* \.\.\. ok$' enrollment-tail-root.log
+
   check:
     name: check (${{ matrix.os }})
     strategy:
