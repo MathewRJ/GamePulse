@@ -4,7 +4,7 @@ RigSignal is configured via a TOML file. The agent checks these locations in ord
 
 1. Path specified with `--config PATH` CLI flag
 2. `$RIGSIGNAL_CONFIG` environment variable
-3. `~/.config/rigsignal/rigsignal.toml`
+3. `${XDG_CONFIG_HOME:-~/.config}/rigsignal/rigsignal.toml`
 4. `/etc/rigsignal/rigsignal.toml`
 
 Run `rigsignal setup` to create the user config interactively, or create it manually.

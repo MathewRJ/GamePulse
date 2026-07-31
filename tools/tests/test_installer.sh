@@ -4,7 +4,11 @@
 
 set -u
 
-REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+# Config discovery honors SUDO_USER before HOME; keep each fixture rooted in
+# its test-specific HOME even when this harness is launched from sudo.
+export SUDO_USER=""
+
+REPO_ROOT=${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}
 LAUNCHER="$REPO_ROOT/packaging/rigsignal-launcher.sh"
 INSTALLER="$REPO_ROOT/packaging/install.sh"
 UNINSTALLER="$REPO_ROOT/packaging/uninstall.sh"
@@ -209,12 +213,82 @@ test_setup_preserves_collection_on_reauth() {
         && grep -q 'api_key = "test-api-key"' "$cfg/rigsignal.toml"
 }
 
+test_package_user_unit_uses_user_config_and_detects_packaged_ebpf() {
+    local stage="$TEST_TMP/package-stage"
+    local home="$TEST_TMP/package-home"
+    local unit="$stage/usr/lib/systemd/user/rigsignal-agent.service"
+    local example="$stage/usr/share/rigsignal/examples/rigsignal.toml.example"
+    local sudo_log="$TEST_TMP/package-sudo.log"
+
+    # Build the relevant package tree under a staged root, rather than relying
+    # on the tarball's user-local unit path.
+    install -Dm644 "$REPO_ROOT/packaging/systemd/rigsignal-agent.service" "$unit" || return 1
+    install -Dm644 "$REPO_ROOT/packaging/config/rigsignal.toml.example" "$example" || return 1
+    install -Dm755 /bin/true "$stage/usr/bin/rigsignal-ebpf" || return 1
+    printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> "$RIGSIGNAL_TEST_SUDO_LOG"\n' >"$stage/usr/bin/sudo"
+    chmod +x "$stage/usr/bin/sudo"
+
+    grep -qx 'ExecStart=/usr/bin/rigsignal-agent' "$unit" || return 1
+    ! grep -q -- '--config /etc/rigsignal/rigsignal.toml' "$unit" || return 1
+    ! grep -q '^Environment=HOME=' "$unit" || return 1
+    # Package and tarball units are intentionally identical except for the
+    # installed agent binary path.
+    sed '/^ExecStart=/d' "$unit" >"$TEST_TMP/packaged-unit-without-exec"
+    sed '/^ExecStart=/d' "$REPO_ROOT/packaging/systemd/rigsignal-agent.user-install.service" >"$TEST_TMP/tarball-unit-without-exec"
+    cmp -s "$TEST_TMP/packaged-unit-without-exec" "$TEST_TMP/tarball-unit-without-exec" || return 1
+    [[ -f "$example" && ! -e "$stage/etc/rigsignal/rigsignal.toml" ]] || return 1
+    local pkgbuild
+    for pkgbuild in "$REPO_ROOT/packaging/PKGBUILD" "$REPO_ROOT/packaging/aur/PKGBUILD"; do
+        grep -qx 'install=rigsignal.install' "$pkgbuild" || return 1
+        grep -q 'usr/share/rigsignal/examples/rigsignal.toml.example' "$pkgbuild" || return 1
+        ! grep -q '^backup=' "$pkgbuild" || return 1
+    done
+    cmp -s "$REPO_ROOT/packaging/rigsignal.install" "$REPO_ROOT/packaging/aur/rigsignal.install" || return 1
+
+    # Exercise the Arch upgrade hook under a staged /etc: it removes known
+    # pristine examples but leaves an operator-modified pacsave untouched.
+    local hook_stage="$TEST_TMP/package-hook-stage"
+    local hook_config="$hook_stage/etc/rigsignal/rigsignal.toml"
+    sed "s#/etc/rigsignal/rigsignal.toml#$hook_config#g" \
+        "$REPO_ROOT/packaging/rigsignal.install" >"$TEST_TMP/staged-rigsignal.install"
+    mkdir -p "$(dirname "$hook_config")"
+    source "$TEST_TMP/staged-rigsignal.install"
+    git -C "$REPO_ROOT" show 50e07d4:packaging/config/rigsignal.toml.example >"$hook_config" || return 1
+    post_upgrade >/dev/null
+    [[ ! -e "$hook_config" ]] || return 1
+    git -C "$REPO_ROOT" show c9557dd:packaging/config/rigsignal.toml.example >"$hook_config" || return 1
+    post_upgrade >/dev/null
+    [[ ! -e "$hook_config" ]] || return 1
+    printf 'operator eBPF config\n' >"${hook_config}.pacsave"
+    post_upgrade >"$TEST_TMP/package-hook-pacsave.out"
+    [[ ! -e "$hook_config" && -f "${hook_config}.pacsave" ]] || return 1
+    grep -qx 'operator eBPF config' "${hook_config}.pacsave" || return 1
+    grep -q 'Preserved modified .*\.pacsave' "$TEST_TMP/package-hook-pacsave.out" || return 1
+
+    # setup writes the user config. A staged /usr/bin eBPF binary must be
+    # discovered through PATH and cause the existing privileged sync path.
+    mkdir -p "$home"
+    start_mock_es happy || return 1
+    if ! printf 'http://127.0.0.1:%s\ntest-api-key\n' "$MOCK_PORT" | \
+        HOME="$home" XDG_CONFIG_HOME="$home/.config" PATH="$stage/usr/bin:$PATH" \
+        RIGSIGNAL_TEST_SUDO_LOG="$sudo_log" RIGSIGNAL_DEBUG=0 \
+        "$LAUNCHER" setup >"$TEST_TMP/package-setup.out" 2>&1; then
+        stop_mock_es
+        return 1
+    fi
+    stop_mock_es
+
+    [[ -f "$home/.config/rigsignal/rigsignal.toml" ]] \
+        && grep -q '^install -m 600 ' "$sudo_log"
+}
+
 run_test setup_fails_on_401 test_setup_fails_on_401
 run_test setup_preserves_collection_on_reauth test_setup_preserves_collection_on_reauth
 run_test setup_fails_without_create_doc test_setup_fails_without_create_doc
 run_test setup_succeeds_with_required_privileges test_setup_succeeds_with_required_privileges
 run_test checksum_mismatch_aborts_before_unpack test_checksum_mismatch_aborts_before_unpack
 run_test uninstall_removes_staged_install test_uninstall_removes_staged_install
+run_test package_user_unit_uses_user_config_and_detects_packaged_ebpf test_package_user_unit_uses_user_config_and_detects_packaged_ebpf
 
 printf 'TEST RESULT %d passed, %d failed\n' "$PASS_COUNT" "$FAIL_COUNT"
 [[ "$FAIL_COUNT" -eq 0 ]]

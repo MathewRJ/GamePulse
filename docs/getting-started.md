@@ -47,7 +47,7 @@ rigsignal setup
 ```
 
 Prompts for your Elasticsearch endpoint and API key, tests connectivity, and writes
-`~/.config/rigsignal/rigsignal.toml` (mode 600).
+`${XDG_CONFIG_HOME:-~/.config}/rigsignal/rigsignal.toml` (mode 600).
 
 ### Option B — Edit the config file directly
 

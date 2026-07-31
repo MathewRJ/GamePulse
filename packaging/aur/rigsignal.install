@@ -1,0 +1,42 @@
+post_upgrade() {
+    local legacy_config=/etc/rigsignal/rigsignal.toml
+    local pacsave_config=${legacy_config}.pacsave
+    local actual_hash
+
+    # Shipped payloads from `git log --follow --format='%H' -- packaging/config/rigsignal.toml.example`
+    # (commit -> SHA-256):
+    # c9557dda842bbcf5a058c4bd3e95bc96b114a11b -> 70759ca92c75a08c06469128b3ff394b711c592569604bba419474f113409868 (rigsignal-git VCS package; no release tag)
+    # 2338e8c6ce32d71428150914a6d3f0ca6a58a050 -> c7981746e301319c66000ee5b79c00ba9b55a2f4a2770620e3a63d6ac29f7088
+    # 50e07d4facc3f1e07b8a419691c419c98b60607d -> 1edf65c9657113ccd1189dc8f69081ae872bea04603d0c077ddb7e5be5cb1fff
+    # Only known shipped payloads are removable:
+    # c9557dda842bbcf5a058c4bd3e95bc96b114a11b (rigsignal-git VCS package; no release tag) -> 70759ca92c75a08c06469128b3ff394b711c592569604bba419474f113409868
+    # 50e07d4facc3f1e07b8a419691c419c98b60607d (v0.2.0-v0.2.2) -> 1edf65c9657113ccd1189dc8f69081ae872bea04603d0c077ddb7e5be5cb1fff
+    # 2338e8c6ce32d71428150914a6d3f0ca6a58a050 (v0.2.5, v0.3.0) -> c7981746e301319c66000ee5b79c00ba9b55a2f4a2770620e3a63d6ac29f7088
+    # The new package no longer owns this path: user credentials live in the
+    # XDG config location, while the root eBPF daemon writes its own 0600
+    # runtime config here.
+    if [ -f "$legacy_config" ]; then
+        actual_hash=$(sha256sum "$legacy_config" | awk '{print $1}') || return 0
+    elif [ -f "$pacsave_config" ]; then
+        actual_hash=$(sha256sum "$pacsave_config" | awk '{print $1}') || return 0
+        if [ "$actual_hash" = 70759ca92c75a08c06469128b3ff394b711c592569604bba419474f113409868 ] || \
+           [ "$actual_hash" = 1edf65c9657113ccd1189dc8f69081ae872bea04603d0c077ddb7e5be5cb1fff ] || \
+           [ "$actual_hash" = c7981746e301319c66000ee5b79c00ba9b55a2f4a2770620e3a63d6ac29f7088 ]; then
+            rm -f "$pacsave_config"
+            echo "==> Removed the obsolete pristine /etc/rigsignal/rigsignal.toml.pacsave example."
+        else
+            echo "==> Preserved modified /etc/rigsignal/rigsignal.toml.pacsave; review and place it manually if the root eBPF daemon needs it."
+        fi
+        return 0
+    else
+        return 0
+    fi
+    if [ "$actual_hash" = 70759ca92c75a08c06469128b3ff394b711c592569604bba419474f113409868 ] || \
+       [ "$actual_hash" = 1edf65c9657113ccd1189dc8f69081ae872bea04603d0c077ddb7e5be5cb1fff ] || \
+       [ "$actual_hash" = c7981746e301319c66000ee5b79c00ba9b55a2f4a2770620e3a63d6ac29f7088 ]; then
+        rm -f "$legacy_config"
+        echo "==> Removed the obsolete pristine /etc/rigsignal/rigsignal.toml example."
+    else
+        echo "==> Preserved modified /etc/rigsignal/rigsignal.toml; review it before using it for the root eBPF daemon."
+    fi
+}

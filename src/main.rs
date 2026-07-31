@@ -134,7 +134,7 @@ enum DiagnoseAction {
 )]
 struct Cli {
     /// Path to config file. If unset, searches platform defaults:
-    /// Linux: ~/.config/rigsignal/rigsignal.toml then /etc/rigsignal/rigsignal.toml.
+    /// Linux: ${XDG_CONFIG_HOME:-~/.config}/rigsignal/rigsignal.toml then /etc/rigsignal/rigsignal.toml.
     /// Windows: %APPDATA%\RigSignal\rigsignal.toml then %PROGRAMDATA%\RigSignal\rigsignal.toml.
     #[arg(short, long, value_name = "PATH")]
     config: Option<PathBuf>,

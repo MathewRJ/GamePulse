@@ -1,14 +1,14 @@
 [Unit]
-Description=RigSignal metrics agent (user install)
+Description=RigSignal metrics agent
 After=network.target
 
 [Service]
 Type=simple
-# %h expands to the user's home directory at activation time — safe across all users.
-# Config search order: ~/.config/rigsignal/rigsignal.toml then /etc/rigsignal/rigsignal.toml
 ExecStart=%h/.local/bin/rigsignal-agent
 Restart=on-failure
 RestartSec=5
+# Set default log level. Override with: systemctl --user edit rigsignal-agent
+# and add [Service] / Environment=RIGSIGNAL_LOG=debug
 Environment=RIGSIGNAL_LOG=info
 
 [Install]

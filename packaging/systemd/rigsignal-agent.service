@@ -4,11 +4,9 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/rigsignal-agent --config /etc/rigsignal/rigsignal.toml
+ExecStart=/usr/bin/rigsignal-agent
 Restart=on-failure
 RestartSec=5
-# Ensure HOME resolves to the real user home even if PAM session env is absent.
-Environment=HOME=/home/%u
 # Set default log level. Override with: systemctl --user edit rigsignal-agent
 # and add [Service] / Environment=RIGSIGNAL_LOG=debug
 Environment=RIGSIGNAL_LOG=info

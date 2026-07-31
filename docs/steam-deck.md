@@ -27,7 +27,7 @@ major update — re-run the installer after each OS update to restore kernel tra
 rigsignal setup
 ```
 
-This prompts for your Elasticsearch endpoint and API key, writes `~/.config/rigsignal/rigsignal.toml`,
+This prompts for your Elasticsearch endpoint and API key, writes `${XDG_CONFIG_HOME:-~/.config}/rigsignal/rigsignal.toml`,
 and syncs credentials to `/etc/rigsignal/rigsignal.toml` for the eBPF daemon (restarting it if
 running). Re-run `rigsignal setup` any time you rotate your API key.
 

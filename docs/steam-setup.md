@@ -23,7 +23,7 @@ rigsignal setup
 ```
 
 This will prompt for your Elasticsearch endpoint and API key, verify the connection,
-and write `~/.config/rigsignal/rigsignal.toml`. Your API key is stored only in that
+and write `${XDG_CONFIG_HOME:-~/.config}/rigsignal/rigsignal.toml`. Your API key is stored only in that
 file (mode 600) and is never printed to the terminal after entry.
 
 To get an API key from Elastic Cloud:

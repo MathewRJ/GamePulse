@@ -23,7 +23,11 @@ ES_MIN_VERSION="8.13.0"
 # User config path — mirrors what the Rust agent's Config::load() searches first.
 # The agent also reads /etc/rigsignal/rigsignal.toml (system-wide), but setup
 # writes the user config so credentials stay per-user and never world-readable.
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/rigsignal"
+case "${XDG_CONFIG_HOME:-}" in
+    /*) CONFIG_HOME=$XDG_CONFIG_HOME ;;
+    *) CONFIG_HOME=$HOME/.config ;;
+esac
+CONFIG_DIR="$CONFIG_HOME/rigsignal"
 CONFIG_FILE="$CONFIG_DIR/rigsignal.toml"
 
 # ── Launcher debug log ─────────────────────────────────────────────────────────
@@ -422,7 +426,19 @@ TOML
 
     # If the eBPF daemon is installed, sync credentials to the system config so it
     # can reach Elasticsearch without a separate manual step.
-    if [ -f /usr/local/bin/rigsignal-ebpf ] && command -v sudo >/dev/null 2>&1; then
+    # Prefer PATH so distro packages (/usr/bin), tarball installs (/usr/local/bin),
+    # and per-user installs (~/.local/bin) are all detected. Keep explicit
+    # fallbacks for environments whose PATH is incomplete under a launcher.
+    _ebpf_bin=$(command -v rigsignal-ebpf 2>/dev/null || true)
+    if [ -z "$_ebpf_bin" ]; then
+        for _ebpf_candidate in /usr/local/bin/rigsignal-ebpf /usr/bin/rigsignal-ebpf "$HOME/.local/bin/rigsignal-ebpf"; do
+            if [ -x "$_ebpf_candidate" ]; then
+                _ebpf_bin=$_ebpf_candidate
+                break
+            fi
+        done
+    fi
+    if [ -n "$_ebpf_bin" ] && command -v sudo >/dev/null 2>&1; then
         _steamos_ro_setup=0
         if command -v steamos-readonly >/dev/null 2>&1; then
             sudo steamos-readonly disable 2>/dev/null && _steamos_ro_setup=1

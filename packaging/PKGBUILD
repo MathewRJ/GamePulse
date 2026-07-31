@@ -20,8 +20,7 @@ license=('Apache')
 depends=()
 makedepends=('rust')
 optdepends=('mangohud: frame timing data collection')
-backup=('etc/rigsignal/rigsignal.toml')
-install=
+install=rigsignal.install
 # Disable LTO: ring's build script compiles C/ASM via cc and produces GCC LTO
 # bitcode objects when CFLAGS contains -flto. Rust's LLD linker cannot resolve
 # symbols from GCC LTO objects, causing undefined symbol errors at link time.
@@ -107,9 +106,9 @@ package() {
     install -Dm755 "${startdir}/rigsignal-launcher.sh" \
         "${pkgdir}/usr/bin/rigsignal"
 
-    # ---- Config ----
-    # Install example as the default config (backup= in PKGBUILD protects user edits
-    # from being overwritten on upgrade). User should edit this with their ES credentials.
+    # ---- Example config ----
+    # The launcher writes the live, credential-bearing user config under XDG_CONFIG_HOME.
+    # /etc/rigsignal/rigsignal.toml remains reserved for the root eBPF service.
     install -Dm644 "${startdir}/config/rigsignal.toml.example" \
-        "${pkgdir}/etc/rigsignal/rigsignal.toml"
+        "${pkgdir}/usr/share/rigsignal/examples/rigsignal.toml.example"
 }

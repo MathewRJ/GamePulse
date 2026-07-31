@@ -88,7 +88,7 @@ For a personal deployment, `all` cluster + index privileges is simpler and fine.
 rigsignal setup
 ```
 
-This prompts for your ES endpoint and API key, verifies connectivity, and writes `~/.config/rigsignal/rigsignal.toml` (mode 600). Import the Kibana dashboards separately — see "Import the dashboards" below.
+This prompts for your ES endpoint and API key, verifies connectivity, and writes `${XDG_CONFIG_HOME:-~/.config}/rigsignal/rigsignal.toml` (mode 600). Import the Kibana dashboards separately — see "Import the dashboards" below.
 
 ---
 
@@ -217,6 +217,12 @@ cd rigsignal-git
 makepkg -si
 ```
 
+When upgrading from the legacy package, its post-upgrade hook hashes the former
+`/etc/rigsignal/rigsignal.toml` example. It removes only known pristine
+examples; a modified file (including a pacman's `.pacsave`) is left in place
+with an announcement for the operator. It never copies credentials into a user
+config—run `rigsignal setup` for that.
+
 ### Debian / Ubuntu 24.04+ (.deb)
 
 Download the latest `.deb` from the [GitHub releases page](https://github.com/MathewRJ/RigSignal/releases):
@@ -225,7 +231,7 @@ Download the latest `.deb` from the [GitHub releases page](https://github.com/Ma
 sudo dpkg -i rigsignal_0.3.0-1_amd64.deb
 ```
 
-The package installs `rigsignal-agent` and `rigsignal` (launcher) to `/usr/bin/`, the systemd user unit, and an example config to `/etc/rigsignal/rigsignal.toml`.
+The package installs `rigsignal-agent` and `rigsignal` (launcher) to `/usr/bin/`, the systemd user unit, and an example config to `/usr/share/rigsignal/examples/rigsignal.toml.example`. Run `rigsignal setup` to create the credential-bearing config in `${XDG_CONFIG_HOME:-~/.config}/rigsignal/rigsignal.toml`.
 
 ### Fedora / RHEL / openSUSE (.rpm)
 
@@ -329,6 +335,10 @@ user agent by default; pass `--with-ebpf` to explicitly install and enable the
 privileged eBPF service. For manual installs, copy the unit files from the
 release tarball or `packaging/systemd/`.
 
+> A tarball-installed `~/.config/systemd/user/rigsignal-agent.service` shadows
+> the packaged unit in `/usr/lib/systemd/user/`. Remove the leftover user unit
+> after switching to a distro package, then run `systemctl --user daemon-reload`.
+
 > **Dev installs (build from source):** The unit's `ExecStart` defaults to `/usr/bin/rigsignal-agent`, but a source build installs to `/usr/local/bin/`. Create a drop-in to override:
 > ```bash
 > mkdir -p ~/.config/systemd/user/rigsignal-agent.service.d
@@ -346,10 +356,10 @@ release tarball or `packaging/systemd/`.
 
 Config is read from (in priority order):
 1. `--config PATH` CLI flag
-2. `~/.config/rigsignal/rigsignal.toml`
+2. `${XDG_CONFIG_HOME:-~/.config}/rigsignal/rigsignal.toml`
 3. `/etc/rigsignal/rigsignal.toml`
 
-`rigsignal setup` writes `~/.config/rigsignal/rigsignal.toml` automatically. See `docs/configuration.md` for the full reference.
+`rigsignal setup` writes `${XDG_CONFIG_HOME:-~/.config}/rigsignal/rigsignal.toml` automatically. See `docs/configuration.md` for the full reference.
 
 ---
 

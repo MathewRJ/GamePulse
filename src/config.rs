@@ -229,7 +229,7 @@ impl Config {
     ///   2. $RIGSIGNAL_CONFIG env var
     ///
     /// Linux fallback chain (when neither of the above is set):
-    ///   3. ~/.config/rigsignal/rigsignal.toml
+    ///   3. $XDG_CONFIG_HOME/rigsignal/rigsignal.toml (or ~/.config when unset)
     ///   4. /etc/rigsignal/rigsignal.toml
     ///
     /// Windows fallback chain (when neither of the above is set):
@@ -261,8 +261,8 @@ impl Config {
             }
             #[cfg(not(windows))]
             {
-                if let Some(home) = home_dir() {
-                    v.push(home.join(".config/rigsignal/rigsignal.toml"));
+                if let Some(user_config) = user_config_path() {
+                    v.push(user_config);
                 }
                 v.push(PathBuf::from("/etc/rigsignal/rigsignal.toml"));
             }
@@ -330,6 +330,17 @@ impl Config {
     }
 }
 
+#[cfg(not(windows))]
+fn user_config_path() -> Option<PathBuf> {
+    if let Ok(config_home) = std::env::var("XDG_CONFIG_HOME") {
+        let config_home = PathBuf::from(config_home);
+        if config_home.is_absolute() {
+            return Some(config_home.join("rigsignal/rigsignal.toml"));
+        }
+    }
+    home_dir().map(|home| home.join(".config/rigsignal/rigsignal.toml"))
+}
+
 fn home_dir() -> Option<PathBuf> {
     // When running via sudo, HOME is /root but config lives in the invoking
     // user's home. Prefer SUDO_USER → /home/<user> over HOME.
@@ -347,6 +358,11 @@ fn home_dir() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(not(windows))]
+    use std::sync::Mutex;
+
+    #[cfg(not(windows))]
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn config_defaults_output_when_absent() {
@@ -390,5 +406,73 @@ mod tests {
         assert_eq!(cfg.output.max_file_bytes, 1024);
         assert_eq!(cfg.output.max_file_age_secs, 30);
         assert_eq!(cfg.output.spool_retention_hours, 24);
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn user_config_path_honors_absolute_xdg_config_home() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let previous = std::env::var_os("XDG_CONFIG_HOME");
+        std::env::set_var("XDG_CONFIG_HOME", "/tmp/rigsignal-xdg-config-test");
+
+        assert_eq!(
+            user_config_path(),
+            Some(PathBuf::from(
+                "/tmp/rigsignal-xdg-config-test/rigsignal/rigsignal.toml"
+            ))
+        );
+
+        match previous {
+            Some(value) => std::env::set_var("XDG_CONFIG_HOME", value),
+            None => std::env::remove_var("XDG_CONFIG_HOME"),
+        }
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn user_config_path_ignores_empty_xdg_config_home() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let previous_xdg = std::env::var_os("XDG_CONFIG_HOME");
+        let previous_home = std::env::var_os("HOME");
+        std::env::set_var("XDG_CONFIG_HOME", "");
+        std::env::set_var("HOME", "/tmp/rigsignal-home-empty-xdg");
+
+        assert_eq!(
+            user_config_path(),
+            Some(PathBuf::from(
+                "/tmp/rigsignal-home-empty-xdg/.config/rigsignal/rigsignal.toml"
+            ))
+        );
+
+        restore_env("XDG_CONFIG_HOME", previous_xdg);
+        restore_env("HOME", previous_home);
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn user_config_path_ignores_relative_xdg_config_home() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let previous_xdg = std::env::var_os("XDG_CONFIG_HOME");
+        let previous_home = std::env::var_os("HOME");
+        std::env::set_var("XDG_CONFIG_HOME", "relative/config");
+        std::env::set_var("HOME", "/tmp/rigsignal-home-relative-xdg");
+
+        assert_eq!(
+            user_config_path(),
+            Some(PathBuf::from(
+                "/tmp/rigsignal-home-relative-xdg/.config/rigsignal/rigsignal.toml"
+            ))
+        );
+
+        restore_env("XDG_CONFIG_HOME", previous_xdg);
+        restore_env("HOME", previous_home);
+    }
+
+    #[cfg(not(windows))]
+    fn restore_env(name: &str, value: Option<std::ffi::OsString>) {
+        match value {
+            Some(value) => std::env::set_var(name, value),
+            None => std::env::remove_var(name),
+        }
     }
 }

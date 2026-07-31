@@ -18,7 +18,7 @@ conflicts=('rigsignal')
 depends=()
 makedepends=('rust' 'git')
 optdepends=('mangohud: frame timing data collection')
-backup=('etc/rigsignal/rigsignal.toml')
+install=rigsignal.install
 # Disable LTO: ring's build script compiles C/ASM via cc and produces GCC LTO
 # bitcode objects when CFLAGS contains -flto. Rust's LLD linker cannot resolve
 # symbols from GCC LTO objects, causing undefined symbol errors at link time.
@@ -91,5 +91,5 @@ package() {
         "${pkgdir}/usr/bin/rigsignal"
 
     install -Dm644 "${_repodir}/packaging/config/rigsignal.toml.example" \
-        "${pkgdir}/etc/rigsignal/rigsignal.toml"
+        "${pkgdir}/usr/share/rigsignal/examples/rigsignal.toml.example"
 }
