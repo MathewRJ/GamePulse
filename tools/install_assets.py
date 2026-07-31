@@ -4336,25 +4336,38 @@ def run_handshake(agent: Path, root: Path, journal: TransactionJournal | None = 
                              "--credentials-file", str(root / "credentials.toml")], env=environment,
                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False)
     if result.returncode != 0:
-        try:
-            line = result.stdout.decode("utf-8")
-            diagnosis = json.loads(line)
-        except (AttributeError, UnicodeDecodeError, json.JSONDecodeError):
-            diagnosis = None
-        if isinstance(diagnosis, dict) and line.endswith("\n") and line.count("\n") == 1:
+        # The line is journaled only after full validation: bounded size, single line, no
+        # fields beyond the probe schema, scalar values only, and whitelisted enums for the
+        # three surfaced fields. Anything else is discarded whole - the journal and the raised
+        # message must never carry unvalidated agent output.
+        line = ""
+        diagnosis = None
+        if result.stdout and len(result.stdout) <= 4096:
+            try:
+                line = result.stdout.decode("utf-8")
+                diagnosis = json.loads(line)
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                diagnosis = None
+        allowed = {
+            "outcome": {"failed", "ready", "pending_enrollment"},
+            "reason": {"ready", "pending_enrollment", "local_config", "connectivity", "auth",
+                       "destination", "compatibility", "unclassified_4xx"},
+            "failed_stage": {"none", "local", "root_info", "template_read", "mapping_read"},
+        }
+        schema_keys = {"probe_schema_version", "diagnosis_schema_version", "outcome", "reason",
+                       "failed_stage", "target_generation", "observed_cluster_uuid",
+                       "accepted_set_digest"}
+        valid = (isinstance(diagnosis, dict) and line.endswith("\n") and line.count("\n") == 1
+                 and set(diagnosis) <= schema_keys
+                 and all(isinstance(value, (str, int)) or value is None
+                         for value in diagnosis.values())
+                 and all(isinstance(diagnosis.get(name), str) and diagnosis[name] in allowed[name]
+                         for name in allowed))
+        if valid:
             if journal is not None:
                 journal.published_probe_diagnosis(line)
-            fields = [(name, diagnosis.get(name)) for name in
-                      ("outcome", "reason", "failed_stage")]
-            allowed = {
-                "outcome": {"failed", "ready", "pending_enrollment"},
-                "reason": {"ready", "pending_enrollment", "local_config", "connectivity", "auth",
-                           "destination", "compatibility", "unclassified_4xx"},
-                "failed_stage": {"none", "local", "root_info", "template_read", "mapping_read"},
-            }
-            if all(value in allowed[name] for name, value in fields):
-                raise InputError("published handshake failed: " + " ".join(
-                    name + "=" + value for name, value in fields))
+            raise InputError("published handshake failed: " + " ".join(
+                name + "=" + diagnosis[name] for name in ("outcome", "reason", "failed_stage")))
         raise InputError("published handshake failed")
 
 

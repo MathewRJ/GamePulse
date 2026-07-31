@@ -146,6 +146,36 @@ class HandshakeDiagnosisTests(unittest.TestCase):
             INSTALL.run_handshake(agent, root, journal)
             self.assertNotIn("published_probe_diagnosis", journal.value)
 
+    def assert_diagnosis_discarded_whole(self, line: str):
+        with tempfile.TemporaryDirectory() as raw:
+            root = INSTALL.secure_root(Path(raw) / "enrollment")
+            journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            agent = Path(raw) / "agent"
+            agent.write_text("#!/bin/sh\nprintf '%s' '" + line + "'\nexit 1\n")
+            agent.chmod(0o700)
+            with self.assertRaisesRegex(INSTALL.InputError, "published handshake failed$"):
+                INSTALL.run_handshake(agent, root, journal)
+            self.assertNotIn("published_probe_diagnosis", journal.value)
+
+    def test_non_string_outcome_is_discarded_whole_not_typeerror(self):
+        self.assert_diagnosis_discarded_whole(
+            '{"probe_schema_version":1,"diagnosis_schema_version":1,"outcome":[],'
+            '"reason":"local_config","failed_stage":"local","target_generation":null,'
+            '"observed_cluster_uuid":null,"accepted_set_digest":null}\n')
+
+    def test_unknown_field_is_discarded_whole(self):
+        self.assert_diagnosis_discarded_whole(
+            '{"probe_schema_version":1,"diagnosis_schema_version":1,"outcome":"failed",'
+            '"reason":"local_config","failed_stage":"local","target_generation":null,'
+            '"observed_cluster_uuid":null,"accepted_set_digest":null,"extra":"x"}\n')
+
+    def test_oversized_diagnosis_is_discarded_whole(self):
+        self.assert_diagnosis_discarded_whole(
+            '{"probe_schema_version":1,"diagnosis_schema_version":1,"outcome":"failed",'
+            '"reason":"local_config","failed_stage":"local",'
+            '"target_generation":"' + "a" * 5000 + '","observed_cluster_uuid":null,'
+            '"accepted_set_digest":null}\n')
+
 
 class InstallRootPreparationTests(unittest.TestCase):
     def test_prepare_install_root_creates_every_component_private_under_umask_0002(self):
