@@ -39,6 +39,17 @@ use probes::vfs::VfsProbe;
 use session::{session_file_path, spawn_watcher};
 use shipper::EsShipper;
 
+const BUILD_COMMIT: &str = env!("RIGSIGNAL_BUILD_COMMIT");
+
+fn build_info_json() -> String {
+    serde_json::json!({
+        "name": "rigsignal-ebpf",
+        "version": env!("CARGO_PKG_VERSION"),
+        "commit": BUILD_COMMIT,
+    })
+    .to_string()
+}
+
 fn assign_metric_timestamps(docs: &mut [EbpfDocument], tick_timestamp: DateTime<Utc>) {
     for doc in docs {
         if let EbpfDocument::Metric(metric) = doc {
@@ -50,6 +61,7 @@ fn assign_metric_timestamps(docs: &mut [EbpfDocument], tick_timestamp: DateTime<
 #[derive(Parser, Debug)]
 #[command(
     name = "rigsignal-ebpf",
+    version,
     about = "RigSignal eBPF kernel telemetry daemon"
 )]
 struct Cli {
@@ -64,11 +76,20 @@ struct Cli {
     /// Log level filter (e.g. info, debug, rigsignal_ebpf_daemon=debug)
     #[arg(long, default_value = "info")]
     log: String,
+
+    /// Print machine-readable build provenance and exit.
+    #[arg(long)]
+    build_info_json: bool,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
+
+    if cli.build_info_json {
+        println!("{}", build_info_json());
+        return Ok(());
+    }
 
     // Logging
     tracing_subscriber::fmt()

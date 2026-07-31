@@ -42,6 +42,17 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
+const BUILD_COMMIT: &str = env!("RIGSIGNAL_BUILD_COMMIT");
+
+fn build_info_json(name: &str) -> String {
+    json!({
+        "name": name,
+        "version": env!("CARGO_PKG_VERSION"),
+        "commit": BUILD_COMMIT,
+    })
+    .to_string()
+}
+
 // ── CLI ───────────────────────────────────────────────────────────────────────
 
 #[derive(Subcommand)]
@@ -155,6 +166,10 @@ struct Cli {
     /// Print the resolved configuration (credentials redacted) to stdout and exit.
     #[arg(long)]
     print_config: bool,
+
+    /// Print machine-readable build provenance and exit.
+    #[arg(long)]
+    build_info_json: bool,
 
     /// Short annotation for this session (e.g. "after-driver-update").
     /// Overrides [session].label in the config file.
@@ -788,6 +803,11 @@ async fn main() -> Result<ExitCode> {
 
 async fn run() -> Result<ExitCode> {
     let cli = Cli::parse();
+
+    if cli.build_info_json {
+        println!("{}", build_info_json("rigsignal-agent"));
+        return Ok(ExitCode::SUCCESS);
+    }
 
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::new(resolve_log_filter(

@@ -35,6 +35,25 @@ per-process metrics. Without it, only aggregated metrics are visible.
 
 ---
 
+## Build provenance (G4)
+
+Both binaries expose a no-privilege, machine-readable build record:
+
+```bash
+cargo run --manifest-path src/Cargo.toml -- --build-info-json
+cargo run --manifest-path ebpf/rigsignal-ebpf/Cargo.toml -- --build-info-json
+```
+
+Each command prints one JSON line containing `name`, `version`, and `commit`.
+The commit is a 40-character SHA when Git metadata or `GITHUB_SHA` is available,
+otherwise `unknown` for source-tarball builds. The build scripts watch Git's real
+`HEAD`, current branch-ref, and `packed-refs` paths, so building again after a
+new commit re-stamps the binary without `cargo clean`. In CI, a `GITHUB_SHA`
+that differs from local `HEAD` fails the build rather than producing stale
+provenance.
+
+---
+
 ## Pass criteria per stream
 
 A stream is ✅ when:
