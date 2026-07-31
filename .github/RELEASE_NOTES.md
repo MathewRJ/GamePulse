@@ -48,9 +48,9 @@ reference and a real replay transcript:
 **Linux tarball + one-line installer** (`rigsignal-0.3.0-linux-x86_64.tar.gz`):
 - Everything in the Linux packages above, **plus the pre-built eBPF daemon and
   probes** (`rigsignal-ebpf`, `rigsignal-ebpf-probes`) — no nightly Rust
-  toolchain or `bpf-linker` required on your machine. Installing via the
-  one-liner below installs and starts the eBPF daemon automatically (one sudo
-  prompt); pass `--no-ebpf` to skip it.
+  toolchain or `bpf-linker` required on your machine. The one-line installer
+  leaves eBPF disabled by default; pass `--with-ebpf` to install and start its
+  privileged daemon (one sudo prompt).
 - This is the recommended install path on SteamOS and other immutable/atomic
   distros — installs entirely to `~/.local/bin` and survives OS updates.
 

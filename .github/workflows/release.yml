@@ -168,6 +168,12 @@ jobs:
           cd dist-tar
           tar -czf "${DIR}.tar.gz" "${DIR}/"
 
+      - name: Build asset bundle
+        run: |
+          python3 tools/build_asset_bundle.py \
+            --version "${{ needs.setup.outputs.version }}" \
+            --source-commit "${GITHUB_SHA}"
+
       - name: Upload tarball artefact
         uses: actions/upload-artifact@v4
         with:
@@ -179,6 +185,12 @@ jobs:
         with:
           name: install-sh
           path: packaging/install.sh
+
+      - name: Upload asset bundle artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: asset-bundle
+          path: dist/rigsignal-assets-*.tar.gz
 
   # ── 2. Build Windows x86_64 release binary ──────────────────────────────────
   build-windows:
@@ -438,6 +450,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: install-sh
+          path: dist/
+
+      - name: Download asset bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: asset-bundle
           path: dist/
 
       - name: List release assets

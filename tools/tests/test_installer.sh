@@ -182,7 +182,13 @@ test_uninstall_removes_staged_install() {
     [[ ! -e "$stage$home/.local/bin/rigsignal-agent" ]] \
         && [[ ! -e "$stage$home/.local/bin/rigsignal" ]] \
         && [[ ! -e "$stage$home/.local/bin/rigsignal-uninstall" ]] \
-        && [[ ! -e "$stage$home/.config/systemd/user/rigsignal-agent.service" ]]
+        && [[ ! -e "$stage$home/.config/systemd/user/rigsignal-agent.service" ]] || return 1
+    HOME="$home" DESTDIR="$stage" RIGSIGNAL_INSTALL_LOCAL_DIR="$release" \
+        "$INSTALLER" --version 1.2.4 >"$TEST_TMP/reinstall.out" 2>&1 || return 1
+    [[ -e "$stage$home/.local/bin/rigsignal-agent" ]] \
+        && [[ -e "$stage$home/.local/bin/rigsignal" ]] \
+        && [[ -e "$stage$home/.local/bin/rigsignal-uninstall" ]] \
+        && [[ -e "$stage$home/.config/systemd/user/rigsignal-agent.service" ]]
 }
 
 test_setup_preserves_collection_on_reauth() {
