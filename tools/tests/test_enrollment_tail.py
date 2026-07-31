@@ -112,7 +112,7 @@ class OutboxPreflightTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as raw:
             outbox = Path(raw) / "outbox"
             outbox.mkdir(mode=0o700)
-            outbox.chown(1, -1)
+            os.chown(outbox, 1, -1)
             with self.assertRaisesRegex(INSTALL.ProvisionError, "install refused: outbox preflight:"):
                 INSTALL.check_outbox_root(outbox)
 
