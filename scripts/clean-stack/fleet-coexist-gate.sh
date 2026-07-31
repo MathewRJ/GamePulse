@@ -9,13 +9,13 @@ source "$SCRIPT_DIR/lib.sh"
 
 ES_VERSION='' KB_VERSION='' BUNDLE='' PREDECESSOR_MANIFEST='' KEEP=0
 declare -a LEGS=()
-usage() { printf '%s\n' 'Usage: fleet-coexist-gate.sh --es-version 9.4.3|9.4.4 [--kb-version VERSION] --leg a..x [--bundle PATH] [--predecessor-manifest PATH] [--all]' 'Solo-screen subset: fleet legs a/b/i/n/o/p/q/r/s plus adoption leg 1.' >&2; }
+usage() { printf '%s\n' 'Usage: fleet-coexist-gate.sh --es-version 9.4.3|9.4.4 [--kb-version VERSION] --leg a..y [--bundle PATH] [--predecessor-manifest PATH] [--all]' 'Solo-screen subset: fleet legs a/b/i/n/o/p/q/r/s plus adoption leg 1.' >&2; }
 version() { [[ "$1" =~ ^9\.4\.[34]$ ]]; }
 fail() { printf 'ASSERT FAIL %s\n' "$*" >&2; return 1; }
 while (($#)); do case "$1" in
   --es-version) ES_VERSION="${2:-}"; shift 2 ;; --kb-version) KB_VERSION="${2:-}"; shift 2 ;;
   --bundle) BUNDLE="${2:-}"; shift 2 ;; --predecessor-manifest) PREDECESSOR_MANIFEST="${2:-}"; shift 2 ;; --leg) LEGS+=("${2:-}"); shift 2 ;;
-  --all) LEGS=(a b c d e f g h i j k l m n o p q r s t u v w x); shift ;; --keep) KEEP=1; shift ;;
+  --all) LEGS=(a b c d e f g h i j k l m n o p q r s t u v w x y); shift ;; --keep) KEEP=1; shift ;;
   -h|--help) usage; exit 0 ;; *) usage; exit 2 ;; esac; done
 [[ -n "$ES_VERSION" ]] || { usage; exit 2; }; KB_VERSION="${KB_VERSION:-$ES_VERSION}"
 version "$ES_VERSION" && version "$KB_VERSION" && [[ "$ES_VERSION" == "$KB_VERSION" ]] || { usage; exit 2; }
@@ -47,7 +47,7 @@ api() { curl --silent --show-error --fail --max-redirs 0 --user "elastic:$ELASTI
 build_bundle() { if [[ -z "$BUNDLE" ]]; then BUNDLE="$RUN_DIR/assets.tar.gz"; python3 "$REPO_ROOT/tools/build_asset_bundle.py" --source-commit "$(git -C "$REPO_ROOT" rev-parse HEAD)" --output "$BUNDLE"; fi; BUNDLE_SHA256="$(sha256sum "$BUNDLE" | awk '{print $1}')"; IMPLEMENTING_COMMIT="$(git -C "$REPO_ROOT" rev-parse HEAD)"; }
 write_admin() { umask 077; printf '[elasticsearch]\nusername = "elastic"\npassword = "%s"\n' "$ELASTIC_PASSWORD" >"$RUN_DIR/admin.toml"; chmod 600 "$RUN_DIR/admin.toml"; }
 _installer() {
-  local -a args=(--bundle "$BUNDLE" --endpoint "$ES_URL" --ca-file "$CS_CA_FILE" --kibana-endpoint "$KB_URL" --kibana-ca-file "$CS_CA_FILE" --admin-credentials-file "$RUN_DIR/admin.toml" --agent-binary "$CLEAN_STACK_AGENT_BINARY" --profile user --enrollment-root "$RUN_DIR/enrollment" --ownership-profile fleet-coexist)
+  local -a args=(--bundle "$BUNDLE" --endpoint "$ES_URL" --ca-file "${CLEAN_STACK_ENROLLMENT_CA_FILE:-$CS_CA_FILE}" --kibana-endpoint "$KB_URL" --kibana-ca-file "$CS_CA_FILE" --admin-credentials-file "$RUN_DIR/admin.toml" --agent-binary "$CLEAN_STACK_AGENT_BINARY" --profile user --enrollment-root "$RUN_DIR/enrollment" --ownership-profile fleet-coexist)
   local out rc attempt
   # Adoption flag only on the first install per root: a rerun with committed
   # state correctly refuses adoption_flag_state_present (A4 flag-misuse guard).
@@ -580,13 +580,87 @@ leg_v() {
 
 # W: prove this gate filesystem supports the exchange/fsync publication path.
 leg_w() {
-  local member
+  local member unrelated_ca bundle
   setup
-  installer || fail 'Leg-W install failed'
+  unrelated_ca="$RUN_DIR/tls/unrelated-enrollment-ca.pem"
+  bundle="$RUN_DIR/tls/enrollment-ca-bundle.pem"
+  openssl req -x509 -new -nodes -newkey rsa:2048 \
+    -keyout "$RUN_DIR/tls/unrelated-enrollment-ca.key" \
+    -out "$unrelated_ca" \
+    -days 1 \
+    -subj '/CN=RigSignal Unrelated Enrollment CA' \
+    -addext 'basicConstraints=critical,CA:TRUE' \
+    -addext 'keyUsage=critical,keyCertSign,cRLSign' >/dev/null 2>&1
+  chmod 600 "$RUN_DIR/tls/unrelated-enrollment-ca.key" "$unrelated_ca"
+  cat "$unrelated_ca" "$CS_CA_FILE" >"$bundle"
+  chmod 600 "$bundle"
+  CLEAN_STACK_ENROLLMENT_CA_FILE="$bundle" installer || fail 'Leg-W install failed'
   for member in credentials.toml handshake.toml shipping-policy-v1.toml state.json; do
     [[ "$(stat -c '%a' "$RUN_DIR/enrollment/$member")" == 600 ]] || fail "Leg-W published member is not 0600: $member"
   done
   [[ ! -e "$RUN_DIR/.rigsignal-publication-enrollment" ]] || fail 'Leg-W left publication stage residue'
+  # Recorded, non-load-bearing state assertion; the handshake below is the wire proof.
+  jq -e '.phase == "committed"' "$RUN_DIR/enrollment/state.json" >/dev/null || fail 'Leg-W published state is not committed'
+  env -u RIGSIGNAL_ENDPOINT -u RIGSIGNAL_CA_FILE -u RIGSIGNAL_EXPECTED_CLUSTER_UUID \
+    -u RIGSIGNAL_PENDING_ENROLLMENT -u RIGSIGNAL_TARGET_GENERATION -u RIGSIGNAL_API_KEY \
+    "$CLEAN_STACK_AGENT_BINARY" handshake check --config "$RUN_DIR/enrollment/handshake.toml" \
+    --credentials-file "$RUN_DIR/enrollment/credentials.toml" >"$RUN_DIR/leg-w-handshake.json" \
+    || fail 'Leg-W zero-environment handshake failed'
+  jq -e '.outcome == "ready"' "$RUN_DIR/leg-w-handshake.json" >/dev/null || fail 'Leg-W zero-environment handshake was not ready'
+}
+
+# Y: an existing outbox must be safe before the installer can reach HTTP, and
+# the historical installer control must prove the test is not vacuous.
+leg_y() {
+  local parent root attacker pre_fix rc
+  setup
+
+  parent="$RUN_DIR/leg-y-symlink"
+  root="$parent/enrollment"
+  attacker="$RUN_DIR/leg-y-attacker"
+  mkdir -m 0700 "$parent" "$attacker"
+  ln -s "$attacker" "$parent/outbox"
+  : >"$RUN_DIR/leg-y-symlink-http.log"
+  set +e
+  RIGSIGNAL_HTTP_AUDIT_LOG="$RUN_DIR/leg-y-symlink-http.log" installer_at_root "$root" >"$RUN_DIR/leg-y-symlink.log" 2>&1
+  rc=$?
+  set -e
+  [[ "$rc" != 0 ]] || fail 'Leg-Y symlink outbox unexpectedly installed'
+  grep -E '^install refused: outbox preflight:' "$RUN_DIR/leg-y-symlink.log" >/dev/null || { cat "$RUN_DIR/leg-y-symlink.log" >&2; fail 'Leg-Y symlink outbox wrong refusal token'; }
+  [[ ! -s "$RUN_DIR/leg-y-symlink-http.log" ]] || fail 'Leg-Y symlink outbox made an HTTP request'
+
+  parent="$RUN_DIR/leg-y-group-writable"
+  root="$parent/enrollment"
+  mkdir -m 0700 "$parent"
+  mkdir "$parent/outbox"
+  chmod 0775 "$parent/outbox"
+  : >"$RUN_DIR/leg-y-group-writable-http.log"
+  set +e
+  RIGSIGNAL_HTTP_AUDIT_LOG="$RUN_DIR/leg-y-group-writable-http.log" installer_at_root "$root" >"$RUN_DIR/leg-y-group-writable.log" 2>&1
+  rc=$?
+  set -e
+  [[ "$rc" != 0 ]] || fail 'Leg-Y group-writable outbox unexpectedly installed'
+  grep -E '^install refused: outbox preflight:' "$RUN_DIR/leg-y-group-writable.log" >/dev/null || { cat "$RUN_DIR/leg-y-group-writable.log" >&2; fail 'Leg-Y group-writable outbox wrong refusal token'; }
+  [[ ! -s "$RUN_DIR/leg-y-group-writable-http.log" ]] || fail 'Leg-Y group-writable outbox made an HTTP request'
+
+  # Resolve against $REPO_ROOT, never the caller's cwd.  The historical source
+  # must predate check_outbox_root or this anti-vacuity control proves nothing.
+  pre_fix="$RUN_DIR/leg-y-pre-fix-install_assets.py"
+  git -C "$REPO_ROOT" show '2df73bf:tools/install_assets.py' >"$pre_fix" 2>/dev/null \
+    || fail 'Leg-Y could not resolve pre-fix installer at 2df73bf'
+  ! grep -q 'check_outbox_root' "$pre_fix" \
+    || fail 'Leg-Y pre-fix source at 2df73bf already contains the fix; control is vacuous'
+  parent="$RUN_DIR/leg-y-pre-fix"
+  root="$parent/enrollment"
+  mkdir -m 0700 "$parent"
+  mkdir "$parent/outbox"
+  chmod 0775 "$parent/outbox"
+  : >"$RUN_DIR/leg-y-pre-fix-http.log"
+  set +e
+  RIGSIGNAL_HTTP_AUDIT_LOG="$RUN_DIR/leg-y-pre-fix-http.log" PYTHONPATH="$REPO_ROOT/tools${PYTHONPATH:+:$PYTHONPATH}" python3 "$pre_fix" --bundle "$BUNDLE" --endpoint "$ES_URL" --ca-file "$CS_CA_FILE" --kibana-endpoint "$KB_URL" --kibana-ca-file "$CS_CA_FILE" --admin-credentials-file "$RUN_DIR/admin.toml" --agent-binary "$CLEAN_STACK_AGENT_BINARY" --profile user --enrollment-root "$root" --ownership-profile fleet-coexist --adopt-existing-w1-stream >"$RUN_DIR/leg-y-pre-fix.out" 2>"$RUN_DIR/leg-y-pre-fix.err"
+  set -e
+  [[ -s "$RUN_DIR/leg-y-pre-fix-http.log" ]] || fail 'Leg-Y pre-fix installer did not proceed to HTTP'
+  ! grep -F 'outbox preflight' "$RUN_DIR/leg-y-pre-fix.err" >/dev/null || fail 'Leg-Y pre-fix installer emitted the new refusal'
 }
 
 # X: the same-class NAME_MAX preflight must refuse before publication or HTTP.
@@ -843,4 +917,4 @@ leg_p() {
   PREDECESSOR_MANIFEST="$RUN_DIR/predecessor-good.json" installer || fail 'Leg-P post-retained-pipeline retry did not pass predecessor barrier'
 }
 
-for leg in "${LEGS[@]}"; do case "$leg" in a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x) "leg_$leg" ;; *) fail "unknown leg: $leg"; exit 2 ;; esac; done
+for leg in "${LEGS[@]}"; do case "$leg" in a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y) "leg_$leg" ;; *) fail "unknown leg: $leg"; exit 2 ;; esac; done
