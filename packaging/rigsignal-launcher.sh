@@ -708,62 +708,67 @@ cmd_assets_install() {
     ASSETS_BUNDLE="" ASSETS_ENDPOINT="" ASSETS_CA_FILE="" ASSETS_CA_SHA256="" ASSETS_KIBANA=""
     ASSETS_ADMIN_SOURCE="" ASSETS_REPAIR=0 ASSETS_UPGRADE=0 ASSETS_ALLOW_DOWNGRADE=0 ASSETS_OWNERSHIP=default ASSETS_NONINTERACTIVE=0
     ASSETS_STTY_DISABLED=0 ASSETS_CLEANING=0 ASSETS_KIBANA_TRANSACTION=0 ASSETS_CONFIG_HAD=0
+    # Assets setup/acquisition failures are local contract failures.  Keep
+    # this scoped helper separate from the launcher's global _die() because
+    # other subcommands retain their existing exit protocol.
+    _assets_die() { _err "$*"; exit 2; }
+    _assets_refuse() { _err "$*"; exit 3; }
     while [ "$#" -gt 0 ]; do
         case "$1" in
             --bundle|--endpoint|--ca-file|--ca-sha256|--kibana-endpoint|--admin-credentials-file|--ownership-profile)
-                [ "$#" -ge 2 ] && [ -n "$2" ] || _die "assets install: missing value for $1"
+                [ "$#" -ge 2 ] && [ -n "$2" ] || _assets_die "assets install: missing value for $1"
                 case "$1" in
-                    --bundle) [ -z "$ASSETS_BUNDLE" ] || _die "assets install: duplicate --bundle"; ASSETS_BUNDLE=$2 ;;
-                    --endpoint) [ -z "$ASSETS_ENDPOINT" ] || _die "assets install: duplicate --endpoint"; ASSETS_ENDPOINT=$2 ;;
-                    --ca-file) [ -z "$ASSETS_CA_FILE" ] || _die "assets install: duplicate --ca-file"; ASSETS_CA_FILE=$2 ;;
-                    --ca-sha256) [ -z "$ASSETS_CA_SHA256" ] || _die "assets install: duplicate --ca-sha256"; ASSETS_CA_SHA256=$2 ;;
-                    --kibana-endpoint) [ -z "$ASSETS_KIBANA" ] || _die "assets install: duplicate --kibana-endpoint"; ASSETS_KIBANA=$2 ;;
-                    --admin-credentials-file) [ -z "$ASSETS_ADMIN_SOURCE" ] || _die "assets install: duplicate --admin-credentials-file"; ASSETS_ADMIN_SOURCE=$2 ;;
+                    --bundle) [ -z "$ASSETS_BUNDLE" ] || _assets_die "assets install: duplicate --bundle"; ASSETS_BUNDLE=$2 ;;
+                    --endpoint) [ -z "$ASSETS_ENDPOINT" ] || _assets_die "assets install: duplicate --endpoint"; ASSETS_ENDPOINT=$2 ;;
+                    --ca-file) [ -z "$ASSETS_CA_FILE" ] || _assets_die "assets install: duplicate --ca-file"; ASSETS_CA_FILE=$2 ;;
+                    --ca-sha256) [ -z "$ASSETS_CA_SHA256" ] || _assets_die "assets install: duplicate --ca-sha256"; ASSETS_CA_SHA256=$2 ;;
+                    --kibana-endpoint) [ -z "$ASSETS_KIBANA" ] || _assets_die "assets install: duplicate --kibana-endpoint"; ASSETS_KIBANA=$2 ;;
+                    --admin-credentials-file) [ -z "$ASSETS_ADMIN_SOURCE" ] || _assets_die "assets install: duplicate --admin-credentials-file"; ASSETS_ADMIN_SOURCE=$2 ;;
                     --ownership-profile) ASSETS_OWNERSHIP=$2 ;;
                 esac; shift 2 ;;
             --repair) ASSETS_REPAIR=1; shift ;;
             --upgrade) ASSETS_UPGRADE=1; shift ;;
             --allow-downgrade) ASSETS_ALLOW_DOWNGRADE=1; shift ;;
             --non-interactive|--noninteractive) ASSETS_NONINTERACTIVE=1; shift ;;
-            *) _die "Usage: rigsignal assets install [--bundle PATH] [--endpoint URL] [--ca-file PATH --ca-sha256 HEX] [--kibana-endpoint URL] [--admin-credentials-file PATH] [--non-interactive]" ;;
+            *) _assets_die "Usage: rigsignal assets install [--bundle PATH] [--endpoint URL] [--ca-file PATH --ca-sha256 HEX] [--kibana-endpoint URL] [--admin-credentials-file PATH] [--non-interactive]" ;;
         esac
     done
-    [ -z "$ASSETS_CA_SHA256" ] || { case "$ASSETS_CA_SHA256" in *[!0123456789abcdefABCDEF]*|'') _die "assets install: --ca-sha256 must be 64 hexadecimal characters";; esac; [ "${#ASSETS_CA_SHA256}" -eq 64 ] || _die "assets install: --ca-sha256 must be 64 hexadecimal characters"; }
-    [ -z "$ASSETS_CA_SHA256" ] || [ -n "$ASSETS_CA_FILE" ] || _die "assets install: --ca-sha256 requires --ca-file"
-    [ "$ASSETS_OWNERSHIP" != fleet-coexist ] || _die "fleet_coexist_requires_full_flow: use the full packaged engine flow."
-    [ "$ASSETS_OWNERSHIP" = default ] || _die "assets install: invalid --ownership-profile"
+    [ -z "$ASSETS_CA_SHA256" ] || { case "$ASSETS_CA_SHA256" in *[!0123456789abcdefABCDEF]*|'') _assets_die "assets install: --ca-sha256 must be 64 hexadecimal characters";; esac; [ "${#ASSETS_CA_SHA256}" -eq 64 ] || _assets_die "assets install: --ca-sha256 must be 64 hexadecimal characters"; }
+    [ -z "$ASSETS_CA_SHA256" ] || [ -n "$ASSETS_CA_FILE" ] || _assets_die "assets install: --ca-sha256 requires --ca-file"
+    [ "$ASSETS_OWNERSHIP" != fleet-coexist ] || _assets_refuse "fleet_coexist_requires_full_flow: use the full packaged engine flow."
+    [ "$ASSETS_OWNERSHIP" = default ] || _assets_die "assets install: invalid --ownership-profile"
     for _assets_env in RIGSIGNAL_CONFIG ES_URL ES_CA_CERT RIGSIGNAL_ENDPOINT RIGSIGNAL_CA_FILE RIGSIGNAL_KIBANA_ENDPOINT KIBANA_ENDPOINT; do
         _assets_env_value=$(printenv "$_assets_env" 2>/dev/null || true)
-        [ -z "$_assets_env_value" ] || _die "assets install: refusing ambiguous environment override $_assets_env"
+        [ -z "$_assets_env_value" ] || _assets_die "assets install: refusing ambiguous environment override $_assets_env"
     done
-    resolve_assets_installation || exit 1
-    ASSETS_TMP=$(mktemp -d "${TMPDIR:-/tmp}/rigsignal-assets.XXXXXX") || _die "assets install: could not create private temporary directory"
-    chmod 700 "$ASSETS_TMP" || _die "assets install: could not secure temporary directory"
+    resolve_assets_installation || _assets_die "assets install: matching engine installation is unavailable"
+    ASSETS_TMP=$(mktemp -d "${TMPDIR:-/tmp}/rigsignal-assets.XXXXXX") || _assets_die "assets install: could not create private temporary directory"
+    chmod 700 "$ASSETS_TMP" || _assets_die "assets install: could not secure temporary directory"
     ASSETS_ENGINE_PID=""
     trap assets_cleanup EXIT
     trap 'assets_interrupted HUP' HUP
     trap 'assets_interrupted INT' INT
     trap 'assets_interrupted TERM' TERM
-    assets_load_persisted_inputs || _die "assets install: persisted launcher configuration is invalid"
+    assets_load_persisted_inputs || _assets_die "assets install: persisted launcher configuration is invalid"
     [ -n "$ASSETS_ENDPOINT" ] || ASSETS_ENDPOINT=$ASSETS_PERSISTED_ENDPOINT
     [ -n "$ASSETS_KIBANA" ] || ASSETS_KIBANA=$ASSETS_PERSISTED_KIBANA
     [ -n "$ASSETS_CA_FILE" ] || ASSETS_CA_FILE=$ASSETS_PERSISTED_CA
     if [ "$ASSETS_NONINTERACTIVE" = 1 ] && { [ -z "$ASSETS_ENDPOINT" ] || [ -z "$ASSETS_CA_FILE" ] || [ -z "$ASSETS_KIBANA" ] || [ -z "$ASSETS_ADMIN_SOURCE" ]; }; then
-        _die "assets install: noninteractive input missing (endpoint, CA, Kibana endpoint, or administrator credentials)"
+        _assets_die "assets install: noninteractive input missing (endpoint, CA, Kibana endpoint, or administrator credentials)"
     fi
-    if [ -z "$ASSETS_ENDPOINT" ]; then printf "Elasticsearch endpoint: " >&2; IFS= read -r ASSETS_ENDPOINT || _die "assets install: endpoint is required"; fi
-    validate_endpoint "$ASSETS_ENDPOINT" || exit 1
-    if [ -z "$ASSETS_CA_FILE" ]; then printf "Elasticsearch CA file: " >&2; IFS= read -r ASSETS_CA_FILE || _die "assets install: CA file is required"; fi
-    assets_snapshot_ca "$ASSETS_CA_FILE" || _die "assets install: CA file is required and must be valid"
-    if [ -z "$ASSETS_KIBANA" ]; then printf "Kibana endpoint: " >&2; IFS= read -r ASSETS_KIBANA || _die "assets install: Kibana endpoint is required"; fi
+    if [ -z "$ASSETS_ENDPOINT" ]; then printf "Elasticsearch endpoint: " >&2; IFS= read -r ASSETS_ENDPOINT || _assets_die "assets install: endpoint is required"; fi
+    validate_endpoint "$ASSETS_ENDPOINT" || _assets_die "assets install: Elasticsearch endpoint is invalid"
+    if [ -z "$ASSETS_CA_FILE" ]; then printf "Elasticsearch CA file: " >&2; IFS= read -r ASSETS_CA_FILE || _assets_die "assets install: CA file is required"; fi
+    assets_snapshot_ca "$ASSETS_CA_FILE" || _assets_die "assets install: CA file is required and must be valid"
+    if [ -z "$ASSETS_KIBANA" ]; then printf "Kibana endpoint: " >&2; IFS= read -r ASSETS_KIBANA || _assets_die "assets install: Kibana endpoint is required"; fi
     if ! validate_url_origin "$ASSETS_KIBANA"; then
-        _die "assets install: Kibana endpoint must be an HTTPS origin with a valid host and optional port"
+        _assets_die "assets install: Kibana endpoint must be an HTTPS origin with a valid host and optional port"
     fi
     case "$ASSETS_KIBANA" in
         https://*) ;;
-        *) _die "assets install: Kibana endpoint must be an HTTPS origin with a valid host and optional port" ;;
+        *) _assets_die "assets install: Kibana endpoint must be an HTTPS origin with a valid host and optional port" ;;
     esac
-    persist_kibana_endpoint "$ASSETS_KIBANA" || _die "assets install: could not atomically persist Kibana endpoint"
+    persist_kibana_endpoint "$ASSETS_KIBANA" || _assets_die "assets install: could not atomically persist Kibana endpoint"
     _assets_ebpf=$(find_ebpf_bin)
     if [ -n "$_assets_ebpf" ] && ! synchronize_ebpf_system_config "$CA_SNAPSHOT"; then
         if [ "${SYSTEM_SCOPE_RESTORED:-0}" = "1" ]; then
@@ -771,30 +776,30 @@ cmd_assets_install() {
         else
             _err "The eBPF system configuration could not be restored; retaining the matching user transaction."
         fi
-        _die "assets install: eBPF system config synchronization failed"
+        _assets_die "assets install: eBPF system config synchronization failed"
     fi
-    assets_commit_kibana_transaction || _die "assets install: could not finalize Kibana endpoint persistence"
-    materialize_admin_file || _die "assets install: administrator credentials must be exactly [elasticsearch] username/password TOML"
+    assets_commit_kibana_transaction || _assets_die "assets install: could not finalize Kibana endpoint persistence"
+    materialize_admin_file || _assets_die "assets install: administrator credentials must be exactly [elasticsearch] username/password TOML"
     if [ -n "$ASSETS_BUNDLE" ]; then
-        [ -f "$ASSETS_BUNDLE" ] && [ -r "$ASSETS_BUNDLE" ] || _die "assets install: bundle is not readable"
+        [ -f "$ASSETS_BUNDLE" ] && [ -r "$ASSETS_BUNDLE" ] || _assets_die "assets install: bundle is not readable"
         _assets_name=$(basename "$ASSETS_BUNDLE")
-        cp "$ASSETS_BUNDLE" "$ASSETS_TMP/$_assets_name" || _die "assets install: could not snapshot bundle"
-        cp "$ASSETS_BUNDLE.sha256" "$ASSETS_TMP/$_assets_name.sha256" || _die "assets install: offline bundle requires $ASSETS_BUNDLE.sha256"
+        cp "$ASSETS_BUNDLE" "$ASSETS_TMP/$_assets_name" || _assets_die "assets install: could not snapshot bundle"
+        cp "$ASSETS_BUNDLE.sha256" "$ASSETS_TMP/$_assets_name.sha256" || _assets_die "assets install: offline bundle requires $ASSETS_BUNDLE.sha256"
     else
-        [ "$ASSETS_CHANNEL" != rigsignal-git ] || _die "assets install: rigsignal-git requires --bundle; no release lookup was attempted"
+        [ "$ASSETS_CHANNEL" != rigsignal-git ] || _assets_die "assets install: rigsignal-git requires --bundle; no release lookup was attempted"
         _assets_name="rigsignal-assets-${ASSETS_VERSION}.tar.gz"
         _assets_base="https://github.com/MathewRJ/RigSignal/releases/download/v${ASSETS_VERSION}"
         if command -v curl >/dev/null 2>&1; then
-            curl -fsSL "$_assets_base/$_assets_name" -o "$ASSETS_TMP/$_assets_name" && curl -fsSL "$_assets_base/$_assets_name.sha256" -o "$ASSETS_TMP/$_assets_name.sha256" || _die "assets install: matching release v${ASSETS_VERSION} is unavailable; use --bundle"
+            curl -fsSL "$_assets_base/$_assets_name" -o "$ASSETS_TMP/$_assets_name" && curl -fsSL "$_assets_base/$_assets_name.sha256" -o "$ASSETS_TMP/$_assets_name.sha256" || _assets_die "assets install: matching release v${ASSETS_VERSION} is unavailable; use --bundle"
         elif command -v wget >/dev/null 2>&1; then
-            wget -qO "$ASSETS_TMP/$_assets_name" "$_assets_base/$_assets_name" && wget -qO "$ASSETS_TMP/$_assets_name.sha256" "$_assets_base/$_assets_name.sha256" || _die "assets install: matching release v${ASSETS_VERSION} is unavailable; use --bundle"
-        else _die "assets install: curl or wget is required to download the release bundle"; fi
+            wget -qO "$ASSETS_TMP/$_assets_name" "$_assets_base/$_assets_name" && wget -qO "$ASSETS_TMP/$_assets_name.sha256" "$_assets_base/$_assets_name.sha256" || _assets_die "assets install: matching release v${ASSETS_VERSION} is unavailable; use --bundle"
+        else _assets_die "assets install: curl or wget is required to download the release bundle"; fi
     fi
     ASSETS_BUNDLE_SNAPSHOT="$ASSETS_TMP/$_assets_name" ASSETS_SIDECAR_SNAPSHOT="$ASSETS_TMP/$_assets_name.sha256"
-    _assets_digest=$(assets_sidecar_digest "$ASSETS_SIDECAR_SNAPSHOT" "$_assets_name") || _die "assets install: invalid bundle checksum sidecar"
-    command -v sha256sum >/dev/null 2>&1 || _die "assets install: sha256sum is required"
-    _assets_actual=$(sha256sum "$ASSETS_BUNDLE_SNAPSHOT") || _die "assets install: could not hash bundle snapshot"
-    [ "${_assets_actual%% *}" = "$_assets_digest" ] || _die "assets install: bundle checksum verification failed"
+    _assets_digest=$(assets_sidecar_digest "$ASSETS_SIDECAR_SNAPSHOT" "$_assets_name") || _assets_die "assets install: invalid bundle checksum sidecar"
+    command -v sha256sum >/dev/null 2>&1 || _assets_die "assets install: sha256sum is required"
+    _assets_actual=$(sha256sum "$ASSETS_BUNDLE_SNAPSHOT") || _assets_die "assets install: could not hash bundle snapshot"
+    [ "${_assets_actual%% *}" = "$_assets_digest" ] || _assets_die "assets install: bundle checksum verification failed"
     # These values are shell variables, never reparsed input; invoke directly
     # so paths and the one-shot credential remain out of logs and argv secrets.
     if [ "$ASSETS_REPAIR" = 1 ]; then set -- --repair; else set --; fi
@@ -1733,7 +1738,7 @@ case "$subcmd" in
         ;;
     run)    cmd_run "$@" ;;
     assets)
-        [ "${1:-}" = install ] || { _err "Usage: rigsignal assets install [options]"; exit 1; }
+        [ "${1:-}" = install ] || { _err "Usage: rigsignal assets install [options]"; exit 2; }
         shift
         cmd_assets_install "$@"
         ;;

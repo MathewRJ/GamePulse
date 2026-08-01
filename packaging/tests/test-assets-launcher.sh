@@ -13,7 +13,6 @@ cp "$launcher" "$bin/rigsignal"
 
 fail() { printf 'FAIL: %s\n' "$*" >&2; return 1; }
 require_status() { if [ "$1" -ne "$2" ]; then fail "$3 (got status $2, expected $1)"; fi; }
-require_nonzero() { if [ "$1" -eq 0 ]; then fail "$2 unexpectedly succeeded"; fi; }
 require_grep() { if ! grep -q -- "$1" "$2"; then fail "$3"; fi; }
 require_line() { if ! grep -qx -- "$1" "$2"; then fail "$3"; fi; }
 require_absent() {
@@ -87,7 +86,7 @@ while IFS=$'\t' read -r name encoded expected; do
     if [ -z "$name" ] || [ "${name#\#}" != "$name" ]; then continue; fi
     python3 -c 'import base64, pathlib, sys; pathlib.Path(sys.argv[2]).write_bytes(base64.b64decode(sys.argv[1]))' "$encoded" "$bundle.sha256"
     run_status run_noninteractive >"$tmp/corpus-$name.out" 2>&1
-    require_nonzero "$RUN_STATUS" "sidecar corpus $name"
+    require_status 2 "$RUN_STATUS" "sidecar corpus $name"
     if [ "$expected" = 1 ]; then
         require_grep 'bundle checksum verification failed' "$tmp/corpus-$name.out" "valid sidecar $name was rejected"
     else
@@ -115,7 +114,7 @@ for build_case in valid wrong-name extra-key missing-key non-string bad-json ext
     if [ "$wanted" = 0 ]; then
         require_status 0 "$RUN_STATUS" "valid build-info"
     else
-        require_nonzero "$RUN_STATUS" "build-info case $build_case"
+        require_status 2 "$RUN_STATUS" "build-info case $build_case"
         require_grep engine_not_installed "$tmp/build-$build_case.out" "build-info case $build_case did not fail at resolver"
     fi
 done
@@ -126,7 +125,7 @@ cp "$launcher" "$tmp/system-bin/rigsignal"
 cp "$bin/rigsignal-agent" "$tmp/system-bin/rigsignal-agent"
 cp -a "$engine/." "$tmp/system-engine/"
 set +e; HOME="$home" XDG_CONFIG_HOME="$home/.config" TMPDIR="$tmp/runtime" "$tmp/system-bin/rigsignal" assets install --bundle "$bundle" --non-interactive >"$tmp/opposite-scope.out" 2>&1; RUN_STATUS=$?; set -e
-require_nonzero "$RUN_STATUS" "opposite-scope resolver"
+require_status 2 "$RUN_STATUS" "opposite-scope resolver"
 require_grep engine_not_installed "$tmp/opposite-scope.out" "opposite-scope resolver used nearby user artifacts"
 
 # Stage the hard-coded /usr paths inside a disposable launcher copy.  This runs
@@ -145,7 +144,7 @@ require_status 0 "$RUN_STATUS" "co-scoped system resolver"
 require_line https://system-kibana.example.invalid "$args" "system-scope engine did not run"
 
 set +e; HOME="$home" XDG_CONFIG_HOME="$home/.config" TMPDIR="$tmp/runtime" "$bin/rigsignal" assets install --bundle "$bundle" --non-interactive </dev/null >"$tmp/noninteractive.out" 2>&1; RUN_STATUS=$?; set -e
-require_nonzero "$RUN_STATUS" "noninteractive missing input"
+require_status 2 "$RUN_STATUS" "noninteractive missing input"
 require_grep 'noninteractive input missing' "$tmp/noninteractive.out" "noninteractive mode prompted or accepted missing input"
 
 mkdir -p "$home/.config/rigsignal"
@@ -160,7 +159,7 @@ for invalid_endpoint in 'https://evil".invalid' 'https://evil\\.invalid' $'https
     printf '%s\n' '[kibana]' 'endpoint = "https://old-kibana.invalid"' >"$home/.config/rigsignal/rigsignal.toml"
     before=$(sha256sum "$home/.config/rigsignal/rigsignal.toml")
     set +e; HOME="$home" XDG_CONFIG_HOME="$home/.config" TMPDIR="$tmp/runtime" "$bin/rigsignal" assets install --bundle "$bundle" --endpoint http://127.0.0.1:9200 --ca-file "$ca" --kibana-endpoint "$invalid_endpoint" --admin-credentials-file "$credentials" --non-interactive >"$tmp/injection.out" 2>&1; RUN_STATUS=$?; set -e
-    require_nonzero "$RUN_STATUS" "unsafe Kibana endpoint"
+    require_status 2 "$RUN_STATUS" "unsafe Kibana endpoint"
     after=$(sha256sum "$home/.config/rigsignal/rigsignal.toml")
     if [ "$before" != "$after" ]; then fail "unsafe Kibana endpoint mutated TOML"; fi
 done
@@ -174,7 +173,7 @@ mkdir -p "$tmp/no-remote-shim"
 printf '%s\n' '#!/bin/sh' 'touch "$RIGSIGNAL_ASSETS_REMOTE_PROBE"' 'exit 1' >"$tmp/no-remote-shim/curl"
 chmod 755 "$tmp/no-remote-shim/curl"
 set +e; HOME="$home" XDG_CONFIG_HOME="$home/.config" TMPDIR="$tmp/runtime" PATH="$tmp/no-remote-shim:$PATH" RIGSIGNAL_ASSETS_REMOTE_PROBE="$remote_probe" "$bin/rigsignal" assets install --endpoint http://127.0.0.1:9200 --ca-file "$ca" --kibana-endpoint https://kibana.example.invalid --admin-credentials-file "$api_key_credentials" --non-interactive >"$tmp/api-key-credentials.out" 2>&1; RUN_STATUS=$?; set -e
-require_nonzero "$RUN_STATUS" "API-key-shaped administrator credentials"
+require_status 2 "$RUN_STATUS" "API-key-shaped administrator credentials"
 require_grep 'administrator credentials must be exactly \[elasticsearch\] username/password TOML' "$tmp/api-key-credentials.out" "API-key-shaped administrator credentials were not rejected"
 if [ -e "$remote_probe" ]; then
     fail "API-key-shaped administrator credentials reached remote work"
@@ -205,7 +204,7 @@ printf 'old-root-config\n' >"$tmp/fake-etc/rigsignal/rigsignal.toml"; printf 'ol
 printf '%s\n' '[kibana]' 'endpoint = "https://old-kibana.invalid"' >"$home/.config/rigsignal/rigsignal.toml"
 sudo_log="$tmp/ebpf-sudo.log"
 set +e; HOME="$home" XDG_CONFIG_HOME="$home/.config" TMPDIR="$tmp/runtime" PATH="$tmp/ebpf-shim:$PATH" RIGSIGNAL_ASSETS_SYSTEM_ROOT="$tmp/fake-etc/rigsignal" RIGSIGNAL_ASSETS_SUDO_LOG="$sudo_log" RIGSIGNAL_ASSETS_TEST_ARGS="$args" RIGSIGNAL_ASSETS_TEST_CREDENTIAL="$credential_probe" "$bin/rigsignal" assets install --bundle "$bundle" --endpoint http://127.0.0.1:9200 --ca-file "$ca" --kibana-endpoint https://new-kibana.invalid --admin-credentials-file "$credentials" --non-interactive >"$tmp/ebpf-fail.out" 2>&1; RUN_STATUS=$?; set -e
-require_nonzero "$RUN_STATUS" "late eBPF durability failure"
+require_status 2 "$RUN_STATUS" "late eBPF durability failure"
 require_grep 'mv .* /etc/rigsignal/rigsignal.toml' "$sudo_log" "eBPF test failed before root config replacement"
 require_grep '^endpoint = "https://old-kibana.invalid"$' "$home/.config/rigsignal/rigsignal.toml" "user config was not rolled back after restored root transaction"
 require_grep '^old-root-config$' "$tmp/fake-etc/rigsignal/rigsignal.toml" "root config was not rolled back"
@@ -319,14 +318,32 @@ chmod 755 "$password_driver"
 HOME="$home" XDG_CONFIG_HOME="$home/.config" TMPDIR="$tmp/runtime" PATH="$tmp/password-stty-shim:$PATH" RIGSIGNAL_ASSETS_LAUNCHER="$bin/rigsignal" RIGSIGNAL_ASSETS_BUNDLE="$bundle" RIGSIGNAL_ASSETS_CA="$ca" RIGSIGNAL_ASSETS_STTY_READY="$password_stty_ready" RIGSIGNAL_ASSETS_PASSWORD_RESULT="$password_result" python3 "$password_driver" >"$tmp/password-console.out" 2>&1
 require_grep 'echo=1$' "$password_result" "terminal echo was not restored after password-prompt interruption"
 
+# The waited child status is the assets command status: all contract codes
+# must pass through unchanged, with stderr left untouched by the launcher.
+write_status_engine() {
+    printf '%s\n' '#!/usr/bin/env python3' 'import sys' 'print("engine-status-" + sys.argv[1], file=sys.stderr)' 'raise SystemExit(int(sys.argv[1]))' >"$engine/install_assets.py"
+    chmod 755 "$engine/install_assets.py"
+}
+for engine_status in 0 2 3 4; do
+    write_status_engine
+    # The fixture reads the requested status from a harmless first argument
+    # injected by its filename-independent script body below.
+    sed -i "s/sys.argv\[1\]/\"$engine_status\"/g" "$engine/install_assets.py"
+    run_status run_noninteractive >"$tmp/forward-$engine_status.out" 2>&1
+    require_status "$engine_status" "$RUN_STATUS" "engine status $engine_status forwarding"
+    require_grep "engine-status-$engine_status" "$tmp/forward-$engine_status.out" "engine status $engine_status stderr forwarding"
+done
+set +e; HOME="$home" XDG_CONFIG_HOME="$home/.config" TMPDIR="$tmp/runtime" "$bin/rigsignal" assets install --unknown-flag >"$tmp/assets-local-exit.out" 2>&1; RUN_STATUS=$?; set -e
+require_status 2 "$RUN_STATUS" "launcher-local assets usage exit"
+
 printf 'rigsignal-git\n' >"$engine/channel"; curl_log="$tmp/curl.log"; mkdir "$tmp/shim"
 printf '%s\n' '#!/bin/sh' 'printf request >> "$RIGSIGNAL_ASSETS_CURL_LOG"' 'exit 1' >"$tmp/shim/curl"; chmod 755 "$tmp/shim/curl"
 set +e; HOME="$home" XDG_CONFIG_HOME="$home/.config" TMPDIR="$tmp/runtime" PATH="$tmp/shim:$PATH" RIGSIGNAL_ASSETS_CURL_LOG="$curl_log" "$bin/rigsignal" assets install --ownership-profile fleet-coexist >"$tmp/fleet.out" 2>&1; RUN_STATUS=$?; set -e
-require_nonzero "$RUN_STATUS" "fleet coexist"
+require_status 3 "$RUN_STATUS" "fleet coexist"
 require_grep fleet_coexist_requires_full_flow "$tmp/fleet.out" "fleet coexist did not fail closed"
 if [ -e "$curl_log" ]; then fail "fleet coexist attempted a release download"; fi
 set +e; HOME="$home" XDG_CONFIG_HOME="$home/.config" TMPDIR="$tmp/runtime" PATH="$tmp/shim:$PATH" RIGSIGNAL_ASSETS_CURL_LOG="$curl_log" "$bin/rigsignal" assets install --endpoint http://127.0.0.1:9200 --ca-file "$ca" --kibana-endpoint https://kibana.example.invalid --admin-credentials-file "$credentials" --non-interactive >"$tmp/git.out" 2>&1; RUN_STATUS=$?; set -e
-require_nonzero "$RUN_STATUS" "git assets without bundle"
+require_status 2 "$RUN_STATUS" "git assets without bundle"
 require_grep 'rigsignal-git requires --bundle' "$tmp/git.out" "git install did not remain offline-only"
 if [ -e "$curl_log" ]; then fail "git assets lookup invoked curl"; fi
 

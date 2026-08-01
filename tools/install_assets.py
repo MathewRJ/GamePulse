@@ -4,6 +4,7 @@
 import argparse
 import base64
 import ctypes
+import contextvars
 import datetime
 import fnmatch
 import hashlib
@@ -162,12 +163,30 @@ class RequestFailure(Exception):
         super().__init__(detail)
 
 
+class RemoteReadRefusal(InputError):
+    """A malformed or unverifiable remote read that must fail closed."""
+
+
 class ProvisionError(Exception):
     """A deliberately sanitized, stable provisioning failure."""
 
     def __init__(self, prefix: str):
         self.prefix = prefix
         super().__init__(prefix)
+
+
+class MutationTracker:
+    """Invocation-local proof that a mutating request was about to be sent."""
+
+    def __init__(self):
+        self.mutation_issued = False
+
+    def mark_issued(self) -> None:
+        self.mutation_issued = True
+
+
+_mutation_tracker: contextvars.ContextVar[MutationTracker | None] = contextvars.ContextVar(
+    "rigsignal_mutation_tracker", default=None)
 
 
 class FailureSite(Enum):
@@ -211,6 +230,38 @@ def report_failure_site(site: FailureSite) -> None:
     if not isinstance(site, FailureSite):
         raise TypeError("failure site must be a FailureSite")
     print("RIGSIGNAL_FAILURE_SITE " + site.value, file=sys.stderr)
+
+
+def finalize_failure(message: str, failure_tracker: FailureSiteTracker,
+                     mutation_tracker: MutationTracker, *, local: bool = False) -> int:
+    """Print one stable failure and select its contract exit status.
+
+    ``mutation_tracker`` is deliberately the sole source for the 3/4 split.
+    FailureSite and the transaction journal are diagnostic evidence only.
+    """
+    print(message, file=sys.stderr)
+    failure_tracker.persist()
+    report_failure_site(failure_tracker.site)
+    # Once a mutating request has been issued, its remote state is authoritative
+    # for the contract.  A later local failure cannot downgrade a possibly
+    # partial operation from exit 4 to exit 2.
+    if mutation_tracker.mutation_issued:
+        return 4
+    if local:
+        return 2
+    return 3
+
+
+def is_local_failure_message(message: str) -> bool:
+    """Classify only the row-11 local-validation families as exit 2."""
+    return (message.startswith("install failed: bundle validation:")
+            or any(token in message for token in (
+                "agent_binary_unlaunchable", "agent_version_unparseable", "version_skew",
+                "admin_credential_api_key",
+                "enrollment ancestor is not protected:", "outbox preflight:",
+                "enrollment preflight unavailable", "atomic_publication_filesystem_unsupported",
+                "enrollment_publication_path_too_long", "enrollment_parent_fsync_unsupported",
+                "local_transaction_storage_unavailable", "enrollment_ca_path_invalid")))
 
 
 class StateBindingError(InputError):
@@ -840,6 +891,23 @@ def request(base: str, path: str, method: str, authorization: str, data: bytes |
     return request_response(base, path, method, authorization, data, headers)[1]
 
 
+def mutation_request(base: str, path: str, method: str, authorization: str,
+                     data: bytes | None = None,
+                     headers: dict[str, str] | None = None) -> bytes:
+    """Issue a known-mutating request after recording the invocation boundary."""
+    tracker = _mutation_tracker.get()
+    if tracker is not None:
+        tracker.mark_issued()
+    return request(base, path, method, authorization, data, headers)
+
+
+def mark_mutation_issued() -> None:
+    """Record a mutation for wrappers that return a status rather than bytes."""
+    tracker = _mutation_tracker.get()
+    if tracker is not None:
+        tracker.mark_issued()
+
+
 def es_path(asset: Asset) -> str:
     name = urllib.parse.quote(asset.name, safe="")
     paths = {
@@ -1100,7 +1168,7 @@ def assert_no_id_regeneration(kb_url: str, authorization: str, asset: Asset, res
     for row in valid:
         object_type, destination_id = row["type"], row["destinationId"]
         try:
-            request(kb_url, space_prefix(target_space) + "/api/saved_objects/"
+            mutation_request(kb_url, space_prefix(target_space) + "/api/saved_objects/"
                     + urllib.parse.quote(object_type, safe="") + "/"
                     + urllib.parse.quote(destination_id, safe=""), "DELETE", authorization,
                     headers={"kbn-xsrf": "true"})
@@ -2049,7 +2117,7 @@ def rollback_transaction_proofs(es_url: str, authorization: str, journal: Transa
             if hit is None:
                 continue
             index = hit["_index"]
-        request(es_url, "/" + urllib.parse.quote(index, safe="") + "/_doc/" +
+        mutation_request(es_url, "/" + urllib.parse.quote(index, safe="") + "/_doc/" +
                 urllib.parse.quote(event_id, safe="") + "?refresh=wait_for", "DELETE", authorization)
 
 
@@ -2214,7 +2282,7 @@ def _rollback_live_hash(es_url: str, kb_url: str, authorization: str, intent: di
 
 def _delete_or_absent(base: str, path: str, authorization: str, headers: dict[str, str] | None = None) -> None:
     try:
-        request(base, path, "DELETE", authorization, headers=headers)
+        mutation_request(base, path, "DELETE", authorization, headers=headers)
     except RequestFailure as error:
         if error.status != 404:
             raise
@@ -2288,7 +2356,7 @@ def _restore_transform_without_pivot(es_url: str, path: str, authorization: str,
     """
     if os.environ.get("RIGSIGNAL_TEST_TRANSFORM_META_RESTORE_REJECT") == "1":
         raise RequestFailure(400, "test transform _meta restore rejection")
-    request(es_url, path + "/_update", "POST", authorization, jcs(body))
+    mutation_request(es_url, path + "/_update", "POST", authorization, jcs(body))
 
 
 def _transform_stats_state(es_url: str, path: str, authorization: str) -> str:
@@ -2320,7 +2388,7 @@ def transform_preapply_restore_proven(es_url: str, authorization: str, asset: As
     if not isinstance(desired, dict):
         raise InputError("transform body is invalid")
     try:
-        request(es_url, path + "/_update", "POST", authorization,
+        mutation_request(es_url, path + "/_update", "POST", authorization,
                 jcs({key: value for key, value in desired.items() if key != "pivot"}))
         _restore_transform_without_pivot(
             es_url, path, authorization,
@@ -2435,7 +2503,7 @@ def _recovery_sweep(kb_url: str, authorization: str, active: dict) -> list[str]:
                 if live_hash != intents[0].get("intended_after_sha256"):
                     print(json.dumps(row, sort_keys=True))
                 try:
-                    request(kb_url, space_prefix(target_space) + "/api/saved_objects/"
+                    mutation_request(kb_url, space_prefix(target_space) + "/api/saved_objects/"
                             + urllib.parse.quote(object_type, safe="") + "/"
                             + urllib.parse.quote(physical_id, safe=""), "DELETE", authorization,
                             headers={"kbn-xsrf": "true"})
@@ -2504,7 +2572,7 @@ def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Pat
             body = asset_adapters.request_body_from_preimage("component_templates", preimage)
             if not isinstance(body, dict):
                 raise ProvisionError("install refused: transaction_journal_invalid")
-            request(es_url, marker_path, "PUT", authorization, jcs(body))
+            mutation_request(es_url, marker_path, "PUT", authorization, jcs(body))
         operations.append("marker")
     _fence_transaction_consumer(root); operations.append("fence")
     for item in journal.value.get("intents", []):
@@ -2550,7 +2618,7 @@ def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Pat
                     body = dict(body); body.pop("pivot", None)
                     _restore_transform_without_pivot(es_url, path, authorization, body)
                 if intent["kind"] != "transforms":
-                    request(base, path, "PUT", authorization, jcs(body), headers)
+                    mutation_request(base, path, "PUT", authorization, jcs(body), headers)
         operations.append("asset:" + str(intent.get("kind")) + "/" + str(intent.get("name")))
     for intent in actions:
         if intent in marker:
@@ -2774,7 +2842,7 @@ def test_rollover(point: str, es_url: str, authorization: str,
     stream = requested or sorted(snapshot)[0]
     if stream not in snapshot:
         raise InputError("fleet rollover test stream is unavailable")
-    request(es_url, "/" + urllib.parse.quote(stream, safe="") + "/_rollover", "POST", authorization)
+    mutation_request(es_url, "/" + urllib.parse.quote(stream, safe="") + "/_rollover", "POST", authorization)
 
 
 def test_candidate_drift(point: str, es_url: str, authorization: str, snapshot: dict[str, object]) -> None:
@@ -3001,7 +3069,8 @@ def es_json_status(base: str, path: str, method: str, authorization: str,
         return error.status or 0, json_response(error.body)
 
 
-def response_status(base: str, path: str, method: str, authorization: str, payload: object | None = None) -> int:
+def response_status(base: str, path: str, method: str, authorization: str,
+                    payload: object | None = None) -> int:
     """Return only a status for authorization-matrix rows.
 
     Real write proofs deliberately use ``es_json`` directly: reducing a write
@@ -3106,7 +3175,7 @@ def _es_object_is_owned(response: object, asset: Asset) -> bool:
     try:
         body = asset_adapters.get_projection(asset.kind, response)
     except asset_adapters.AdapterError as error:
-        raise InputError("asset ownership response is invalid") from error
+        raise RemoteReadRefusal("asset ownership response is invalid") from error
     metadata_key = "metadata" if asset.kind == "security_roles" else "_meta"
     return isinstance(body, dict) and isinstance(body.get(metadata_key), dict) and (
         body[metadata_key].get("managed_by") == RIGSIGNAL_MANAGED_BY)
@@ -3146,10 +3215,10 @@ def _semver_compare(left: str, right: str) -> int:
 def _es_object_matches_bundle(response: object, asset: Asset) -> bool:
     try:
         live = asset_adapters.get_projection(asset.kind, response)
-        desired = asset_adapters.get_projection(
-            asset.kind, parse_json(stamped_asset(asset).data, asset.path))
     except asset_adapters.AdapterError as error:
-        raise InputError("asset ownership response is invalid") from error
+        raise RemoteReadRefusal("asset ownership response is invalid") from error
+    desired = asset_adapters.get_projection(
+        asset.kind, parse_json(stamped_asset(asset).data, asset.path))
     return asset_adapters.canonical_json(live) == asset_adapters.canonical_json(desired)
 
 
@@ -3178,6 +3247,8 @@ def _asset_presence(es_url: str, kb_url: str, authorization: str, asset: Asset) 
         if error.status == 404:
             return False, None
         raise
+    except InputError as error:
+        raise RemoteReadRefusal("asset presence response is invalid") from error
     return True, response
 
 
@@ -3251,7 +3322,7 @@ def install_asset(es_url: str, kb_url: str, authorization: str, asset: Asset, *,
         asset = stamped_asset(asset)
     if asset.kind == "dashboard":
         body, boundary = multipart_dashboard(asset)
-        response = json_response(request(
+        response = json_response(mutation_request(
             kb_url, dashboard_import_path(asset), "POST", authorization, body,
             {"Content-Type": f"multipart/form-data; boundary={boundary}", "kbn-xsrf": "true"},
         ))
@@ -3279,15 +3350,15 @@ def install_asset(es_url: str, kb_url: str, authorization: str, asset: Asset, *,
         except RequestFailure as error:
             if error.status != 404:
                 raise
-            request(kb_url, "/api/spaces/space", "POST", authorization, asset.data, headers)
+            mutation_request(kb_url, "/api/spaces/space", "POST", authorization, asset.data, headers)
         else:
             if status != 200:
                 raise InputError("Kibana space preflight returned an unexpected status")
-            request(kb_url, kibana_path(asset), "PUT", authorization, asset.data, headers)
+            mutation_request(kb_url, kibana_path(asset), "PUT", authorization, asset.data, headers)
         verify_kibana_asset(kb_url, authorization, asset)
         return
     if asset.kind == "kibana_roles":
-        request(kb_url, kibana_path(asset), "PUT", authorization, asset.data, {"kbn-xsrf": "true"})
+        mutation_request(kb_url, kibana_path(asset), "PUT", authorization, asset.data, {"kbn-xsrf": "true"})
         verify_kibana_asset(kb_url, authorization, asset)
         return
     path = es_path(asset)
@@ -3317,13 +3388,13 @@ def install_asset(es_url: str, kb_url: str, authorization: str, asset: Asset, *,
         except RequestFailure as error:
             if error.status != 404:
                 raise
-            request(es_url, path, "PUT", authorization, asset.data)
+            mutation_request(es_url, path, "PUT", authorization, asset.data)
         else:
-            request(es_url, path + "/_update", "POST", authorization,
+            mutation_request(es_url, path + "/_update", "POST", authorization,
                     jcs({key: value for key, value in parse_json(asset.data, asset.path).items() if key != "pivot"}))
         request(es_url, path, "GET", authorization)
         return
-    request(es_url, path, "PUT", authorization, asset.data)
+    mutation_request(es_url, path, "PUT", authorization, asset.data)
     verify_asset(es_url, authorization, asset)
 
 
@@ -3856,7 +3927,7 @@ def dispatch_clean_root(es_url: str, authorization: str, adopt_requested: bool,
 
 def ensure_stream(es_url: str, authorization: str) -> None:
     try:
-        request(es_url, "/_data_stream/" + DIAGNOSIS_STREAM, "PUT", authorization)
+        mutation_request(es_url, "/_data_stream/" + DIAGNOSIS_STREAM, "PUT", authorization)
     except RequestFailure as error:
         if error.status not in {400, 409}:
             raise
@@ -4522,6 +4593,7 @@ def verify_late_fleet_fence(post: dict[str, object], late: dict[str, object],
 
 
 def mint_key(es_url: str, authorization: str, role: dict, name: str) -> tuple[str, str]:
+    mark_mutation_issued()
     response = es_json(es_url, "/_security/api_key", "POST", authorization,
                        {"name": name, "role_descriptors": {"rigsignal_shipper": role}})
     if not isinstance(response, dict) or not isinstance(response.get("id"), str) or not isinstance(response.get("encoded"), str):
@@ -4532,6 +4604,7 @@ def mint_key(es_url: str, authorization: str, role: dict, name: str) -> tuple[st
 def invalidate(es_url: str, authorization: str, ids: list[str]) -> None:
     if not ids:
         return
+    mark_mutation_issued()
     response = es_json(es_url, "/_security/api_key", "DELETE", authorization, {"ids": ids})
     if not isinstance(response, dict):
         raise InputError("API key invalidation was not confirmed")
@@ -4645,6 +4718,7 @@ def verify_stream_behavior(es_url: str, authorization: str, admin_authorization:
     path = "/" + DIAGNOSIS_STREAM + "/_create/" + event_id + "?refresh=wait_for"
     proof_record = journal.proof_intent(event_id) if journal is not None else None
     fault("proof-create")
+    mark_mutation_issued()
     status, response = es_json_status(es_url, path, "POST", authorization, document)
     if status != 201 or not isinstance(response, dict) or response.get("result") != "created":
         raise InputError("candidate exact-stream create failed")
@@ -4659,6 +4733,7 @@ def verify_stream_behavior(es_url: str, authorization: str, admin_authorization:
     # Real strictness proof; do not infer it from _simulate_index.
     bad = json.loads(json.dumps(document)); bad["unknown_root"] = True
     bad_id = "provision-bad-" + suffix
+    mark_mutation_issued()
     status, response = es_json_status(es_url, "/" + DIAGNOSIS_STREAM + "/_create/" + bad_id,
                                       "POST", authorization, bad)
     assert_mapping_rejection(status, response, "strict_dynamic_mapping_exception")
@@ -4667,6 +4742,7 @@ def verify_stream_behavior(es_url: str, authorization: str, admin_authorization:
     nested = json.loads(json.dumps(document))
     nested["rigsignal"]["diagnosis"]["unknown_probe_field"] = True
     nested_id = "provision-nested-" + suffix
+    mark_mutation_issued()
     status, response = es_json_status(es_url, "/" + DIAGNOSIS_STREAM + "/_create/" + nested_id,
                                       "POST", authorization, nested)
     assert_mapping_rejection(status, response, "strict_dynamic_mapping_exception")
@@ -4675,6 +4751,7 @@ def verify_stream_behavior(es_url: str, authorization: str, admin_authorization:
     malformed = json.loads(json.dumps(document))
     malformed["rigsignal"]["diagnosis"]["confidence"] = "not-a-number"
     malformed_id = "provision-malformed-" + suffix
+    mark_mutation_issued()
     status, response = es_json_status(es_url, "/" + DIAGNOSIS_STREAM + "/_create/" + malformed_id,
                                       "POST", authorization, malformed)
     assert_mapping_rejection(status, response, "document_parsing_exception", "number_format_exception")
@@ -4693,6 +4770,7 @@ def verify_role_matrix(es_url: str, authorization: str, suffix: str,
     for item in can_paths:
         if response_status(es_url, item, "GET", authorization) != 200:
             raise InputError("candidate privilege CAN check failed")
+    mark_mutation_issued()
     if response_status(es_url, path, "POST", authorization, document) != 409:
         raise InputError("candidate duplicate create check failed")
     # Overwrite proof, two layers (live wire disproved the 403 expectation:
@@ -4700,6 +4778,7 @@ def verify_role_matrix(es_url: str, authorization: str, suffix: str,
     # so PUT _doc returns 400 for any principal — structural impossibility):
     # (1) the 400 op_type guard below, (2) _has_privileges must show every
     # mutating privilege false on the exact stream name.
+    mark_mutation_issued()
     if response_status(es_url, "/" + DIAGNOSIS_STREAM + "/_doc/provision-" + suffix,
                        "PUT", authorization, document) != 400:
         raise InputError("candidate overwrite op_type guard check failed")
@@ -4710,15 +4789,19 @@ def verify_role_matrix(es_url: str, authorization: str, suffix: str,
     if not granted or any(granted.get(p) is not False for p in
                           ("index", "write", "delete", "delete_index", "manage")):
         raise InputError("candidate overwrite privilege check failed")
-    denied = (("/" + DIAGNOSIS_STREAM + "/_doc/provision-" + suffix, "GET", None),
-              ("/" + DIAGNOSIS_STREAM + "/_search", "POST", {"query": {"match_all": {}}}),
+    denied = (("/" + DIAGNOSIS_STREAM + "/_doc/provision-" + suffix, "GET", None, False),
+              # _search is a read-only POST and must never move the mutation
+              # boundary merely because its HTTP verb is POST.
+              ("/" + DIAGNOSIS_STREAM + "/_search", "POST", {"query": {"match_all": {}}}, False),
               # Bodies must be minimally VALID: ES validates the request shape
               # before authorization, so {} would 400 without proving denial.
-              ("/_component_template/forbidden", "PUT", {"template": {"settings": {}}}),
+              ("/_component_template/forbidden", "PUT", {"template": {"settings": {}}}, True),
               ("/_index_template/forbidden", "PUT",
-               {"index_patterns": ["forbidden-provision-probe-*"], "template": {"settings": {}}}),
-              ("/logs-rigsignal.diagnosis-other/_create/no", "POST", document))
-    for item, method, payload in denied:
+               {"index_patterns": ["forbidden-provision-probe-*"], "template": {"settings": {}}}, True),
+              ("/logs-rigsignal.diagnosis-other/_create/no", "POST", document, True))
+    for item, method, payload, mutates in denied:
+        if mutates:
+            mark_mutation_issued()
         if response_status(es_url, item, method, authorization, payload) != 403:
             raise InputError("candidate privilege CANNOT check failed")
 
@@ -4787,6 +4870,11 @@ def default_root() -> Path:
 
 
 def main() -> int:
+    # This context is created before parsing or bundle setup so even the
+    # journal-free assets-only path has the same finalization protocol.
+    failure_tracker = FailureSiteTracker()
+    mutation_tracker = MutationTracker()
+    _mutation_tracker.set(mutation_tracker)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bundle", type=Path, help="bundle tarball to install")
     parser.add_argument("--endpoint", required=True, help="Elasticsearch HTTPS origin")
@@ -4816,7 +4904,12 @@ def main() -> int:
                         help="owner-approved Fleet predecessor allow-set artifact")
     parser.add_argument("--dry-run", action="store_true", help="list API calls without network access")
     parser.add_argument("--unsafe-test-injection", action="store_true", help=argparse.SUPPRESS)
-    args = parser.parse_args()
+    try:
+        args = parser.parse_args()
+    except SystemExit as error:
+        # argparse already emitted its canonical usage text.  It has no engine
+        # FailureSite, and its documented local-usage status is 2.
+        return 0 if error.code == 0 else 2
     active_test_hooks = sorted(key for key, value in os.environ.items()
                                if key.startswith("RIGSIGNAL_TEST_") and value)
     if active_test_hooks:
@@ -4891,25 +4984,25 @@ def main() -> int:
         role = role_body(bundle)
         ownership = ownership_for_assets(bundle, ownership_profile)
     except ProvisionError as error:
-        print(error.prefix, file=sys.stderr)
-        return 1
+        return finalize_failure(error.prefix, failure_tracker, mutation_tracker,
+                                local=is_local_failure_message(error.prefix))
     except (InputError, RequestFailure, OSError) as error:
         if isinstance(error, OwnershipTableError):
-            print("install refused: " + str(error), file=sys.stderr)
-            return 1
+            return finalize_failure("install refused: " + str(error), failure_tracker,
+                                    mutation_tracker, local=True)
         if args.rollback is not None:
-            print("install failed: enrollment output:", file=sys.stderr)
-            return 1
-        print(f"install failed: bundle validation:", file=sys.stderr)
-        return 1
+            return finalize_failure("install failed: enrollment output:", failure_tracker,
+                                    mutation_tracker)
+        return finalize_failure("install failed: bundle validation:", failure_tracker,
+                                mutation_tracker, local=True)
 
     # Fleet coexistence carries a journaled enrollment transaction and
     # external-asset verification obligations.  The assets-only shortcut has
     # neither, so it is invalid even when dry-run would otherwise stop before
     # planning or mutation.
     if getattr(args, "assets_only", False) and ownership_profile == "fleet-coexist":
-        print("install refused: fleet_coexist_requires_full_flow", file=sys.stderr)
-        return 1
+        return finalize_failure("install refused: fleet_coexist_requires_full_flow", failure_tracker,
+                                mutation_tracker)
 
     total = len(bundle.assets)
     if args.dry_run:
@@ -4942,6 +5035,7 @@ def main() -> int:
             configure_https(args.ca_file)
             configure_https(args.kibana_ca_file)
             authorization = admin_authorization(args.admin_credentials_file)
+            failure_tracker.mark(FailureSite.ASSET_APPLY)
             outcome = assets_only_install(bundle, es_url, kb_url, authorization,
                                           getattr(args, "assets_marker", None), repair=getattr(args, "repair", False),
                                           upgrade=getattr(args, "upgrade", False),
@@ -4949,13 +5043,14 @@ def main() -> int:
             print("assets-only " + outcome)
             return 0
         except ProvisionError as error:
-            print(error.prefix, file=sys.stderr)
-            return 1
-        except (InputError, RequestFailure, OSError):
-            print("install failed: assets-only:", file=sys.stderr)
-            return 1
+            return finalize_failure(error.prefix, failure_tracker, mutation_tracker,
+                                    local=is_local_failure_message(error.prefix))
+        except (InputError, RequestFailure, OSError) as error:
+            return finalize_failure("install failed: assets-only:", failure_tracker,
+                                    mutation_tracker,
+                                    local=(not mutation_tracker.mutation_issued
+                                           and not isinstance(error, (RequestFailure, RemoteReadRefusal))))
 
-    failure_tracker = FailureSiteTracker()
     try:
         requested_root = args.enrollment_root or default_root()
         condition = enrollment_condition(requested_root)
@@ -5148,7 +5243,7 @@ def main() -> int:
                             # Gate-only negative control for the recording
                             # transport.  It is deliberately impossible to
                             # trigger without an explicit test environment.
-                            request(es_url, es_path(asset), "PUT", authorization, asset.data)
+                            mutation_request(es_url, es_path(asset), "PUT", authorization, asset.data)
                         verified_external_assets.append(verify_external_asset(es_url, authorization, asset))
                 journal.pin_external_baselines(verified_external_assets)
             except (RequestFailure, InputError) as error:
@@ -5384,7 +5479,7 @@ def main() -> int:
         try:
             if journal is not None:
                 marker_records = journal_owned_asset(journal, es_url, kb_url, authorization, marker, "create")
-            request(es_url, es_path(marker), "PUT", authorization, marker.data)
+            mutation_request(es_url, es_path(marker), "PUT", authorization, marker.data)
             verify_asset(es_url, authorization, marker)
             if journal is not None:
                 journal_verify_owned_asset(journal, marker_records, es_url, kb_url, authorization, marker)
@@ -5400,15 +5495,13 @@ def main() -> int:
             print(f"installed {total}/{total} assets")
         return 0
     except ProvisionError as error:
-        print(error.prefix, file=sys.stderr)
-        return 1
+        return finalize_failure(error.prefix, failure_tracker, mutation_tracker,
+                                local=is_local_failure_message(error.prefix))
     except (InputError, RequestFailure, OSError):
         # The public contract deliberately avoids exposing response bodies and
         # exception text, which could contain credentials or cluster data.
-        print("install failed: enrollment output:", file=sys.stderr)
-        failure_tracker.persist()
-        report_failure_site(failure_tracker.site)
-        return 1
+        return finalize_failure("install failed: enrollment output:", failure_tracker,
+                                mutation_tracker, local=False)
 
 
 if __name__ == "__main__":

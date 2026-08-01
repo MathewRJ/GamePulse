@@ -379,7 +379,7 @@ class FailureSiteTests(unittest.TestCase):
                     INSTALL, "prepare_install_root",
                     side_effect=INSTALL.InputError("enrollment root is not protected")))
                 with redirect_stderr(stderr):
-                    self.assertEqual(INSTALL.main(), 1)
+                    self.assertEqual(INSTALL.main(), 3)
             self.assertEqual(stderr.getvalue(), "install failed: enrollment output:\n"
                              "RIGSIGNAL_FAILURE_SITE root_prepare\n")
 
@@ -393,7 +393,7 @@ class FailureSiteTests(unittest.TestCase):
                 patches.enter_context(patch.object(INSTALL, "install_asset",
                                                    side_effect=OSError("transport failure")))
                 with redirect_stderr(stderr):
-                    self.assertEqual(INSTALL.main(), 1)
+                    self.assertEqual(INSTALL.main(), 3)
             self.assertEqual(stderr.getvalue(), "install failed: enrollment output:\n"
                              "RIGSIGNAL_FAILURE_SITE asset_apply\n")
 
@@ -438,7 +438,7 @@ class FailureSiteTests(unittest.TestCase):
                 patches.enter_context(patch.object(INSTALL, "atomic_publication",
                                                    side_effect=OSError("response body /private/key")))
                 with redirect_stderr(stderr):
-                    self.assertEqual(INSTALL.main(), 1)
+                    self.assertEqual(INSTALL.main(), 3)
             self.assertEqual(stderr.getvalue(), "install failed: enrollment output:\n"
                              "RIGSIGNAL_FAILURE_SITE publication_stage\n")
             self.assertNotIn("response body", stderr.getvalue())
@@ -479,8 +479,9 @@ class FailureSiteTests(unittest.TestCase):
                  patch.object(INSTALL, "configure_https", configure):
                 stderr = io.StringIO()
                 with redirect_stderr(stderr):
-                    self.assertEqual(INSTALL.main(), 1)
-            self.assertEqual(stderr.getvalue(), "install refused: enrollment_remediation_required\n")
+                    self.assertEqual(INSTALL.main(), 3)
+            self.assertEqual(stderr.getvalue(), "install refused: enrollment_remediation_required\n"
+                             "RIGSIGNAL_FAILURE_SITE preflight\n")
             ancestor.assert_not_called()
             same_class.assert_not_called()
             configure.assert_not_called()
@@ -498,8 +499,9 @@ class FailureSiteTests(unittest.TestCase):
                  patch.object(INSTALL, "configure_https", configure):
                 stderr = io.StringIO()
                 with redirect_stderr(stderr):
-                    self.assertEqual(INSTALL.main(), 1)
-            self.assertEqual(stderr.getvalue(), "install refused: enrollment_publication_path_too_long\n")
+                    self.assertEqual(INSTALL.main(), 2)
+            self.assertEqual(stderr.getvalue(), "install refused: enrollment_publication_path_too_long\n"
+                             "RIGSIGNAL_FAILURE_SITE preflight\n")
             configure.assert_not_called()
             self.assertFalse(root.exists())
 
@@ -516,8 +518,9 @@ class FailureSiteTests(unittest.TestCase):
                  patch.object(INSTALL, "configure_https", configure):
                 stderr = io.StringIO()
                 with redirect_stderr(stderr):
-                    self.assertEqual(INSTALL.main(), 1)
-            self.assertEqual(stderr.getvalue(), "install refused: enrollment ancestor is not protected:\n")
+                    self.assertEqual(INSTALL.main(), 2)
+            self.assertEqual(stderr.getvalue(), "install refused: enrollment ancestor is not protected:\n"
+                             "RIGSIGNAL_FAILURE_SITE preflight\n")
             configure.assert_not_called()
             self.assertFalse(root.exists())
 
@@ -536,8 +539,9 @@ class FailureSiteTests(unittest.TestCase):
                  patch.object(INSTALL, "admin_authorization", remote):
                 stderr = io.StringIO()
                 with redirect_stderr(stderr):
-                    self.assertEqual(INSTALL.main(), 1)
-            self.assertEqual(stderr.getvalue(), "install refused: enrollment ancestor is not protected:\n")
+                    self.assertEqual(INSTALL.main(), 2)
+            self.assertEqual(stderr.getvalue(), "install refused: enrollment ancestor is not protected:\n"
+                             "RIGSIGNAL_FAILURE_SITE preflight\n")
             ancestor.assert_called_once_with(root)
             preflight.assert_not_called()
             remote.assert_not_called()
@@ -576,8 +580,9 @@ class MainPreflightRecoveryTests(unittest.TestCase):
                               side_effect=INSTALL.ProvisionError("install refused: boundary_stop")):
                 stderr = io.StringIO()
                 with redirect_stderr(stderr):
-                    self.assertEqual(INSTALL.main(), 1)
-            self.assertEqual(stderr.getvalue(), "install refused: boundary_stop\n")
+                    self.assertEqual(INSTALL.main(), 3)
+            self.assertEqual(stderr.getvalue(), "install refused: boundary_stop\n"
+                             "RIGSIGNAL_FAILURE_SITE preflight\n")
             agent.assert_called_once_with(Path("agent"))
             stage.assert_called_once()
 
@@ -595,8 +600,9 @@ class MainPreflightRecoveryTests(unittest.TestCase):
                  patch.object(INSTALL, "admin_authorization") as transport:
                 stderr = io.StringIO()
                 with redirect_stderr(stderr):
-                    self.assertEqual(INSTALL.main(), 1)
-            self.assertEqual(stderr.getvalue(), "install refused: outbox preflight:\n")
+                    self.assertEqual(INSTALL.main(), 2)
+            self.assertEqual(stderr.getvalue(), "install refused: outbox preflight:\n"
+                             "RIGSIGNAL_FAILURE_SITE preflight\n")
             preflight.assert_not_called()
             configure.assert_not_called()
             transport.assert_not_called()
@@ -619,17 +625,24 @@ class MainPreflightRecoveryTests(unittest.TestCase):
                  patch.object(INSTALL, "fence_remote_ownership_profile"), \
                  patch.object(INSTALL, "run_topology_preflight"), \
                  patch.object(INSTALL, "cluster_uuid", return_value=state["expected_cluster_uuid"]), \
-                 patch.object(INSTALL, "invalidate_mint_name") as invalidate_name, \
-                 patch.object(INSTALL, "invalidate") as invalidate, \
+                 patch.object(INSTALL, "request", side_effect=lambda _base, path, method, _authorization,
+                              data=None, headers=None: (
+                                  INSTALL.jcs({"api_keys": [{"name": "unfinished", "id": "orphan"}]})
+                                  if (path == "/_security/api_key?name=unfinished&active_only=true"
+                                      and method == "GET")
+                                  else INSTALL.jcs({"invalidated_api_keys": ["orphan"],
+                                                    "previously_invalidated_api_keys": [],
+                                                    "error_count": 0, "error_details": []})
+                                  if (path == "/_security/api_key" and method == "DELETE")
+                                  else self.fail("unexpected recovery request " + method + " " + path))), \
                  patch.object(INSTALL, "dispatch_clean_root", return_value=False), \
                  patch.object(INSTALL, "check_install_preflight", side_effect=refusal) as preflight:
                 stderr = io.StringIO()
                 with redirect_stderr(stderr):
-                    self.assertEqual(INSTALL.main(), 1)
-            invalidate_name.assert_called_once_with("https://es.invalid", "admin", "unfinished")
-            invalidate.assert_not_called()
+                    self.assertEqual(INSTALL.main(), 4)
             preflight.assert_called_once_with(root, Path("agent"), Path("unused"))
-            self.assertEqual(stderr.getvalue(), "install refused: atomic_publication_filesystem_unsupported\n")
+            self.assertEqual(stderr.getvalue(), "install refused: atomic_publication_filesystem_unsupported\n"
+                             "RIGSIGNAL_FAILURE_SITE root_prepare\n")
             self.assertFalse((root / "state.json").exists())
 
     def test_recovery_handshake_uses_preflight_validated_agent_path(self):
@@ -659,10 +672,11 @@ class MainPreflightRecoveryTests(unittest.TestCase):
                               side_effect=INSTALL.InputError("probe failed")) as handshake:
                 stderr = io.StringIO()
                 with redirect_stderr(stderr):
-                    self.assertEqual(INSTALL.main(), 1)
+                    self.assertEqual(INSTALL.main(), 3)
             preflight.assert_called_once_with(root, Path("agent"), Path("unused"))
             handshake.assert_called_once_with(resolved_agent, root)
-            self.assertEqual(stderr.getvalue(), "install failed: old shipper API key revocation:\n")
+            self.assertEqual(stderr.getvalue(), "install failed: old shipper API key revocation:\n"
+                             "RIGSIGNAL_FAILURE_SITE root_prepare\n")
 
     def test_published_handshake_uses_preflight_validated_agent_path(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -689,7 +703,7 @@ class MainPreflightRecoveryTests(unittest.TestCase):
                 handshake = patches.enter_context(patch.object(
                     INSTALL, "run_handshake", side_effect=INSTALL.InputError("probe failed")))
                 with redirect_stderr(io.StringIO()):
-                    self.assertEqual(INSTALL.main(), 1)
+                    self.assertEqual(INSTALL.main(), 3)
             handshake.assert_called_once_with(resolved_agent, root)
 
     def test_rollback_remains_reachable_below_unsafe_parent(self):

@@ -291,13 +291,14 @@ class AssetToolsTests(unittest.TestCase):
                 stderr = io.StringIO()
                 try:
                     with redirect_stderr(stderr):
-                        self.assertEqual(INSTALL.main(), 1)
+                        self.assertEqual(INSTALL.main(), 3)
                 finally:
                     (INSTALL.argparse.ArgumentParser.parse_args, INSTALL.load_bundle, INSTALL.role_body,
                      INSTALL.configure_https, INSTALL.admin_authorization, INSTALL.cluster_uuid) = (
                         old_parse, old_bundle, old_role, old_configure, old_auth, old_uuid)
                 self.assertEqual(stderr.getvalue(),
-                                 "install refused: enrollment_remediation_required\n")
+                                 "install refused: enrollment_remediation_required\n"
+                                 "RIGSIGNAL_FAILURE_SITE preflight\n")
                 self.assertEqual(calls, [])
                 self.assertEqual((target / "state.json").read_bytes(), before)
 
@@ -843,9 +844,10 @@ sys.exit(module.main())
                 sys.executable, "-c", program, str(engine), str(bundle), str(agent),
                 str(root / "enrollment"), str(sentinel),
             ], cwd=root, text=True, capture_output=True, check=False)
-            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.returncode, 2)
             self.assertEqual(result.stderr,
-                             "install refused: version_skew; engine=0.3.0; agent=9.9.9; bundle=0.3.0\n")
+                             "install refused: version_skew; engine=0.3.0; agent=9.9.9; bundle=0.3.0\n"
+                             "RIGSIGNAL_FAILURE_SITE preflight\n")
             self.assertFalse(sentinel.exists(), "version fence allowed an HTTP mutation")
 
     def test_s5_rollback_skew_refuses_before_remote_mutation(self):
@@ -883,9 +885,10 @@ sys.exit(module.main())
             result = subprocess.run([sys.executable, "-c", program, str(engine), str(agent),
                                      str(rollback), str(sentinel)], cwd=root, text=True,
                                     capture_output=True, check=False)
-            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.returncode, 2)
             self.assertEqual(result.stderr,
-                             "install refused: version_skew; engine=0.3.0; agent=9.9.9; bundle=none\n")
+                             "install refused: version_skew; engine=0.3.0; agent=9.9.9; bundle=none\n"
+                             "RIGSIGNAL_FAILURE_SITE preflight\n")
             self.assertFalse(sentinel.exists(), "rollback fence allowed an HTTP mutation")
 
     def test_s5_source_commit_mismatch_refuses_before_remote_work(self):
@@ -924,9 +927,10 @@ sys.exit(module.main())
             result = subprocess.run([sys.executable, "-c", program, str(engine), str(mismatched), str(agent),
                                      str(root / "enrollment"), str(sentinel)],
                                     cwd=root, text=True, capture_output=True, check=False)
-            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.returncode, 2)
             self.assertEqual(result.stderr, "install refused: version_skew; engine=0.3.0; agent=0.3.0; "
-                             "bundle=0.3.0; engine_commit=engine-commit; bundle_commit=bundle-commit\n")
+                             "bundle=0.3.0; engine_commit=engine-commit; bundle_commit=bundle-commit\n"
+                             "RIGSIGNAL_FAILURE_SITE preflight\n")
             self.assertFalse(sentinel.exists(), "source-commit fence allowed an HTTP mutation")
 
     def test_s5_rollback_staged_engine_requires_verified_source(self):
@@ -966,9 +970,10 @@ sys.exit(module.main())
             result = subprocess.run([sys.executable, "-c", program, str(engine), str(root / "transaction"),
                                      str(agent), str(sentinel)],
                                     cwd=root, text=True, capture_output=True, check=False)
-            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.returncode, 3)
             self.assertEqual(result.stderr,
-                             "install refused: rollback_source_unavailable; provide the applied bundle\n")
+                             "install refused: rollback_source_unavailable; provide the applied bundle\n"
+                             "RIGSIGNAL_FAILURE_SITE preflight\n")
             self.assertFalse(sentinel.exists(), "staged rollback mutated before source refusal")
 
     def test_s5_malformed_agent_version_is_named_refusal(self):

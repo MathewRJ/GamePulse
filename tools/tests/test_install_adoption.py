@@ -103,10 +103,11 @@ class InstallAdoptionTests(unittest.TestCase):
                                                             return_value=("compatible", snapshot)))
                 stderr = io.StringIO()
                 with redirect_stderr(stderr):
-                    self.assertEqual(INSTALL.main(), 1)
+                    self.assertEqual(INSTALL.main(), 3)
             invalidate_name.assert_called_once_with("https://es.invalid", "admin", "unfinished")
             invalidate.assert_called_once_with("https://es.invalid", "admin", ["candidate"])
-            self.assertEqual(stderr.getvalue(), "install refused: adoption_required\n")
+            self.assertEqual(stderr.getvalue(), "install refused: adoption_required\n"
+                             "RIGSIGNAL_FAILURE_SITE root_prepare\n")
             remote.assert_called_once_with("https://es.invalid", "admin", expected_bundle)
             self.assertFalse((root / "candidate").exists())
             self.assertFalse((root / "state.json").exists())
@@ -160,8 +161,9 @@ class InstallAdoptionTests(unittest.TestCase):
                     INSTALL.remote_stream_condition = lambda *_args: (remote, None)
                     stderr = io.StringIO()
                     with redirect_stderr(stderr):
-                        self.assertEqual(INSTALL.main(), 1)
-                    self.assertEqual(stderr.getvalue(), f"install refused: {code}\n")
+                        self.assertEqual(INSTALL.main(), 3)
+                    self.assertEqual(stderr.getvalue(), f"install refused: {code}\n"
+                                     "RIGSIGNAL_FAILURE_SITE preflight\n")
                     self.assertFalse(root.exists())
         finally:
             (INSTALL.argparse.ArgumentParser.parse_args, INSTALL.load_bundle, INSTALL.role_body,
@@ -207,8 +209,9 @@ class InstallAdoptionTests(unittest.TestCase):
                  patch.object(INSTALL, "invalidate", recovery):
                 stderr = io.StringIO()
                 with redirect_stderr(stderr):
-                    self.assertEqual(INSTALL.main(), 1)
-            self.assertEqual(stderr.getvalue(), "install refused: adoption_flag_state_present\n")
+                    self.assertEqual(INSTALL.main(), 3)
+            self.assertEqual(stderr.getvalue(), "install refused: adoption_flag_state_present\n"
+                             "RIGSIGNAL_FAILURE_SITE preflight\n")
             secure_root.assert_not_called()
             recovery.assert_not_called()
 
@@ -228,8 +231,9 @@ class InstallAdoptionTests(unittest.TestCase):
                      patch.object(INSTALL, "secure_root", secure_root):
                     stderr = io.StringIO()
                     with redirect_stderr(stderr):
-                        self.assertEqual(INSTALL.main(), 1)
-                self.assertEqual(stderr.getvalue(), f"install refused: {code}\n")
+                        self.assertEqual(INSTALL.main(), 3)
+                self.assertEqual(stderr.getvalue(), f"install refused: {code}\n"
+                                 "RIGSIGNAL_FAILURE_SITE preflight\n")
                 remote.assert_not_called()
                 secure_root.assert_not_called()
 
@@ -447,8 +451,9 @@ class InstallAdoptionTests(unittest.TestCase):
                 patches.enter_context(patch.object(INSTALL, "request", marker_request))
                 stderr = io.StringIO()
                 with redirect_stderr(stderr):
-                    self.assertEqual(INSTALL.main(), 1)
-            self.assertEqual(stderr.getvalue(), "install failed: pre-publication fence:\n")
+                    self.assertEqual(INSTALL.main(), 3)
+            self.assertEqual(stderr.getvalue(), "install failed: pre-publication fence:\n"
+                             "RIGSIGNAL_FAILURE_SITE candidate_stage\n")
             publication.assert_not_called()
             self.assertFalse(any(call.args[2] == "PUT" for call in marker_request.call_args_list))
             self.assertNotIn("committed", {state["phase"] for state in written_states})
@@ -488,8 +493,9 @@ class InstallAdoptionTests(unittest.TestCase):
                 patches.enter_context(patch.object(INSTALL, "request", marker_request))
                 stderr = io.StringIO()
                 with redirect_stderr(stderr):
-                    self.assertEqual(INSTALL.main(), 1)
-            self.assertEqual(stderr.getvalue(), "install failed: fleet stream verification:\n")
+                    self.assertEqual(INSTALL.main(), 3)
+            self.assertEqual(stderr.getvalue(), "install failed: fleet stream verification:\n"
+                             "RIGSIGNAL_FAILURE_SITE asset_apply\n")
             self.assertEqual(snapshots.call_count, 2)
             publication.assert_not_called()
             marker_request.assert_called_once_with(
@@ -546,13 +552,15 @@ class RollbackBoundaryFenceTests(unittest.TestCase):
                 patches.enter_context(patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args))
                 patches.enter_context(patch.object(INSTALL, "configure_https"))
                 patches.enter_context(patch.object(INSTALL, "admin_authorization", return_value="admin"))
+                patches.enter_context(patch.object(INSTALL, "check_version_fence"))
                 patches.enter_context(patch.object(INSTALL, "load_ownership_profile", return_value="fleet-coexist"))
                 patches.enter_context(patch.object(INSTALL, "request", return_value=json.dumps(marker).encode()))
                 patches.enter_context(patch.object(INSTALL, "rollback_transaction", rollback))
                 stderr = io.StringIO()
                 with redirect_stderr(stderr):
-                    self.assertEqual(INSTALL.main(), 1)
-            self.assertEqual(stderr.getvalue(), "install refused: ownership_table_version_mismatch\n")
+                    self.assertEqual(INSTALL.main(), 3)
+            self.assertEqual(stderr.getvalue(), "install refused: ownership_table_version_mismatch\n"
+                             "RIGSIGNAL_FAILURE_SITE preflight\n")
             rollback.assert_not_called()
 
     def test_rollback_refuses_malformed_present_journal_before_reversal(self):
@@ -571,11 +579,13 @@ class RollbackBoundaryFenceTests(unittest.TestCase):
                 patches.enter_context(patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args))
                 patches.enter_context(patch.object(INSTALL, "configure_https"))
                 patches.enter_context(patch.object(INSTALL, "admin_authorization", return_value="admin"))
+                patches.enter_context(patch.object(INSTALL, "check_version_fence"))
                 patches.enter_context(patch.object(INSTALL, "rollback_transaction", rollback))
                 stderr = io.StringIO()
                 with redirect_stderr(stderr):
-                    self.assertEqual(INSTALL.main(), 1)
-            self.assertEqual(stderr.getvalue(), "install refused: transaction_journal_invalid\n")
+                    self.assertEqual(INSTALL.main(), 3)
+            self.assertEqual(stderr.getvalue(), "install refused: transaction_journal_invalid\n"
+                             "RIGSIGNAL_FAILURE_SITE preflight\n")
             rollback.assert_not_called()
 
     def test_rollback_fence_request_failure_is_sanitized(self):
@@ -593,13 +603,15 @@ class RollbackBoundaryFenceTests(unittest.TestCase):
                 patches.enter_context(patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args))
                 patches.enter_context(patch.object(INSTALL, "configure_https"))
                 patches.enter_context(patch.object(INSTALL, "admin_authorization", return_value="admin"))
+                patches.enter_context(patch.object(INSTALL, "check_version_fence"))
                 patches.enter_context(patch.object(
                     INSTALL, "request", side_effect=INSTALL.RequestFailure(503, "sensitive response")))
                 patches.enter_context(patch.object(INSTALL, "rollback_transaction", rollback))
                 stderr = io.StringIO()
                 with redirect_stderr(stderr):
-                    self.assertEqual(INSTALL.main(), 1)
-            self.assertEqual(stderr.getvalue(), "install failed: enrollment output:\n")
+                    self.assertEqual(INSTALL.main(), 3)
+            self.assertEqual(stderr.getvalue(), "install failed: enrollment output:\n"
+                             "RIGSIGNAL_FAILURE_SITE preflight\n")
             rollback.assert_not_called()
 
     def test_second_rollback_reaches_journal_refusal_with_restored_coexist_marker(self):
@@ -627,10 +639,12 @@ class RollbackBoundaryFenceTests(unittest.TestCase):
                 patches.enter_context(patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args))
                 patches.enter_context(patch.object(INSTALL, "configure_https"))
                 patches.enter_context(patch.object(INSTALL, "admin_authorization", return_value="admin"))
+                patches.enter_context(patch.object(INSTALL, "check_version_fence"))
                 patches.enter_context(patch.object(INSTALL, "request", return_value=json.dumps(marker).encode()))
                 patches.enter_context(patch.object(INSTALL, "rollback_transaction", rollback))
                 stderr = io.StringIO()
                 with redirect_stderr(stderr):
-                    self.assertEqual(INSTALL.main(), 1)
-            self.assertEqual(stderr.getvalue(), "install refused: transaction_already_rolled_back\n")
+                    self.assertEqual(INSTALL.main(), 3)
+            self.assertEqual(stderr.getvalue(), "install refused: transaction_already_rolled_back\n"
+                             "RIGSIGNAL_FAILURE_SITE preflight\n")
             rollback.assert_called_once()

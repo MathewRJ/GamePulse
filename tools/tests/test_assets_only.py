@@ -7,7 +7,7 @@ import json
 import stat
 import tempfile
 import unittest
-from contextlib import redirect_stderr
+from contextlib import ExitStack, redirect_stderr
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -24,12 +24,14 @@ SPEC.loader.exec_module(INSTALL)
 class AssetTransport:
     """A narrow in-memory wire transport whose mutation sentinel is fail-closed."""
 
-    def __init__(self, bundle):
+    def __init__(self, bundle, *, fail_on_nth_mutation=None):
         self.bundle = bundle
         self.es = {}
         self.kibana = {}
         self.calls = []
         self.fail_mutations = False
+        self.fail_on_nth_mutation = fail_on_nth_mutation
+        self.mutation_attempts = 0
 
     def _asset_for_path(self, path):
         for asset in self.bundle.assets:
@@ -43,6 +45,10 @@ class AssetTransport:
         self.calls.append((method, path))
         if method != "GET" and self.fail_mutations:
             raise AssertionError("mutation sentinel tripped: " + method + " " + path)
+        if method != "GET":
+            self.mutation_attempts += 1
+            if self.fail_on_nth_mutation == self.mutation_attempts:
+                raise INSTALL.RequestFailure(503, "deterministic mutation failure")
         if method == "GET":
             if "/api/saved_objects/" in path:
                 if path not in self.kibana:
@@ -111,6 +117,81 @@ class AssetsOnlyInstallTests(unittest.TestCase):
              redirect_stdout(io.StringIO()):
             return INSTALL.assets_only_install(self.bundle, "https://es", "https://kb", "admin", marker,
                                                **modes)
+
+    @staticmethod
+    def main_args(marker):
+        return SimpleNamespace(
+            bundle=Path("fixture.tar.gz"), endpoint="https://es", ca_file=Path("fixture-ca.pem"),
+            kibana_endpoint="https://kb", kibana_ca_file=Path("fixture-kb-ca.pem"),
+            admin_credentials_file=Path("admin.toml"), agent_binary=Path("agent"), profile="user",
+            assets_only=True, assets_marker=marker, repair=False, upgrade=False, allow_downgrade=False,
+            enrollment_root=None, adopt_existing_w1_stream=False, ownership_profile=None, rollback=None,
+            predecessor_manifest=None, dry_run=False, unsafe_test_injection=False,
+        )
+
+    def main_assets(self, args, transport=None, *, load_bundle=None):
+        patches = [mock.patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args),
+                   mock.patch.object(INSTALL, "load_bundle", return_value=load_bundle or self.bundle),
+                   mock.patch.object(INSTALL, "role_body", return_value={}),
+                   mock.patch.object(INSTALL, "check_version_fence"),
+                   mock.patch.object(INSTALL, "configure_https"),
+                   mock.patch.object(INSTALL, "admin_authorization", return_value="admin")]
+        if transport is not None:
+            patches.extend((mock.patch.object(INSTALL, "request", transport.request),
+                            mock.patch.object(INSTALL, "request_response", transport.request_response)))
+        with ExitStack() as stack:
+            for patcher in patches:
+                stack.enter_context(patcher)
+            return INSTALL.main()
+
+    def test_main_assets_exit_protocol_is_tracker_driven(self):
+        """Break-one-thing: removing mutation_request makes the N=2 leg return 3."""
+        with tempfile.TemporaryDirectory() as raw:
+            marker = Path(raw) / INSTALL.ASSETS_MARKER_FILE
+            stderr = io.StringIO()
+            with redirect_stderr(stderr), mock.patch.object(
+                    INSTALL, "load_bundle", side_effect=INSTALL.InputError("bad bundle")):
+                args = self.main_args(marker)
+                with mock.patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args):
+                    self.assertEqual(INSTALL.main(), 2)
+            self.assertEqual(stderr.getvalue(), "install failed: bundle validation:\n"
+                             "RIGSIGNAL_FAILURE_SITE preflight\n")
+
+            transport = AssetTransport(self.bundle)
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                self.assertEqual(self.main_assets(self.main_args(marker), transport), 0)
+            self.assertEqual(stderr.getvalue(), "")
+
+            conflict = AssetTransport(self.bundle)
+            target = next(asset for asset in self.bundle.assets if asset.kind in INSTALL._ES_ASSET_KINDS)
+            conflict.es[INSTALL.es_path(target)] = {"_meta": {"managed_by": "foreign"}}
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                self.assertEqual(self.main_assets(self.main_args(marker), conflict), 3)
+            self.assertIn("install refused: asset_conflict_unproven\n", stderr.getvalue())
+            self.assertIn("RIGSIGNAL_FAILURE_SITE asset_apply\n", stderr.getvalue())
+            self.assertEqual(conflict.mutations, [])
+
+            partial_marker = Path(raw) / "partial-marker.json"
+            partial = AssetTransport(self.bundle, fail_on_nth_mutation=2)
+            stderr = io.StringIO()
+            with redirect_stderr(stderr), mock.patch.object(INSTALL, "rollback_transaction") as rollback:
+                self.assertEqual(self.main_assets(self.main_args(partial_marker), partial), 4)
+            self.assertIn("install failed: assets-only:\n", stderr.getvalue())
+            self.assertIn("RIGSIGNAL_FAILURE_SITE asset_apply\n", stderr.getvalue())
+            self.assertEqual(len(partial.mutations), 2)
+            self.assertFalse(partial_marker.exists())
+            rollback.assert_not_called()
+
+            # A malformed remote GET is not a local-input error.  Refuse
+            # fail-closed before the first write with the safe remote code.
+            remote_refusal = io.StringIO()
+            with redirect_stderr(remote_refusal), \
+                 mock.patch.object(INSTALL, "request", return_value=b"[]"):
+                self.assertEqual(self.main_assets(self.main_args(Path(raw) / "remote-marker")), 3)
+            self.assertEqual(remote_refusal.getvalue(), "install failed: assets-only:\n"
+                             "RIGSIGNAL_FAILURE_SITE asset_apply\n")
 
     def test_all_55_absent_creates_everything_and_writes_verified_marker(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -270,8 +351,9 @@ class AssetsOnlyInstallTests(unittest.TestCase):
                      mock.patch.object(INSTALL, "check_version_fence") as version_fence, \
                      mock.patch.object(INSTALL, "assets_only_install") as install, \
                      redirect_stderr(stderr), redirect_stdout(stdout):
-                    self.assertEqual(INSTALL.main(), 1)
-                self.assertEqual(stderr.getvalue(), "install refused: fleet_coexist_requires_full_flow\n")
+                    self.assertEqual(INSTALL.main(), 3)
+                self.assertEqual(stderr.getvalue(), "install refused: fleet_coexist_requires_full_flow\n"
+                                 "RIGSIGNAL_FAILURE_SITE preflight\n")
                 self.assertEqual(stdout.getvalue(), "")
                 version_fence.assert_not_called()
                 install.assert_not_called()
@@ -311,8 +393,9 @@ class AssetsOnlyInstallTests(unittest.TestCase):
                  mock.patch.object(INSTALL, "request", transport.request), \
                  mock.patch.object(INSTALL, "request_response", transport.request_response), \
                  redirect_stderr(stderr):
-                self.assertEqual(INSTALL.main(), 1)
-            self.assertEqual(stderr.getvalue(), "install refused: asset_conflict_unproven\n")
+                self.assertEqual(INSTALL.main(), 3)
+            self.assertEqual(stderr.getvalue(), "install refused: asset_conflict_unproven\n"
+                             "RIGSIGNAL_FAILURE_SITE preflight\n")
             prepare_root.assert_not_called()
             self.assertFalse(root.exists())
             self.assertEqual(transport.mutations, [])
