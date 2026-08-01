@@ -83,6 +83,11 @@ OWNERSHIP_PROFILE_FILE = "ownership-profile.json"
 UUID_RE = re.compile(r"[A-Za-z0-9_-]{22}\Z")
 HEX_RE = re.compile(r"[0-9a-f]{64}\Z")
 OWNERSHIP_TABLE_VERSION = "fleet-coexist-v1"
+ASSETS_MARKER_SCHEMA_VERSION = 1
+ASSETS_MARKER_FILE = "assets-marker.json"
+RIGSIGNAL_MANAGED_BY = "rigsignal-asset-bundle"
+_ES_ASSET_KINDS = frozenset(("component_templates", "index_templates", "pipelines",
+                             "transforms", "security_roles"))
 RENAME_EXCHANGE_FILESYSTEMS = frozenset(("btrfs", "ext4", "overlay", "tmpfs", "xfs"))
 LOCAL_TRANSACTION_MIN_AVAILABLE_BLOCKS = 16
 
@@ -219,6 +224,13 @@ class OwnershipTableError(InputError):
         self.code, self.asset = code, asset
         suffix = "" if asset is None else ": " + asset[0] + "/" + asset[1]
         super().__init__(code + suffix)
+
+
+class AssetConflictUnproven(ProvisionError):
+    """A default-profile object exists but has no accepted ownership proof."""
+
+    def __init__(self):
+        super().__init__("install refused: asset_conflict_unproven")
 
 
 @dataclass(frozen=True)
@@ -2936,7 +2948,8 @@ def verify_kibana_asset(base: str, authorization: str, asset: Asset) -> None:
 
 def verify_prepublication_assets(es_url: str, kb_url: str, authorization: str, bundle: Bundle,
                                  ownership_profile: str, ownership: dict[tuple[str, str], str],
-                                 external_baselines: list[dict] | None = None) -> None:
+                                 external_baselines: list[dict] | None = None,
+                                 default_assets_managed: bool = False) -> None:
     """Recheck assets after candidate proof and before consumer publication."""
     for asset in bundle.assets:
         if (ownership_profile == "fleet-coexist"
@@ -2952,18 +2965,21 @@ def verify_prepublication_assets(es_url: str, kb_url: str, authorization: str, b
                         != record.get("compatibility_projection_sha256")):
                     raise InputError("external compatibility baseline drifted")
         elif asset.kind in {"component_templates", "index_templates", "security_roles"}:
-            verify_asset(es_url, authorization, asset)
+            verify_asset(es_url, authorization,
+                         stamped_asset(asset) if default_assets_managed else asset)
         elif asset.kind in {"kibana_spaces", "kibana_roles"}:
             verify_kibana_asset(kb_url, authorization, asset)
 
 
 def prepublication_asset_fence(es_url: str, kb_url: str, authorization: str, bundle: Bundle,
                                ownership_profile: str, ownership: dict[tuple[str, str], str],
-                               external_baselines: list[dict] | None = None) -> None:
+                               external_baselines: list[dict] | None = None,
+                               default_assets_managed: bool = False) -> None:
     """Expose every late asset drift through the stable publication-fence category."""
     try:
         verify_prepublication_assets(es_url, kb_url, authorization, bundle,
-                                     ownership_profile, ownership, external_baselines)
+                                     ownership_profile, ownership, external_baselines,
+                                     default_assets_managed)
     except (InputError, RequestFailure) as error:
         raise ProvisionError("install failed: pre-publication fence:") from error
 
@@ -2997,7 +3013,242 @@ def response_status(base: str, path: str, method: str, authorization: str, paylo
         return error.status or 0
 
 
-def install_asset(es_url: str, kb_url: str, authorization: str, asset: Asset) -> object:
+def stamped_asset(asset: Asset) -> Asset:
+    """Render the default-profile ES ownership stamp into a request body.
+
+    The stamp is an ownership proof, not a content digest.  It is added only
+    to ES objects; Kibana saved objects deliberately use the protected local
+    marker because their APIs cannot retain this metadata.
+    """
+    if asset.kind not in _ES_ASSET_KINDS:
+        return asset
+    body = parse_json(asset.data, asset.path)
+    if not isinstance(body, dict):
+        raise InputError("asset body is not an object")
+    # The security-role API is the lone ES asset endpoint that persists its
+    # caller metadata under ``metadata`` rather than ``_meta``.  In
+    # particular, PUT /_security/role rejects (or does not retain) ``_meta``.
+    metadata_key = "metadata" if asset.kind == "security_roles" else "_meta"
+    meta = body.get(metadata_key)
+    if meta is None:
+        meta = {}
+    if not isinstance(meta, dict):
+        raise InputError("asset " + metadata_key + " is invalid")
+    body[metadata_key] = {**meta, "managed_by": RIGSIGNAL_MANAGED_BY}
+    return Asset(asset.kind, asset.name, asset.path, jcs(body))
+
+
+def _asset_marker_default_path() -> Path:
+    state_home = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local" / "state")))
+    return state_home / "rigsignal" / ASSETS_MARKER_FILE
+
+
+def _asset_marker_identities(bundle: Bundle) -> list[dict[str, str]]:
+    return [{"kind": asset.kind, "name": asset.name} for asset in bundle.assets]
+
+
+def _read_assets_marker_record(path: Path, bundle: Bundle) -> tuple[str | None, set[tuple[str, str]]]:
+    """Return a validated marker version and complete identity set.
+
+    A version mismatch is a transition decision, not malformed ownership
+    evidence.  Callers that only need current-version proof use the wrapper
+    below; the planner uses this record to decide whether an explicit version
+    flag authorizes a transition.
+    """
+    if not path.exists():
+        return None, set()
+    value = parse_json(protected_regular_file(path), ASSETS_MARKER_FILE)
+    if (not isinstance(value, dict)
+            or set(value) != {"schema_version", "bundle_version", "source_commit", "identities"}
+            or value.get("schema_version") != ASSETS_MARKER_SCHEMA_VERSION
+            or not isinstance(value.get("bundle_version"), str)
+            or not value["bundle_version"]
+            or not isinstance(value.get("source_commit"), str)
+            or not value["source_commit"]
+            or not isinstance(value.get("identities"), list)):
+        raise InputError("assets marker is invalid")
+    identities: set[tuple[str, str]] = set()
+    for item in value["identities"]:
+        if (not isinstance(item, dict) or set(item) != {"kind", "name"}
+                or item.get("kind") not in {*_ES_ASSET_KINDS, "dashboard", "kibana_spaces", "kibana_roles"}
+                or not isinstance(item.get("name"), str) or not item["name"]):
+            raise InputError("assets marker is invalid")
+        identity = (item["kind"], item["name"])
+        if identity in identities:
+            raise InputError("assets marker is invalid")
+        identities.add(identity)
+    if identities != {(asset.kind, asset.name) for asset in bundle.assets}:
+        raise InputError("assets marker is invalid")
+    return value["bundle_version"], identities
+
+
+def _read_assets_marker(path: Path, bundle: Bundle) -> set[tuple[str, str]]:
+    """Return current-version marker proof, never accepting a stale marker."""
+    version, identities = _read_assets_marker_record(path, bundle)
+    if version is not None and version != bundle.version:
+        raise InputError("assets marker is invalid")
+    return identities
+
+
+def _write_assets_marker(path: Path, bundle: Bundle) -> None:
+    if path.name != ASSETS_MARKER_FILE:
+        raise InputError("assets marker path is invalid")
+    value = {"schema_version": ASSETS_MARKER_SCHEMA_VERSION, "bundle_version": bundle.version,
+             "source_commit": bundle.source_commit, "identities": _asset_marker_identities(bundle)}
+    atomic_write(path.parent, path.name, jcs(value) + b"\n")
+    # The read-back proves both the atomic write and the 0600 ownership fence.
+    if _read_assets_marker(path, bundle) != {(item["kind"], item["name"])
+                                             for item in value["identities"]}:
+        raise InputError("assets marker verification failed")
+
+
+def _es_object_is_owned(response: object, asset: Asset) -> bool:
+    try:
+        body = asset_adapters.get_projection(asset.kind, response)
+    except asset_adapters.AdapterError as error:
+        raise InputError("asset ownership response is invalid") from error
+    metadata_key = "metadata" if asset.kind == "security_roles" else "_meta"
+    return isinstance(body, dict) and isinstance(body.get(metadata_key), dict) and (
+        body[metadata_key].get("managed_by") == RIGSIGNAL_MANAGED_BY)
+
+
+def _semver_compare(left: str, right: str) -> int:
+    """Compare the release versions accepted by bundle manifests."""
+    expression = re.compile(r"(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?\Z")
+
+    def parse(value: str) -> tuple[tuple[int, int, int], tuple[tuple[int, object], ...] | None]:
+        match = expression.fullmatch(value)
+        if match is None:
+            raise InputError("assets marker version is invalid")
+        release = tuple(int(match.group(index)) for index in range(1, 4))
+        prerelease = match.group(4)
+        if prerelease is None:
+            return release, None
+        identifiers: list[tuple[int, object]] = []
+        for identifier in prerelease.split("."):
+            identifiers.append((0, int(identifier)) if identifier.isdigit() else (1, identifier))
+        return release, tuple(identifiers)
+
+    left_release, left_pre = parse(left)
+    right_release, right_pre = parse(right)
+    if left_release != right_release:
+        return -1 if left_release < right_release else 1
+    if left_pre is None or right_pre is None:
+        if left_pre is right_pre:
+            return 0
+        return 1 if left_pre is None else -1
+    for left_part, right_part in zip(left_pre, right_pre):
+        if left_part != right_part:
+            return -1 if left_part < right_part else 1
+    return (left_pre > right_pre) - (left_pre < right_pre)
+
+
+def _es_object_matches_bundle(response: object, asset: Asset) -> bool:
+    try:
+        live = asset_adapters.get_projection(asset.kind, response)
+        desired = asset_adapters.get_projection(
+            asset.kind, parse_json(stamped_asset(asset).data, asset.path))
+    except asset_adapters.AdapterError as error:
+        raise InputError("asset ownership response is invalid") from error
+    return asset_adapters.canonical_json(live) == asset_adapters.canonical_json(desired)
+
+
+def _dashboard_present(kb_url: str, authorization: str, asset: Asset) -> bool:
+    present = False
+    for object_type, object_id in dashboard_objects(asset.data):
+        try:
+            request(kb_url, dashboard_object_path(asset, object_type, object_id), "GET", authorization,
+                    headers={"kbn-xsrf": "true"})
+            present = True
+        except RequestFailure as error:
+            if error.status != 404:
+                raise
+    return present
+
+
+def _asset_presence(es_url: str, kb_url: str, authorization: str, asset: Asset) -> tuple[bool, object | None]:
+    if asset.kind == "dashboard":
+        return _dashboard_present(kb_url, authorization, asset), None
+    base = es_url if asset.kind in _ES_ASSET_KINDS else kb_url
+    path = es_path(asset) if asset.kind in _ES_ASSET_KINDS else kibana_path(asset)
+    headers = None if asset.kind in _ES_ASSET_KINDS else {"kbn-xsrf": "true"}
+    try:
+        response = json_response(request(base, path, "GET", authorization, headers=headers))
+    except RequestFailure as error:
+        if error.status == 404:
+            return False, None
+        raise
+    return True, response
+
+
+def assets_ownership_plan(bundle: Bundle, es_url: str, kb_url: str, authorization: str,
+                          marker_path: Path | None = None, *, repair: bool = False,
+                          upgrade: bool = False, allow_downgrade: bool = False) -> list[tuple[Asset, str]]:
+    """Read all 55 targets and return a write plan without issuing a mutation."""
+    identities = {(asset.kind, asset.name) for asset in bundle.assets}
+    if len(identities) != 55 or len(identities) != len(bundle.assets):
+        raise InputError("assets-only bundle cardinality is invalid")
+    marker_path = marker_path or _asset_marker_default_path()
+    marker_version, marker_identities = _read_assets_marker_record(marker_path, bundle)
+    transition = False
+    if marker_version is not None and marker_version != bundle.version:
+        direction = _semver_compare(marker_version, bundle.version)
+        if direction < 0:
+            if not upgrade:
+                raise ProvisionError("install refused: assets_marker_upgrade_required")
+        elif not allow_downgrade:
+            raise ProvisionError("install refused: assets_marker_downgrade_required")
+        transition = True
+    plan: list[tuple[Asset, str]] = []
+    for asset in bundle.assets:
+        present, response = _asset_presence(es_url, kb_url, authorization, asset)
+        if not present:
+            plan.append((asset, "create"))
+            continue
+        if asset.kind in _ES_ASSET_KINDS:
+            if not _es_object_is_owned(response, asset):
+                raise AssetConflictUnproven()
+            plan.append((asset, "noop" if _es_object_matches_bundle(response, asset) else "update"))
+        elif (asset.kind, asset.name) in marker_identities:
+            # Same-version Kibana drift detection is expressly out of scope;
+            # the marker proves ownership, and an explicit maintenance mode
+            # is allowed to re-apply only that proven-owned object.
+            plan.append((asset, "noop"))
+        else:
+            raise AssetConflictUnproven()
+    # Upgrade/downgrade are transition authorizations, not same-version force
+    # modes.  ``--repair`` remains the explicit same-version re-apply path.
+    force = repair or transition
+    if force:
+        plan = [(asset, "update" if action != "create" else action) for asset, action in plan]
+    return plan
+
+
+def assets_only_install(bundle: Bundle, es_url: str, kb_url: str, authorization: str,
+                        marker_path: Path | None = None, *, repair: bool = False,
+                        upgrade: bool = False, allow_downgrade: bool = False) -> str:
+    """Apply only bundle assets, after one complete fail-closed ownership pass.
+
+    This intentionally has no enrollment-root dependency.  Every target is
+    read before the first write: an existing ES object needs our `_meta` stamp;
+    an existing Kibana object needs its identity in the protected local marker.
+    """
+    marker_path = marker_path or _asset_marker_default_path()
+    plan = assets_ownership_plan(bundle, es_url, kb_url, authorization, marker_path,
+                                 repair=repair, upgrade=upgrade,
+                                 allow_downgrade=allow_downgrade)
+    if all(action == "noop" for _asset, action in plan):
+        return "noop"
+    for asset, action in plan:
+        if action != "noop":
+            install_asset(es_url, kb_url, authorization, asset, managed=True)
+    _write_assets_marker(marker_path, bundle)
+    return "applied"
+
+
+def install_asset(es_url: str, kb_url: str, authorization: str, asset: Asset, *, managed: bool = False) -> object:
+    if managed:
+        asset = stamped_asset(asset)
     if asset.kind == "dashboard":
         body, boundary = multipart_dashboard(asset)
         response = json_response(request(
@@ -4546,6 +4797,14 @@ def main() -> int:
                         help="protected administrator TOML credential")
     parser.add_argument("--agent-binary", type=Path, required=True)
     parser.add_argument("--profile", choices=("user", "system"), required=True)
+    parser.add_argument("--assets-only", action="store_true",
+                        help="install bundle assets without creating an enrollment root")
+    parser.add_argument("--assets-marker", type=Path, metavar="MARKER",
+                        help="protected local ownership marker for --assets-only")
+    parser.add_argument("--repair", action="store_true", help="re-apply proven-owned assets")
+    parser.add_argument("--upgrade", action="store_true", help="re-apply proven-owned assets")
+    parser.add_argument("--allow-downgrade", action="store_true",
+                        help="re-apply proven-owned assets")
     parser.add_argument("--enrollment-root", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--adopt-existing-w1-stream", action="store_true",
                         help="one-shot adoption of a compatible pre-existing W1 diagnosis stream")
@@ -4644,6 +4903,14 @@ def main() -> int:
         print(f"install failed: bundle validation:", file=sys.stderr)
         return 1
 
+    # Fleet coexistence carries a journaled enrollment transaction and
+    # external-asset verification obligations.  The assets-only shortcut has
+    # neither, so it is invalid even when dry-run would otherwise stop before
+    # planning or mutation.
+    if getattr(args, "assets_only", False) and ownership_profile == "fleet-coexist":
+        print("install refused: fleet_coexist_requires_full_flow", file=sys.stderr)
+        return 1
+
     total = len(bundle.assets)
     if args.dry_run:
         for asset in bundle.assets:
@@ -4665,6 +4932,28 @@ def main() -> int:
         print(f"ownership profile: {ownership_profile}")
         print(f"source assets: {total}")
         return 0
+
+    if getattr(args, "assets_only", False):
+        try:
+            # Slice 1's version/commit fence remains an invocation boundary,
+            # while this path deliberately never resolves or creates an
+            # enrollment root.
+            check_version_fence(bundle, args.agent_binary)
+            configure_https(args.ca_file)
+            configure_https(args.kibana_ca_file)
+            authorization = admin_authorization(args.admin_credentials_file)
+            outcome = assets_only_install(bundle, es_url, kb_url, authorization,
+                                          getattr(args, "assets_marker", None), repair=getattr(args, "repair", False),
+                                          upgrade=getattr(args, "upgrade", False),
+                                          allow_downgrade=getattr(args, "allow_downgrade", False))
+            print("assets-only " + outcome)
+            return 0
+        except ProvisionError as error:
+            print(error.prefix, file=sys.stderr)
+            return 1
+        except (InputError, RequestFailure, OSError):
+            print("install failed: assets-only:", file=sys.stderr)
+            return 1
 
     failure_tracker = FailureSiteTracker()
     try:
@@ -4707,6 +4996,20 @@ def main() -> int:
         fence_remote_ownership_profile(es_url, authorization, ownership_profile,
                                        raw_ownership_profile is None)
         run_topology_preflight(bundle, es_url, kb_url, authorization, ownership_profile)
+        # The shared default-profile ownership barrier belongs before even a
+        # local enrollment-root mutation or incomplete-key recovery.  It is a
+        # complete read pass over all 55 target identities.
+        default_marker_path = getattr(args, "assets_marker", None) or _asset_marker_default_path()
+        default_asset_actions: dict[tuple[str, str], str] = {}
+        # Main receives a verified member map from load_bundle().  A missing
+        # map identifies an in-memory legacy unit fixture, never a CLI bundle.
+        if ownership_profile == "default" and bundle.files is not None:
+            default_asset_actions = {(asset.kind, asset.name): action
+                                     for asset, action in assets_ownership_plan(
+                                         bundle, es_url, kb_url, authorization, default_marker_path,
+                                         repair=getattr(args, "repair", False),
+                                         upgrade=getattr(args, "upgrade", False),
+                                         allow_downgrade=getattr(args, "allow_downgrade", False))}
         test_pause("after-topology-preflight", args.unsafe_test_injection)
         failure_tracker.mark(FailureSite.ROOT_PREPARE)
         root = prepare_install_root(requested_root)
@@ -4799,9 +5102,8 @@ def main() -> int:
         elif pre_put_condition != "compatible":
             raise ProvisionError("install refused: migration_required")
 
-        # Step 5: external members are verified as one no-write barrier before
-        # any bundle-owned mutation.  The default profile deliberately retains
-        # the established PUT-everything path.
+        # Step 5: resolve every default-profile target before an asset write.
+        # Fleet coexistence retains its separately-ratified 16/39 classifier.
         applied_owned_assets: list[dict] = []
         verified_external_assets: list[dict] = []
         journal: TransactionJournal | None = None
@@ -4811,6 +5113,9 @@ def main() -> int:
         predecessor_pins: dict[tuple[str, str], str] = {}
         post_fleet_snapshot: dict[str, object] | None = None
         candidate_drift_done = False
+        if ownership_profile == "default":
+            planned_actions = (default_asset_actions if bundle.files is not None else
+                               {(asset.kind, asset.name): "update" for asset in bundle.assets})
         if ownership_profile == "fleet-coexist":
             try:
                 # This capture dynamically enumerates the active stream set;
@@ -4852,8 +5157,7 @@ def main() -> int:
             if ownership[(asset.kind, asset.name)] == "external":
                 continue
             try:
-                action = (planned_actions[(asset.kind, asset.name)]
-                          if ownership_profile == "fleet-coexist" else "update")
+                action = planned_actions[(asset.kind, asset.name)]
                 records: list[dict] = []
                 if journal is not None:
                     if predecessor_manifest is not None and action != "noop":
@@ -4880,7 +5184,8 @@ def main() -> int:
                             raise ProvisionError("install failed: fleet stream verification:") from error
                     if asset.kind == "dashboard":
                         fault("dashboard-multipart")
-                    install_asset(es_url, kb_url, authorization, asset)
+                    install_asset(es_url, kb_url, authorization, asset,
+                                  managed=ownership_profile == "default")
                     fault("after-remote-mutation", f"{asset.kind}/{asset.name}")
                     if not candidate_drift_done:
                         test_candidate_drift("after-first-owned-write", es_url, authorization,
@@ -5008,7 +5313,8 @@ def main() -> int:
                                      post_fleet_snapshot or {})
             prepublication_asset_fence(es_url, kb_url, authorization, bundle,
                                        ownership_profile, ownership,
-                                       journal.value.get("external_baselines") if journal is not None else None)
+                                       journal.value.get("external_baselines") if journal is not None else None,
+                                       default_assets_managed=ownership_profile == "default")
             simulate(es_url, authorization, bundle)
             if ownership_profile == "fleet-coexist":
                 if post_fleet_snapshot is None:
@@ -5083,6 +5389,8 @@ def main() -> int:
             if journal is not None:
                 journal_verify_owned_asset(journal, marker_records, es_url, kb_url, authorization, marker)
                 journal.apply_ok()
+            if ownership_profile == "default" and bundle.assets:
+                _write_assets_marker(default_marker_path, bundle)
         except (InputError, RequestFailure) as error:
             raise ProvisionError("install failed: bundle marker:") from error
         if ownership_profile == "fleet-coexist":

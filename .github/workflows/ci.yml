@@ -29,6 +29,9 @@ jobs:
       - name: Run launcher packaging tests
         run: bash packaging/tests/test-rigsignal-launcher.sh
 
+      - name: Run assets-only ownership tests
+        run: python3 tools/tests/test_assets_only.py
+
       - name: Run eBPF workspace tests
         run: cargo test --manifest-path ebpf/Cargo.toml --locked
 
