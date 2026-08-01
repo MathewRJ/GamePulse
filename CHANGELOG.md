@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-08-01
+
+### Added
+
+- `rigsignal assets install` now installs the bundled asset engine across supported
+  release channels, verifies matching release bundles, and can safely use an
+  offline bundle when needed.
+- Agent and eBPF binaries expose build identity (version and source commit) for
+  provenance checks and support diagnostics.
+
+### Changed
+
+- `rigsignal setup` now establishes verified TLS trust with an operator-supplied
+  CA certificate and keeps the user and eBPF configuration in sync.
+- Linux installer releases are x86_64-only and can optionally install the
+  pre-built eBPF service; Windows remains an agent-only installation.
+- Packaged units and configuration transitions now consistently preserve the
+  user-scoped agent configuration across distro package upgrades.
+
+### Fixed
+
+- Release bundle installation now rejects version or source-commit mismatches
+  before changing assets, and reports actionable assets-install exit codes.
+- Release checksum consumption now validates the exact requested sidecar record
+  and artifact name.
+
 ## [0.3.0] — 2026-07-21
 
 ### Added

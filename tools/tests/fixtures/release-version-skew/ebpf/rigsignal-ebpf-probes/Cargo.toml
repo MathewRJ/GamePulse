@@ -1,0 +1,4 @@
+[package]
+name = "rigsignal-ebpf-probes"
+version = "0.3.1"
+edition = "2021"

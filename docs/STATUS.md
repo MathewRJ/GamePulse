@@ -40,7 +40,7 @@ turnkey bar (bundled local stack pins inside this range).
 | G  elastic/integrations PR (M4) | 🟡 Deferred (maintainer architecture rework + `fields.yml` gating) | ▓░░░░░░░░░ |
 | 0.2.4 release | 🟢 Released 2026-07-18 | ▓▓▓▓▓▓▓▓▓▓ |
 | 0.2.5 release | 🟢 Released + deployed 2026-07-19 (both hosts) | ▓▓▓▓▓▓▓▓▓▓ |
-| 0.3.0 release — D6 display detector | 🟢 Released 2026-07-21 (tag `v0.3.0`) | ▓▓▓▓▓▓▓▓▓▓ |
+| 0.3.1 release — packaging and asset-install hardening | 🟡 Release preparation 2026-08-01 | ▓▓▓▓▓▓▓▓▓▓ |
 
 ## At a glance — offline branch (not yet forked)
 

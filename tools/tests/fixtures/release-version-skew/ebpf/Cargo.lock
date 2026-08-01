@@ -1,0 +1,13 @@
+version = 4
+
+[[package]]
+name = "rigsignal-ebpf"
+version = "0.3.1"
+
+[[package]]
+name = "rigsignal-ebpf-probes"
+version = "0.3.1"
+
+[[package]]
+name = "xtask"
+version = "0.2.1"

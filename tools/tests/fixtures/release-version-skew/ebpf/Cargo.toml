@@ -1,0 +1,3 @@
+[workspace]
+members = ["rigsignal-ebpf-probes", "rigsignal-ebpf", "xtask"]
+resolver = "2"

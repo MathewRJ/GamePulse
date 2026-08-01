@@ -42,6 +42,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check release version consistency
+        run: python3 tools/check-release-version --tag "$GITHUB_REF_NAME"
+
       - name: Install Rust toolchain (stable)
         uses: dtolnay/rust-toolchain@stable
 
@@ -519,11 +522,25 @@ jobs:
             sha256sum "$asset" > "${asset}.sha256"
           done
 
+      - name: Extract release notes from changelog
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v ver="$VERSION" '
+            { target = "## [" ver "]"
+              hit = index($0, target) == 1 &&
+                    (length($0) == length(target) ||
+                     substr($0, length(target)+1, 1) ~ /[[:space:]]/)
+              if (hit) found = 1
+              if (found && !hit && /^## /) exit
+              if (found) print }
+            END { if (!found) exit 2 }
+          ' CHANGELOG.md > "${{ runner.temp }}/release-notes.md"
+          test -s "${{ runner.temp }}/release-notes.md"
+
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: ${{ needs.setup.outputs.tag }}
           files: dist/*
-          body_path: .github/RELEASE_NOTES.md
-          generate_release_notes: true
+          body_path: ${{ runner.temp }}/release-notes.md
           fail_on_unmatched_files: true
