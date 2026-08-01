@@ -48,6 +48,12 @@ prepare() {
         echo "ERROR: rust-src not found for nightly. Install with: rustup component add rust-src --toolchain nightly"
         return 1
     fi
+    # The engine is a staged release payload, not a source-tree fallback.  Its
+    # stamp must match the commit compiled into the agent below.
+    python3 "${_repodir}/tools/build_asset_bundle.py" \
+        --source-commit "$(git -C "${_repodir}" rev-parse HEAD)" \
+        --output "${srcdir}/rigsignal-assets-${pkgver}.tar.gz" \
+        --engine-output "${_repodir}/dist/engine"
 }
 
 build() {
@@ -105,6 +111,17 @@ package() {
     # 'rigsignal run %command%' is the Steam launch option form.
     install -Dm755 "${startdir}/rigsignal-launcher.sh" \
         "${pkgdir}/usr/bin/rigsignal"
+
+    # Staged by the release build; the launcher deliberately uses only this
+    # system-scope engine with the system launcher and agent.
+    install -Dm755 "${_repodir}/dist/engine/install_assets.py" \
+        "${pkgdir}/usr/lib/rigsignal/engine/install_assets.py"
+    install -Dm644 "${_repodir}/dist/engine/asset_adapters.py" \
+        "${pkgdir}/usr/lib/rigsignal/engine/asset_adapters.py"
+    install -Dm644 "${_repodir}/dist/engine/_version.py" \
+        "${pkgdir}/usr/lib/rigsignal/engine/_version.py"
+    printf 'rigsignal-release\n' > "${pkgdir}/usr/lib/rigsignal/engine/channel"
+    chmod 644 "${pkgdir}/usr/lib/rigsignal/engine/channel"
 
     # ---- Example config ----
     # The launcher writes the live, credential-bearing user config under XDG_CONFIG_HOME.

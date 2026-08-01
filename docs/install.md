@@ -35,6 +35,61 @@ Data starts flowing to Elasticsearch the next time you launch a game.
 The default install is agent-only (`--no-ebpf`) and does not request `sudo`.
 To enable kernel telemetry later, rerun the installer with `--with-ebpf`.
 
+## Install the released asset bundle
+
+The launcher installs dashboards, templates, pipelines, transforms, and related
+Kibana assets separately from telemetry setup. It downloads the bundle matching
+the installed RigSignal release, verifies its adjacent SHA-256 sidecar, and then
+has the packaged engine verify the bundle manifest:
+
+```bash
+# Latest installed release, prompting for the administrator's native user login
+rigsignal assets install
+
+# A pinned installed release is selected automatically from its agent build stamp.
+# Supply values explicitly for automation; no prompt is made with --non-interactive.
+rigsignal assets install --endpoint https://es.example.invalid \
+  --ca-file ./http_ca.crt --ca-sha256 "$(sha256sum ./http_ca.crt | awk '{print $1}')" \
+  --kibana-endpoint https://kibana.example.invalid \
+  --admin-credentials-file ./elastic-admin.toml --non-interactive
+```
+
+The administrator input is one-shot and is never added to RigSignal
+configuration, state, logs, or the journal. It must be a native Elasticsearch
+user credential—API-key TOML is deliberately refused:
+
+```toml
+[elasticsearch]
+username = "elastic"
+password = "…"
+```
+
+The command creates a protected temporary copy for the engine's two reads and
+removes it on success, failure, or interruption. The resulting assets use the
+`user`/default ownership profile. `--ownership-profile fleet-coexist` is not an
+assets shortcut: use the full packaged engine flow for that transaction.
+
+Endpoint, CA, and Kibana endpoint resolution is explicit flag, then valid
+persisted launcher configuration, then prompt. `--non-interactive` turns any
+missing value into an actionable failure. A CA pin is valid only with an
+explicit CA file. A resolved Kibana endpoint is atomically persisted and any
+installed eBPF system configuration is synchronized; the administrator password
+is not persisted. Re-running against the same bundle is marker-driven and
+idempotent; use `--repair`, `--upgrade`, or `--allow-downgrade` only for their
+corresponding explicit transitions.
+
+`rigsignal-git` intentionally has no guessed GitHub release mapping. Use an
+offline bundle and its exact adjacent sidecar instead:
+
+```bash
+rigsignal assets install --bundle ./rigsignal-assets-<version>.tar.gz \
+  --admin-credentials-file ./elastic-admin.toml
+```
+
+Offline mode copies both the archive and `.sha256` file into a private snapshot
+before hashing, so changing the source path after launch cannot affect the
+engine input.
+
 ### Manual Linux download with checksum verification
 
 Download the tarball and its adjacent checksum file from the same release, then

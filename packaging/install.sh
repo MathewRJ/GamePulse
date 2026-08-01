@@ -21,6 +21,7 @@ set -e
 
 REPO="MathewRJ/RigSignal"
 INSTALL_BIN="${HOME}/.local/bin"
+INSTALL_ENGINE="${HOME}/.local/lib/rigsignal/engine"
 INSTALL_SERVICE="${HOME}/.config/systemd/user"
 GITHUB_API="https://api.github.com/repos/${REPO}"
 GITHUB_RELEASES="https://github.com/${REPO}/releases/download"
@@ -163,6 +164,7 @@ add_installed() { INSTALLED="${INSTALLED}  + $1\n"; }
 add_skipped()   { SKIPPED="${SKIPPED}  - $1\n"; }
 
 INSTALL_BIN_PATH=$(stage_path "$INSTALL_BIN")
+INSTALL_ENGINE_PATH=$(stage_path "$INSTALL_ENGINE")
 INSTALL_SERVICE_PATH=$(stage_path "$INSTALL_SERVICE")
 
 mkdir -p "$INSTALL_BIN_PATH"
@@ -172,6 +174,20 @@ install -m 755 "$TMP/rigsignal-uninstall" "$INSTALL_BIN_PATH/rigsignal-uninstall
 add_installed "$INSTALL_BIN/rigsignal-agent  (collector)"
 add_installed "$INSTALL_BIN/rigsignal  (launcher CLI)"
 add_installed "$INSTALL_BIN/rigsignal-uninstall  (uninstaller)"
+
+# The assets launcher executes only this co-packaged, immutable engine.  Keep
+# these files separate from the executable directory so a stale system engine
+# can never be selected for a user tarball installation.
+for _engine_file in install_assets.py asset_adapters.py _version.py; do
+    [ -f "$TMP/engine/$_engine_file" ] || err "Release tarball is missing engine/$_engine_file."
+done
+mkdir -p "$INSTALL_ENGINE_PATH"
+install -m 755 "$TMP/engine/install_assets.py" "$INSTALL_ENGINE_PATH/install_assets.py"
+install -m 644 "$TMP/engine/asset_adapters.py" "$INSTALL_ENGINE_PATH/asset_adapters.py"
+install -m 644 "$TMP/engine/_version.py" "$INSTALL_ENGINE_PATH/_version.py"
+printf 'rigsignal-release\n' > "$INSTALL_ENGINE_PATH/channel"
+chmod 644 "$INSTALL_ENGINE_PATH/channel"
+add_installed "$INSTALL_ENGINE/  (assets engine)"
 
 # ── Install user systemd service ──────────────────────────────────────────────
 

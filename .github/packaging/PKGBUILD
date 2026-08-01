@@ -38,6 +38,8 @@ package() {
         "${pkgdir}/usr/lib/rigsignal/engine/asset_adapters.py"
     install -Dm644 "${_reporoot}/dist/engine/_version.py" \
         "${pkgdir}/usr/lib/rigsignal/engine/_version.py"
+    printf 'rigsignal-release\n' > "${pkgdir}/usr/lib/rigsignal/engine/channel"
+    chmod 644 "${pkgdir}/usr/lib/rigsignal/engine/channel"
 
     install -Dm755 "${_reporoot}/packaging/rigsignal-launcher.sh" \
         "${pkgdir}/usr/bin/rigsignal"

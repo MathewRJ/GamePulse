@@ -45,6 +45,11 @@ prepare() {
         echo "ERROR: rust-src not found for nightly; run: rustup component add rust-src --toolchain nightly"
         return 1
     fi
+    local _repodir="${srcdir}/${pkgname}"
+    python3 "${_repodir}/tools/build_asset_bundle.py" \
+        --source-commit "$(git -C "${_repodir}" rev-parse HEAD)" \
+        --output "${srcdir}/rigsignal-assets-${pkgver}.tar.gz" \
+        --engine-output "${_repodir}/dist/engine"
 }
 
 build() {
@@ -89,6 +94,16 @@ package() {
 
     install -Dm755 "${_repodir}/packaging/rigsignal-launcher.sh" \
         "${pkgdir}/usr/bin/rigsignal"
+
+    install -Dm755 "${_repodir}/dist/engine/install_assets.py" \
+        "${pkgdir}/usr/lib/rigsignal/engine/install_assets.py"
+    install -Dm644 "${_repodir}/dist/engine/asset_adapters.py" \
+        "${pkgdir}/usr/lib/rigsignal/engine/asset_adapters.py"
+    install -Dm644 "${_repodir}/dist/engine/_version.py" \
+        "${pkgdir}/usr/lib/rigsignal/engine/_version.py"
+    # This marker, rather than agent build metadata, defines the git channel.
+    printf 'rigsignal-git\n' > "${pkgdir}/usr/lib/rigsignal/engine/channel"
+    chmod 644 "${pkgdir}/usr/lib/rigsignal/engine/channel"
 
     install -Dm644 "${_repodir}/packaging/config/rigsignal.toml.example" \
         "${pkgdir}/usr/share/rigsignal/examples/rigsignal.toml.example"

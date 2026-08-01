@@ -212,9 +212,11 @@ if grep -qiE '^ID=steamos|^VARIANT_ID=steamdeck' /etc/os-release 2>/dev/null; th
 fi
 
 USER_BIN_LOGICAL="${HOME}/.local/bin"
+USER_ENGINE_LOGICAL="${HOME}/.local/lib/rigsignal/engine"
 USER_SERVICE_LOGICAL="${HOME}/.config/systemd/user"
 USER_CONFIG_LOGICAL="${XDG_CONFIG_HOME:-$HOME/.config}/rigsignal/rigsignal.toml"
 USER_BIN=$(stage_path "$USER_BIN_LOGICAL")
+USER_ENGINE=$(stage_path "$USER_ENGINE_LOGICAL")
 USER_SERVICE=$(stage_path "$USER_SERVICE_LOGICAL")
 USER_CONFIG=$(stage_path "$USER_CONFIG_LOGICAL")
 
@@ -229,6 +231,13 @@ remove_file "$USER_BIN/rigsignal-agent" "$USER_BIN_LOGICAL/rigsignal-agent"
 remove_file "$USER_BIN/rigsignal" "$USER_BIN_LOGICAL/rigsignal"
 remove_file "$USER_BIN/rigsignal-uninstall" "$USER_BIN_LOGICAL/rigsignal-uninstall"
 remove_file "$USER_SERVICE/rigsignal-agent.service" "$USER_SERVICE_LOGICAL/rigsignal-agent.service"
+remove_file "$USER_ENGINE/install_assets.py" "$USER_ENGINE_LOGICAL/install_assets.py"
+remove_file "$USER_ENGINE/asset_adapters.py" "$USER_ENGINE_LOGICAL/asset_adapters.py"
+remove_file "$USER_ENGINE/_version.py" "$USER_ENGINE_LOGICAL/_version.py"
+remove_file "$USER_ENGINE/channel" "$USER_ENGINE_LOGICAL/channel"
+if [ -d "$USER_ENGINE" ] && rmdir "$USER_ENGINE" 2>/dev/null; then
+    removed "$USER_ENGINE_LOGICAL/ (empty directory)"
+fi
 
 if [ "$PURGE" = "1" ]; then
     remove_file "$USER_CONFIG" "$USER_CONFIG_LOGICAL"

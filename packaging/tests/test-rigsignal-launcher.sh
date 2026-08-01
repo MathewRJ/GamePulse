@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-launcher="$(cd "$(dirname "$0")/.." && pwd)/rigsignal-launcher.sh"
+launcher_dir=$(dirname "$0")/..
+launcher="$(cd "$launcher_dir"; pwd)/rigsignal-launcher.sh"
 generation="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 test_tmp="$(mktemp -d)"
 
@@ -61,7 +62,7 @@ test_home="$test_tmp/home"
 test_bin="$test_tmp/bin"
 mkdir -p "$test_home" "$test_bin"
 printf '%s\n' '#!/usr/bin/env bash' \
-    '[ "$1" = "-c" ] && exec /usr/bin/python3 "$@"' \
+    'if [ "$1" = "-c" ]; then exec /usr/bin/python3 "$@"; fi' \
     'case "$4" in' \
     "    GET) printf '%s\n' '200' '{\"version\":{\"number\":\"9.4.3\"}}' ;;" \
     "    POST) printf '%s\n' '200' '{\"has_all_requested\":true}' ;;" \
@@ -85,5 +86,24 @@ fi
     echo "relative XDG_CONFIG_HOME was used as a config path" >&2
     exit 1
 }
+
+# Setup rejects a malformed API-key token before it can be sent or persisted.
+bad_key_home="$test_tmp/bad-key-home"
+set +e
+bad_key_output="$(printf 'http://127.0.0.1:9200\nbad key\n' | env SUDO_USER='' HOME="$bad_key_home" XDG_CONFIG_HOME="$bad_key_home/.config" PATH="$test_bin:/usr/bin:/bin" "$launcher" setup 2>&1)"
+bad_key_status=$?
+set -e
+if [ "$bad_key_status" -eq 0 ]; then
+    echo "malformed API key was accepted" >&2
+    exit 1
+fi
+case "$bad_key_output" in
+    *"invalid shape"*) ;;
+    *)
+        echo "malformed API key was not rejected before validation" >&2
+        exit 1
+        ;;
+esac
+[ ! -e "$bad_key_home/.config/rigsignal/rigsignal.toml" ] || { echo "malformed API key was persisted" >&2; exit 1; }
 
 echo "rigsignal launcher handshake status guard: PASS"

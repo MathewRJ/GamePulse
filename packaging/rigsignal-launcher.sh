@@ -8,6 +8,7 @@
 #   rigsignal stop               Stop both services gracefully
 #   rigsignal status             Show service state + last session label
 #   rigsignal run %command%      Steam launch option: start → game → stop
+#   rigsignal assets install     Download/verify and install released assets
 #
 # Steam integration:
 #   In game Properties → Launch Options:  rigsignal run %command%
@@ -101,7 +102,12 @@ toml_get() {
 validate_endpoint() {
     _endpoint="$1"
     case "$_endpoint" in
-        https://?* ) return 0 ;;
+        https://?* )
+            validate_url_origin "$_endpoint" || {
+                _err "Elasticsearch endpoint must be a URL origin with a valid host and optional port."
+                return 1
+            }
+            return 0 ;;
         http://* )
             _http_authority=${_endpoint#http://}
             _http_authority=${_http_authority%%/*}
@@ -111,7 +117,12 @@ validate_endpoint() {
                 ''|*@*)
                     _err "Refusing clear-text HTTP Elasticsearch endpoint outside loopback; use HTTPS (HTTP is allowed only for localhost development)."
                     return 1 ;;
-                localhost|localhost:[0-9]*|[[]::1[]]|[[]::1[]]:[0-9]*) return 0 ;;
+                localhost|localhost:[0-9]*|[[]::1[]]|[[]::1[]]:[0-9]*)
+                    validate_url_origin "$_endpoint" || {
+                        _err "Elasticsearch endpoint must be a URL origin with a valid host and optional port."
+                        return 1
+                    }
+                    return 0 ;;
                 127.*) ;;
                 *)
                     _err "Refusing clear-text HTTP Elasticsearch endpoint outside loopback; use HTTPS (HTTP is allowed only for localhost development)."
@@ -119,6 +130,10 @@ validate_endpoint() {
             esac
             _http_host=${_http_authority%%:*}
             if printf '%s\n' "$_http_host" | awk -F. 'NF == 4 && $1 == 127 && $2 ~ /^[0-9]+$/ && $3 ~ /^[0-9]+$/ && $4 ~ /^[0-9]+$/ && $2 <= 255 && $3 <= 255 && $4 <= 255 { exit 0 } { exit 1 }'; then
+                validate_url_origin "$_endpoint" || {
+                    _err "Elasticsearch endpoint must be a URL origin with a valid host and optional port."
+                    return 1
+                }
                 return 0
             fi
             _err "Refusing clear-text HTTP Elasticsearch endpoint outside loopback; use HTTPS (HTTP is allowed only for localhost development)."
@@ -126,6 +141,26 @@ validate_endpoint() {
         * )
             _err "Elasticsearch endpoint must start with https:// (or http:// for a loopback development endpoint)."
             return 1 ;;
+    esac
+}
+
+# Reject only characters unsafe in a quoted TOML value.  Scheme, authority, and
+# loopback policy remain the responsibility of validate_endpoint above so its
+# established acceptance rules and refusal messages are preserved.
+validate_url_origin() {
+    case "$1" in
+        *\"*|*\\*|*[[:space:][:cntrl:]]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+# Elasticsearch API keys are opaque base64-like tokens. Reject whitespace and
+# control characters before they can be placed in a header or persisted TOML;
+# retain URL-safe/base64 punctuation for both Elastic-generated key variants.
+validate_api_key_shape() {
+    case "$1" in
+        ''|*[!A-Za-z0-9._~+=/-]*) _err "API key has an invalid shape (whitespace and control characters are not allowed)."; return 1 ;;
+        *) return 0 ;;
     esac
 }
 
@@ -371,6 +406,414 @@ resolve_agent_bin() {
     else
         echo ""
     fi
+}
+
+# ── Subcommand: assets install ────────────────────────────────────────────────
+
+# This command intentionally has a narrower resolver than run/setup.  Assets
+# are a release artifact and must never pair a user launcher with /usr's engine
+# (or vice versa).
+resolve_assets_installation() {
+    _assets_script_dir=$(cd "$(dirname "$0")" 2>/dev/null && pwd -P) || return 1
+    if [ "$_assets_script_dir" = "$HOME/.local/bin" ]; then
+        ASSETS_AGENT="$HOME/.local/bin/rigsignal-agent"
+        ASSETS_ENGINE="$HOME/.local/lib/rigsignal/engine"
+    else
+        ASSETS_AGENT="/usr/bin/rigsignal-agent"
+        ASSETS_ENGINE="/usr/lib/rigsignal/engine"
+    fi
+    command -v python3 >/dev/null 2>&1 || { _err "python3 is required for rigsignal assets install."; return 1; }
+    ASSETS_VERSION=$(python3 - "$ASSETS_AGENT" "$ASSETS_ENGINE" <<'PYEOF'
+import json, os, re, stat, subprocess, sys
+agent, engine = sys.argv[1:]
+required = ("install_assets.py", "asset_adapters.py", "_version.py", "channel")
+try:
+    for path in (agent, *(os.path.join(engine, name) for name in required)):
+        item = os.lstat(path)
+        if not stat.S_ISREG(item.st_mode) or stat.S_ISLNK(item.st_mode):
+            raise ValueError("not a regular file")
+    marker = open(os.path.join(engine, "channel"), "rb").read()
+    if marker not in (b"rigsignal-release\n", b"rigsignal-git\n"):
+        raise ValueError("invalid channel marker")
+    result = subprocess.run([agent, "--build-info-json"], stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, check=False)
+    if result.returncode != 0 or result.stderr:
+        raise ValueError("build information unavailable")
+    raw = result.stdout
+    if raw.endswith(b"\n"):
+        raw = raw[:-1]
+    if not raw or b"\n" in raw:
+        raise ValueError("extra build information output")
+    def reject_duplicate_keys(pairs):
+        value = {}
+        for key, item in pairs:
+            if key in value:
+                raise ValueError("duplicate JSON key")
+            value[key] = item
+        return value
+    value = json.loads(raw.decode("utf-8"), object_pairs_hook=reject_duplicate_keys)
+    if (not isinstance(value, dict) or set(value) != {"name", "version", "commit"}
+            or any(not isinstance(value[key], str) for key in value)
+            or value["name"] != "rigsignal-agent"
+            or re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?", value["version"]) is None):
+        raise ValueError("invalid build information")
+    print(value["version"])
+except (OSError, UnicodeError, ValueError, json.JSONDecodeError):
+    raise SystemExit(1)
+PYEOF
+) || { _err "engine_not_installed: matching launcher, agent, engine, and channel marker are required."; return 1; }
+    ASSETS_CHANNEL=$(cat "$ASSETS_ENGINE/channel")
+}
+
+assets_sidecar_digest() {
+    # Keep this deliberately standalone, matching install.sh's piped bootstrap
+    # verifier.  The shared corpus under packaging/tests fences the two copies.
+    python3 - "$1" "$2" <<'PYEOF'
+import pathlib, re, sys
+sidecar = pathlib.Path(sys.argv[1]).read_bytes()
+name = sys.argv[2].encode("ascii")
+match = re.fullmatch(rb"([0-9a-f]{64})(?:  | \*)" + re.escape(name) + rb"\n", sidecar)
+if match is None:
+    raise SystemExit(1)
+print(match.group(1).decode("ascii"))
+PYEOF
+}
+
+assets_restore_terminal() {
+    if [ "${ASSETS_STTY_DISABLED:-0}" = "1" ]; then
+        stty echo 2>/dev/null || true
+        ASSETS_STTY_DISABLED=0
+        printf '\n' >&2
+    fi
+}
+
+assets_rollback_kibana_transaction() {
+    [ "${ASSETS_KIBANA_TRANSACTION:-0}" = "1" ] || return 0
+    _assets_rollback_ok=1
+    if [ "${ASSETS_CONFIG_HAD:-0}" = "1" ]; then
+        rm -f "$CONFIG_FILE" 2>/dev/null || true
+        mv "${ASSETS_CONFIG_BACKUP:-}" "$CONFIG_FILE" 2>/dev/null || _assets_rollback_ok=0
+    else
+        rm -f "$CONFIG_FILE" 2>/dev/null || true
+    fi
+    [ "$_assets_rollback_ok" = "1" ] && ASSETS_KIBANA_TRANSACTION=0
+    return $((1 - _assets_rollback_ok))
+}
+
+assets_restore_steamos_readonly() {
+    [ "${STEAMOS_READONLY_DISABLED:-0}" = "1" ] || return 0
+    sudo steamos-readonly enable >/dev/null 2>&1 || sudo steamos-readonly enable >/dev/null 2>&1 || return 1
+    STEAMOS_READONLY_DISABLED=0
+}
+
+assets_cleanup() {
+    _assets_cleanup_status=${1:-$?}
+    # A signal received while cleanup is running must not tear down a second
+    # time and strand the one-shot credential or leave terminal echo disabled.
+    [ "${ASSETS_CLEANING:-0}" = "1" ] && return 0
+    ASSETS_CLEANING=1
+    assets_restore_terminal
+    # During an S4 system transaction, only restore the user copy once its
+    # root counterpart has been restored.  Retaining both new copies is safer
+    # than creating a new root config next to an old user config.
+    if [ "${SYSTEM_SCOPE_TRANSACTION_ACTIVE:-0}" = "1" ]; then
+        rollback_system_transaction || true
+        [ "${_system_ca_backup_ready:-1}" = "0" ] && [ "${_system_cfg_backup_ready:-1}" = "0" ] \
+            && SYSTEM_SCOPE_RESTORED=1
+        cleanup_system_transaction_temps
+    fi
+    if [ "${SYSTEM_SCOPE_RESTORED:-1}" = "1" ]; then
+        assets_rollback_kibana_transaction
+    fi
+    # synchronize_ebpf_system_config uses this same flag for S4.  Retain that
+    # restoration guarantee if an assets signal arrives during elevation.
+    assets_restore_steamos_readonly || _warn "SteamOS left writable — run steamos-readonly enable"
+    rm -f "${ASSETS_CREDENTIAL_FILE:-}" "${ASSETS_BUNDLE_SNAPSHOT:-}" "${ASSETS_SIDECAR_SNAPSHOT:-}" "${CA_SNAPSHOT:-}" "${_assets_new_config:-}" "${_sync_tmp:-}" 2>/dev/null || true
+    [ "${ASSETS_KIBANA_TRANSACTION:-0}" = "1" ] || rm -f "${ASSETS_CONFIG_BACKUP:-}" 2>/dev/null || true
+    [ -z "${ASSETS_TMP:-}" ] || rmdir "$ASSETS_TMP" 2>/dev/null || rm -rf "$ASSETS_TMP" 2>/dev/null || true
+    ASSETS_CLEANING=0
+    return "$_assets_cleanup_status"
+}
+
+assets_interrupted() {
+    _assets_signal_status=$?
+    _assets_signal=${1:-TERM}
+    # Keep this trap active until the first cleanup has completed.  Returning
+    # here lets the original cleanup finish if another signal arrives mid-rm.
+    [ "${ASSETS_CLEANING:-0}" = "1" ] && return 0
+    # wait is interrupted before the child has necessarily received HUP/INT.
+    # Forward the same signal, then wait for that real child status before any
+    # cleanup command (or a second trap) can overwrite it.
+    if [ -n "${ASSETS_ENGINE_PID:-}" ]; then
+        kill -"$_assets_signal" "$ASSETS_ENGINE_PID" 2>/dev/null || true
+        set +e
+        wait "$ASSETS_ENGINE_PID"
+        ASSETS_ENGINE_STATUS=$?
+        set -e
+        ASSETS_ENGINE_PID=""
+    else
+        [ -n "${ASSETS_ENGINE_STATUS+x}" ] || ASSETS_ENGINE_STATUS=$_assets_signal_status
+    fi
+    # Cleanup is deliberately non-reentrant.  Ignore a second delivery while
+    # it runs so that its trap status cannot replace the status just captured
+    # from the engine (and so it cannot interrupt credential/terminal cleanup).
+    trap '' HUP INT TERM
+    assets_cleanup "${ASSETS_ENGINE_STATUS:-$_assets_signal_status}"
+    trap - EXIT HUP INT TERM
+    exit "${ASSETS_ENGINE_STATUS:-$_assets_signal_status}"
+}
+
+assets_snapshot_ca() {
+    _assets_ca_source="$1"
+    [ -n "$_assets_ca_source" ] || return 1
+    snapshot_ca "$_assets_ca_source" "$ASSETS_CA_SHA256"
+}
+
+toml_get_section() {
+    _toml_section="$1" _toml_key="$2" _toml_file="$3"
+    awk -v section="$_toml_section" -v key="$_toml_key" '
+        $0 ~ "^\\[" section "\\][ \\t]*(#.*)?$" { inside=1; next }
+        /^\[[^]]+\]/ { inside=0 }
+        inside && $0 ~ "^[ \\t]*" key "[ \\t]*=" { print; exit }
+    ' "$_toml_file" 2>/dev/null | sed 's/^[^=]*=[[:space:]]*//' | sed 's/[[:space:]]*#.*$//' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr -d '"' | tr -d "'"
+}
+
+assets_load_persisted_inputs() {
+    [ -f "$CONFIG_FILE" ] || { ASSETS_PERSISTED_ENDPOINT= ASSETS_PERSISTED_CA= ASSETS_PERSISTED_KIBANA=; return 0; }
+    _assets_persisted=$(python3 - "$CONFIG_FILE" <<'PYEOF'
+import sys, tomllib
+try:
+    with open(sys.argv[1], "rb") as handle: value = tomllib.load(handle)
+    if not isinstance(value, dict): raise ValueError()
+    elastic = value.get("elasticsearch", {})
+    kibana = value.get("kibana", {})
+    if not isinstance(elastic, dict) or not isinstance(kibana, dict): raise ValueError()
+    values = (elastic.get("endpoint", ""), elastic.get("ca_cert", ""), kibana.get("endpoint", ""))
+    if any(not isinstance(item, str) or "\t" in item or "\n" in item for item in values): raise ValueError()
+    print("\t".join(values))
+except (OSError, ValueError, tomllib.TOMLDecodeError):
+    raise SystemExit(1)
+PYEOF
+) || return 1
+    _assets_tab='	'
+    IFS="$_assets_tab" read -r ASSETS_PERSISTED_ENDPOINT ASSETS_PERSISTED_CA ASSETS_PERSISTED_KIBANA <<EOF
+$_assets_persisted
+EOF
+}
+
+persist_kibana_endpoint() {
+    _assets_kibana="$1"
+    _assets_kibana_q=$(toml_quote "$_assets_kibana")
+    mkdir -p "$CONFIG_DIR" || return 1
+    chmod 700 "$CONFIG_DIR" || return 1
+    _assets_new_config=$(mktemp "$CONFIG_DIR/.rigsignal.toml.assets.XXXXXX") || return 1
+    chmod 600 "$_assets_new_config" || return 1
+    _assets_config_input=$CONFIG_FILE
+    [ -f "$_assets_config_input" ] || _assets_config_input=/dev/null
+    awk -v endpoint="$_assets_kibana_q" '
+        function flush() { if (inside && !seen) print "endpoint = \"" endpoint "\""; inside=0 }
+        /^\[kibana\][ \t]*(#.*)?$/ { flush(); inside=1; seen=0; found=1; print; next }
+        /^\[[^]]+\]/ { flush(); inside=0 }
+        { if (inside && $0 ~ /^[ \t]*endpoint[ \t]*=/) { print "endpoint = \"" endpoint "\""; seen=1; next }; print }
+        END { flush(); if (!found) { print ""; print "[kibana]"; print "endpoint = \"" endpoint "\"" } }
+    ' "$_assets_config_input" 2>/dev/null > "$_assets_new_config" || { rm -f "$_assets_new_config"; return 1; }
+    fsync_file_and_dir "$_assets_new_config" "$CONFIG_DIR" || { rm -f "$_assets_new_config"; return 1; }
+    ASSETS_CONFIG_HAD=0
+    if [ -e "$CONFIG_FILE" ]; then
+        ASSETS_CONFIG_HAD=1
+        ASSETS_CONFIG_BACKUP=$(mktemp "$CONFIG_DIR/.rigsignal.toml.assets.backup.XXXXXX") || return 1
+        rm -f "$ASSETS_CONFIG_BACKUP" || return 1
+        mv "$CONFIG_FILE" "$ASSETS_CONFIG_BACKUP" || return 1
+    fi
+    ASSETS_KIBANA_TRANSACTION=1
+    mv "$_assets_new_config" "$CONFIG_FILE" || { assets_rollback_kibana_transaction; return 1; }
+    fsync_file_and_dir "$CONFIG_FILE" "$CONFIG_DIR" || { assets_rollback_kibana_transaction; return 1; }
+    return 0
+}
+
+assets_commit_kibana_transaction() {
+    [ "${ASSETS_KIBANA_TRANSACTION:-0}" = "1" ] || return 0
+    rm -f "${ASSETS_CONFIG_BACKUP:-}" 2>/dev/null || return 1
+    ASSETS_KIBANA_TRANSACTION=0
+}
+
+materialize_admin_file() {
+    ASSETS_CREDENTIAL_FILE=$(mktemp "$ASSETS_TMP/admin.XXXXXX") || return 1
+    chmod 600 "$ASSETS_CREDENTIAL_FILE" || return 1
+    if [ -n "$ASSETS_ADMIN_SOURCE" ]; then
+        python3 - "$ASSETS_ADMIN_SOURCE" "$ASSETS_CREDENTIAL_FILE" <<'PYEOF'
+import json, os, stat, sys, tomllib
+source, destination = sys.argv[1:]
+flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+fd = os.open(source, flags)
+try:
+    st = os.fstat(fd)
+    if not stat.S_ISREG(st.st_mode): raise ValueError()
+    with os.fdopen(fd, "rb") as handle: fd = None; value = tomllib.load(handle)
+finally:
+    if fd is not None: os.close(fd)
+if (not isinstance(value, dict) or set(value) != {"elasticsearch"}
+        or not isinstance(value["elasticsearch"], dict)
+        or set(value["elasticsearch"]) != {"username", "password"}
+        or any(not isinstance(value["elasticsearch"][k], str) for k in ("username", "password"))):
+    raise SystemExit(1)
+data = ("[elasticsearch]\nusername = " + json.dumps(value["elasticsearch"]["username"])
+        + "\npassword = " + json.dumps(value["elasticsearch"]["password"]) + "\n").encode()
+fd = os.open(destination, os.O_WRONLY | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0))
+try:
+    st = os.fstat(fd)
+    if not stat.S_ISREG(st.st_mode) or stat.S_IMODE(st.st_mode) != 0o600: raise ValueError()
+    os.write(fd, data); os.fsync(fd)
+finally: os.close(fd)
+PYEOF
+        return $?
+    fi
+    printf "Administrator username: " >&2
+    IFS= read -r _assets_username || return 1
+    printf "Administrator password (input hidden): " >&2
+    # Set the intent first: a signal between stty and assignment must still
+    # restore echo in the EXIT/signal cleanup path.
+    ASSETS_STTY_DISABLED=1
+    if stty -echo 2>/dev/null; then
+        IFS= read -r _assets_password; _assets_read_status=$?
+        assets_restore_terminal
+        [ "$_assets_read_status" = 0 ] || return 1
+    else
+        ASSETS_STTY_DISABLED=0
+        IFS= read -r _assets_password || return 1
+    fi
+    # The Python program is an argument, never stdin: stdin is reserved for
+    # credentials only in this interactive path (the old heredoc/pipeline
+    # combination consumed the program as stdin and produced an empty file).
+    _assets_toml_program='import json, os, stat, sys, tomllib
+destination = sys.argv[1]
+username, password = os.fdopen(3, "r", encoding="utf-8").read().splitlines()
+data = ("[elasticsearch]\nusername = " + json.dumps(username) + "\npassword = " + json.dumps(password) + "\n").encode()
+if set(tomllib.loads(data.decode())) != {"elasticsearch"}: raise SystemExit(1)
+fd = os.open(destination, os.O_WRONLY | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0))
+try:
+ st=os.fstat(fd)
+ if not stat.S_ISREG(st.st_mode) or stat.S_IMODE(st.st_mode) != 0o600: raise SystemExit(1)
+ os.write(fd, data); os.fsync(fd)
+finally: os.close(fd)'
+    python3 -c "$_assets_toml_program" "$ASSETS_CREDENTIAL_FILE" 3<<EOF
+$_assets_username
+$_assets_password
+EOF
+}
+
+cmd_assets_install() {
+    # Never trace an administrator credential into the persistent debug log.
+    set +x 2>/dev/null || true
+    ASSETS_BUNDLE="" ASSETS_ENDPOINT="" ASSETS_CA_FILE="" ASSETS_CA_SHA256="" ASSETS_KIBANA=""
+    ASSETS_ADMIN_SOURCE="" ASSETS_REPAIR=0 ASSETS_UPGRADE=0 ASSETS_ALLOW_DOWNGRADE=0 ASSETS_OWNERSHIP=default ASSETS_NONINTERACTIVE=0
+    ASSETS_STTY_DISABLED=0 ASSETS_CLEANING=0 ASSETS_KIBANA_TRANSACTION=0 ASSETS_CONFIG_HAD=0
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --bundle|--endpoint|--ca-file|--ca-sha256|--kibana-endpoint|--admin-credentials-file|--ownership-profile)
+                [ "$#" -ge 2 ] && [ -n "$2" ] || _die "assets install: missing value for $1"
+                case "$1" in
+                    --bundle) [ -z "$ASSETS_BUNDLE" ] || _die "assets install: duplicate --bundle"; ASSETS_BUNDLE=$2 ;;
+                    --endpoint) [ -z "$ASSETS_ENDPOINT" ] || _die "assets install: duplicate --endpoint"; ASSETS_ENDPOINT=$2 ;;
+                    --ca-file) [ -z "$ASSETS_CA_FILE" ] || _die "assets install: duplicate --ca-file"; ASSETS_CA_FILE=$2 ;;
+                    --ca-sha256) [ -z "$ASSETS_CA_SHA256" ] || _die "assets install: duplicate --ca-sha256"; ASSETS_CA_SHA256=$2 ;;
+                    --kibana-endpoint) [ -z "$ASSETS_KIBANA" ] || _die "assets install: duplicate --kibana-endpoint"; ASSETS_KIBANA=$2 ;;
+                    --admin-credentials-file) [ -z "$ASSETS_ADMIN_SOURCE" ] || _die "assets install: duplicate --admin-credentials-file"; ASSETS_ADMIN_SOURCE=$2 ;;
+                    --ownership-profile) ASSETS_OWNERSHIP=$2 ;;
+                esac; shift 2 ;;
+            --repair) ASSETS_REPAIR=1; shift ;;
+            --upgrade) ASSETS_UPGRADE=1; shift ;;
+            --allow-downgrade) ASSETS_ALLOW_DOWNGRADE=1; shift ;;
+            --non-interactive|--noninteractive) ASSETS_NONINTERACTIVE=1; shift ;;
+            *) _die "Usage: rigsignal assets install [--bundle PATH] [--endpoint URL] [--ca-file PATH --ca-sha256 HEX] [--kibana-endpoint URL] [--admin-credentials-file PATH] [--non-interactive]" ;;
+        esac
+    done
+    [ -z "$ASSETS_CA_SHA256" ] || { case "$ASSETS_CA_SHA256" in *[!0123456789abcdefABCDEF]*|'') _die "assets install: --ca-sha256 must be 64 hexadecimal characters";; esac; [ "${#ASSETS_CA_SHA256}" -eq 64 ] || _die "assets install: --ca-sha256 must be 64 hexadecimal characters"; }
+    [ -z "$ASSETS_CA_SHA256" ] || [ -n "$ASSETS_CA_FILE" ] || _die "assets install: --ca-sha256 requires --ca-file"
+    [ "$ASSETS_OWNERSHIP" != fleet-coexist ] || _die "fleet_coexist_requires_full_flow: use the full packaged engine flow."
+    [ "$ASSETS_OWNERSHIP" = default ] || _die "assets install: invalid --ownership-profile"
+    for _assets_env in RIGSIGNAL_CONFIG ES_URL ES_CA_CERT RIGSIGNAL_ENDPOINT RIGSIGNAL_CA_FILE RIGSIGNAL_KIBANA_ENDPOINT KIBANA_ENDPOINT; do
+        _assets_env_value=$(printenv "$_assets_env" 2>/dev/null || true)
+        [ -z "$_assets_env_value" ] || _die "assets install: refusing ambiguous environment override $_assets_env"
+    done
+    resolve_assets_installation || exit 1
+    ASSETS_TMP=$(mktemp -d "${TMPDIR:-/tmp}/rigsignal-assets.XXXXXX") || _die "assets install: could not create private temporary directory"
+    chmod 700 "$ASSETS_TMP" || _die "assets install: could not secure temporary directory"
+    ASSETS_ENGINE_PID=""
+    trap assets_cleanup EXIT
+    trap 'assets_interrupted HUP' HUP
+    trap 'assets_interrupted INT' INT
+    trap 'assets_interrupted TERM' TERM
+    assets_load_persisted_inputs || _die "assets install: persisted launcher configuration is invalid"
+    [ -n "$ASSETS_ENDPOINT" ] || ASSETS_ENDPOINT=$ASSETS_PERSISTED_ENDPOINT
+    [ -n "$ASSETS_KIBANA" ] || ASSETS_KIBANA=$ASSETS_PERSISTED_KIBANA
+    [ -n "$ASSETS_CA_FILE" ] || ASSETS_CA_FILE=$ASSETS_PERSISTED_CA
+    if [ "$ASSETS_NONINTERACTIVE" = 1 ] && { [ -z "$ASSETS_ENDPOINT" ] || [ -z "$ASSETS_CA_FILE" ] || [ -z "$ASSETS_KIBANA" ] || [ -z "$ASSETS_ADMIN_SOURCE" ]; }; then
+        _die "assets install: noninteractive input missing (endpoint, CA, Kibana endpoint, or administrator credentials)"
+    fi
+    if [ -z "$ASSETS_ENDPOINT" ]; then printf "Elasticsearch endpoint: " >&2; IFS= read -r ASSETS_ENDPOINT || _die "assets install: endpoint is required"; fi
+    validate_endpoint "$ASSETS_ENDPOINT" || exit 1
+    if [ -z "$ASSETS_CA_FILE" ]; then printf "Elasticsearch CA file: " >&2; IFS= read -r ASSETS_CA_FILE || _die "assets install: CA file is required"; fi
+    assets_snapshot_ca "$ASSETS_CA_FILE" || _die "assets install: CA file is required and must be valid"
+    if [ -z "$ASSETS_KIBANA" ]; then printf "Kibana endpoint: " >&2; IFS= read -r ASSETS_KIBANA || _die "assets install: Kibana endpoint is required"; fi
+    if ! validate_url_origin "$ASSETS_KIBANA"; then
+        _die "assets install: Kibana endpoint must be an HTTPS origin with a valid host and optional port"
+    fi
+    case "$ASSETS_KIBANA" in
+        https://*) ;;
+        *) _die "assets install: Kibana endpoint must be an HTTPS origin with a valid host and optional port" ;;
+    esac
+    persist_kibana_endpoint "$ASSETS_KIBANA" || _die "assets install: could not atomically persist Kibana endpoint"
+    _assets_ebpf=$(find_ebpf_bin)
+    if [ -n "$_assets_ebpf" ] && ! synchronize_ebpf_system_config "$CA_SNAPSHOT"; then
+        if [ "${SYSTEM_SCOPE_RESTORED:-0}" = "1" ]; then
+            assets_rollback_kibana_transaction
+        else
+            _err "The eBPF system configuration could not be restored; retaining the matching user transaction."
+        fi
+        _die "assets install: eBPF system config synchronization failed"
+    fi
+    assets_commit_kibana_transaction || _die "assets install: could not finalize Kibana endpoint persistence"
+    materialize_admin_file || _die "assets install: administrator credentials must be exactly [elasticsearch] username/password TOML"
+    if [ -n "$ASSETS_BUNDLE" ]; then
+        [ -f "$ASSETS_BUNDLE" ] && [ -r "$ASSETS_BUNDLE" ] || _die "assets install: bundle is not readable"
+        _assets_name=$(basename "$ASSETS_BUNDLE")
+        cp "$ASSETS_BUNDLE" "$ASSETS_TMP/$_assets_name" || _die "assets install: could not snapshot bundle"
+        cp "$ASSETS_BUNDLE.sha256" "$ASSETS_TMP/$_assets_name.sha256" || _die "assets install: offline bundle requires $ASSETS_BUNDLE.sha256"
+    else
+        [ "$ASSETS_CHANNEL" != rigsignal-git ] || _die "assets install: rigsignal-git requires --bundle; no release lookup was attempted"
+        _assets_name="rigsignal-assets-${ASSETS_VERSION}.tar.gz"
+        _assets_base="https://github.com/MathewRJ/RigSignal/releases/download/v${ASSETS_VERSION}"
+        if command -v curl >/dev/null 2>&1; then
+            curl -fsSL "$_assets_base/$_assets_name" -o "$ASSETS_TMP/$_assets_name" && curl -fsSL "$_assets_base/$_assets_name.sha256" -o "$ASSETS_TMP/$_assets_name.sha256" || _die "assets install: matching release v${ASSETS_VERSION} is unavailable; use --bundle"
+        elif command -v wget >/dev/null 2>&1; then
+            wget -qO "$ASSETS_TMP/$_assets_name" "$_assets_base/$_assets_name" && wget -qO "$ASSETS_TMP/$_assets_name.sha256" "$_assets_base/$_assets_name.sha256" || _die "assets install: matching release v${ASSETS_VERSION} is unavailable; use --bundle"
+        else _die "assets install: curl or wget is required to download the release bundle"; fi
+    fi
+    ASSETS_BUNDLE_SNAPSHOT="$ASSETS_TMP/$_assets_name" ASSETS_SIDECAR_SNAPSHOT="$ASSETS_TMP/$_assets_name.sha256"
+    _assets_digest=$(assets_sidecar_digest "$ASSETS_SIDECAR_SNAPSHOT" "$_assets_name") || _die "assets install: invalid bundle checksum sidecar"
+    command -v sha256sum >/dev/null 2>&1 || _die "assets install: sha256sum is required"
+    _assets_actual=$(sha256sum "$ASSETS_BUNDLE_SNAPSHOT") || _die "assets install: could not hash bundle snapshot"
+    [ "${_assets_actual%% *}" = "$_assets_digest" ] || _die "assets install: bundle checksum verification failed"
+    # These values are shell variables, never reparsed input; invoke directly
+    # so paths and the one-shot credential remain out of logs and argv secrets.
+    if [ "$ASSETS_REPAIR" = 1 ]; then set -- --repair; else set --; fi
+    [ "$ASSETS_UPGRADE" = 0 ] || set -- "$@" --upgrade
+    [ "$ASSETS_ALLOW_DOWNGRADE" = 0 ] || set -- "$@" --allow-downgrade
+    # A background child lets the trap forward HUP/INT/TERM and wait for the
+    # child's real status.  In the ordinary path wait's status is captured
+    # immediately, while errexit is disabled, before cleanup can run.
+    set +e
+    python3 "$ASSETS_ENGINE/install_assets.py" --assets-only --profile user --ownership-profile default \
+        --bundle "$ASSETS_BUNDLE_SNAPSHOT" --endpoint "$ASSETS_ENDPOINT" --ca-file "$CA_SNAPSHOT" \
+        --kibana-endpoint "$ASSETS_KIBANA" --kibana-ca-file "$CA_SNAPSHOT" \
+        --admin-credentials-file "$ASSETS_CREDENTIAL_FILE" --agent-binary "$ASSETS_AGENT" "$@" &
+    ASSETS_ENGINE_PID=$!
+    wait "$ASSETS_ENGINE_PID"
+    ASSETS_ENGINE_STATUS=$?
+    ASSETS_ENGINE_PID=""
+    set -e
+    return "$ASSETS_ENGINE_STATUS"
 }
 
 # ── Subcommand: setup ──────────────────────────────────────────────────────────
@@ -624,12 +1067,24 @@ rollback_system_transaction() {
     [ "$_rollback_ok" = "1" ]
 }
 
+cleanup_system_transaction_temps() {
+    # mktemp under /etc is privileged, so the ordinary assets EXIT cleanup
+    # cannot remove these files directly.  This helper is shared by S4 and the
+    # assets signal path, including interruption after a root replacement.
+    if command -v sudo >/dev/null 2>&1; then
+        sudo rm -f "${_system_ca_tmp:-}" "${_system_cfg_tmp:-}" >/dev/null 2>&1 || true
+    fi
+    rm -f "${_sync_tmp:-}" 2>/dev/null || true
+    _system_ca_tmp="" _system_cfg_tmp=""
+}
+
 # This is the only setup path that owns /etc/rigsignal/rigsignal.toml and its
 # CA copy.  It is deliberately reusable by S5 without adding another dispatcher.
 synchronize_ebpf_system_config() {
     _sync_ca="$1"
     command -v sudo >/dev/null 2>&1 || return 1
     SYSTEM_SCOPE_RESTORED=0
+    SYSTEM_SCOPE_TRANSACTION_ACTIVE=0
     _sync_tmp=$(mktemp "$CONFIG_DIR/.rigsignal-system.XXXXXX") || return 1
     chmod 600 "$_sync_tmp" || return 1
     rewrite_system_ca_cert "$CONFIG_FILE" "$_sync_tmp" \
@@ -661,6 +1116,9 @@ synchronize_ebpf_system_config() {
     _system_cfg_backup_ready=0
     _system_ca_replaced=0
     _system_cfg_replaced=0
+    _system_ca_tmp=""
+    _system_cfg_tmp=""
+    SYSTEM_SCOPE_TRANSACTION_ACTIVE=1
     [ "$_sync_ok" = "1" ] && sudo test -e "$_system_ca" && _system_ca_had=1
     [ "$_sync_ok" = "1" ] && sudo test -e "$_system_cfg" && _system_cfg_had=1
     if [ "$_sync_ok" = "1" ]; then
@@ -736,9 +1194,12 @@ PYEOF
         [ "$_system_ca_backup_ready" = "0" ] && [ "$_system_cfg_backup_ready" = "0" ] \
             && SYSTEM_SCOPE_RESTORED=1
     fi
-    rm -f "$_sync_tmp"
+    cleanup_system_transaction_temps
     if [ "$_sync_ok" = "1" ]; then
         sudo rm -f "${_system_ca}.bak" "${_system_cfg}.bak" >/dev/null 2>&1 || true
+        SYSTEM_SCOPE_TRANSACTION_ACTIVE=0
+    elif [ "${SYSTEM_SCOPE_RESTORED:-0}" = "1" ]; then
+        SYSTEM_SCOPE_TRANSACTION_ACTIVE=0
     fi
     [ "$_sync_ok" = "1" ]
 }
@@ -933,6 +1394,7 @@ cmd_setup() {
     if [ -z "$api_key" ]; then
         _die "API key cannot be empty."
     fi
+    validate_api_key_shape "$api_key" || exit 1
 
     _ca_source=$SETUP_CA_FILE
     [ -n "$_ca_source" ] || _ca_source=${existing_ca:-}
@@ -1217,6 +1679,8 @@ Usage:
   rigsignal stop               Stop both services gracefully
   rigsignal status             Show service status and last session info
   rigsignal run <cmd> [args]   Start services, run command, stop on exit
+  rigsignal assets install [options]
+                              Install a verified release asset bundle as user
 
 Steam integration — set in game Properties → Launch Options:
   rigsignal run %command%
@@ -1226,6 +1690,7 @@ Examples:
   rigsignal start
   rigsignal status
   rigsignal run ./mygame --fullscreen
+  rigsignal assets install --admin-credentials-file ./elastic-admin.toml
 EOF
 }
 
@@ -1267,6 +1732,11 @@ case "$subcmd" in
         esac
         ;;
     run)    cmd_run "$@" ;;
+    assets)
+        [ "${1:-}" = install ] || { _err "Usage: rigsignal assets install [options]"; exit 1; }
+        shift
+        cmd_assets_install "$@"
+        ;;
     "")     usage; exit 0 ;;
     *)      _err "Unknown subcommand: $subcmd"; echo; usage; exit 1 ;;
 esac

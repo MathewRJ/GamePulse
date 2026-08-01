@@ -570,6 +570,10 @@ make_release_fixture() {
     cp "$LAUNCHER" "$package_dir/rigsignal"
     cp "$UNINSTALLER" "$package_dir/rigsignal-uninstall"
     printf '[Unit]\nDescription=fixture\n' >"$package_dir/rigsignal-agent.service"
+    mkdir -p "$package_dir/engine"
+    printf '#!/usr/bin/env python3\n' >"$package_dir/engine/install_assets.py"
+    printf '# fixture adapter\n' >"$package_dir/engine/asset_adapters.py"
+    printf 'ENGINE_VERSION = "%s"\nSOURCE_COMMIT = "fixture"\n' "$version" >"$package_dir/engine/_version.py"
     chmod +x "$package_dir/rigsignal-agent" "$package_dir/rigsignal" "$package_dir/rigsignal-uninstall"
     (cd "$release_dir" && tar -czf "$tarball" "$(basename "$package_dir")")
     if [[ "$checksum_mode" == "valid" ]]; then
@@ -634,7 +638,11 @@ test_x86_64_architecture_installs_fixture() {
     printf '%s *%s\n' "$digest" "$tarball" >"$release/$tarball.sha256"
     HOME="$home" DESTDIR="$stage" RIGSIGNAL_INSTALL_LOCAL_DIR="$release" PATH="$shim:$PATH" \
         "$INSTALLER" --version 1.2.5 >"$TEST_TMP/x86_64.out" 2>&1 \
-        && [[ -x "$stage$home/.local/bin/rigsignal" ]]
+        && [[ -x "$stage$home/.local/bin/rigsignal" ]] \
+        && [[ -x "$stage$home/.local/lib/rigsignal/engine/install_assets.py" ]] \
+        && [[ -f "$stage$home/.local/lib/rigsignal/engine/asset_adapters.py" ]] \
+        && [[ -f "$stage$home/.local/lib/rigsignal/engine/_version.py" ]] \
+        && grep -qx 'rigsignal-release' "$stage$home/.local/lib/rigsignal/engine/channel"
 }
 
 test_python_preflight_rejects_missing_or_broken_python() {
@@ -715,6 +723,29 @@ test_sidecar_rejects_noncanonical_records() {
         grep -qi 'checksum' "$TEST_TMP/malformed-sidecar-$mode.out" || return 1
         [[ ! -e "$stage$home/.local/bin/rigsignal" ]] || return 1
     done
+
+    # Execute the same corpus through install.sh's embedded verifier.  Valid
+    # grammar proceeds to the intentionally wrong digest; malformed records
+    # stop at the sidecar verifier.  This is a behavioral fence, not a source
+    # text/third-regex comparison.
+    local corpus="$REPO_ROOT/packaging/tests/sidecar-verifier-corpus.tsv"
+    local name encoded expected output
+    while IFS=$'\t' read -r name encoded expected; do
+        [[ -z "$name" || "$name" == \#* ]] && continue
+        make_release_fixture "$release" 1.2.6 valid || return 1
+        python3 -c 'import base64, pathlib, sys; data = base64.b64decode(sys.argv[1]); pathlib.Path(sys.argv[2]).write_bytes(data.replace(b"bundle.tar.gz", sys.argv[3].encode("ascii")))' \
+            "$encoded" "$release/$tarball.sha256" "$tarball" || return 1
+        stage="$TEST_TMP/stage-sidecar-corpus-$name"
+        output="$TEST_TMP/sidecar-corpus-$name.out"
+        if HOME="$home" DESTDIR="$stage" RIGSIGNAL_INSTALL_LOCAL_DIR="$release" PATH="$shim:$PATH" "$INSTALLER" --version 1.2.6 >"$output" 2>&1; then
+            return 1
+        fi
+        if [[ "$expected" = 1 ]]; then
+            grep -q 'Checksum verification failed' "$output" || return 1
+        else
+            grep -q 'Checksum sidecar must contain exactly' "$output" || return 1
+        fi
+    done <"$corpus"
 }
 
 test_package_dependencies_declare_python3() {
@@ -723,6 +754,58 @@ test_package_dependencies_declare_python3() {
     grep -qx "depends=('python3')" "$REPO_ROOT/packaging/PKGBUILD" || return 1
     grep -qx "depends=('python3')" "$REPO_ROOT/packaging/aur/PKGBUILD" || return 1
     grep -qx "depends=('python3')" "$REPO_ROOT/.github/packaging/PKGBUILD"
+}
+
+test_package_paths_write_channel_markers() {
+    # Source each real PKGBUILD and invoke package() against a small staged
+    # payload. This verifies the produced package path, rather than merely
+    # checking PKGBUILD text, has the marker required by assets resolution.
+    local fixture="$TEST_TMP/channel-package-fixture"
+    local spec path marker stage
+    mkdir -p "$fixture/target/release" "$fixture/ebpf/target/release" \
+        "$fixture/ebpf/target/bpfel-unknown-none/release" "$fixture/dist/engine" \
+        "$fixture/packaging/systemd" "$fixture/packaging/config" "$fixture/profiles" "$fixture/packaging"
+    for file in target/release/rigsignal-agent ebpf/target/release/rigsignal-ebpf ebpf/target/bpfel-unknown-none/release/rigsignal-ebpf-probes; do
+        install -Dm755 /bin/true "$fixture/$file" || return 1
+    done
+    for file in install_assets.py asset_adapters.py _version.py; do
+        printf 'fixture\n' >"$fixture/dist/engine/$file" || return 1
+    done
+    install -Dm755 "$REPO_ROOT/packaging/rigsignal-launcher.sh" "$fixture/packaging/rigsignal-launcher.sh" || return 1
+    for file in rigsignal-agent.service rigsignal-ebpf.service; do
+        install -Dm644 "$REPO_ROOT/packaging/systemd/$file" "$fixture/packaging/systemd/$file" || return 1
+    done
+    install -Dm644 "$REPO_ROOT/packaging/config/rigsignal.toml.example" "$fixture/packaging/config/rigsignal.toml.example" || return 1
+    printf 'fixture\n' >"$fixture/profiles/fixture.toml"
+    printf 'fixture license\n' >"$fixture/LICENSE"
+    for spec in "packaging/PKGBUILD:rigsignal-release" "packaging/aur/PKGBUILD:rigsignal-git" ".github/packaging/PKGBUILD:rigsignal-release"; do
+        path=${spec%%:*}; marker=${spec#*:}; stage="$TEST_TMP/channel-stage-$(basename "$(dirname "$path")")"
+        mkdir -p "$stage"
+        if [[ "$path" == .github/* ]]; then
+            ( pkgdir="$stage"; REPOROOT="$fixture"; source "$REPO_ROOT/$path"; package ) || return 1
+        elif [[ "$path" == packaging/aur/* ]]; then
+            mkdir -p "$TEST_TMP/channel-aur-src"
+            ln -sfn "$fixture" "$TEST_TMP/channel-aur-src/rigsignal-git"
+            ( pkgdir="$stage"; srcdir="$TEST_TMP/channel-aur-src"; source "$REPO_ROOT/$path"; package ) || return 1
+        else
+            ( pkgdir="$stage"; startdir="$fixture/packaging"; source "$REPO_ROOT/$path"; _repodir="$fixture"; package ) || return 1
+        fi
+        grep -qx "$marker" "$stage/usr/lib/rigsignal/engine/channel" || return 1
+    done
+    # cargo-deb and cargo-generate-rpm consume these parsed asset descriptors;
+    # assert both real package paths carry the same concrete release marker.
+    python3 - "$REPO_ROOT/src/Cargo.toml" "$REPO_ROOT/packaging/engine-channel-release" <<'PY'
+import pathlib, sys, tomllib
+metadata = tomllib.loads(pathlib.Path(sys.argv[1]).read_text())['package']['metadata']
+deb = metadata['deb']['assets']
+rpm = metadata['generate-rpm']['assets']
+if not any(item[0] == '../packaging/engine-channel-release' and item[1] == 'usr/lib/rigsignal/engine/channel' for item in deb):
+    raise SystemExit(1)
+if not any(item['source'] == '../packaging/engine-channel-release' and item['dest'] == '/usr/lib/rigsignal/engine/channel' for item in rpm):
+    raise SystemExit(1)
+if pathlib.Path(sys.argv[2]).read_bytes() != b'rigsignal-release\n':
+    raise SystemExit(1)
+PY
 }
 
 test_uninstall_removes_staged_install() {
@@ -738,13 +821,17 @@ test_uninstall_removes_staged_install() {
     [[ ! -e "$stage$home/.local/bin/rigsignal-agent" ]] \
         && [[ ! -e "$stage$home/.local/bin/rigsignal" ]] \
         && [[ ! -e "$stage$home/.local/bin/rigsignal-uninstall" ]] \
-        && [[ ! -e "$stage$home/.config/systemd/user/rigsignal-agent.service" ]] || return 1
+        && [[ ! -e "$stage$home/.config/systemd/user/rigsignal-agent.service" ]] \
+        && [[ ! -e "$stage$home/.local/lib/rigsignal/engine/install_assets.py" ]] \
+        && [[ ! -e "$stage$home/.local/lib/rigsignal/engine/asset_adapters.py" ]] \
+        && [[ ! -e "$stage$home/.local/lib/rigsignal/engine/_version.py" ]] || return 1
     HOME="$home" DESTDIR="$stage" RIGSIGNAL_INSTALL_LOCAL_DIR="$release" \
         "$INSTALLER" --version 1.2.4 >"$TEST_TMP/reinstall.out" 2>&1 || return 1
     [[ -e "$stage$home/.local/bin/rigsignal-agent" ]] \
         && [[ -e "$stage$home/.local/bin/rigsignal" ]] \
         && [[ -e "$stage$home/.local/bin/rigsignal-uninstall" ]] \
-        && [[ -e "$stage$home/.config/systemd/user/rigsignal-agent.service" ]]
+        && [[ -e "$stage$home/.config/systemd/user/rigsignal-agent.service" ]] \
+        && [[ -e "$stage$home/.local/lib/rigsignal/engine/install_assets.py" ]]
 }
 
 test_setup_preserves_collection_on_reauth() {
@@ -835,6 +922,14 @@ test_package_user_unit_uses_user_config_and_detects_packaged_ebpf() {
     grep -q 'usr/lib/systemd/user/rigsignal-agent.service' "$REPO_ROOT/.github/packaging/PKGBUILD" || return 1
     cmp -s "$REPO_ROOT/packaging/rigsignal.install" "$REPO_ROOT/packaging/aur/rigsignal.install" || return 1
     cmp -s "$REPO_ROOT/packaging/rigsignal.install" "$REPO_ROOT/.github/packaging/rigsignal.install" || return 1
+    for pkgbuild in "$REPO_ROOT/packaging/PKGBUILD" "$REPO_ROOT/packaging/aur/PKGBUILD"; do
+        grep -q -- '--engine-output' "$pkgbuild" || return 1
+        grep -q 'usr/lib/rigsignal/engine/install_assets.py' "$pkgbuild" || return 1
+        grep -q 'usr/lib/rigsignal/engine/asset_adapters.py' "$pkgbuild" || return 1
+        grep -q 'usr/lib/rigsignal/engine/_version.py' "$pkgbuild" || return 1
+    done
+    grep -Fq "printf 'rigsignal-release\\n'" "$REPO_ROOT/packaging/PKGBUILD" || return 1
+    grep -Fq "printf 'rigsignal-git\\n'" "$REPO_ROOT/packaging/aur/PKGBUILD" || return 1
 
     # Exercise the Arch upgrade hook under a staged /etc: it removes known
     # pristine examples but leaves an operator-modified pacsave untouched.
@@ -1026,6 +1121,7 @@ run_test x86_64_architecture_installs_fixture test_x86_64_architecture_installs_
 run_test python_preflight_rejects_missing_or_broken_python test_python_preflight_rejects_missing_or_broken_python
 run_test sidecar_rejects_noncanonical_records test_sidecar_rejects_noncanonical_records
 run_test package_dependencies_declare_python3 test_package_dependencies_declare_python3
+run_test package_paths_write_channel_markers test_package_paths_write_channel_markers
 run_test uninstall_removes_staged_install test_uninstall_removes_staged_install
 run_test package_user_unit_uses_user_config_and_detects_packaged_ebpf test_package_user_unit_uses_user_config_and_detects_packaged_ebpf
 run_test elevated_install_failure_rolls_back_and_restores_readonly test_elevated_install_failure_rolls_back_and_restores_readonly
