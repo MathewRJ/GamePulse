@@ -347,7 +347,7 @@ jobs:
         uses: cargo-bins/cargo-binstall@0b24824336e2b3800b0f89d9e08b2c08bfa3dcdd # v1.17.9
 
       - name: Install cargo-generate-rpm
-        run: cargo binstall cargo-generate-rpm --no-confirm
+        run: cargo binstall cargo-generate-rpm@0.21.0 --no-confirm  # pinned: v0.21.0 parses `requires = { pkg = "*" }`
 
       - name: Build .rpm
         run: cd src && cargo generate-rpm

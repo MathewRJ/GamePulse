@@ -119,7 +119,7 @@ eula         = false
 [package.metadata.generate-rpm]
 license = "Apache-2.0"
 summary = "RigSignal gaming performance telemetry agent"
-requires = ["python3"]
+requires = { python3 = "*" }
 assets = [
     { source = "../target/release/rigsignal-agent", dest = "/usr/bin/rigsignal-agent", mode = "755" },
     { source = "../dist/engine/install_assets.py", dest = "/usr/lib/rigsignal/engine/install_assets.py", mode = "755" },
