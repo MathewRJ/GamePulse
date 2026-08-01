@@ -24,6 +24,11 @@ optdepends=('mangohud: frame timing data collection')
 install=rigsignal.install
 source=()
 sha256sums=()
+# Suppress makepkg's auto-generated -debug package: the release contract is the
+# seven payloads, and a debug-symbols package is not one of them. Without this,
+# the runner's default OPTIONS=(... debug) emits rigsignal-debug-*.pkg.tar.zst
+# alongside the main package, breaking the exact-payload assertion.
+options=('!debug')
 
 # Resolve absolute path at parse time so the fakeroot package() call can find files.
 _reporoot="$(realpath "${REPOROOT:-../..}")"
