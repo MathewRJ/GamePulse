@@ -1,0 +1,622 @@
+#!/usr/bin/env bash
+# Automated S8 release-verification window.  It never publishes a release.
+# The fixture provider is deliberately file-only; it does not invoke gh, curl,
+# wget, ssh, or the installed RigSignal launcher.
+set -Eeuo pipefail
+
+mode=''
+owner_go=0
+repo=''
+tag=''
+evidence_dir=''
+fixture_dir=''
+a4_evidence=''
+a4_evidence_sha256=''
+owner_snapshot=''
+owner_snapshot_sha256=''
+launcher_path=''
+agent_path=''
+engine_path=''
+native_agent_pid=''
+fixture_installer_rc=0
+fixture_fault=''
+fixture_ledger_case=''
+attestation_bundle_dir=''
+trusted_root=''
+bound_surface_dir=''
+bound_runtime_dir=''
+
+usage() {
+    printf '%s\n' 'usage: verify-release-window --mode fixture|live --repo OWNER/REPO --tag vX.Y.Z --evidence-dir DIR --a4-evidence FILE --a4-evidence-sha256 HEX --owner-snapshot FILE --owner-snapshot-sha256 HEX [options]' >&2
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --mode) mode="${2:?--mode requires a value}"; shift 2 ;;
+        --i-have-owner-go) owner_go=1; shift ;;
+        --repo) repo="${2:?--repo requires a value}"; shift 2 ;;
+        --tag) tag="${2:?--tag requires a value}"; shift 2 ;;
+        --evidence-dir) evidence_dir="${2:?--evidence-dir requires a value}"; shift 2 ;;
+        --fixture-dir) fixture_dir="${2:?--fixture-dir requires a value}"; shift 2 ;;
+        --a4-evidence) a4_evidence="${2:?--a4-evidence requires a value}"; shift 2 ;;
+        --a4-evidence-sha256) a4_evidence_sha256="${2:?--a4-evidence-sha256 requires a value}"; shift 2 ;;
+        --owner-snapshot) owner_snapshot="${2:?--owner-snapshot requires a value}"; shift 2 ;;
+        --owner-snapshot-sha256) owner_snapshot_sha256="${2:?--owner-snapshot-sha256 requires a value}"; shift 2 ;;
+        --launcher-path) launcher_path="${2:?--launcher-path requires a value}"; shift 2 ;;
+        --agent-path) agent_path="${2:?--agent-path requires a value}"; shift 2 ;;
+        --engine-path) engine_path="${2:?--engine-path requires a value}"; shift 2 ;;
+        --native-agent-pid) native_agent_pid="${2:?--native-agent-pid requires a value}"; shift 2 ;;
+        --fixture-installer-rc) fixture_installer_rc="${2:?--fixture-installer-rc requires a value}"; shift 2 ;;
+        --fixture-fault) fixture_fault="${2:?--fixture-fault requires a value}"; shift 2 ;;
+        --fixture-ledger-case) fixture_ledger_case="${2:?--fixture-ledger-case requires a value}"; shift 2 ;;
+        --attestation-bundle-dir) attestation_bundle_dir="${2:?--attestation-bundle-dir requires a value}"; shift 2 ;;
+        --trusted-root) trusted_root="${2:?--trusted-root requires a value}"; shift 2 ;;
+        # Deliberate CLI exception: --help does not create a ledger.  Every
+        # invocation that enters the verification window is ledger-gated.
+        --help) usage; exit 0 ;;
+        *) printf 'unknown argument: %s\n' "$1" >&2; usage; exit 2 ;;
+    esac
+done
+
+: "${mode:?--mode is required; there is no default}"
+case "$mode" in fixture|live) ;; *) printf 'invalid --mode: %s\n' "$mode" >&2; exit 2 ;; esac
+: "${repo:?--repo is required}"
+: "${tag:?--tag is required}"
+: "${evidence_dir:?--evidence-dir is required}"
+: "${a4_evidence:?--a4-evidence is required}"
+: "${a4_evidence_sha256:?--a4-evidence-sha256 is required}"
+: "${owner_snapshot:?--owner-snapshot is required}"
+: "${owner_snapshot_sha256:?--owner-snapshot-sha256 is required}"
+: "${launcher_path:?--launcher-path is required}"
+: "${agent_path:?--agent-path is required}"
+: "${engine_path:?--engine-path is required}"
+
+mkdir -p "$evidence_dir"
+chmod 700 "$evidence_dir"
+readonly ledger="$evidence_dir/check-ledger.tsv"
+: >"$ledger"
+window_complete=0
+
+if [ "$mode" = fixture ]; then
+    : "${fixture_dir:?--fixture-dir is required in fixture mode}"
+    [ "$owner_go" -eq 0 ] || { printf 'fixture mode rejects owner GO\n' >&2; exit 2; }
+    [ -z "${GH_TOKEN:-}" ] || { printf 'fixture mode rejects GH_TOKEN\n' >&2; exit 2; }
+    [ -z "${RIGSIGNAL_WINDOW_LIVE_INPUT:-}" ] || { printf 'fixture mode rejects live-only input\n' >&2; exit 2; }
+    [ -z "$attestation_bundle_dir$trusted_root" ] || { printf 'fixture mode rejects live attestation inputs\n' >&2; exit 2; }
+else
+    [ "$owner_go" -eq 1 ] || { printf 'live mode requires --i-have-owner-go before provider or installer dispatch\n' >&2; exit 2; }
+    : "${GH_TOKEN:?GH_TOKEN is required in live mode}"
+    [ -z "$fixture_dir" ] || { printf 'live mode rejects --fixture-dir\n' >&2; exit 2; }
+    if [ -n "$attestation_bundle_dir$trusted_root" ] && { [ -z "$attestation_bundle_dir" ] || [ -z "$trusted_root" ]; }; then
+        printf '%s\n' 'live offline attestation requires both --attestation-bundle-dir and --trusted-root' >&2
+        exit 2
+    fi
+fi
+
+declare -a mandatory
+if [ "$mode" = fixture ]; then
+    mandatory=(mode-gate inputs derive release-shape download manifest hash provenance-deferred a4 drift-pre owner-snapshot launch-surface proc-binding install drift-post)
+else
+    mandatory=(mode-gate inputs derive release-shape download manifest hash provenance a4 drift-pre owner-snapshot launch-surface proc-binding install drift-post)
+fi
+
+ledger_line() { printf '%s\t%s\n' "$1" "$2" >>"$ledger"; }
+start_check() { ledger_line "$1" started; }
+pass_check() { ledger_line "$1" passed; }
+fail_check() { ledger_line "$1" failed; }
+
+closeout() {
+    local rc=$? id
+    # The terminal row makes unsuccessful windows auditable too.  It is
+    # intentionally emitted by the EXIT trap so no abort path can omit it.
+    if [ "$rc" -eq 0 ] && [ "$window_complete" -eq 1 ]; then
+        ledger_line terminal passed
+    else
+        ledger_line terminal failed
+    fi
+    # The ledger is an executable assertion, not a report assembled from paths run.
+    if ! python3 - "$ledger" "$rc" "$window_complete" "${mandatory[@]}" <<'PY'; then
+import sys
+path, exit_status, complete, required = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4:]
+rows = []
+try:
+    with open(path, encoding='utf-8') as stream:
+        for raw in stream:
+            row = raw.rstrip('\n').split('\t')
+            if len(row) != 2 or not row[0] or row[1] not in {'started', 'passed', 'failed'}:
+                raise ValueError('malformed ledger')
+            rows.append(row)
+except (OSError, ValueError) as error:
+    print('ledger closeout:', error, file=sys.stderr)
+    raise SystemExit(1)
+known = set(required) | {'terminal'}
+seen = {name: [] for name in required}
+for name, state in rows:
+    if name not in known:
+        print('ledger closeout: unknown ID ' + name, file=sys.stderr); raise SystemExit(1)
+    if name == 'terminal':
+        continue
+    seen[name].append(state)
+for name, states in seen.items():
+    if states != ['started', 'passed']:
+        print('ledger closeout: ' + name + ' is not exactly started,passed', file=sys.stderr)
+        raise SystemExit(1)
+terminal = [state for name, state in rows if name == 'terminal']
+expected_terminal = ['passed'] if exit_status == 0 and complete == 1 else ['failed']
+if terminal != expected_terminal:
+    print('ledger closeout: terminal is not ' + expected_terminal[0], file=sys.stderr)
+    raise SystemExit(1)
+PY
+        rc=1
+    fi
+    if [ "$rc" -eq 0 ] && [ "$window_complete" -ne 1 ]; then
+        printf '%s\n' 'ledger closeout: early success before window completion' >&2
+        rc=1
+    fi
+    if [ "$rc" -eq 0 ]; then return 0; fi
+    return "$rc"
+}
+trap closeout EXIT
+
+check() {
+    local id=$1
+    shift
+    start_check "$id"
+    if "$@"; then
+        pass_check "$id"
+        return 0
+    fi
+    fail_check "$id"
+    return 1
+}
+
+must_check() {
+    if check "$@"; then
+        return 0
+    fi
+    exit 1
+}
+
+# Do not short-circuit independent rejectors.  In particular, an altered byte
+# must be recorded by both the release hash oracle and the provenance oracle.
+independent_failure=0
+independent_check() {
+    if check "$@"; then
+        return 0
+    fi
+    independent_failure=1
+    return 0
+}
+
+sha256() { sha256sum "$1" | awk '{print $1}'; }
+
+fixture_fault_apply() {
+    case "$fixture_fault" in
+        '') ;;
+        hash-mismatch) printf x >>"$download_dir/rigsignal_0.3.1-1_amd64.deb" ;;
+        bad-sidecar) printf '0%.0s' {1..64} >"$download_dir/rigsignal_0.3.1-1_amd64.deb.sha256"; printf '  wrong-name\n' >>"$download_dir/rigsignal_0.3.1-1_amd64.deb.sha256" ;;
+        manifest-mismatch) python3 - "$download_dir/release-assets.json" <<'PY'
+import json, sys
+p=sys.argv[1]; x=json.load(open(p)); x['assets'][0]['sha256']='0'*64; open(p,'w').write(json.dumps(x))
+PY
+            ;;
+        manifest-schema) python3 - "$download_dir/release-assets.json" <<'PY'
+import json, sys
+p=sys.argv[1]; x=json.load(open(p)); x['schema']=2; open(p,'w').write(json.dumps(x))
+PY
+            ;;
+        missing-api-digest) python3 - "$assets_file" <<'PY'
+import json, sys
+p=sys.argv[1]; x=json.load(open(p)); x[0].pop('digest'); open(p,'w').write(json.dumps(x))
+PY
+            ;;
+        api-size-mismatch) python3 - "$assets_file" <<'PY'
+import json, sys
+p=sys.argv[1]; x=json.load(open(p)); x[0]['size']+=1; open(p,'w').write(json.dumps(x))
+PY
+            ;;
+        duplicate-api) python3 - "$assets_file" <<'PY'
+import json, sys
+p=sys.argv[1]; x=json.load(open(p)); x.append(dict(x[0])); open(p,'w').write(json.dumps(x))
+PY
+            ;;
+        duplicate-manifest) python3 - "$download_dir/release-assets.json" <<'PY'
+import json, sys
+p=sys.argv[1]; x=json.load(open(p)); x['assets'].append(dict(x['assets'][0])); open(p,'w').write(json.dumps(x))
+PY
+            ;;
+        manifest-tag-source) python3 - "$download_dir/release-assets.json" <<'PY'
+import json, sys
+p=sys.argv[1]; x=json.load(open(p)); x['tag']='v9.9.9'; x['source_commit']='f'*40; open(p,'w').write(json.dumps(x))
+PY
+            ;;
+        post-drift|unsafe-api-names) ;;
+        *) printf 'unknown fixture fault: %s\n' "$fixture_fault" >&2; return 1 ;;
+    esac
+}
+
+fetch_release() {
+    local phase=$1
+    if [ "$mode" = fixture ]; then
+        if cp "$fixture_dir/release-view.json" "$evidence_dir/release-view-$phase.json"; then :; else return 1; fi
+        if cp "$fixture_dir/release-assets.json" "$evidence_dir/release-assets-$phase.json"; then :; else return 1; fi
+        if cp "$fixture_dir/tag-commit" "$evidence_dir/tag-commit-$phase"; then :; else return 1; fi
+        if [ "$phase" = post ] && [ "$fixture_fault" = post-drift ]; then
+            python3 - "$evidence_dir/release-assets-$phase.json" <<'PY'
+import json, sys
+p=sys.argv[1]; x=json.load(open(p)); x[0]['size'] += 1; open(p,'w').write(json.dumps(x))
+PY
+        fi
+        if [ "$phase" = pre ] && [ "$fixture_fault" = unsafe-api-names ]; then
+            python3 - "$evidence_dir/release-assets-$phase.json" <<'PY'
+import json, sys
+p=sys.argv[1]; x=json.load(open(p)); x[0]['name']='../evil'; x[1]['name']='foo/bar'; open(p,'w').write(json.dumps(x))
+PY
+        fi
+    else
+        if gh release view "$tag" -R "$repo" --json tagName,isDraft,databaseId,isImmutable >"$evidence_dir/release-view-$phase.json"; then :; else return 1; fi
+        if gh api -H 'Accept: application/vnd.github+json' "repos/$repo/releases/tags/$tag" >"$evidence_dir/release-api-$phase.json"; then :; else return 1; fi
+        local release_id
+        if release_id="$(jq -er '.id' "$evidence_dir/release-api-$phase.json")"; then :; else return 1; fi
+        if gh api --paginate -H 'Accept: application/vnd.github+json' "repos/$repo/releases/$release_id/assets?per_page=100" | jq -s 'add' >"$evidence_dir/release-assets-$phase.json"; then :; else return 1; fi
+        if git ls-remote "https://github.com/$repo.git" "refs/tags/$tag^{}" | awk 'NR==1 {print $1}' >"$evidence_dir/tag-commit-$phase"; then :; else return 1; fi
+    fi
+}
+
+validate_release_shape() {
+    if jq -e --arg tag "$tag" '.tagName == $tag and .isDraft == true and (.databaseId|type == "number")' "$evidence_dir/release-view-pre.json" >/dev/null; then :; else return 1; fi
+    if jq -e 'type == "array" and length == 15 and all(.[]; (.id|type == "number") and (.name|type == "string") and (.size|type == "number") and (.digest|type == "string" and test("^sha256:[0-9a-f]{64}$")) and .state == "uploaded")' "$assets_file" >/dev/null; then :; else return 1; fi
+    if python3 - "$assets_file" "${expected_assets[@]}" <<'PY'
+import json, sys
+items=json.load(open(sys.argv[1])); names=[item['name'] for item in items]; expected=sys.argv[2:]
+if len(expected) != 15 or len(expected) != len(set(expected)):
+    raise SystemExit('invalid expected release asset contract')
+if len(names) != len(set(names)): raise SystemExit('duplicate API asset name')
+for name in names:
+    if (name.startswith('.') or '..' in name or '/' in name or '\\' in name
+            or any(ord(char) < 32 or ord(char) == 127 or char.isspace() for char in name)):
+        raise SystemExit('unsafe API asset name')
+if set(names) != set(expected): raise SystemExit('undeclared or missing API release asset')
+PY
+    then :; else return 1; fi
+}
+
+download_assets() {
+    mkdir -p "$download_dir"
+    if [ "$mode" = fixture ]; then
+        local name
+        for name in "${expected_assets[@]}"; do
+            cp "$fixture_dir/assets/$name" "$download_dir/$name"
+        done
+    else
+        local name asset_id
+        for name in "${expected_assets[@]}"; do
+            if asset_id="$(jq -er --arg name "$name" '.[] | select(.name == $name) | .id' "$assets_file")"; then :; else return 1; fi
+            gh api -H 'Accept: application/octet-stream' "repos/$repo/releases/assets/$asset_id" >"$download_dir/$name"
+        done
+    fi
+}
+
+validate_manifest_shape() {
+    if jq -e --arg tag "$tag" --arg commit "$source_commit" '.schema == 1 and .tag == $tag and .source_commit == $commit and (.assets|type == "array" and length == 14)' "$download_dir/release-assets.json" >/dev/null; then :; else return 1; fi
+    if python3 - "$download_dir/release-assets.json" <<'PY'
+import json, sys
+manifest=json.load(open(sys.argv[1]))
+entries=manifest['assets']
+if len(entries) != 14 or len({x.get('name') for x in entries}) != 14:
+    raise SystemExit('manifest assets array invalid')
+if any(not isinstance(x.get('name'), str) or not isinstance(x.get('size'), int)
+       or not isinstance(x.get('sha256'), str) for x in entries):
+    raise SystemExit('manifest entry shape invalid')
+PY
+    then :; else return 1; fi
+}
+
+# This is deliberately hash-only.  Provenance has a different implementation
+# below and is always run even if this check records a failure.
+validate_hashes() {
+    if python3 - "$download_dir" "$assets_file" "$tag" "$source_commit" <<'PY'
+import hashlib, json, os, re, subprocess, sys
+d, api_p, tag, commit = sys.argv[1:]
+api=json.load(open(api_p)); manifest=json.load(open(os.path.join(d,'release-assets.json')))
+entries=manifest['assets']
+if len(entries) != 14 or len({x['name'] for x in entries}) != 14: raise SystemExit('manifest assets array invalid')
+expected={x['name']:x for x in entries}; api_by={x['name']:x for x in api}
+if len(api) != len(api_by): raise SystemExit('duplicate API asset name')
+if set(api_by) != set(expected)|{'release-assets.json'}: raise SystemExit('undeclared or missing release asset')
+if set(os.listdir(d)) != set(api_by): raise SystemExit('download set differs from API')
+payloads=[n for n in expected if not n.endswith('.sha256')]
+if len(payloads) != 7 or len(expected)-len(payloads) != 7: raise SystemExit('expected 7 payloads and 7 sidecars')
+for name, item in expected.items():
+    data=open(os.path.join(d,name),'rb').read(); digest=hashlib.sha256(data).hexdigest()
+    if digest != item['sha256'] or len(data) != item['size']: raise SystemExit('manifest hash or size mismatch: '+name)
+    a=api_by[name]
+    if a.get('digest') != 'sha256:'+digest or a.get('size') != len(data): raise SystemExit('API hash or size mismatch: '+name)
+for name in payloads:
+    side=open(os.path.join(d,name+'.sha256'),'rb').read()
+    if re.fullmatch(rb'[0-9a-f]{64}  '+re.escape(name.encode())+rb'\n',side) is None: raise SystemExit('bad sidecar grammar: '+name)
+    if side[:64].decode() != expected[name]['sha256']: raise SystemExit('sidecar payload mismatch: '+name)
+root=open(os.path.join(d,'release-assets.json'),'rb').read(); a=api_by['release-assets.json']
+if a.get('digest') != 'sha256:'+hashlib.sha256(root).hexdigest() or a.get('size') != len(root): raise SystemExit('root hash or size mismatch')
+PY
+    then :; else return 1; fi
+    local payload sidecar
+    while IFS= read -r payload; do
+        sidecar="$payload.sha256"
+        if (cd "$download_dir" && sha256sum --strict --status --check "$sidecar"); then :; else return 1; fi
+    done < <(jq -r '.assets[] | select(.name | endswith(".sha256") | not) | .name' "$download_dir/release-assets.json")
+}
+
+verify_provenance() {
+    local file output digest bundle verified=0
+    if [ "$mode" = fixture ]; then
+        # Fixture mode cannot claim GitHub/Sigstore cryptography.  It does,
+        # however, independently exercises the attestation subject binding so
+        # a byte corruption is rejected by this oracle as well as by hash.
+        if python3 - "$fixture_dir/attestation-status.json" "$download_dir" "$evidence_dir/oracle2-deferred.json" <<'PY'
+import hashlib, json, os, sys
+status_path, download, output = sys.argv[1:]
+status=json.load(open(status_path))
+if status.get('oracle2_real_crypto') != 's8c-live-validated-deferred':
+    raise SystemExit('fixture provenance status is not explicitly deferred')
+if not isinstance(status.get('reason'), str) or not status['reason']:
+    raise SystemExit('fixture provenance reason missing')
+subjects=status.get('subjects')
+if not isinstance(subjects, dict) or set(subjects) != set(os.listdir(download)):
+    raise SystemExit('fixture attestation subjects differ from downloaded assets')
+for name, expected in subjects.items():
+    if not isinstance(expected, str) or hashlib.sha256(open(os.path.join(download, name), 'rb').read()).hexdigest() != expected:
+        raise SystemExit('fixture attestation subject mismatch: ' + name)
+json.dump(status, open(output, 'w'), sort_keys=True)
+PY
+        then return 0; else return 1; fi
+    fi
+    : "${GH_TOKEN:?GH_TOKEN required for attestation verification}"
+    : "${source_commit:?source commit required for attestation verification}"
+    while IFS= read -r file; do
+        output="$evidence_dir/attestation-$(basename "$file").json"
+        if [ -n "$attestation_bundle_dir" ]; then
+            digest="$(sha256 "$file")"
+            bundle="$attestation_bundle_dir/sha256:$digest.jsonl"
+            if gh attestation verify "$file" -R "$repo" --source-ref "refs/tags/$tag" --source-digest "$source_commit" --signer-workflow '.github/workflows/release.yml' --bundle "$bundle" --custom-trusted-root "$trusted_root" --format json >"$output"; then :; else return 1; fi
+        else
+            if gh attestation verify "$file" -R "$repo" --source-ref "refs/tags/$tag" --source-digest "$source_commit" --signer-workflow '.github/workflows/release.yml' --format json >"$output"; then :; else return 1; fi
+        fi
+        if jq -e 'type == "array" and length > 0' "$output" >/dev/null; then :; else return 1; fi
+        verified=$((verified + 1))
+    done < <(find "$download_dir" -maxdepth 1 -type f -printf '%f\n' | sort | sed "s|^|$download_dir/|")
+    [ "$verified" -eq 15 ]
+}
+
+validate_a4() {
+    if [ "$(sha256 "$a4_evidence")" = "$a4_evidence_sha256" ]; then :; else return 1; fi
+    if jq -e 'type == "object" and (.items|type == "array" and length > 0) and all(.items[]; (.id|type == "string" and length > 0) and (.status|IN("historical","open","fixed-tested","live-validated","unknown")) and .status != "unknown")' "$a4_evidence" >/dev/null; then :; else return 1; fi
+    if jq -e '[.items[] | select(.id == "multi-cert" or .id == "f6")] | length == 2 and all(.[]; .status == "fixed-tested" or .status == "live-validated")' "$a4_evidence" >/dev/null; then :; else return 1; fi
+}
+
+validate_owner_snapshot() {
+    if [ "$(sha256 "$owner_snapshot")" = "$owner_snapshot_sha256" ]; then :; else return 1; fi
+    if jq -e --arg repo "$repo" --arg tag "$tag" '.owner_bound == true and .status == "success" and .repo == $repo and .tag == $tag and (.target_identity|type == "string" and length > 0)' "$owner_snapshot" >/dev/null; then :; else return 1; fi
+}
+
+validate_drift() {
+    local phase=$1
+    if cmp "$evidence_dir/release-view-pre.json" "$evidence_dir/release-view-$phase.json"; then :; else return 1; fi
+    if cmp "$evidence_dir/release-assets-pre.json" "$evidence_dir/release-assets-$phase.json"; then :; else return 1; fi
+    if cmp "$evidence_dir/tag-commit-pre" "$evidence_dir/tag-commit-$phase"; then :; else return 1; fi
+}
+
+fetch_and_validate_post_drift() {
+    if fetch_release post; then :; else return 1; fi
+    if validate_drift post; then :; else return 1; fi
+}
+
+fetch_and_validate_pre_drift() {
+    if fetch_release preinstall; then :; else return 1; fi
+    if validate_drift preinstall; then :; else return 1; fi
+}
+
+extract_and_bind_launch_surface() {
+    local linux_bundle="$download_dir/rigsignal-${tag#v}-linux-x86_64.tar.gz"
+    local deb_bundle="$download_dir/rigsignal_${tag#v}-1_amd64.deb"
+    bound_surface_dir="$evidence_dir/bound-launch-surface"
+    rm -rf "$bound_surface_dir"
+    if python3 - "$linux_bundle" "$deb_bundle" "$bound_surface_dir" "${tag#v}" <<'PY'
+import io, os, shutil, sys, tarfile
+linux_path, deb_path, destination, version = sys.argv[1:]
+prefix = f'rigsignal-{version}-linux-x86_64/'
+linux_members = {
+    'rigsignal': prefix + 'rigsignal',
+    'rigsignal-agent': prefix + 'rigsignal-agent',
+    'engine/install_assets.py': prefix + 'engine/install_assets.py',
+    'engine/asset_adapters.py': prefix + 'engine/asset_adapters.py',
+    'engine/_version.py': prefix + 'engine/_version.py',
+}
+deb_members = {
+    'rigsignal': 'usr/bin/rigsignal',
+    'rigsignal-agent': 'usr/bin/rigsignal-agent',
+    'engine/install_assets.py': 'usr/lib/rigsignal/engine/install_assets.py',
+    'engine/asset_adapters.py': 'usr/lib/rigsignal/engine/asset_adapters.py',
+    'engine/_version.py': 'usr/lib/rigsignal/engine/_version.py',
+    'engine/channel': 'usr/lib/rigsignal/engine/channel',
+}
+def safe_regular(archive, name):
+    try:
+        member = archive.getmember(name)
+    except KeyError as error:
+        try:
+            member = archive.getmember('./' + name)
+        except KeyError:
+            raise SystemExit('missing launch member: ' + name) from error
+    if not member.isfile() or member.issym() or member.name.startswith('/') or '..' in member.name.split('/'):
+        raise SystemExit('unsafe launch member: ' + name)
+    value = archive.extractfile(member)
+    if value is None:
+        raise SystemExit('unreadable launch member: ' + name)
+    return value.read()
+def deb_data_tar(path):
+    raw = open(path, 'rb').read()
+    if not raw.startswith(b'!<arch>\n'):
+        raise SystemExit('not a Debian package')
+    offset = 8
+    while offset + 60 <= len(raw):
+        header = raw[offset:offset + 60]
+        name = header[:16].decode('ascii', 'strict').strip().rstrip('/')
+        try:
+            size = int(header[48:58].decode('ascii', 'strict').strip())
+        except ValueError as error:
+            raise SystemExit('malformed Debian package member') from error
+        start, end = offset + 60, offset + 60 + size
+        if end > len(raw):
+            raise SystemExit('truncated Debian package member')
+        if name.startswith('data.tar'):
+            return raw[start:end]
+        offset = end + (size & 1)
+    raise SystemExit('Debian package lacks data.tar member')
+shutil.rmtree(destination, ignore_errors=True)
+os.makedirs(destination, mode=0o700)
+with tarfile.open(linux_path, 'r:gz') as archive:
+    for relative, member in linux_members.items():
+        target = os.path.join(destination, 'tarball', relative)
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, 'wb') as stream:
+            stream.write(safe_regular(archive, member))
+with tarfile.open(fileobj=io.BytesIO(deb_data_tar(deb_path)), mode='r:*') as archive:
+    for relative, member in deb_members.items():
+        target = os.path.join(destination, 'deb', relative)
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, 'wb') as stream:
+            stream.write(safe_regular(archive, member))
+PY
+    then :; else return 1; fi
+    # The Linux tarball is the actual source for a user installation.  A
+    # system installation is sourced from the native package, so use its
+    # extracted bytes for the live /usr tuple.  Fixture paths deliberately
+    # model the tarball surface and never execute it.
+    bound_runtime_dir="$bound_surface_dir/tarball"
+    if [ "$mode" = live ] && [ "$launcher_path" = /usr/bin/rigsignal ]; then
+        bound_runtime_dir="$bound_surface_dir/deb"
+    fi
+    local required
+    for required in "$launcher_path" "$agent_path" "$engine_path" "$(dirname "$engine_path")/asset_adapters.py" "$(dirname "$engine_path")/_version.py" "$(dirname "$engine_path")/channel"; do
+        [ -f "$required" ] && [ ! -L "$required" ] || return 1
+    done
+    if [ "$(sha256 "$launcher_path")" = "$(sha256 "$bound_runtime_dir/rigsignal")" ]; then :; else return 1; fi
+    if [ "$(sha256 "$agent_path")" = "$(sha256 "$bound_runtime_dir/rigsignal-agent")" ]; then :; else return 1; fi
+    if [ "$(sha256 "$engine_path")" = "$(sha256 "$bound_runtime_dir/engine/install_assets.py")" ]; then :; else return 1; fi
+    if [ "$(sha256 "$(dirname "$engine_path")/asset_adapters.py")" = "$(sha256 "$bound_runtime_dir/engine/asset_adapters.py")" ]; then :; else return 1; fi
+    if [ "$(sha256 "$(dirname "$engine_path")/_version.py")" = "$(sha256 "$bound_runtime_dir/engine/_version.py")" ]; then :; else return 1; fi
+    if [ "$(sha256 "$(dirname "$engine_path")/channel")" = "$(sha256 "$bound_surface_dir/deb/engine/channel")" ]; then :; else return 1; fi
+    # In live mode, direct launcher execution must use the exact locations its
+    # assets resolver will select.  Fixture dispatch is intentionally isolated
+    # to its own mock and is not allowed to execute this installed surface.
+    if [ "$mode" = live ]; then
+        if [ "$launcher_path" = /usr/bin/rigsignal ]; then
+            [ "$agent_path" = /usr/bin/rigsignal-agent ] && [ "$engine_path" = /usr/lib/rigsignal/engine/install_assets.py ] || return 1
+        elif [ "$launcher_path" = "$HOME/.local/bin/rigsignal" ]; then
+            [ "$agent_path" = "$HOME/.local/bin/rigsignal-agent" ] && [ "$engine_path" = "$HOME/.local/lib/rigsignal/engine/install_assets.py" ] || return 1
+        else
+            return 1
+        fi
+    fi
+    if "$agent_path" --build-info-json | jq -e --arg commit "$source_commit" '.commit == $commit' >/dev/null; then :; else return 1; fi
+    if grep -F -- "$source_commit" "$engine_path" >/dev/null; then :; else return 1; fi
+}
+
+verify_proc_binding() {
+    if [ -z "$native_agent_pid" ]; then return 0; fi
+    if [[ "$native_agent_pid" =~ ^[1-9][0-9]*$ ]]; then :; else return 1; fi
+    if [ -e "/proc/$native_agent_pid/exe" ]; then :; else return 1; fi
+    if [ "$(sha256 "/proc/$native_agent_pid/exe")" = "$(sha256 "$bound_runtime_dir/rigsignal-agent")" ]; then :; else return 1; fi
+}
+
+dispatch_install() {
+    local rc
+    : "${launcher_path:?launcher path required before installer dispatch}"
+    : "${agent_path:?agent path required before installer dispatch}"
+    : "${engine_path:?engine path required before installer dispatch}"
+    if [ "$mode" = fixture ]; then
+        local fixture_launcher="$fixture_dir/bin/rigsignal"
+        [ -f "$fixture_launcher" ] && [ ! -L "$fixture_launcher" ] && [ -x "$fixture_launcher" ] || return 1
+        export RIGSIGNAL_FIXTURE_INSTALLER_RC="$fixture_installer_rc"
+        # Absolute fixture-only dispatch: no PATH lookup can reach a real
+        # launcher, even if the fixture mock is missing or malformed.
+        if "$fixture_launcher" assets install --bundle "$download_dir/rigsignal-assets-${tag#v}.tar.gz" --non-interactive >"$evidence_dir/installer.stdout" 2>"$evidence_dir/installer.stderr"; then rc=0; else rc=$?; fi
+    else
+        [ "$owner_go" -eq 1 ] || return 1
+        # This is the byte-verified launcher from launch-surface, not `rigsignal`
+        # resolved through PATH.  Its resolver was checked above against the
+        # same verified agent and engine paths.
+        if "$launcher_path" assets install --bundle "$download_dir/rigsignal-assets-${tag#v}.tar.gz" --non-interactive >"$evidence_dir/installer.stdout" 2>"$evidence_dir/installer.stderr"; then rc=0; else rc=$?; fi
+    fi
+    printf '%s\n' "$rc" >"$evidence_dir/installer.rc"
+    grep -m1 -E '^(install refused:|install failed:|RIGSIGNAL_FAILURE_SITE=)' "$evidence_dir/installer.stderr" >"$evidence_dir/installer.failure-line" || true
+    if [ "$rc" -eq 4 ]; then printf '%s\n' manual_recovery_required >"$evidence_dir/recovery-status"; fi
+    [ "$rc" -eq 0 ]
+}
+
+run_ledger_fixture_case() {
+    case "$fixture_ledger_case" in
+        missing) ledger_line mode-gate started; ledger_line mode-gate passed ;;
+        started) for id in "${mandatory[@]}"; do ledger_line "$id" started; done ;;
+        failed) for id in "${mandatory[@]}"; do ledger_line "$id" started; ledger_line "$id" passed; done; ledger_line inputs failed ;;
+        duplicate) for id in "${mandatory[@]}"; do ledger_line "$id" started; ledger_line "$id" passed; done; ledger_line inputs passed ;;
+        unknown) for id in "${mandatory[@]}"; do ledger_line "$id" started; ledger_line "$id" passed; done; ledger_line no-such-id passed ;;
+        malformed) printf 'not-a-ledger-row\n' >>"$ledger" ;;
+        early-exit) for id in "${mandatory[@]}"; do ledger_line "$id" started; ledger_line "$id" passed; done; exit 0 ;;
+        '') return 0 ;;
+        *) return 1 ;;
+    esac
+    exit 0
+}
+
+run_ledger_fixture_case
+
+must_check mode-gate true
+must_check inputs test -d "$evidence_dir"
+
+must_check derive fetch_release pre
+readonly assets_file="$evidence_dir/release-assets-pre.json"
+readonly source_commit="$(tr -d '\n' <"$evidence_dir/tag-commit-pre")"
+if [[ "$source_commit" =~ ^[0-9a-f]{40}$ ]]; then :; else exit 1; fi
+readonly download_dir="$evidence_dir/download"
+readonly version="${tag#v}"
+# These are both the release contract and the only names ever used to build a
+# download path.  API-provided names remain data until release-shape proves
+# they are exactly this set.
+readonly -a expected_assets=(
+    "rigsignal_${version}-1_amd64.deb"
+    "rigsignal-${version}-1.x86_64.rpm"
+    "rigsignal-${version}-1-x86_64.pkg.tar.zst"
+    "rigsignal-${version}-x86_64.msi"
+    "rigsignal-${version}-linux-x86_64.tar.gz"
+    install.sh
+    "rigsignal-assets-${version}.tar.gz"
+    "rigsignal_${version}-1_amd64.deb.sha256"
+    "rigsignal-${version}-1.x86_64.rpm.sha256"
+    "rigsignal-${version}-1-x86_64.pkg.tar.zst.sha256"
+    "rigsignal-${version}-x86_64.msi.sha256"
+    "rigsignal-${version}-linux-x86_64.tar.gz.sha256"
+    install.sh.sha256
+    "rigsignal-assets-${version}.tar.gz.sha256"
+    release-assets.json
+)
+
+must_check release-shape validate_release_shape
+must_check download download_assets
+if fixture_fault_apply; then :; else exit 1; fi
+independent_check manifest validate_manifest_shape
+independent_check hash validate_hashes
+if [ "$mode" = fixture ]; then independent_check provenance-deferred verify_provenance; else independent_check provenance verify_provenance; fi
+if [ "$independent_failure" -ne 0 ]; then exit 1; fi
+must_check a4 validate_a4
+must_check owner-snapshot validate_owner_snapshot
+
+must_check launch-surface extract_and_bind_launch_surface
+must_check proc-binding verify_proc_binding
+must_check drift-pre fetch_and_validate_pre_drift
+must_check install dispatch_install
+must_check drift-post fetch_and_validate_post_drift
+
+window_complete=1
+printf '%s\n' 'release-verification-window: passed'
