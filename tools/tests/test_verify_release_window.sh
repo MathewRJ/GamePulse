@@ -124,7 +124,35 @@ snapshot_sha="$(sha256sum "$fixture/owner-snapshot.json" | awk '{print $1}')"
 cat >"$fixture/bin/rigsignal" <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
+if [ "${1:-}" != assets ] || [ "${2:-}" != install ]; then
+  printf '%s\n' 'Usage: rigsignal assets install [options]' >&2
+  exit 2
+fi
+shift 2
+admin_credentials_file=''
+noninteractive=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --admin-credentials-file)
+      [ "$#" -ge 2 ] && [ -n "$2" ] || { printf '%s\n' 'assets install: missing value for --admin-credentials-file' >&2; exit 2; }
+      [ -z "$admin_credentials_file" ] || { printf '%s\n' 'assets install: duplicate --admin-credentials-file' >&2; exit 2; }
+      admin_credentials_file=$2
+      shift 2
+      ;;
+    --bundle|--endpoint|--ca-file|--ca-sha256|--kibana-endpoint)
+      [ "$#" -ge 2 ] && [ -n "$2" ] || { printf 'assets install: missing value for %s\n' "$1" >&2; exit 2; }
+      shift 2
+      ;;
+    --non-interactive|--noninteractive) noninteractive=1; shift ;;
+    *) printf '%s\n' 'Usage: rigsignal assets install [options]' >&2; exit 2 ;;
+  esac
+done
+if [ "$noninteractive" = 1 ] && [ -z "$admin_credentials_file" ]; then
+  printf '%s\n' 'assets install: noninteractive input missing (endpoint, CA, Kibana endpoint, or administrator credentials)' >&2
+  exit 2
+fi
 printf '%s\n' dispatched >"${RIGSIGNAL_FIXTURE_INSTALLER_TOUCHED:?}"
+printf '%s\n' "$admin_credentials_file" >"${RIGSIGNAL_FIXTURE_INSTALLER_ADMIN_PATH:?}"
 case "${RIGSIGNAL_FIXTURE_INSTALLER_RC:?}" in
   0) exit 0 ;;
   2) printf 'install refused: fixture-local\n' >&2; exit 2 ;;
@@ -134,6 +162,8 @@ case "${RIGSIGNAL_FIXTURE_INSTALLER_RC:?}" in
 esac
 EOF
 chmod +x "$fixture/bin/rigsignal"
+mock_admin_credentials="$work/mock-admin-credentials.toml"
+printf '[elasticsearch]\nusername = "fixture-admin"\npassword = "fixture-password"\n' >"$mock_admin_credentials"
 for forbidden in gh curl wget git ssh; do
     cat >"$fixture/bin/$forbidden" <<EOF
 #!/usr/bin/env bash
@@ -146,7 +176,18 @@ done
 run_window() {
     local evidence=$1
     shift
-    PATH="$fixture/bin:$PATH" GH_TOKEN='' RIGSIGNAL_FIXTURE_INSTALLER_TOUCHED="$evidence/installer-touched" \
+    PATH="$fixture/bin:$PATH" GH_TOKEN='' RIGSIGNAL_FIXTURE_INSTALLER_TOUCHED="$evidence/installer-touched" RIGSIGNAL_FIXTURE_INSTALLER_ADMIN_PATH="$evidence/installer-admin-path" \
+        bash "$tool" --mode fixture --repo acme/rigsignal --tag "$tag" --evidence-dir "$evidence" --fixture-dir "$fixture" \
+        --a4-evidence "$fixture/a4-evidence.json" --a4-evidence-sha256 "$a4_sha" \
+        --owner-snapshot "$fixture/owner-snapshot.json" --owner-snapshot-sha256 "$snapshot_sha" \
+        --launcher-path "$installed/bin/rigsignal" --agent-path "$installed/bin/rigsignal-agent" \
+        --engine-path "$installed/lib/rigsignal/engine/install_assets.py" --admin-credentials-file "$mock_admin_credentials" "$@"
+}
+
+run_window_without_admin_credentials() {
+    local evidence=$1
+    shift
+    PATH="$fixture/bin:$PATH" GH_TOKEN='' RIGSIGNAL_FIXTURE_INSTALLER_TOUCHED="$evidence/installer-touched" RIGSIGNAL_FIXTURE_INSTALLER_ADMIN_PATH="$evidence/installer-admin-path" \
         bash "$tool" --mode fixture --repo acme/rigsignal --tag "$tag" --evidence-dir "$evidence" --fixture-dir "$fixture" \
         --a4-evidence "$fixture/a4-evidence.json" --a4-evidence-sha256 "$a4_sha" \
         --owner-snapshot "$fixture/owner-snapshot.json" --owner-snapshot-sha256 "$snapshot_sha" \
@@ -181,6 +222,20 @@ assert_success run_window "$work/pass" --native-agent-pid "$native_pid"
 kill "$native_pid" 2>/dev/null || true
 assert_file_contains "$work/pass/check-ledger.tsv" $'provenance-deferred\tpassed'
 assert_file_contains "$work/pass/installer-touched" dispatched
+assert_file_contains "$work/pass/installer-admin-path" "$mock_admin_credentials"
+
+# Fixture mode intentionally does not require a live credential input up
+# front, but its non-interactive mock dispatch still fails closed without it.
+assert_failure run_window_without_admin_credentials "$work/fixture-no-admin"
+assert_file_contains "$work/fixture-no-admin/installer.stderr" 'assets install: noninteractive input missing (endpoint, CA, Kibana endpoint, or administrator credentials)'
+assert_no_file "$work/fixture-no-admin/installer-touched"
+assert_ledger_transition "$work/fixture-no-admin" install failed
+
+# The mock mirrors the launcher's non-interactive administrator-credential
+# contract, so a missing pass-through cannot hide behind fixture success.
+if RIGSIGNAL_FIXTURE_INSTALLER_TOUCHED="$work/mock-missing-admin-touched" RIGSIGNAL_FIXTURE_INSTALLER_ADMIN_PATH="$work/mock-missing-admin-path" RIGSIGNAL_FIXTURE_INSTALLER_RC=0 "$fixture/bin/rigsignal" assets install --bundle "$fixture/assets/rigsignal-assets-0.3.1.tar.gz" --non-interactive >"$work/mock-missing-admin.stdout" 2>"$work/mock-missing-admin.stderr"; then fail 'fixture mock accepted non-interactive install without admin credentials'; return 1; fi
+assert_file_contains "$work/mock-missing-admin.stderr" 'assets install: noninteractive input missing (endpoint, CA, Kibana endpoint, or administrator credentials)'
+assert_no_file "$work/mock-missing-admin-touched"
 
 # Fixture dispatch is fail-closed: a missing fixture mock cannot fall through
 # to a real `rigsignal` found later on PATH.
@@ -266,10 +321,17 @@ assert_failure run_window "$work/fixture-go" --i-have-owner-go
 if GH_TOKEN=token PATH="$fixture/bin:$PATH" bash "$tool" --mode live --repo acme/rigsignal --tag "$tag" --evidence-dir "$work/live-no-go" --a4-evidence "$fixture/a4-evidence.json" --a4-evidence-sha256 "$a4_sha" --owner-snapshot "$fixture/owner-snapshot.json" --owner-snapshot-sha256 "$snapshot_sha" 2>/dev/null; then fail 'live without GO unexpectedly passed'; return 1; fi
 assert_no_file "$work/live-no-go/installer-touched"
 
+# Live mode fails before provider or installer dispatch when its required
+# administrator-credential path is omitted.
+if GH_TOKEN=token PATH="$fixture/bin:$PATH" bash "$tool" --mode live --i-have-owner-go --repo acme/rigsignal --tag "$tag" --evidence-dir "$work/live-no-admin" --a4-evidence "$fixture/a4-evidence.json" --a4-evidence-sha256 "$a4_sha" --owner-snapshot "$fixture/owner-snapshot.json" --owner-snapshot-sha256 "$snapshot_sha" --launcher-path "$installed/bin/rigsignal" --agent-path "$installed/bin/rigsignal-agent" --engine-path "$installed/lib/rigsignal/engine/install_assets.py" >"$work/live-no-admin.stdout" 2>"$work/live-no-admin.stderr"; then fail 'live without admin credentials unexpectedly passed'; return 1; fi
+assert_file_contains "$work/live-no-admin.stderr" '--admin-credentials-file is required in live mode'
+assert_no_file "$work/live-no-admin/installer-touched"
+
 # Source-level safety proof: no publish/mutation command and exact status capture.
 if grep -E 'gh[[:space:]]+release[[:space:]]+edit|--draft=false|gh[[:space:]]+api[[:space:]].*(POST|PATCH|DELETE)' "$tool" >/dev/null; then fail 'publish or release mutation found in source'; return 1; fi
 assert_file_contains "$tool" 'if "$launcher_path" assets install --bundle'
 assert_file_contains "$tool" 'if "$fixture_launcher" assets install --bundle'
+assert_file_contains "$tool" '--admin-credentials-file "$admin_credentials_file"'
 assert_file_contains "$tool" 'then rc=0; else rc=$?; fi'
 if grep -F 'tee' "$tool" >/dev/null; then fail 'installer output is piped through tee'; return 1; fi
 

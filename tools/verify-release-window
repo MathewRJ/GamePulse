@@ -23,11 +23,16 @@ fixture_fault=''
 fixture_ledger_case=''
 attestation_bundle_dir=''
 trusted_root=''
+admin_credentials_file=''
+endpoint=''
+ca_file=''
+ca_sha256=''
+kibana_endpoint=''
 bound_surface_dir=''
 bound_runtime_dir=''
 
 usage() {
-    printf '%s\n' 'usage: verify-release-window --mode fixture|live --repo OWNER/REPO --tag vX.Y.Z --evidence-dir DIR --a4-evidence FILE --a4-evidence-sha256 HEX --owner-snapshot FILE --owner-snapshot-sha256 HEX [options]' >&2
+    printf '%s\n' 'usage: verify-release-window --mode fixture|live --repo OWNER/REPO --tag vX.Y.Z --evidence-dir DIR --a4-evidence FILE --a4-evidence-sha256 HEX --owner-snapshot FILE --owner-snapshot-sha256 HEX [--admin-credentials-file PATH (required in live mode)] [--endpoint URL] [--ca-file PATH] [--ca-sha256 HEX] [--kibana-endpoint URL] [options]' >&2
 }
 
 while [ "$#" -gt 0 ]; do
@@ -51,6 +56,11 @@ while [ "$#" -gt 0 ]; do
         --fixture-ledger-case) fixture_ledger_case="${2:?--fixture-ledger-case requires a value}"; shift 2 ;;
         --attestation-bundle-dir) attestation_bundle_dir="${2:?--attestation-bundle-dir requires a value}"; shift 2 ;;
         --trusted-root) trusted_root="${2:?--trusted-root requires a value}"; shift 2 ;;
+        --admin-credentials-file) admin_credentials_file="${2:?--admin-credentials-file requires a value}"; shift 2 ;;
+        --endpoint) endpoint="${2:?--endpoint requires a value}"; shift 2 ;;
+        --ca-file) ca_file="${2:?--ca-file requires a value}"; shift 2 ;;
+        --ca-sha256) ca_sha256="${2:?--ca-sha256 requires a value}"; shift 2 ;;
+        --kibana-endpoint) kibana_endpoint="${2:?--kibana-endpoint requires a value}"; shift 2 ;;
         # Deliberate CLI exception: --help does not create a ledger.  Every
         # invocation that enters the verification window is ledger-gated.
         --help) usage; exit 0 ;;
@@ -86,6 +96,8 @@ if [ "$mode" = fixture ]; then
 else
     [ "$owner_go" -eq 1 ] || { printf 'live mode requires --i-have-owner-go before provider or installer dispatch\n' >&2; exit 2; }
     : "${GH_TOKEN:?GH_TOKEN is required in live mode}"
+    : "${admin_credentials_file:?--admin-credentials-file is required in live mode}"
+    [ -f "$admin_credentials_file" ] && [ ! -L "$admin_credentials_file" ] || { printf '%s\n' 'live mode requires --admin-credentials-file to name an existing regular non-symlink file' >&2; exit 2; }
     [ -z "$fixture_dir" ] || { printf 'live mode rejects --fixture-dir\n' >&2; exit 2; }
     if [ -n "$attestation_bundle_dir$trusted_root" ] && { [ -z "$attestation_bundle_dir" ] || [ -z "$trusted_root" ]; }; then
         printf '%s\n' 'live offline attestation requires both --attestation-bundle-dir and --trusted-root' >&2
@@ -541,13 +553,22 @@ dispatch_install() {
         export RIGSIGNAL_FIXTURE_INSTALLER_RC="$fixture_installer_rc"
         # Absolute fixture-only dispatch: no PATH lookup can reach a real
         # launcher, even if the fixture mock is missing or malformed.
-        if "$fixture_launcher" assets install --bundle "$download_dir/rigsignal-assets-${tag#v}.tar.gz" --non-interactive >"$evidence_dir/installer.stdout" 2>"$evidence_dir/installer.stderr"; then rc=0; else rc=$?; fi
+        if [ -n "$admin_credentials_file" ]; then
+            if "$fixture_launcher" assets install --bundle "$download_dir/rigsignal-assets-${tag#v}.tar.gz" --admin-credentials-file "$admin_credentials_file" --non-interactive >"$evidence_dir/installer.stdout" 2>"$evidence_dir/installer.stderr"; then rc=0; else rc=$?; fi
+        else
+            if "$fixture_launcher" assets install --bundle "$download_dir/rigsignal-assets-${tag#v}.tar.gz" --non-interactive >"$evidence_dir/installer.stdout" 2>"$evidence_dir/installer.stderr"; then rc=0; else rc=$?; fi
+        fi
     else
+        local -a live_install_args=()
         [ "$owner_go" -eq 1 ] || return 1
+        [ -n "$endpoint" ] && live_install_args+=(--endpoint "$endpoint")
+        [ -n "$ca_file" ] && live_install_args+=(--ca-file "$ca_file")
+        [ -n "$ca_sha256" ] && live_install_args+=(--ca-sha256 "$ca_sha256")
+        [ -n "$kibana_endpoint" ] && live_install_args+=(--kibana-endpoint "$kibana_endpoint")
         # This is the byte-verified launcher from launch-surface, not `rigsignal`
         # resolved through PATH.  Its resolver was checked above against the
         # same verified agent and engine paths.
-        if "$launcher_path" assets install --bundle "$download_dir/rigsignal-assets-${tag#v}.tar.gz" --non-interactive >"$evidence_dir/installer.stdout" 2>"$evidence_dir/installer.stderr"; then rc=0; else rc=$?; fi
+        if "$launcher_path" assets install --bundle "$download_dir/rigsignal-assets-${tag#v}.tar.gz" --admin-credentials-file "$admin_credentials_file" "${live_install_args[@]}" --non-interactive >"$evidence_dir/installer.stdout" 2>"$evidence_dir/installer.stderr"; then rc=0; else rc=$?; fi
     fi
     printf '%s\n' "$rc" >"$evidence_dir/installer.rc"
     grep -m1 -E '^(install refused:|install failed:|RIGSIGNAL_FAILURE_SITE=)' "$evidence_dir/installer.stderr" >"$evidence_dir/installer.failure-line" || true
