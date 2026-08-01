@@ -750,7 +750,7 @@ test_sidecar_rejects_noncanonical_records() {
 
 test_package_dependencies_declare_python3() {
     grep -qx 'depends = "$auto, python3"' "$REPO_ROOT/src/Cargo.toml" || return 1
-    grep -qx 'requires = \["python3"\]' "$REPO_ROOT/src/Cargo.toml" || return 1
+    grep -qxF 'requires = { python3 = "*" }' "$REPO_ROOT/src/Cargo.toml" || return 1
     grep -qx "depends=('python3')" "$REPO_ROOT/packaging/PKGBUILD" || return 1
     grep -qx "depends=('python3')" "$REPO_ROOT/packaging/aur/PKGBUILD" || return 1
     grep -qx "depends=('python3')" "$REPO_ROOT/.github/packaging/PKGBUILD"
