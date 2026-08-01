@@ -1,5 +1,7 @@
 # RigSignal — Elastic Integration
 
+Release manifests intentionally exclude `release-assets.json` and any self-sidecar: the manifest is the attested root, so it cannot contain a finite hash of itself. Before S8c publishes a draft, the owner must confirm repository immutable releases are enabled and then assert the published release is immutable.
+
 > **This document is the Elastic Fleet integration guide** — it covers adding RigSignal to Kibana Fleet and is bundled into the Elastic Package Registry.
 > For installation, quick start, and project overview, see the [project README](https://github.com/MathewRJ/RigSignal#readme).
 

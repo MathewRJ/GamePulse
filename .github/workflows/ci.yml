@@ -29,6 +29,9 @@ jobs:
       - name: Test release version guard
         run: python3 tools/tests/test_check_release_version.py
 
+      - name: Test release manifest generator
+        run: python3 tools/tests/test_gen_release_manifest.py
+
       - name: Run installer packaging tests
         run: bash tools/tests/test_installer.sh
 

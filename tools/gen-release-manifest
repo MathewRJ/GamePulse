@@ -1,0 +1,106 @@
+#!/usr/bin/env python3
+"""Generate the deterministic, attested root manifest for a release dist directory.
+
+The root `release-assets.json` and an optional `release-assets.json.sha256` are
+intentionally excluded: a finite manifest cannot hash itself or its self-sidecar.
+Their integrity comes from the release asset digest and artifact attestation.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import re
+import sys
+from pathlib import Path
+from typing import Iterable
+
+
+class ManifestError(Exception):
+    """The dist directory does not satisfy the release asset contract."""
+
+
+def payload_names(version: str) -> list[str]:
+    return [
+        f"rigsignal_{version}-1_amd64.deb",
+        f"rigsignal-{version}-1.x86_64.rpm",
+        f"rigsignal-{version}-1-x86_64.pkg.tar.zst",
+        f"rigsignal-{version}-x86_64.msi",
+        f"rigsignal-{version}-linux-x86_64.tar.gz",
+        "install.sh",
+        f"rigsignal-assets-{version}.tar.gz",
+    ]
+
+
+def validate_entries(names: Iterable[str], expected: set[str]) -> None:
+    names = list(names)
+    duplicate_names = sorted({name for name in names if names.count(name) > 1})
+    if duplicate_names:
+        raise ManifestError(f"duplicate dist entries: {', '.join(duplicate_names)}")
+    unexpected = sorted(set(names) - expected)
+    missing = sorted(expected - set(names))
+    if missing or unexpected:
+        detail = []
+        if missing:
+            detail.append(f"missing: {', '.join(missing)}")
+        if unexpected:
+            detail.append(f"unexpected: {', '.join(unexpected)}")
+        raise ManifestError("; ".join(detail))
+
+
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def generate(dist: Path, tag: str, source_commit: str) -> dict[str, object]:
+    if not re.fullmatch(r"v[^/\\\s]+", tag):
+        raise ManifestError(f"invalid tag: {tag!r}")
+    if not re.fullmatch(r"[0-9a-f]{40}", source_commit):
+        raise ManifestError("source_commit must be a 40-character lowercase hexadecimal SHA")
+    if not dist.is_dir():
+        raise ManifestError(f"dist is not a directory: {dist}")
+
+    version = tag[1:]
+    payloads = payload_names(version)
+    expected_assets = set(payloads + [f"{name}.sha256" for name in payloads])
+    root_exceptions = {"release-assets.json", "release-assets.json.sha256"}
+    entries = list(dist.iterdir())
+    names = []
+    for entry in entries:
+        if entry.name.startswith("."):
+            raise ManifestError(f"hidden dist entry: {entry.name}")
+        if entry.is_symlink() or not entry.is_file():
+            raise ManifestError(f"dist entry is not a regular file: {entry.name}")
+        names.append(entry.name)
+    validate_entries(names, expected_assets | root_exceptions.intersection(names))
+
+    assets = [
+        {"name": name, "size": (dist / name).stat().st_size, "sha256": sha256(dist / name)}
+        for name in sorted(expected_assets)
+    ]
+    return {"schema": 1, "tag": tag, "source_commit": source_commit, "assets": assets}
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--dist", type=Path, required=True)
+    parser.add_argument("--tag", required=True)
+    parser.add_argument("--source-commit", required=True)
+    args = parser.parse_args(argv)
+    try:
+        manifest = generate(args.dist, args.tag, args.source_commit)
+    except ManifestError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 2
+    output = args.dist / "release-assets.json"
+    output.write_text(json.dumps(manifest, separators=(",", ":"), ensure_ascii=True) + "\n", encoding="utf-8")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

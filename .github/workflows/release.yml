@@ -24,8 +24,13 @@ on:
         required: true
         type: string
 
+# Residual: out-of-band manual published-release creation in the sub-second window is outside this workflow guard; owners must avoid it.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
-  contents: write  # required by softprops/action-gh-release to create releases
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -38,15 +43,20 @@ jobs:
     name: packaging tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
 
       - name: Check release version consistency
         run: python3 tools/check-release-version --tag "$GITHUB_REF_NAME"
 
+      - name: Test release manifest generator
+        run: python3 tools/tests/test_gen_release_manifest.py
+
       - name: Install Rust toolchain (stable)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master@2026-07-18
+        with:
+          toolchain: stable
 
       - name: Run installer packaging tests
         run: bash tools/tests/test_installer.sh
@@ -86,13 +96,15 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Install Rust toolchain (stable)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master@2026-07-18
+        with:
+          toolchain: stable
 
       - name: Cache cargo registry + build artefacts
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
           workspaces: src -> target
 
@@ -100,10 +112,11 @@ jobs:
         run: cargo build --release --manifest-path src/Cargo.toml --locked
 
       - name: Upload binary artefact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: agent-binary-linux-x86_64
           path: target/release/rigsignal-agent
+          if-no-files-found: error
 
   # ── 1b. Build eBPF daemon + probes (Linux x86_64, nightly Rust) ─────────────
   build-ebpf:
@@ -111,17 +124,17 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       # Keep the release eBPF toolchain aligned with ebpf/rust-toolchain.toml.
       - name: Install Rust nightly + rust-src (for build-std)
-        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master@2026-07-18
         with:
           toolchain: nightly-2026-07-18
           components: rust-src
 
       - name: Cache cargo registry + build artefacts (eBPF workspace)
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
           workspaces: ebpf -> ebpf/target
           key: ebpf-nightly
@@ -141,10 +154,11 @@ jobs:
           cp ebpf/target/bpfel-unknown-none/release/rigsignal-ebpf-probes   ebpf-artifacts/
 
       - name: Upload eBPF artefacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ebpf-binaries-linux-x86_64
           path: ebpf-artifacts/
+          if-no-files-found: error
 
   # ── 2a. Package Linux binary tarball (for install.sh / SteamOS) ─────────────
   package-tarball:
@@ -152,16 +166,16 @@ jobs:
     needs: [setup, build-linux, build-ebpf]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Download agent binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: agent-binary-linux-x86_64
           path: target/release/
 
       - name: Download eBPF binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: ebpf-binaries-linux-x86_64
           path: target/ebpf/
@@ -207,22 +221,25 @@ jobs:
             --source-commit "${GITHUB_SHA}"
 
       - name: Upload tarball artefact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: linux-tarball
           path: dist-tar/rigsignal-*-linux-x86_64.tar.gz
+          if-no-files-found: error
 
       - name: Upload install.sh artefact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: install-sh
           path: packaging/install.sh
+          if-no-files-found: error
 
       - name: Upload asset bundle artefact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: asset-bundle
           path: dist/rigsignal-assets-*.tar.gz
+          if-no-files-found: error
 
   # ── 2. Build Windows x86_64 release binary ──────────────────────────────────
   build-windows:
@@ -230,13 +247,15 @@ jobs:
     needs: setup
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Install Rust toolchain (stable)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master@2026-07-18
+        with:
+          toolchain: stable
 
       - name: Cache cargo registry + build artefacts
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
           workspaces: src -> target
 
@@ -244,10 +263,11 @@ jobs:
         run: cargo build --release --manifest-path src/Cargo.toml --locked
 
       - name: Upload binary artefact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: agent-binary-windows-x86_64
           path: target/release/rigsignal-agent.exe
+          if-no-files-found: error
 
   # ── 3. .deb (Debian / Ubuntu) ───────────────────────────────────────────────
   package-deb:
@@ -255,13 +275,15 @@ jobs:
     needs: [setup, build-linux]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Install Rust toolchain (stable)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master@2026-07-18
+        with:
+          toolchain: stable
 
       - name: Download release binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: agent-binary-linux-x86_64
           path: target/release/
@@ -277,7 +299,7 @@ jobs:
             --engine-output dist/engine
 
       - name: Install cargo-binstall (fast binary installer)
-        uses: cargo-bins/cargo-binstall@main
+        uses: cargo-bins/cargo-binstall@0b24824336e2b3800b0f89d9e08b2c08bfa3dcdd # v1.17.9
 
       - name: Install cargo-deb
         run: cargo binstall cargo-deb --no-confirm
@@ -286,10 +308,11 @@ jobs:
         run: cargo deb --manifest-path src/Cargo.toml --no-build --no-strip
 
       - name: Upload .deb artefact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: deb-package
           path: target/debian/*.deb
+          if-no-files-found: error
 
   # ── 4. .rpm (Fedora / RHEL / openSUSE) ──────────────────────────────────────
   package-rpm:
@@ -297,13 +320,15 @@ jobs:
     needs: [setup, build-linux]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Install Rust toolchain (stable)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master@2026-07-18
+        with:
+          toolchain: stable
 
       - name: Download release binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: agent-binary-linux-x86_64
           path: target/release/
@@ -319,7 +344,7 @@ jobs:
             --engine-output dist/engine
 
       - name: Install cargo-binstall
-        uses: cargo-bins/cargo-binstall@main
+        uses: cargo-bins/cargo-binstall@0b24824336e2b3800b0f89d9e08b2c08bfa3dcdd # v1.17.9
 
       - name: Install cargo-generate-rpm
         run: cargo binstall cargo-generate-rpm --no-confirm
@@ -328,25 +353,26 @@ jobs:
         run: cd src && cargo generate-rpm
 
       - name: Upload .rpm artefact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: rpm-package
           path: src/target/generate-rpm/*.rpm
+          if-no-files-found: error
 
   # ── 5. .pkg.tar.zst (Arch Linux) ────────────────────────────────────────────
   package-arch:
     name: package .pkg.tar.zst
     needs: [setup, build-linux]
     runs-on: ubuntu-latest
-    container: archlinux/archlinux:latest
+    container: archlinux/archlinux@sha256:16191a338ed2338e17a3af7d164e9de871fbc2ae6b96f58a7bd3fedbb6e24dc2
     steps:
       - name: Install base-devel and git
         run: pacman -Syu --noconfirm base-devel git
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Download release binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: agent-binary-linux-x86_64
           path: target/release/
@@ -382,10 +408,11 @@ jobs:
           "
 
       - name: Upload .pkg.tar.zst artefact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: arch-package
           path: .github/packaging/*.pkg.tar.zst
+          if-no-files-found: error
 
   # ── 6. Windows .msi (cargo-wix + WiX Toolset 3) ─────────────────────────────
   # WiX 3 is pre-installed on windows-latest runners; cargo-wix is a small
@@ -397,24 +424,26 @@ jobs:
     needs: [setup, build-windows]
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Install Rust toolchain (stable)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master@2026-07-18
+        with:
+          toolchain: stable
 
       - name: Cache cargo registry + build artefacts
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
           workspaces: src -> target
 
       - name: Download Windows binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: agent-binary-windows-x86_64
           path: target/release/
 
       - name: Install cargo-binstall
-        uses: cargo-bins/cargo-binstall@main
+        uses: cargo-bins/cargo-binstall@0b24824336e2b3800b0f89d9e08b2c08bfa3dcdd # v1.17.9
 
       - name: Install cargo-wix
         # --force because Swatinem/rust-cache restores ~/.cargo/.crates2.json
@@ -469,10 +498,11 @@ jobs:
             src/Cargo.toml
 
       - name: Upload .msi artefact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: windows-package
           path: target/wix/*.msi
+          if-no-files-found: error
 
   # ── 7. Create GitHub Release ─────────────────────────────────────────────────
   # Only runs on a real tag push. workflow_dispatch is for CI testing — the
@@ -482,45 +512,41 @@ jobs:
     needs: [setup, packaging-tests, build-ebpf, package-tarball, package-deb, package-rpm, package-arch, package-windows]
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Download all package artefacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: '*-package'
           merge-multiple: true
           path: dist/
 
       - name: Download tarball and install.sh
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: 'linux-tarball'
           merge-multiple: true
           path: dist/
 
       - name: Copy install.sh to dist
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: install-sh
           path: dist/
 
       - name: Download asset bundle
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: asset-bundle
           path: dist/
 
       - name: List release assets
         run: ls -lh dist/
-
-      - name: Generate per-asset SHA-256 checksum files
-        run: |
-          cd dist
-          for asset in *; do
-            [ -f "$asset" ] || continue
-            sha256sum "$asset" > "${asset}.sha256"
-          done
 
       - name: Extract release notes from changelog
         run: |
@@ -537,10 +563,124 @@ jobs:
           ' CHANGELOG.md > "${{ runner.temp }}/release-notes.md"
           test -s "${{ runner.temp }}/release-notes.md"
 
+      - name: Refuse an existing release for this tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ needs.setup.outputs.tag }}"
+          error_file="${RUNNER_TEMP}/release-view.err"
+          if gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --silent 2>"${error_file}"; then
+            echo "ERROR: release already exists for ${TAG}; S8a expects a fresh RC" >&2
+            exit 1
+          fi
+          if ! grep -q 'HTTP 404' "${error_file}"; then
+            echo "ERROR: could not establish that ${TAG} has no release; refusing to continue" >&2
+            cat "${error_file}" >&2
+            exit 1
+          fi
+
+      - name: Assert exact release payload contract
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.setup.outputs.version }}"
+          expected=(
+            "rigsignal_${VERSION}-1_amd64.deb"
+            "rigsignal-${VERSION}-1.x86_64.rpm"
+            "rigsignal-${VERSION}-1-x86_64.pkg.tar.zst"
+            "rigsignal-${VERSION}-x86_64.msi"
+            "rigsignal-${VERSION}-linux-x86_64.tar.gz"
+            "install.sh"
+            "rigsignal-assets-${VERSION}.tar.gz"
+          )
+          actual=()
+          while IFS= read -r -d '' path; do
+            name="${path##*/}"
+            if [[ "${name}" == .* ]] || [[ -d "${path}" ]] || [[ ! -f "${path}" ]] || [[ -L "${path}" ]]; then
+              echo "ERROR: dist contains invalid entry: ${name}" >&2
+              exit 1
+            fi
+            actual+=("${name}")
+          done < <(find dist -mindepth 1 -maxdepth 1 -print0)
+          if [[ "$(printf '%s\n' "${actual[@]}" | sort | uniq -d)" ]]; then
+            echo "ERROR: dist contains duplicate entry names" >&2
+            exit 1
+          fi
+          if ! diff -u <(printf '%s\n' "${expected[@]}" | sort) <(printf '%s\n' "${actual[@]}" | sort); then
+            echo "ERROR: dist must contain exactly the seven release payloads before checksumming" >&2
+            exit 1
+          fi
+
+      - name: Generate per-asset SHA-256 checksum files
+        run: |
+          set -euo pipefail
+          cd dist
+          VERSION="${{ needs.setup.outputs.version }}"
+          for asset in \
+            "rigsignal_${VERSION}-1_amd64.deb" \
+            "rigsignal-${VERSION}-1.x86_64.rpm" \
+            "rigsignal-${VERSION}-1-x86_64.pkg.tar.zst" \
+            "rigsignal-${VERSION}-x86_64.msi" \
+            "rigsignal-${VERSION}-linux-x86_64.tar.gz" \
+            install.sh \
+            "rigsignal-assets-${VERSION}.tar.gz"; do
+            sha256sum "$asset" > "${asset}.sha256"
+          done
+
+      - name: Generate canonical release asset manifest
+        run: |
+          set -euo pipefail
+          tools/gen-release-manifest \
+            --dist dist \
+            --tag "${GITHUB_REF_NAME}" \
+            --source-commit "${GITHUB_SHA}"
+          actual_count="$(find dist -mindepth 1 -maxdepth 1 -type f | wc -l)"
+          if [[ "${actual_count}" -ne 15 ]] || \
+             find dist -mindepth 1 -maxdepth 1 ! -type f -print -quit | grep -q . || \
+             find dist -mindepth 1 -maxdepth 1 -name '.*' -print -quit | grep -q . || \
+             [[ -e dist/release-assets.json.sha256 ]]; then
+            echo "ERROR: final dist must be exactly 15 regular, non-hidden files (seven payloads, seven sidecars, release-assets.json)" >&2
+            exit 1
+          fi
+
+      - name: Attest release assets
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        with:
+          subject-path: dist/*
+
       - name: Create GitHub Release
+        id: create_release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: ${{ needs.setup.outputs.tag }}
           files: dist/*
           body_path: ${{ runner.temp }}/release-notes.md
           fail_on_unmatched_files: true
+          draft: true
+
+      - name: Assert draft release state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ needs.setup.outputs.tag }}"
+          gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" \
+            --json isDraft,publishedAt,tagName,isImmutable > "${RUNNER_TEMP}/release.json"
+          python3 - "${TAG}" "${RUNNER_TEMP}/release.json" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          tag, json_path = sys.argv[1:]
+          release = json.loads(pathlib.Path(json_path).read_text(encoding="utf-8"))
+          failures = []
+          if release.get("isDraft") is not True:
+              failures.append("isDraft is not true")
+          if release.get("publishedAt") is not None:
+              failures.append("publishedAt is not null")
+          if release.get("tagName") != tag:
+              failures.append(f"tagName is {release.get('tagName')!r}, expected {tag!r}")
+          if release.get("isImmutable") is True:
+              failures.append("isImmutable is true for the new draft")
+          if failures:
+              raise SystemExit("ERROR: created release failed draft-state assertion: " + "; ".join(failures))
+          PY
