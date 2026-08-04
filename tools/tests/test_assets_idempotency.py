@@ -447,6 +447,78 @@ print(outcome)
             final = INSTALL.read_transaction_record_if_present(record, binding, targets)
             return crashed, raw_after, state_after, rerun, final
 
+    def _real_transaction(self, *, record_kind="N", full_flow=False, absent=(), divergent=(),
+                          unreadable=(), repair=False, upgrade=False, allow_downgrade=False):
+        """Run the production executor against a stateful, mutation-counting wire.
+
+        The wire is intentionally below ``run_default_asset_transaction``: it
+        observes exactly the target state requested by a manifest fixture and
+        turns a selected write into a subsequently exact GET.  Consequently a
+        test which uses this helper exercises durable record publication,
+        transition ordering, and the executor's own post-write verification;
+        it is not a test of ``transaction_flag_policy``.
+        """
+        bundle = INSTALL.load_source()
+        targets = INSTALL.transaction_targets(bundle)
+        binding = INSTALL.transaction_binding(
+            bundle, "0123456789ABCDEFGHIJKL", "https://kb.example", "a" * 64)
+        ordinary = [item["key"] for item in targets]
+        full_key = INSTALL.BUNDLE_META_TARGET_KEY
+        absent, divergent, unreadable = set(absent), set(divergent), set(unreadable)
+        wire = {key: ("absent" if key in absent else "exact") for key in ordinary}
+        wire.update({key: "absent" for key in absent})
+        wire.update({key: "divergent" for key in divergent})
+        wire.update({key: "unreadable" for key in unreadable})
+        writes = []
+
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw); root.chmod(0o700)
+            path = root / INSTALL.ASSETS_MARKER_FILE
+            if record_kind != "N":
+                record = INSTALL.new_installing_record(binding, targets, "2026-08-04T12:34:56Z")
+                if record_kind.startswith("I-full") or record_kind == "S-current-full":
+                    record = INSTALL.expand_full_flow_record(record)
+                if record_kind.startswith("I-"):
+                    record["possible_mutation"] = record_kind.endswith("pm1")
+                else:
+                    for key in record["progress"]:
+                        record["progress"][key] = "verified"
+                    record = INSTALL.promote_transaction_record(record, "2026-08-04T12:35:00Z")
+                INSTALL.write_transaction_record(path, record, binding, targets)
+
+            def observe(_es, _kb, _auth, spec, _bundle, _adapter, _record=None):
+                key = spec[0]
+                state = wire.get(key, "exact")
+                if state == "unreadable":
+                    raise INSTALL.AssetTransactionRefusal("fixture remote read refused")
+                return state, None, None
+
+            def put(_es, _kb, _auth, spec, _bundle, _record, _adapter):
+                writes.append(spec[0])
+                wire[spec[0]] = "exact"
+
+            outcome = None
+            error = None
+            with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(root / "state")}, clear=False), \
+                 mock.patch.object(INSTALL, "_transaction_observe", side_effect=observe), \
+                 mock.patch.object(INSTALL, "_transaction_put", side_effect=put):
+                try:
+                    outcome = INSTALL.run_default_asset_transaction(
+                        bundle, "https://es", "https://kb", "auth", path, binding,
+                        full_flow=full_flow, repair=repair, upgrade=upgrade,
+                        allow_downgrade=allow_downgrade)
+                    status = 0
+                except (INSTALL.AssetTransactionHalt, INSTALL.AssetTransactionRefusal) as caught:
+                    error = caught
+                    status = INSTALL.transaction_failure_status(path)
+                except INSTALL.InputError as caught:
+                    error = caught
+                    status = 2 if (upgrade or allow_downgrade) else INSTALL.transaction_failure_status(path)
+            final = INSTALL.read_transaction_record_if_present(path, binding, targets)
+            return {"outcome": outcome, "error": error, "status": status, "writes": writes,
+                    "record": final, "path_exists": path.exists(), "wire": wire,
+                    "targets": targets, "full_key": full_key}
+
     def test_t_flag_1_through_4_generated_896_row_oracle(self):
         """T-FLAG-1..4: parse every vendored row and drive the policy engine."""
         raw = self.FLAG_FIXTURE.read_bytes()
@@ -475,6 +547,75 @@ print(outcome)
                 self.assertIn(actual_writes, (0, 1))
             writes_seen += actual_writes
         self.assertGreater(writes_seen, 0)
+
+    def test_t_dash_1_partial_dashboard_refuses_before_any_mutation_for_both_callers(self):
+        """T-DASH-1: the real executor's N-state barrier is object-complete."""
+        bundle = INSTALL.load_source()
+        root = next(item["key"] for item in INSTALL.transaction_targets(bundle)
+                    if item["key"].startswith("kibana/") and "/dashboard/" in item["key"])
+        for full_flow in (False, True):
+            with self.subTest(caller="full-flow" if full_flow else "assets-only"):
+                result = self._real_transaction(full_flow=full_flow, divergent=(root,))
+                self.assertEqual(result["status"], 3)
+                self.assertIsInstance(result["error"], INSTALL.AssetTransactionRefusal)
+                self.assertEqual(result["writes"], [])
+                self.assertFalse(result["path_exists"])
+                self.assertEqual(result["wire"][root], "divergent")
+
+    def test_t_dash_2_duplicate_expansion_has_eighteen_real_saved_object_writes(self):
+        """T-DASH-2: 29 source entries collapse to the 18 persisted SO identities."""
+        targets = INSTALL.transaction_targets(INSTALL.load_source())
+        saved = [item["key"] for item in targets
+                 if item["key"].startswith("kibana/")
+                 and "/space/" not in item["key"] and "/role/" not in item["key"]]
+        self.assertEqual(len(saved), 18)
+        result = self._real_transaction(absent=saved)
+        self.assertEqual(result["status"], 0)
+        self.assertEqual(result["record"]["state"], "installed")
+        self.assertEqual(sorted(result["writes"]), saved)
+        self.assertEqual(len(result["writes"]), 18)
+        replay = self._real_transaction(record_kind="S-current-assets")
+        self.assertEqual((replay["status"], replay["writes"], replay["outcome"]), (0, [], "noop"))
+
+    def test_t_cross_1_assets_only_retains_full_flow_intent_then_full_flow_completes(self):
+        """T-CROSS-1, both literal Step-11 cases, on the shared executor."""
+        for meta_state, expected_writes in (("exact", 0), ("absent", 1)):
+            with self.subTest(bundle_meta=meta_state):
+                held = self._real_transaction(record_kind="I-full-pm1", absent=(
+                    (INSTALL.BUNDLE_META_TARGET_KEY,) if meta_state == "absent" else ()))
+                # assets-only must not reach its transport at all while the
+                # full-flow obligation is active.
+                self.assertEqual((held["status"], held["writes"], held["record"]["state"]),
+                                 (4, [], "installing"))
+                self.assertEqual(held["record"]["caller_obligations"],
+                                 ["assets-66", "full-flow-step-11"])
+
+                # Rebuild the same input for the permitted full-flow caller.
+                resumed = self._real_transaction(record_kind="I-full-pm1", full_flow=True, absent=(
+                    (INSTALL.BUNDLE_META_TARGET_KEY,) if meta_state == "absent" else ()))
+                self.assertEqual(resumed["status"], 0)
+                self.assertEqual(len(resumed["writes"]), expected_writes)
+                self.assertEqual(resumed["record"]["state"], "installed")
+
+    def test_t_exit_3_installed_reverify_refuses_without_write(self):
+        """T-EXIT-3: installed has no uncertainty, so a foreign reread is exit 3."""
+        key = INSTALL.transaction_targets(INSTALL.load_source())[0]["key"]
+        result = self._real_transaction(record_kind="S-current-assets", divergent=(key,))
+        self.assertEqual(result["status"], 3)
+        self.assertIsInstance(result["error"], INSTALL.AssetTransactionRefusal)
+        self.assertEqual(result["writes"], [])
+        self.assertEqual(result["record"]["state"], "installed")
+
+    def test_t_exit_2_version_flags_are_local_preflight_with_no_transport(self):
+        """The currently implemented T-EXIT-2 invalid-flag limb is real, not policy-only."""
+        for kwargs in ({"upgrade": True}, {"allow_downgrade": True},
+                       {"upgrade": True, "allow_downgrade": True}):
+            with self.subTest(**kwargs):
+                result = self._real_transaction(**kwargs)
+                self.assertEqual(result["status"], 2)
+                self.assertIsInstance(result["error"], INSTALL.InputError)
+                self.assertEqual(result["writes"], [])
+                self.assertFalse(result["path_exists"])
 
     def test_t_sm_1_through_12_every_durable_edge_has_a_guarded_crash_hook(self):
         source = (ROOT / "tools/install_assets.py").read_text()
@@ -570,3 +711,7 @@ print(outcome)
         manifest = Path("/home/dev/coding/Workflow/projects/RigSignal/tasks/idempotency-2026-08-04/TEST-MANIFEST.md").read_text()
         self.assertIn("T-EXIT-4", manifest)
         self.assertIn("origin redaction takes precedence", re.sub(r"\s+", " ", manifest))
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
