@@ -269,6 +269,28 @@ class V2GuardedPrimitiveTests(RecordFixtures):
             self.assertEqual(evidence["detector"], "created:false")
             self.assertEqual(evidence["target"], role[0])
 
+    def test_t_recon_5_diagnostic_uses_the_record_parent_security_preflight(self):
+        """AMBIGUITY-4: evidence is a protected sibling, never record data."""
+        record = self.installing()
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw); root.chmod(0o755)
+            path = root / INSTALL.ASSETS_MARKER_FILE
+            with self.assertRaises(INSTALL.InputError):
+                INSTALL._transaction_diagnostic(path, record, target=record["targets"][0]["key"],
+                                                nonce="nonce", detector="test", observed={})
+            self.assertFalse((root / (INSTALL.ASSETS_MARKER_FILE + ".diagnostic.json")).exists())
+
+    def test_assets_only_release_boundary_routes_to_the_shared_transaction(self):
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / INSTALL.ASSETS_MARKER_FILE
+            with mock.patch.object(INSTALL, "cluster_uuid", return_value="0123456789ABCDEFGHIJKL"), \
+                 mock.patch.object(INSTALL, "run_default_asset_transaction", return_value="applied") as run:
+                self.assertEqual(INSTALL.assets_only_install(
+                    self.bundle, "https://es", "https://kb", "auth", path,
+                    archive_sha256="a" * 64), "applied")
+            self.assertTrue(run.called)
+            self.assertFalse(run.call_args.kwargs["full_flow"])
+
     def test_t_recon_6_and_8_divergent_or_ambiguous_are_refusals(self):
         with self.assertRaises(INSTALL.AssetTransactionRefusal):
             INSTALL._saved_object_projection("rigsignal", "dashboard", [])
