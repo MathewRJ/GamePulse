@@ -2106,13 +2106,22 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
                                                 es_url, kb_url, authorization, adapter,
                                                 full_flow=full_flow)
         if record is None:
-            # T-RECON-2: complete Kibana fail-closed preflight before intent or
-            # an ES self-heal.  Exact and absent are both safe observations.
+            # A new transaction has no pre-existing remote authority.  Finish
+            # the complete no-write observation barrier before publishing
+            # intent or creating anything: a foreign/divergent target anywhere
+            # in the release must not leave an earlier target newly created.
+            # This includes the T-RECON-2 Kibana barrier and extends the same
+            # fail-closed rule to ES ownership observations.
             for spec in _transaction_specs(bundle):
                 if spec[0].startswith("kibana/"):
                     state, _live, _destination = _transaction_observe(es_url, kb_url, authorization, spec, bundle, adapter)
                     if state == "divergent":
                         raise AssetTransactionRefusal("Kibana target differs")
+            for spec in _transaction_specs(bundle):
+                if spec[0].startswith("es/"):
+                    state, _live, _destination = _transaction_observe(es_url, kb_url, authorization, spec, bundle, adapter)
+                    if state in {"divergent", "owned-divergent"}:
+                        raise AssetTransactionRefusal("asset target differs")
             record = new_installing_record(binding, targets, _transaction_now())
             write_transaction_record(record_path, record, binding, targets)
             fault("after-v2-intent-publication")
@@ -4747,7 +4756,7 @@ def cluster_uuid(es_url: str, authorization: str) -> str:
     response = es_json(es_url, "/", "GET", authorization)
     value = response.get("cluster_uuid") if isinstance(response, dict) else None
     if not isinstance(value, str) or not UUID_RE.fullmatch(value):
-        raise InputError("cluster UUID is invalid")
+        raise RemoteReadRefusal("cluster UUID is invalid")
     return value
 
 
@@ -6213,9 +6222,10 @@ def main() -> int:
         # The marker survives local rollback and a fresh enrollment root.  It
         # is therefore the authoritative rerun fence, ahead of secure_root()
         # and every subsequent mutation.
-        fence_remote_ownership_profile(es_url, authorization, ownership_profile,
-                                       raw_ownership_profile is None)
-        run_topology_preflight(bundle, es_url, kb_url, authorization, ownership_profile)
+        if bundle.assets or ownership_profile == "fleet-coexist":
+            fence_remote_ownership_profile(es_url, authorization, ownership_profile,
+                                           raw_ownership_profile is None)
+            run_topology_preflight(bundle, es_url, kb_url, authorization, ownership_profile)
         # Default profile has one transaction engine for every caller.  The
         # Fleet-coexist journal remains the only legacy transaction path.
         test_pause("after-topology-preflight", args.unsafe_test_injection)
@@ -6325,7 +6335,7 @@ def main() -> int:
         post_fleet_snapshot: dict[str, object] | None = None
         candidate_drift_done = False
         default_transaction_done = False
-        if ownership_profile == "default":
+        if ownership_profile == "default" and needs_default_marker:
             if default_marker_path is None:
                 raise InputError("assets transaction record path is unavailable")
             binding = transaction_binding(bundle, uuid_value, kb_url,

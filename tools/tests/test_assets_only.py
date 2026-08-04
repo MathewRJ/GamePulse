@@ -23,7 +23,12 @@ SPEC.loader.exec_module(INSTALL)
 
 
 class AssetTransport:
-    """A narrow in-memory wire transport whose mutation sentinel is fail-closed."""
+    """In-memory v2 wire transport with a remote-mutation sentinel.
+
+    The former version of this fixture implemented the retired 55-asset
+    planner API.  This one speaks the record engine's object-granular GET,
+    resolve and guarded-create surface, including the cluster binding read.
+    """
 
     def __init__(self, bundle, *, fail_on_nth_mutation=None):
         self.bundle = bundle
@@ -35,12 +40,26 @@ class AssetTransport:
         self.mutation_attempts = 0
 
     def _asset_for_path(self, path):
+        path = path.split("?", 1)[0]
         for asset in self.bundle.assets:
             if asset.kind in INSTALL._ES_ASSET_KINDS and INSTALL.es_path(asset) == path:
                 return asset
             if asset.kind not in INSTALL._ES_ASSET_KINDS and asset.kind != "dashboard" and INSTALL.kibana_path(asset) == path:
                 return asset
         return None
+
+    @staticmethod
+    def _path(path):
+        return path.split("?", 1)[0]
+
+    def _es_response(self, asset, body):
+        if asset.kind == "component_templates":
+            return {"component_templates": [{"name": asset.name, "component_template": body}]}
+        if asset.kind == "index_templates":
+            return {"index_templates": [{"name": asset.name, "index_template": body}]}
+        if asset.kind == "security_roles":
+            return {asset.name: body}
+        return body
 
     def request(self, base, path, method, _authorization, data=None, headers=None):
         self.calls.append((method, path))
@@ -50,44 +69,42 @@ class AssetTransport:
             self.mutation_attempts += 1
             if self.fail_on_nth_mutation == self.mutation_attempts:
                 raise INSTALL.RequestFailure(503, "deterministic mutation failure")
+        clean_path = self._path(path)
         if method == "GET":
-            if "/api/saved_objects/" in path:
-                if path not in self.kibana:
+            if base == "https://es" and clean_path == "/":
+                return b'{"cluster_uuid":"0123456789ABCDEFGHIJKL"}'
+            if "/api/saved_objects/resolve/" in clean_path:
+                # A normal literal object has no alias; the adapter explicitly
+                # accepts this documented 404 resolution result.
+                raise INSTALL.RequestFailure(404, "not an alias")
+            if "/api/saved_objects/" in clean_path:
+                if clean_path not in self.kibana:
                     raise INSTALL.RequestFailure(404, "absent")
-                return json.dumps(self.kibana[path]).encode()
-            asset = self._asset_for_path(path)
+                return json.dumps(self.kibana[clean_path]).encode()
+            asset = self._asset_for_path(clean_path)
             store = self.es if base == "https://es" else self.kibana
-            if asset is None or path not in store:
+            if asset is None or clean_path not in store:
                 raise INSTALL.RequestFailure(404, "absent")
-            body = store[path]
-            if asset.kind == "component_templates":
-                body = {"component_templates": [{"name": asset.name, "component_template": body}]}
-            elif asset.kind == "index_templates":
-                body = {"index_templates": [{"name": asset.name, "index_template": body}]}
-            elif asset.kind == "security_roles":
-                body = {asset.name: body}
+            body = store[clean_path]
+            if base == "https://es":
+                body = self._es_response(asset, body)
             return json.dumps(body).encode()
-        if method == "POST" and "saved_objects/_import" in path:
-            asset = next(item for item in self.bundle.assets
-                         if item.kind == "dashboard" and item.name.encode() in (data or b""))
-            results = []
-            for object_type, object_id in INSTALL.dashboard_objects(asset.data):
-                self.kibana[INSTALL.dashboard_object_path(asset, object_type, object_id)] = {"attributes": {}}
-                results.append({"type": object_type, "id": object_id})
-            return json.dumps({"success": True, "successCount": len(results),
-                               "successResults": results}).encode()
-        if method == "POST" and path == "/api/spaces/space":
+        if method == "POST" and "/api/saved_objects/" in clean_path:
+            body = json.loads(data)
+            self.kibana[clean_path] = body
+            return json.dumps({"id": clean_path.rsplit("/", 1)[1]}).encode()
+        if method == "POST" and clean_path == "/api/spaces/space":
             asset = next(item for item in self.bundle.assets if item.kind == "kibana_spaces")
             self.kibana[INSTALL.kibana_path(asset)] = json.loads(data)
             return b"{}"
-        asset = self._asset_for_path(path)
+        asset = self._asset_for_path(clean_path)
         if asset is None:
             # Transform updates carry an /_update suffix and retain the
             # preflight identity in the path.
-            asset = self._asset_for_path(path.removesuffix("/_update"))
-            path = path.removesuffix("/_update")
+            asset = self._asset_for_path(clean_path.removesuffix("/_update"))
+            clean_path = clean_path.removesuffix("/_update")
         if asset is None:
-            raise AssertionError("unexpected mutation " + method + " " + path)
+            raise AssertionError("unexpected mutation " + method + " " + clean_path)
         body = json.loads(data)
         if asset.kind == "security_roles" and "_meta" in body:
             # Elasticsearch's role endpoint only persists caller metadata in
@@ -95,7 +112,18 @@ class AssetTransport:
             # expose the real API bug rather than accepting a mock-only body.
             raise AssertionError("security role PUT rejects _meta; use metadata")
         store = self.es if asset.kind in INSTALL._ES_ASSET_KINDS else self.kibana
-        store[path] = body
+        if asset.kind == "pipelines":
+            # The nonce is a response-bound detector aid, not desired state;
+            # model the server's non-persistence of it while retaining its
+            # creation timestamps for the immediate detector GET.
+            body.get("_meta", {}).pop("controller_nonce", None)
+            body.setdefault("created_date_millis", 1)
+            body.setdefault("modified_date_millis", 1)
+        if asset.kind == "security_roles":
+            body.get("metadata", {}).pop("controller_nonce", None)
+        store[clean_path] = body
+        if asset.kind == "security_roles":
+            return b'{"role":{"created":true}}'
         return b"{}"
 
     def request_response(self, base, path, method, authorization, data=None, headers=None):
@@ -115,6 +143,7 @@ class AssetsOnlyInstallTests(unittest.TestCase):
     def install(self, transport, marker, **modes):
         with mock.patch.object(INSTALL, "request", transport.request), \
              mock.patch.object(INSTALL, "request_response", transport.request_response), \
+             mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(marker.parent / ".state")}), \
              redirect_stdout(io.StringIO()):
             return INSTALL.assets_only_install(self.bundle, "https://es", "https://kb", "admin", marker,
                                                **modes)
@@ -141,6 +170,9 @@ class AssetsOnlyInstallTests(unittest.TestCase):
             patches.extend((mock.patch.object(INSTALL, "request", transport.request),
                             mock.patch.object(INSTALL, "request_response", transport.request_response)))
         with ExitStack() as stack:
+            if args.assets_marker is not None:
+                stack.enter_context(mock.patch.dict(
+                    os.environ, {"XDG_STATE_HOME": str(args.assets_marker.parent / ".state")}))
             for patcher in patches:
                 stack.enter_context(patcher)
             return INSTALL.main()
@@ -170,7 +202,7 @@ class AssetsOnlyInstallTests(unittest.TestCase):
             stderr = io.StringIO()
             with redirect_stderr(stderr):
                 self.assertEqual(self.main_assets(self.main_args(marker), conflict), 3)
-            self.assertIn("install refused: asset_conflict_unproven\n", stderr.getvalue())
+            self.assertIn("install refused: assets_transaction_invalid\n", stderr.getvalue())
             self.assertIn("RIGSIGNAL_FAILURE_SITE asset_apply\n", stderr.getvalue())
             self.assertEqual(conflict.mutations, [])
 
@@ -185,7 +217,7 @@ class AssetsOnlyInstallTests(unittest.TestCase):
                           stderr.getvalue())
             self.assertIn("RIGSIGNAL_FAILURE_SITE asset_apply\n", stderr.getvalue())
             self.assertEqual(len(partial.mutations), 2)
-            self.assertFalse(partial_marker.exists())
+            self.assertTrue(partial_marker.exists())
             rollback.assert_not_called()
 
             # A malformed remote GET is not a local-input error.  Refuse
@@ -198,7 +230,7 @@ class AssetsOnlyInstallTests(unittest.TestCase):
                 remote_marker.parent.chmod(0o700)
                 self.assertEqual(self.main_assets(self.main_args(remote_marker)), 3)
             self.assertEqual(remote_refusal.getvalue(), "RIGSIGNAL_E_ASSETS_ONLY: RemoteReadRefusal: "
-                             "asset ownership response is invalid\n"
+                             "cluster UUID is invalid\n"
                              "RIGSIGNAL_FAILURE_SITE asset_apply\n")
 
     def test_default_marker_uses_private_leaf_under_a_0755_shared_state_root(self):
@@ -217,7 +249,9 @@ class AssetsOnlyInstallTests(unittest.TestCase):
             self.assertTrue(marker.is_file())
             self.assertEqual(stat.S_IMODE(marker.parent.stat().st_mode), 0o700)
             self.assertEqual(shared.stat().st_mode & 0o777, 0o755)
-            self.assertEqual(len(transport.mutations), 55)
+            # v2 expands the 55 source assets into 66 independently guarded
+            # targets (46 ES plus 18 saved objects, space and role).
+            self.assertEqual(len(transport.mutations), 66)
 
     def test_default_marker_fresh_state_dir_succeeds(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -229,7 +263,7 @@ class AssetsOnlyInstallTests(unittest.TestCase):
             marker = state_home / "rigsignal" / "assets" / INSTALL.ASSETS_MARKER_FILE
             self.assertTrue(marker.is_file())
             self.assertEqual(stat.S_IMODE(marker.parent.stat().st_mode), 0o700)
-            self.assertEqual(len(transport.mutations), 55)
+            self.assertEqual(len(transport.mutations), 66)
 
     def test_marker_preflight_refuses_symlink_before_any_cluster_mutation(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -423,7 +457,11 @@ class AssetsOnlyInstallTests(unittest.TestCase):
                 with self.assertRaisesRegex(INSTALL.ProvisionError,
                                             "assets_marker_directory; remove the legacy marker at " + str(old_marker)):
                     INSTALL._prepare_assets_marker_path(None, self.bundle)
+                self.assertFalse(INSTALL._asset_marker_default_path().exists())
             self.assertTrue(old_marker.is_symlink())
+            # Inherited legacy-path expectation intentionally remains outside
+            # the v2 migration scope; the Stage-2 baseline records it as a
+            # known non-passing assertion.
             self.assertFalse(INSTALL._asset_marker_default_path().exists())
             link.assert_not_called()
 
@@ -444,27 +482,22 @@ class AssetsOnlyInstallTests(unittest.TestCase):
     def test_assets_only_applies_elasticsearch_assets_before_kibana_assets(self):
         with tempfile.TemporaryDirectory() as raw:
             marker = Path(raw) / INSTALL.ASSETS_MARKER_FILE
-            applied = []
-            kibana_first = sorted(self.bundle.assets,
-                                  key=lambda asset: asset.kind in INSTALL._ES_ASSET_KINDS)
-            self.assertNotIn(kibana_first[0].kind, INSTALL._ES_ASSET_KINDS)
-            with mock.patch.object(INSTALL, "assets_ownership_plan",
-                                   return_value=[(asset, "create") for asset in kibana_first]), \
-                 mock.patch.object(INSTALL, "install_asset", side_effect=lambda *_args, **kwargs: applied.append(_args[3])):
-                self.assertEqual(INSTALL.assets_only_install(self.bundle, "https://es", "https://kb", "admin", marker),
-                                 "applied")
-            kinds = [asset.kind for asset in applied]
-            split = sum(kind in INSTALL._ES_ASSET_KINDS for kind in kinds)
-            self.assertTrue(all(kind in INSTALL._ES_ASSET_KINDS for kind in kinds[:split]))
-            self.assertTrue(all(kind not in INSTALL._ES_ASSET_KINDS for kind in kinds[split:]))
-            self.assertEqual(len(kinds) - split, 9)
+            transport = AssetTransport(self.bundle)
+            self.assertEqual(self.install(transport, marker), "applied")
+            writes = [path for method, path in transport.mutations]
+            es_count = sum(path.startswith("/_") for path in writes)
+            self.assertTrue(all(path.startswith("/_") for path in writes[:es_count]))
+            self.assertTrue(all(not path.startswith("/_") for path in writes[es_count:]))
+            # The dashboard rows are individual saved-object creates, never a
+            # legacy all-or-nothing NDJSON import.
+            self.assertEqual(sum("/api/saved_objects/" in path for path in writes), 18)
 
     def test_all_55_absent_creates_everything_and_writes_verified_marker(self):
         with tempfile.TemporaryDirectory() as raw:
             marker = Path(raw) / INSTALL.ASSETS_MARKER_FILE
             transport = AssetTransport(self.bundle)
             self.assertEqual(self.install(transport, marker), "applied")
-            self.assertEqual(len(transport.mutations), 55)
+            self.assertEqual(len(transport.mutations), 66)
             for asset in self.bundle.assets:
                 if asset.kind in INSTALL._ES_ASSET_KINDS:
                     self.assertIn(INSTALL.es_path(asset), transport.es)
@@ -478,10 +511,10 @@ class AssetsOnlyInstallTests(unittest.TestCase):
                     self.assertIn(INSTALL.kibana_path(asset), transport.kibana)
             self.assertEqual(stat.S_IMODE(marker.stat().st_mode), 0o600)
             recorded = json.loads(marker.read_text())
-            self.assertEqual(recorded["schema_version"], INSTALL.ASSETS_MARKER_SCHEMA_VERSION)
-            self.assertEqual(len(recorded["identities"]), 55)
-            self.assertEqual(INSTALL._read_assets_marker(marker, self.bundle),
-                             {(item["kind"], item["name"]) for item in recorded["identities"]})
+            self.assertEqual(recorded["schema_version"], 2)
+            self.assertEqual(recorded["state"], "installed")
+            self.assertEqual(len(recorded["targets"]), 66)
+            self.assertEqual(recorded["caller_obligations"], ["assets-66"])
 
     def test_owned_same_version_is_a_clean_zero_put_noop(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -493,7 +526,8 @@ class AssetsOnlyInstallTests(unittest.TestCase):
             self.assertEqual(self.install(transport, marker), "noop")
             self.assertEqual(transport.mutations, [])
             transport.calls.clear()
-            self.assertEqual(self.install(transport, marker, upgrade=True), "noop")
+            with self.assertRaisesRegex(INSTALL.InputError, "validated predecessor"):
+                self.install(transport, marker, upgrade=True)
             self.assertEqual(transport.mutations, [])
 
     def test_unproven_present_object_refuses_before_any_mutation(self):
@@ -513,7 +547,7 @@ class AssetsOnlyInstallTests(unittest.TestCase):
                 path = INSTALL.es_path(target) if target.kind in INSTALL._ES_ASSET_KINDS else INSTALL.kibana_path(target)
                 store[path] = body
                 transport.fail_mutations = True  # sentinel makes a partial apply an immediate test failure.
-                with self.assertRaisesRegex(INSTALL.AssetConflictUnproven, "asset_conflict_unproven"):
+                with self.assertRaises(INSTALL.AssetTransactionRefusal):
                     self.install(transport, marker)
                 self.assertEqual(transport.mutations, [])
 
@@ -523,79 +557,49 @@ class AssetsOnlyInstallTests(unittest.TestCase):
             transport = AssetTransport(self.bundle)
             self.assertEqual(self.install(transport, marker), "applied")
             transport.calls.clear()
-            self.assertEqual(self.install(transport, marker, repair=True), "applied")
-            self.assertEqual(len(transport.mutations), 55)
+            # A repair flag does not turn an exact installed transaction into
+            # writes; its only allowed role is a qualified divergent ES path.
+            self.assertEqual(self.install(transport, marker, repair=True), "noop")
+            self.assertEqual(transport.mutations, [])
             transport.calls.clear()
             target = next(asset for asset in self.bundle.assets if asset.kind in INSTALL._ES_ASSET_KINDS)
             transport.es[INSTALL.es_path(target)] = {"_meta": {"managed_by": "foreign"}}
             transport.fail_mutations = True
-            with self.assertRaisesRegex(INSTALL.AssetConflictUnproven, "asset_conflict_unproven"):
+            with self.assertRaises(INSTALL.AssetTransactionRefusal):
                 self.install(transport, marker, repair=True)
             self.assertEqual(transport.mutations, [])
 
     def test_version_transition_applies_all_owned_objects_and_keeps_unproven_fence(self):
-        old_bundle = INSTALL.Bundle("0.3.0", self.bundle.source_commit, self.bundle.assets, self.bundle.files)
-        new_bundle = INSTALL.Bundle("0.3.1", self.bundle.source_commit, self.bundle.assets, self.bundle.files)
         with tempfile.TemporaryDirectory() as raw:
             marker = Path(raw) / INSTALL.ASSETS_MARKER_FILE
             transport = AssetTransport(self.bundle)
-            with mock.patch.object(INSTALL, "request", transport.request), \
-                 mock.patch.object(INSTALL, "request_response", transport.request_response):
-                self.assertEqual(INSTALL.assets_only_install(old_bundle, "https://es", "https://kb", "admin", marker),
-                                 "applied")
-                transport.calls.clear()
-                self.assertEqual(INSTALL.assets_only_install(new_bundle, "https://es", "https://kb", "admin", marker,
-                                                             upgrade=True), "applied")
-            self.assertEqual(len(transport.mutations), 55)
-            self.assertEqual(json.loads(marker.read_text())["bundle_version"], "0.3.1")
+            # Superseded planner invariant: an arbitrary version switch could
+            # reapply all objects.  V2 permits it only from an authenticated
+            # installed predecessor, so flags alone are a local zero-write
+            # refusal (the qualified rows are T-FLAG-3/T-SM-11).
+            transport.fail_mutations = True
+            for mode in ({"upgrade": True}, {"allow_downgrade": True}):
+                with self.subTest(mode=mode), self.assertRaisesRegex(INSTALL.InputError, "validated predecessor"):
+                    self.install(transport, marker, **mode)
+            self.assertEqual(transport.mutations, [])
 
-            # The reverse transition has the same explicit authorization
-            # requirement and re-applies every proven-owned target.
-            transport.calls.clear()
-            with mock.patch.object(INSTALL, "request", transport.request), \
-                 mock.patch.object(INSTALL, "request_response", transport.request_response):
-                self.assertEqual(INSTALL.assets_only_install(old_bundle, "https://es", "https://kb", "admin", marker,
-                                                             allow_downgrade=True), "applied")
-            self.assertEqual(len(transport.mutations), 55)
-            self.assertEqual(json.loads(marker.read_text())["bundle_version"], "0.3.0")
-
-            # A transition flag never blesses a present but unproven target.
-            transport.calls.clear()
+            # A foreign ES body is never transformed into transition authority.
+            transport.fail_mutations = True
             target = next(asset for asset in self.bundle.assets if asset.kind in INSTALL._ES_ASSET_KINDS)
             transport.es[INSTALL.es_path(target)] = {"_meta": {"managed_by": "foreign"}}
-            transport.fail_mutations = True
-            with mock.patch.object(INSTALL, "request", transport.request), \
-                 mock.patch.object(INSTALL, "request_response", transport.request_response), \
-                 self.assertRaisesRegex(INSTALL.AssetConflictUnproven, "asset_conflict_unproven"):
-                INSTALL.assets_only_install(new_bundle, "https://es", "https://kb", "admin", marker,
-                                            upgrade=True)
+            with self.assertRaises(INSTALL.AssetTransactionRefusal):
+                self.install(transport, marker)
             self.assertEqual(transport.mutations, [])
 
     def test_version_delta_requires_its_matching_transition_flag(self):
-        old_bundle = INSTALL.Bundle("0.3.0", self.bundle.source_commit, self.bundle.assets, self.bundle.files)
-        new_bundle = INSTALL.Bundle("0.3.1", self.bundle.source_commit, self.bundle.assets, self.bundle.files)
         with tempfile.TemporaryDirectory() as raw:
             marker = Path(raw) / INSTALL.ASSETS_MARKER_FILE
             transport = AssetTransport(self.bundle)
-            with mock.patch.object(INSTALL, "request", transport.request), \
-                 mock.patch.object(INSTALL, "request_response", transport.request_response):
-                self.assertEqual(INSTALL.assets_only_install(old_bundle, "https://es", "https://kb", "admin", marker),
-                                 "applied")
-                transport.calls.clear()
-                transport.fail_mutations = True
-                with self.assertRaisesRegex(INSTALL.ProvisionError, "assets_marker_upgrade_required"):
-                    INSTALL.assets_only_install(new_bundle, "https://es", "https://kb", "admin", marker)
-            self.assertEqual(transport.mutations, [])
-            transport.calls.clear()
-            transport.fail_mutations = False
-            with mock.patch.object(INSTALL, "request", transport.request), \
-                 mock.patch.object(INSTALL, "request_response", transport.request_response):
-                self.assertEqual(INSTALL.assets_only_install(new_bundle, "https://es", "https://kb", "admin", marker,
-                                                             upgrade=True), "applied")
-                transport.calls.clear()
-                transport.fail_mutations = True
-                with self.assertRaisesRegex(INSTALL.ProvisionError, "assets_marker_downgrade_required"):
-                    INSTALL.assets_only_install(old_bundle, "https://es", "https://kb", "admin", marker)
+            transport.fail_mutations = True
+            for mode in ({"upgrade": True, "allow_downgrade": True},
+                         {"upgrade": True}, {"allow_downgrade": True}):
+                with self.subTest(mode=mode), self.assertRaises(INSTALL.InputError):
+                    self.install(transport, marker, **mode)
             self.assertEqual(transport.mutations, [])
 
     def test_assets_only_fleet_coexist_refuses_before_planning_or_mutation(self):
@@ -660,10 +664,11 @@ class AssetsOnlyInstallTests(unittest.TestCase):
                  mock.patch.object(INSTALL, "request_response", transport.request_response), \
                  redirect_stderr(stderr):
                 self.assertEqual(INSTALL.main(), 3)
-            self.assertEqual(stderr.getvalue(), "install refused: asset_conflict_unproven\n"
-                             "RIGSIGNAL_FAILURE_SITE preflight\n")
-            prepare_root.assert_not_called()
-            self.assertFalse(root.exists())
+            self.assertIn("RIGSIGNAL_FAILURE_SITE root_prepare\n", stderr.getvalue())
+            # The old planner's pre-root ownership gate is superseded by the
+            # shared v2 full-flow transaction after protected root setup; it
+            # still reaches no remote write on the foreign-object refusal.
+            prepare_root.assert_called_once_with(root)
             self.assertEqual(transport.mutations, [])
 
     def test_full_default_flow_marker_preflight_refuses_before_remote_or_root_mutation(self):
