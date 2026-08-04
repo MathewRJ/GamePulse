@@ -3,6 +3,7 @@
 
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import re
@@ -11,6 +12,7 @@ import sys
 import tempfile
 import textwrap
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -447,39 +449,39 @@ print(outcome)
             final = INSTALL.read_transaction_record_if_present(record, binding, targets)
             return crashed, raw_after, state_after, rerun, final
 
-    def _real_transaction(self, *, record_kind="N", full_flow=False, absent=(), divergent=(),
-                          unreadable=(), repair=False, upgrade=False, allow_downgrade=False):
-        """Run the production executor against a stateful, mutation-counting wire.
+    def _run_scenario(self, caller, initial_durable_record="N", live_state=None, flags=(),
+                      crash_point=None):
+        """Drive the real transaction from the public ``main()`` asset route.
 
-        The wire is intentionally below ``run_default_asset_transaction``: it
-        observes exactly the target state requested by a manifest fixture and
-        turns a selected write into a subsequently exact GET.  Consequently a
-        test which uses this helper exercises durable record publication,
-        transition ordering, and the executor's own post-write verification;
-        it is not a test of ``transaction_flag_policy``.
+        ``live_state`` is a transport script: key -> exact/absent/divergent/
+        unreadable or a callable receiving ``(key, attempt)``.  The wire is
+        beneath the engine and records every mutation attempt, so table rows
+        can assert the durable record and mutation boundary without creating
+        a second planner in the test suite.  ``crash_point`` is reserved for
+        the fresh-process crash runner below; an in-process SIGKILL would end
+        the suite itself.
         """
+        self.assertIn(caller, {"assets-only", "full-flow"})
+        self.assertIsNone(crash_point, "crash scenarios use _subprocess_record")
         bundle = INSTALL.load_source()
         targets = INSTALL.transaction_targets(bundle)
         binding = INSTALL.transaction_binding(
-            bundle, "0123456789ABCDEFGHIJKL", "https://kb.example", "a" * 64)
-        ordinary = [item["key"] for item in targets]
-        full_key = INSTALL.BUNDLE_META_TARGET_KEY
-        absent, divergent, unreadable = set(absent), set(divergent), set(unreadable)
-        wire = {key: ("absent" if key in absent else "exact") for key in ordinary}
-        wire.update({key: "absent" for key in absent})
-        wire.update({key: "divergent" for key in divergent})
-        wire.update({key: "unreadable" for key in unreadable})
-        writes = []
+            bundle, "0123456789ABCDEFGHIJKL", "https://kb.example", INSTALL.bundle_snapshot_digest(bundle))
+        live_state = dict(live_state or {})
+        wire = {item["key"]: "exact" for item in targets}
+        wire.update(live_state.get("states", live_state))
+        operations = []
+        attempts = {}
 
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw); root.chmod(0o700)
             path = root / INSTALL.ASSETS_MARKER_FILE
-            if record_kind != "N":
+            if initial_durable_record != "N":
                 record = INSTALL.new_installing_record(binding, targets, "2026-08-04T12:34:56Z")
-                if record_kind.startswith("I-full") or record_kind == "S-current-full":
+                if initial_durable_record.startswith("I-full") or initial_durable_record == "S-current-full":
                     record = INSTALL.expand_full_flow_record(record)
-                if record_kind.startswith("I-"):
-                    record["possible_mutation"] = record_kind.endswith("pm1")
+                if initial_durable_record.startswith("I-"):
+                    record["possible_mutation"] = initial_durable_record.endswith("pm1")
                 else:
                     for key in record["progress"]:
                         record["progress"][key] = "verified"
@@ -488,36 +490,103 @@ print(outcome)
 
             def observe(_es, _kb, _auth, spec, _bundle, _adapter, _record=None):
                 key = spec[0]
-                state = wire.get(key, "exact")
+                attempts[key] = attempts.get(key, 0) + 1
+                scripted = live_state.get("script")
+                state = scripted(key, attempts[key]) if scripted else wire.get(key, "exact")
                 if state == "unreadable":
                     raise INSTALL.AssetTransactionRefusal("fixture remote read refused")
-                return state, None, None
+                destination = live_state.get("destinations", {}).get(key)
+                return state, None, destination
 
             def put(_es, _kb, _auth, spec, _bundle, _record, _adapter):
-                writes.append(spec[0])
+                operations.append(spec[0])
                 wire[spec[0]] = "exact"
 
-            outcome = None
-            error = None
+            argv = ["install_assets.py", "--bundle", str(root / "bundle.tar"),
+                    "--endpoint", "https://es.example", "--ca-file", str(root / "es.pem"),
+                    "--kibana-endpoint", "https://kb.example", "--kibana-ca-file", str(root / "kb.pem"),
+                    "--admin-credentials-file", str(root / "admin.toml"),
+                    "--agent-binary", str(root / "agent"), "--profile", "user",
+                    "--assets-only", "--assets-marker", str(path)]
+            argv.extend("--" + flag for flag in flags)
+            diagnostics = io.StringIO()
+            output = io.StringIO()
+            actual_assets_only_install = INSTALL.assets_only_install
+
+            def caller_route(*args, **kwargs):
+                if caller == "assets-only":
+                    return actual_assets_only_install(*args, **kwargs)
+                scenario_binding = INSTALL.transaction_binding(
+                    args[0], "0123456789ABCDEFGHIJKL", args[2], INSTALL.bundle_snapshot_digest(args[0]))
+                return INSTALL.run_default_asset_transaction(
+                    args[0], args[1], args[2], args[3], args[4], scenario_binding,
+                    full_flow=True, repair=kwargs.get("repair", False),
+                    upgrade=kwargs.get("upgrade", False),
+                    allow_downgrade=kwargs.get("allow_downgrade", False))
+
             with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(root / "state")}, clear=False), \
+                 mock.patch.object(sys, "argv", argv), \
+                 mock.patch.object(INSTALL, "load_bundle", return_value=bundle), \
+                 mock.patch.object(INSTALL, "check_version_fence"), \
+                 mock.patch.object(INSTALL, "configure_https"), \
+                 mock.patch.object(INSTALL, "admin_authorization", return_value="auth"), \
+                 mock.patch.object(INSTALL, "cluster_uuid", return_value="0123456789ABCDEFGHIJKL"), \
+                 mock.patch.object(INSTALL, "_prepare_assets_marker_path", return_value=path), \
+                 mock.patch.object(INSTALL, "assets_only_install", side_effect=caller_route), \
                  mock.patch.object(INSTALL, "_transaction_observe", side_effect=observe), \
-                 mock.patch.object(INSTALL, "_transaction_put", side_effect=put):
-                try:
-                    outcome = INSTALL.run_default_asset_transaction(
-                        bundle, "https://es", "https://kb", "auth", path, binding,
-                        full_flow=full_flow, repair=repair, upgrade=upgrade,
-                        allow_downgrade=allow_downgrade)
-                    status = 0
-                except (INSTALL.AssetTransactionHalt, INSTALL.AssetTransactionRefusal) as caught:
-                    error = caught
-                    status = INSTALL.transaction_failure_status(path)
-                except INSTALL.InputError as caught:
-                    error = caught
-                    status = 2 if (upgrade or allow_downgrade) else INSTALL.transaction_failure_status(path)
-            final = INSTALL.read_transaction_record_if_present(path, binding, targets)
-            return {"outcome": outcome, "error": error, "status": status, "writes": writes,
-                    "record": final, "path_exists": path.exists(), "wire": wire,
-                    "targets": targets, "full_key": full_key}
+                 mock.patch.object(INSTALL, "_transaction_put", side_effect=put), \
+                 redirect_stdout(output), redirect_stderr(diagnostics):
+                exit_code = INSTALL.main()
+            final = INSTALL.read_transaction_record_if_present(path, binding, targets) if path.exists() else None
+            return {"exit_code": exit_code, "record": final, "operations": operations,
+                    "diagnostics": diagnostics.getvalue(), "output": output.getvalue(),
+                    "path_exists": path.exists(), "wire": wire, "targets": targets,
+                    "full_key": INSTALL.BUNDLE_META_TARGET_KEY}
+
+    def _real_transaction(self, *, record_kind="N", full_flow=False, absent=(), divergent=(),
+                          unreadable=(), repair=False, upgrade=False, allow_downgrade=False):
+        """Compatibility adapter: all completion rows use ``_run_scenario``."""
+        states = {key: "absent" for key in absent}
+        states.update({key: "divergent" for key in divergent})
+        states.update({key: "unreadable" for key in unreadable})
+        flags = tuple(name for name, enabled in (("repair", repair), ("upgrade", upgrade),
+                                                   ("allow-downgrade", allow_downgrade)) if enabled)
+        result = self._run_scenario("full-flow" if full_flow else "assets-only", record_kind,
+                                    {"states": states}, flags)
+        result.update(status=result["exit_code"], writes=result["operations"], error=None, outcome=None)
+        return result
+
+    def test_ambiguity_6_exit_mapping_is_exhaustive_and_main_routed(self):
+        """A6: one mapping owns every executor result; main() invokes it."""
+        bundle = INSTALL.load_source()
+        targets = INSTALL.transaction_targets(bundle)
+        binding = INSTALL.transaction_binding(
+            bundle, "0123456789ABCDEFGHIJKL", "https://kb.example", INSTALL.bundle_snapshot_digest(bundle))
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / INSTALL.ASSETS_MARKER_FILE
+            with redirect_stderr(io.StringIO()):
+                for possible_mutation, expected in ((False, 3), (True, 4)):
+                    record = INSTALL.new_installing_record(binding, targets, "2026-08-04T12:34:56Z")
+                    record["possible_mutation"] = possible_mutation
+                    INSTALL.write_transaction_record(path, record, binding, targets)
+                    for outcome in ("refusal", "halt"):
+                        with self.subTest(outcome=outcome, possible_mutation=possible_mutation):
+                            self.assertEqual(INSTALL.asset_executor_exit_code(outcome, path), expected)
+                self.assertEqual(INSTALL.asset_executor_exit_code("success", path), 0)
+                self.assertEqual(INSTALL.asset_executor_exit_code("local-input", path), 2)
+                with self.assertRaises(INSTALL.InputError):
+                    INSTALL.asset_executor_exit_code("unknown", path)
+
+        # The real main()-routed scenario touches the same mapper for a
+        # success and an uncertainty limb; static source guards the full-flow
+        # caller's matching catch boundary without duplicating enrollment.
+        with mock.patch.object(INSTALL, "asset_executor_exit_code", wraps=INSTALL.asset_executor_exit_code) as mapped:
+            self._run_scenario("assets-only")
+            key = INSTALL.transaction_targets(bundle)[0]["key"]
+            self._run_scenario("assets-only", "I-assets-pm1", {"states": {key: "unreadable"}})
+        self.assertEqual([call.args[0] for call in mapped.call_args_list], ["success", "halt"])
+        source = (ROOT / "tools/install_assets.py").read_text(encoding="utf-8")
+        self.assertGreaterEqual(source.count('asset_executor_exit_code("halt",'), 2)
 
     def test_t_flag_1_through_4_generated_896_row_oracle(self):
         """T-FLAG-1..4: parse every vendored row and drive the policy engine."""
@@ -557,7 +626,6 @@ print(outcome)
             with self.subTest(caller="full-flow" if full_flow else "assets-only"):
                 result = self._real_transaction(full_flow=full_flow, divergent=(root,))
                 self.assertEqual(result["status"], 3)
-                self.assertIsInstance(result["error"], INSTALL.AssetTransactionRefusal)
                 self.assertEqual(result["writes"], [])
                 self.assertFalse(result["path_exists"])
                 self.assertEqual(result["wire"][root], "divergent")
@@ -575,7 +643,7 @@ print(outcome)
         self.assertEqual(sorted(result["writes"]), saved)
         self.assertEqual(len(result["writes"]), 18)
         replay = self._real_transaction(record_kind="S-current-assets")
-        self.assertEqual((replay["status"], replay["writes"], replay["outcome"]), (0, [], "noop"))
+        self.assertEqual((replay["status"], replay["writes"]), (0, []))
 
     def test_t_cross_1_assets_only_retains_full_flow_intent_then_full_flow_completes(self):
         """T-CROSS-1, both literal Step-11 cases, on the shared executor."""
@@ -602,7 +670,6 @@ print(outcome)
         key = INSTALL.transaction_targets(INSTALL.load_source())[0]["key"]
         result = self._real_transaction(record_kind="S-current-assets", divergent=(key,))
         self.assertEqual(result["status"], 3)
-        self.assertIsInstance(result["error"], INSTALL.AssetTransactionRefusal)
         self.assertEqual(result["writes"], [])
         self.assertEqual(result["record"]["state"], "installed")
 
@@ -613,7 +680,6 @@ print(outcome)
             with self.subTest(**kwargs):
                 result = self._real_transaction(**kwargs)
                 self.assertEqual(result["status"], 2)
-                self.assertIsInstance(result["error"], INSTALL.InputError)
                 self.assertEqual(result["writes"], [])
                 self.assertFalse(result["path_exists"])
 

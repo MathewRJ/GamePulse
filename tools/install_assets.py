@@ -1389,6 +1389,22 @@ def transaction_failure_status(record_path: Path) -> int:
     return 3
 
 
+def asset_executor_exit_code(outcome: str, record_path: Path | None = None) -> int:
+    """Translate the complete asset-executor outcome domain at the CLI edge.
+
+    Keeping this small mapping independent of transport details is deliberate:
+    both main() callers must use the same process-status authority, while the
+    persisted transaction record remains authoritative for the 3/4 split.
+    """
+    if outcome == "success":
+        return 0
+    if outcome == "local-input":
+        return 2
+    if outcome in {"refusal", "halt"}:
+        return transaction_failure_status(record_path) if record_path is not None else 3
+    raise InputError("asset executor outcome is invalid")
+
+
 def transaction_flag_policy(caller: str, record: str, possible_mutation: bool,
                             obligations: str, live: str, flags: str) -> tuple[str, int, int]:
     """The executable v2 flag/state policy used by the conformance fixture.
@@ -6162,15 +6178,16 @@ def main() -> int:
                                           allow_downgrade=getattr(args, "allow_downgrade", False),
                                           archive_sha256=(bundle_archive_sha256 if args.bundle.is_file() else None))
             print("assets-only " + outcome)
-            return 0
+            return asset_executor_exit_code("success", marker_path)
         except (AssetTransactionHalt, AssetTransactionRefusal):
             # The record, not only this process's request tracker, is the
             # authority after a durable write-issued transition.
-            status = transaction_failure_status(marker_path)
-            return 4 if status == 4 else finalize_failure(
+            status = asset_executor_exit_code("halt", marker_path)
+            return status if status == 4 else finalize_failure(
                 "install refused: assets_transaction_invalid", failure_tracker, mutation_tracker)
         except ProvisionError as error:
-            status = (transaction_failure_status(marker_path) if "marker_path" in locals() else 3)
+            status = (asset_executor_exit_code("refusal", marker_path)
+                      if "marker_path" in locals() else 3)
             return 4 if status == 4 else finalize_failure(error.prefix, failure_tracker, mutation_tracker,
                                                            local=is_local_failure_message(error.prefix))
         except (InputError, RequestFailure, OSError) as error:
@@ -6358,7 +6375,7 @@ def main() -> int:
                                               upgrade=getattr(args, "upgrade", False),
                                               allow_downgrade=getattr(args, "allow_downgrade", False))
             except (AssetTransactionHalt, AssetTransactionRefusal):
-                status = transaction_failure_status(default_marker_path)
+                status = asset_executor_exit_code("halt", default_marker_path)
                 if status == 4:
                     return 4
                 raise ProvisionError("install refused: assets_transaction_invalid")
