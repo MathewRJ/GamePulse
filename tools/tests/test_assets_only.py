@@ -4,6 +4,7 @@
 import importlib.util
 import io
 import json
+import os
 import stat
 import tempfile
 import unittest
@@ -173,12 +174,15 @@ class AssetsOnlyInstallTests(unittest.TestCase):
             self.assertIn("RIGSIGNAL_FAILURE_SITE asset_apply\n", stderr.getvalue())
             self.assertEqual(conflict.mutations, [])
 
-            partial_marker = Path(raw) / "partial-marker.json"
+            partial_marker = Path(raw) / "partial" / INSTALL.ASSETS_MARKER_FILE
+            partial_marker.parent.mkdir(mode=0o700)
+            partial_marker.parent.chmod(0o700)
             partial = AssetTransport(self.bundle, fail_on_nth_mutation=2)
             stderr = io.StringIO()
             with redirect_stderr(stderr), mock.patch.object(INSTALL, "rollback_transaction") as rollback:
                 self.assertEqual(self.main_assets(self.main_args(partial_marker), partial), 4)
-            self.assertIn("install failed: assets-only:\n", stderr.getvalue())
+            self.assertIn("RIGSIGNAL_E_ASSETS_ONLY: RequestFailure: deterministic mutation failure\n",
+                          stderr.getvalue())
             self.assertIn("RIGSIGNAL_FAILURE_SITE asset_apply\n", stderr.getvalue())
             self.assertEqual(len(partial.mutations), 2)
             self.assertFalse(partial_marker.exists())
@@ -189,9 +193,271 @@ class AssetsOnlyInstallTests(unittest.TestCase):
             remote_refusal = io.StringIO()
             with redirect_stderr(remote_refusal), \
                  mock.patch.object(INSTALL, "request", return_value=b"[]"):
-                self.assertEqual(self.main_assets(self.main_args(Path(raw) / "remote-marker")), 3)
-            self.assertEqual(remote_refusal.getvalue(), "install failed: assets-only:\n"
+                remote_marker = Path(raw) / "remote" / INSTALL.ASSETS_MARKER_FILE
+                remote_marker.parent.mkdir(mode=0o700)
+                remote_marker.parent.chmod(0o700)
+                self.assertEqual(self.main_assets(self.main_args(remote_marker)), 3)
+            self.assertEqual(remote_refusal.getvalue(), "RIGSIGNAL_E_ASSETS_ONLY: RemoteReadRefusal: "
+                             "asset ownership response is invalid\n"
                              "RIGSIGNAL_FAILURE_SITE asset_apply\n")
+
+    def test_default_marker_uses_private_leaf_under_a_0755_shared_state_root(self):
+        """Regression: agent/enrollment's shared 0755 state root must not strand assets."""
+        with tempfile.TemporaryDirectory() as raw:
+            state_home = Path(raw) / "state"
+            shared = state_home / "rigsignal"
+            shared.mkdir(parents=True, mode=0o755)
+            shared.chmod(0o755)
+            transport = AssetTransport(self.bundle)
+            args = self.main_args(None)
+            with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(state_home)}), \
+                 redirect_stderr(io.StringIO()):
+                self.assertEqual(self.main_assets(args, transport), 0)
+            marker = state_home / "rigsignal" / "assets" / INSTALL.ASSETS_MARKER_FILE
+            self.assertTrue(marker.is_file())
+            self.assertEqual(stat.S_IMODE(marker.parent.stat().st_mode), 0o700)
+            self.assertEqual(shared.stat().st_mode & 0o777, 0o755)
+            self.assertEqual(len(transport.mutations), 55)
+
+    def test_default_marker_fresh_state_dir_succeeds(self):
+        with tempfile.TemporaryDirectory() as raw:
+            state_home = Path(raw) / "fresh-state"
+            transport = AssetTransport(self.bundle)
+            with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(state_home)}), \
+                 redirect_stderr(io.StringIO()):
+                self.assertEqual(self.main_assets(self.main_args(None), transport), 0)
+            marker = state_home / "rigsignal" / "assets" / INSTALL.ASSETS_MARKER_FILE
+            self.assertTrue(marker.is_file())
+            self.assertEqual(stat.S_IMODE(marker.parent.stat().st_mode), 0o700)
+            self.assertEqual(len(transport.mutations), 55)
+
+    def test_marker_preflight_refuses_symlink_before_any_cluster_mutation(self):
+        with tempfile.TemporaryDirectory() as raw:
+            state_home = Path(raw) / "state"
+            shared = state_home / "rigsignal"
+            shared.mkdir(parents=True, mode=0o755)
+            shared.chmod(0o755)
+            safe = Path(raw) / "safe"
+            safe.mkdir(mode=0o700)
+            (shared / "assets").symlink_to(safe, target_is_directory=True)
+            transport = AssetTransport(self.bundle)
+            stderr = io.StringIO()
+            with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(state_home)}), \
+                 redirect_stderr(stderr):
+                self.assertEqual(self.main_assets(self.main_args(None), transport), 2)
+            self.assertEqual(stderr.getvalue(), "install refused: assets_marker_directory\n"
+                             "RIGSIGNAL_FAILURE_SITE preflight\n")
+            self.assertEqual(transport.mutations, [])
+
+    def test_marker_preflight_refuses_symlinked_xdg_ancestor_before_any_write(self):
+        with tempfile.TemporaryDirectory() as raw:
+            safe_state = Path(raw) / "safe-state"
+            safe_state.mkdir(mode=0o700)
+            state_home = Path(raw) / "state-link"
+            state_home.symlink_to(safe_state, target_is_directory=True)
+            transport = AssetTransport(self.bundle)
+            transport.fail_mutations = True
+            stderr = io.StringIO()
+            with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(state_home)}), \
+                 redirect_stderr(stderr):
+                self.assertEqual(self.main_assets(self.main_args(None), transport), 2)
+            self.assertEqual(stderr.getvalue(), "install refused: assets_marker_directory\n"
+                             "RIGSIGNAL_FAILURE_SITE preflight\n")
+            self.assertEqual(transport.mutations, [])
+            self.assertFalse((safe_state / "rigsignal").exists())
+
+    def test_marker_preflight_refuses_unprotected_shared_parent_before_mutation(self):
+        for mode in (0o775, 0o757):
+            with self.subTest(mode=oct(mode)), tempfile.TemporaryDirectory() as raw:
+                state_home = Path(raw) / "state"
+                shared = state_home / "rigsignal"
+                shared.mkdir(parents=True, mode=0o755)
+                shared.chmod(mode)
+                transport = AssetTransport(self.bundle)
+                transport.fail_mutations = True
+                stderr = io.StringIO()
+                with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(state_home)}), \
+                     redirect_stderr(stderr):
+                    self.assertEqual(self.main_assets(self.main_args(None), transport), 2)
+                self.assertEqual(stderr.getvalue(), "install refused: assets_marker_directory\n"
+                                 "RIGSIGNAL_FAILURE_SITE preflight\n")
+                self.assertEqual(transport.mutations, [])
+
+    def test_marker_preflight_refuses_nonprivate_leaf_before_mutation(self):
+        for label, make_leaf in (
+                ("non-directory", lambda leaf: leaf.write_text("not a directory")),
+                ("wrong mode", lambda leaf: (leaf.mkdir(mode=0o750), leaf.chmod(0o750))),
+        ):
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as raw:
+                state_home = Path(raw) / "state"
+                shared = state_home / "rigsignal"
+                shared.mkdir(parents=True, mode=0o755)
+                shared.chmod(0o755)
+                make_leaf(shared / "assets")
+                transport = AssetTransport(self.bundle)
+                transport.fail_mutations = True
+                stderr = io.StringIO()
+                with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(state_home)}), \
+                     redirect_stderr(stderr):
+                    self.assertEqual(self.main_assets(self.main_args(None), transport), 2)
+                self.assertEqual(stderr.getvalue(), "install refused: assets_marker_directory\n"
+                                 "RIGSIGNAL_FAILURE_SITE preflight\n")
+                self.assertEqual(transport.mutations, [])
+
+    def test_marker_preflight_refuses_non_euid_leaf_before_mutation(self):
+        """Simulate a foreign-owned leaf without requiring a root test runner."""
+        with tempfile.TemporaryDirectory() as raw:
+            state_home = Path(raw) / "state"
+            leaf = state_home / "rigsignal" / "assets"
+            leaf.mkdir(parents=True, mode=0o700)
+            leaf.chmod(0o700)
+            original_lstat = Path.lstat
+
+            def foreign_leaf_lstat(subject):
+                result = original_lstat(subject)
+                if subject == leaf:
+                    values = list(result)
+                    values[4] = result.st_uid + 1
+                    return os.stat_result(values)
+                return result
+
+            transport = AssetTransport(self.bundle)
+            transport.fail_mutations = True
+            stderr = io.StringIO()
+            with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(state_home)}), \
+                 mock.patch.object(Path, "lstat", new=foreign_leaf_lstat), \
+                 redirect_stderr(stderr):
+                self.assertEqual(self.main_assets(self.main_args(None), transport), 2)
+            self.assertEqual(stderr.getvalue(), "install refused: assets_marker_directory\n"
+                             "RIGSIGNAL_FAILURE_SITE preflight\n")
+            self.assertEqual(transport.mutations, [])
+
+    def test_old_default_marker_requires_manual_removal_and_explicit_marker_is_unchanged(self):
+        with tempfile.TemporaryDirectory() as raw:
+            state_home = Path(raw) / "state"
+            old_marker = state_home / "rigsignal" / INSTALL.ASSETS_MARKER_FILE
+            old_marker.parent.mkdir(parents=True, mode=0o700)
+            old_marker.parent.chmod(0o700)
+            transport = AssetTransport(self.bundle)
+            self.assertEqual(self.install(transport, old_marker), "applied")
+            with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(state_home)}):
+                with self.assertRaisesRegex(INSTALL.ProvisionError,
+                                            "assets_marker_directory; remove the legacy marker at " + str(old_marker)):
+                    INSTALL._prepare_assets_marker_path(None, self.bundle)
+                self.assertTrue(old_marker.exists())
+                self.assertFalse(INSTALL._asset_marker_default_path().exists())
+
+            explicit = Path(raw) / "explicit" / INSTALL.ASSETS_MARKER_FILE
+            explicit.parent.mkdir(mode=0o700)
+            explicit.parent.chmod(0o700)
+            with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(state_home)}):
+                self.assertEqual(INSTALL._prepare_assets_marker_path(explicit, self.bundle), explicit)
+                self.assertTrue(old_marker.exists())
+                self.assertFalse(INSTALL._asset_marker_default_path().exists())
+
+    def test_implicit_old_marker_refusals_do_not_migrate_or_mutate(self):
+        for label in ("malformed", "symlink", "foreign-owned"):
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as raw:
+                state_home = Path(raw) / "state"
+                old_marker = state_home / "rigsignal" / INSTALL.ASSETS_MARKER_FILE
+                old_marker.parent.mkdir(parents=True, mode=0o700)
+                old_marker.parent.chmod(0o700)
+                if label == "malformed":
+                    old_marker.write_text("not a marker")
+                    old_marker.chmod(0o600)
+                elif label == "symlink":
+                    target = Path(raw) / "old-marker-target"
+                    target.write_text("not a marker")
+                    target.chmod(0o600)
+                    old_marker.symlink_to(target)
+                else:
+                    INSTALL._write_assets_marker(old_marker, self.bundle)
+
+                original_lstat = Path.lstat
+
+                def lstat_with_foreign_old_marker(subject):
+                    result = original_lstat(subject)
+                    if label == "foreign-owned" and subject == old_marker:
+                        values = list(result)
+                        values[4] = result.st_uid + 1
+                        return os.stat_result(values)
+                    return result
+
+                transport = AssetTransport(self.bundle)
+                transport.fail_mutations = True
+                stderr = io.StringIO()
+                with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(state_home)}), \
+                     mock.patch.object(Path, "lstat", new=lstat_with_foreign_old_marker), \
+                     redirect_stderr(stderr):
+                    self.assertEqual(self.main_assets(self.main_args(None), transport), 2)
+                marker = state_home / "rigsignal" / "assets" / INSTALL.ASSETS_MARKER_FILE
+                self.assertEqual(stderr.getvalue(), "install refused: assets_marker_directory; remove the legacy marker at "
+                                 + str(old_marker) + "\n"
+                                 "RIGSIGNAL_FAILURE_SITE preflight\n")
+                self.assertTrue(os.path.lexists(old_marker))
+                self.assertFalse(marker.exists())
+                self.assertEqual(transport.mutations, [])
+
+
+    def test_legacy_marker_source_is_never_trusted_for_auto_migration(self):
+        with tempfile.TemporaryDirectory() as raw:
+            state_home = Path(raw) / "state"
+            old_marker = state_home / "rigsignal" / INSTALL.ASSETS_MARKER_FILE
+            old_marker.parent.mkdir(parents=True, mode=0o700)
+            old_marker.parent.chmod(0o700)
+            INSTALL._write_assets_marker(old_marker, self.bundle)
+            replacement = Path(raw) / "replacement"
+            replacement.write_text("rebound source")
+            replacement.chmod(0o600)
+            original_lstat = Path.lstat
+
+            def rebind_old_marker(subject):
+                if subject == old_marker:
+                    old_marker.unlink()
+                    old_marker.symlink_to(replacement)
+                return original_lstat(subject)
+
+            with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(state_home)}), \
+                 mock.patch.object(Path, "lstat", new=rebind_old_marker), \
+                 mock.patch.object(INSTALL.os, "link") as link:
+                with self.assertRaisesRegex(INSTALL.ProvisionError,
+                                            "assets_marker_directory; remove the legacy marker at " + str(old_marker)):
+                    INSTALL._prepare_assets_marker_path(None, self.bundle)
+            self.assertTrue(old_marker.is_symlink())
+            self.assertFalse(INSTALL._asset_marker_default_path().exists())
+            link.assert_not_called()
+
+    def test_assets_only_failure_surfaces_safe_cause_without_response_body(self):
+        with tempfile.TemporaryDirectory() as raw:
+            marker = Path(raw) / "marker" / INSTALL.ASSETS_MARKER_FILE
+            marker.parent.mkdir(mode=0o700)
+            marker.parent.chmod(0o700)
+            stderr = io.StringIO()
+            with mock.patch.object(INSTALL, "assets_only_install",
+                                   side_effect=INSTALL.RequestFailure(503, "safe cause", b"TOP-SECRET")), \
+                 redirect_stderr(stderr):
+                self.assertEqual(self.main_assets(self.main_args(marker)), 3)
+            self.assertEqual(stderr.getvalue(), "RIGSIGNAL_E_ASSETS_ONLY: RequestFailure: safe cause\n"
+                             "RIGSIGNAL_FAILURE_SITE asset_apply\n")
+            self.assertNotIn("TOP-SECRET", stderr.getvalue())
+
+    def test_assets_only_applies_elasticsearch_assets_before_kibana_assets(self):
+        with tempfile.TemporaryDirectory() as raw:
+            marker = Path(raw) / INSTALL.ASSETS_MARKER_FILE
+            applied = []
+            kibana_first = sorted(self.bundle.assets,
+                                  key=lambda asset: asset.kind in INSTALL._ES_ASSET_KINDS)
+            self.assertNotIn(kibana_first[0].kind, INSTALL._ES_ASSET_KINDS)
+            with mock.patch.object(INSTALL, "assets_ownership_plan",
+                                   return_value=[(asset, "create") for asset in kibana_first]), \
+                 mock.patch.object(INSTALL, "install_asset", side_effect=lambda *_args, **kwargs: applied.append(_args[3])):
+                self.assertEqual(INSTALL.assets_only_install(self.bundle, "https://es", "https://kb", "admin", marker),
+                                 "applied")
+            kinds = [asset.kind for asset in applied]
+            split = sum(kind in INSTALL._ES_ASSET_KINDS for kind in kinds)
+            self.assertTrue(all(kind in INSTALL._ES_ASSET_KINDS for kind in kinds[:split]))
+            self.assertTrue(all(kind not in INSTALL._ES_ASSET_KINDS for kind in kinds[split:]))
+            self.assertEqual(len(kinds) - split, 9)
 
     def test_all_55_absent_creates_everything_and_writes_verified_marker(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -396,6 +662,48 @@ class AssetsOnlyInstallTests(unittest.TestCase):
                 self.assertEqual(INSTALL.main(), 3)
             self.assertEqual(stderr.getvalue(), "install refused: asset_conflict_unproven\n"
                              "RIGSIGNAL_FAILURE_SITE preflight\n")
+            prepare_root.assert_not_called()
+            self.assertFalse(root.exists())
+            self.assertEqual(transport.mutations, [])
+
+    def test_full_default_flow_marker_preflight_refuses_before_remote_or_root_mutation(self):
+        with tempfile.TemporaryDirectory() as raw:
+            state_home = Path(raw) / "state"
+            shared = state_home / "rigsignal"
+            shared.mkdir(parents=True, mode=0o755)
+            shared.chmod(0o755)
+            safe = Path(raw) / "safe"
+            safe.mkdir(mode=0o700)
+            (shared / "assets").symlink_to(safe, target_is_directory=True)
+            root = Path(raw) / "enrollment"
+            args = self.main_args(None)
+            args.assets_only = False
+            args.enrollment_root = root
+            transport = AssetTransport(self.bundle)
+            transport.fail_mutations = True
+            stderr = io.StringIO()
+            with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(state_home)}), \
+                 mock.patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args), \
+                 mock.patch.object(INSTALL, "load_bundle", return_value=self.bundle), \
+                 mock.patch.object(INSTALL, "role_body", return_value={}), \
+                 mock.patch.object(INSTALL, "enrollment_condition", return_value="clean"), \
+                 mock.patch.object(INSTALL, "check_version_fence"), \
+                 mock.patch.object(INSTALL, "check_install_root_ancestors"), \
+                 mock.patch.object(INSTALL, "check_outbox_root"), \
+                 mock.patch.object(INSTALL, "check_install_preflight",
+                                   return_value=(Path("/canonical/ca.pem"), Path("/canonical/agent"))), \
+                 mock.patch.object(INSTALL, "configure_https"), \
+                 mock.patch.object(INSTALL, "admin_authorization", return_value="admin"), \
+                 mock.patch.object(INSTALL, "admin_credential_kind", return_value="native_user"), \
+                 mock.patch.object(INSTALL, "dispatch_clean_root") as dispatch, \
+                 mock.patch.object(INSTALL, "prepare_install_root") as prepare_root, \
+                 mock.patch.object(INSTALL, "request", transport.request), \
+                 mock.patch.object(INSTALL, "request_response", transport.request_response), \
+                 redirect_stderr(stderr):
+                self.assertEqual(INSTALL.main(), 2)
+            self.assertEqual(stderr.getvalue(), "install refused: assets_marker_directory\n"
+                             "RIGSIGNAL_FAILURE_SITE preflight\n")
+            dispatch.assert_not_called()
             prepare_root.assert_not_called()
             self.assertFalse(root.exists())
             self.assertEqual(transport.mutations, [])

@@ -258,6 +258,7 @@ def is_local_failure_message(message: str) -> bool:
             or any(token in message for token in (
                 "agent_binary_unlaunchable", "agent_version_unparseable", "version_skew",
                 "admin_credential_api_key",
+                "assets_marker_directory",
                 "enrollment ancestor is not protected:", "outbox preflight:",
                 "enrollment preflight unavailable", "atomic_publication_filesystem_unsupported",
                 "enrollment_publication_path_too_long", "enrollment_parent_fsync_unsupported",
@@ -3109,7 +3110,81 @@ def stamped_asset(asset: Asset) -> Asset:
 
 def _asset_marker_default_path() -> Path:
     state_home = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local" / "state")))
+    return state_home / "rigsignal" / "assets" / ASSETS_MARKER_FILE
+
+
+def _asset_marker_old_default_path() -> Path:
+    state_home = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local" / "state")))
     return state_home / "rigsignal" / ASSETS_MARKER_FILE
+
+
+def _validate_assets_marker_shared_parent(path: Path) -> None:
+    """Reject a writable or substituted shared state root before using its leaf."""
+    _reject_symlinked_path(path)
+    try:
+        st = path.lstat()
+    except OSError as error:
+        raise InputError("assets marker directory is not protected") from error
+    if (not stat.S_ISDIR(st.st_mode) or stat.S_ISLNK(st.st_mode)
+            or st.st_uid != os.geteuid() or st.st_mode & 0o022):
+        raise InputError("assets marker directory is not protected")
+
+
+def _prepare_assets_marker_path(path: Path | None, bundle: Bundle) -> Path:
+    """Preflight the marker destination and reject the old implicit default.
+
+    An explicit path remains verbatim and is never a legacy-marker destination.
+    ``atomic_write`` still rechecks the selected leaf when it publishes the
+    marker; this preflight moves that deterministic local fault before writes.
+    """
+    explicit = path is not None
+    marker_path = path if explicit else _asset_marker_default_path()
+    try:
+        if marker_path.name != ASSETS_MARKER_FILE:
+            raise InputError("assets marker path is invalid")
+        if explicit:
+            # Do not repair or chmod a caller-selected directory.  secure_root
+            # performs the same no-symlink/owner/no-group-or-other-bit checks
+            # that the later atomic write will require.
+            secure_root(marker_path.parent)
+            return marker_path
+
+        shared_parent = marker_path.parent.parent
+        # Check before and after creating the private leaf: a writable shared
+        # parent could otherwise replace that leaf between validation and use.
+        # Supplying a mode for this leaf avoids inheriting a group-writable
+        # ``rigsignal/`` from a permissive umask when state storage is fresh;
+        # an existing shared directory is never chmod-repaired.
+        # These lexical checks must precede mkdir: ``mkdir(parents=True)``
+        # would otherwise follow a substituted XDG-state ancestor while
+        # creating the shared parent or private leaf.
+        _reject_symlinked_path(shared_parent)
+        _reject_symlinked_path(marker_path.parent)
+        shared_parent.mkdir(mode=0o755, parents=True, exist_ok=True)
+        _validate_assets_marker_shared_parent(shared_parent)
+        secure_root(marker_path.parent)
+        _validate_assets_marker_shared_parent(shared_parent)
+        leaf = marker_path.parent.lstat()
+        if stat.S_IMODE(leaf.st_mode) != 0o700:
+            raise InputError("assets marker directory is not protected")
+
+        old_marker = _asset_marker_old_default_path()
+        try:
+            old_marker.lstat()
+        except FileNotFoundError:
+            return marker_path
+        if marker_path.exists():
+            return marker_path
+        # Do not automatically migrate the former shared-directory marker.
+        # A source pathname may be rebound after its validation.  Python's
+        # stdlib can link an opened inode on Linux through /proc/self/fd, but
+        # has no atomic compare-and-unlink operation for the old directory
+        # entry.  A post-link unlink could therefore remove a rebinding rather
+        # than the validated source.  Refuse before reading or linking it so
+        # both the source-rebind and destination-creation races fail closed.
+        raise ProvisionError(f"install refused: assets_marker_directory; remove the legacy marker at {old_marker}")
+    except (InputError, OSError, ValueError) as error:
+        raise ProvisionError("install refused: assets_marker_directory") from error
 
 
 def _asset_marker_identities(bundle: Bundle) -> list[dict[str, str]]:
@@ -3304,13 +3379,13 @@ def assets_only_install(bundle: Bundle, es_url: str, kb_url: str, authorization:
     read before the first write: an existing ES object needs our `_meta` stamp;
     an existing Kibana object needs its identity in the protected local marker.
     """
-    marker_path = marker_path or _asset_marker_default_path()
+    marker_path = marker_path or _prepare_assets_marker_path(None, bundle)
     plan = assets_ownership_plan(bundle, es_url, kb_url, authorization, marker_path,
                                  repair=repair, upgrade=upgrade,
                                  allow_downgrade=allow_downgrade)
     if all(action == "noop" for _asset, action in plan):
         return "noop"
-    for asset, action in plan:
+    for asset, action in sorted(plan, key=lambda item: item[0].kind not in _ES_ASSET_KINDS):
         if action != "noop":
             install_asset(es_url, kb_url, authorization, asset, managed=True)
     _write_assets_marker(marker_path, bundle)
@@ -5035,9 +5110,10 @@ def main() -> int:
             configure_https(args.ca_file)
             configure_https(args.kibana_ca_file)
             authorization = admin_authorization(args.admin_credentials_file)
+            marker_path = _prepare_assets_marker_path(getattr(args, "assets_marker", None), bundle)
             failure_tracker.mark(FailureSite.ASSET_APPLY)
-            outcome = assets_only_install(bundle, es_url, kb_url, authorization,
-                                          getattr(args, "assets_marker", None), repair=getattr(args, "repair", False),
+            outcome = assets_only_install(bundle, es_url, kb_url, authorization, marker_path,
+                                          repair=getattr(args, "repair", False),
                                           upgrade=getattr(args, "upgrade", False),
                                           allow_downgrade=getattr(args, "allow_downgrade", False))
             print("assets-only " + outcome)
@@ -5046,7 +5122,8 @@ def main() -> int:
             return finalize_failure(error.prefix, failure_tracker, mutation_tracker,
                                     local=is_local_failure_message(error.prefix))
         except (InputError, RequestFailure, OSError) as error:
-            return finalize_failure("install failed: assets-only:", failure_tracker,
+            message = "RIGSIGNAL_E_ASSETS_ONLY: " + type(error).__name__ + ": " + str(error)
+            return finalize_failure(message, failure_tracker,
                                     mutation_tracker,
                                     local=(not mutation_tracker.mutation_issued
                                            and not isinstance(error, (RequestFailure, RemoteReadRefusal))))
@@ -5079,6 +5156,12 @@ def main() -> int:
             # API keys may still parse for dry-run/read-only tooling, but this
             # invocation will mint a descriptor-bearing shipper key.
             raise ProvisionError("install refused: admin_credential_api_key")
+        needs_default_marker = ownership_profile == "default" and bool(bundle.assets)
+        # Incomplete enrollment is the sole ordering exception: its pending
+        # credential must be recovered or invalidated before a new local
+        # marker-directory refusal can stop the invocation.
+        default_marker_path = (None if not needs_default_marker or condition == "incomplete" else
+                               _prepare_assets_marker_path(getattr(args, "assets_marker", None), bundle))
         # A clean root or the owner-ratified rolled-back audit-only root can
         # adopt a compatible remote stream.  Decide it before creating the
         # root or running recovery.
@@ -5094,11 +5177,11 @@ def main() -> int:
         # The shared default-profile ownership barrier belongs before even a
         # local enrollment-root mutation or incomplete-key recovery.  It is a
         # complete read pass over all 55 target identities.
-        default_marker_path = getattr(args, "assets_marker", None) or _asset_marker_default_path()
         default_asset_actions: dict[tuple[str, str], str] = {}
         # Main receives a verified member map from load_bundle().  A missing
         # map identifies an in-memory legacy unit fixture, never a CLI bundle.
-        if ownership_profile == "default" and bundle.files is not None:
+        if (ownership_profile == "default" and bundle.files is not None
+                and condition != "incomplete"):
             default_asset_actions = {(asset.kind, asset.name): action
                                      for asset, action in assets_ownership_plan(
                                          bundle, es_url, kb_url, authorization, default_marker_path,
@@ -5173,6 +5256,16 @@ def main() -> int:
             check_outbox_root(requested_root.parent / "outbox")
             enrollment_ca_file, resolved_agent = check_install_preflight(root, args.agent_binary, args.ca_file)
             configure_https(enrollment_ca_file)
+            if needs_default_marker:
+                default_marker_path = _prepare_assets_marker_path(
+                    getattr(args, "assets_marker", None), bundle)
+            if ownership_profile == "default" and bundle.files is not None:
+                default_asset_actions = {(asset.kind, asset.name): action
+                                         for asset, action in assets_ownership_plan(
+                                             bundle, es_url, kb_url, authorization, default_marker_path,
+                                             repair=getattr(args, "repair", False),
+                                             upgrade=getattr(args, "upgrade", False),
+                                             allow_downgrade=getattr(args, "allow_downgrade", False))}
         if resolved_agent is None:
             raise ProvisionError("install refused: agent_binary_unlaunchable")
         if published_recovery is not None:

@@ -1,8 +1,12 @@
 # Assets install exit and refusal contract
 
 `rigsignal assets install` is journal-free.  It never exposes an assets resume
-command and never performs automatic rollback.  On an assets-only exit 4,
-inspect the partial state and idempotently rerun `rigsignal assets install`.
+command and never performs automatic rollback.  An exit 2 is a local,
+pre-mutation refusal and is fully re-runnable after the reported condition is
+corrected.  An exit 4 after a Kibana object has been created can leave a state
+that 0.3.2 cannot recover through the CLI: remove the affected RigSignal saved
+objects, space, or role in Kibana (Stack Management), then rerun.  This residual
+case is addressed by the planned 0.3.3 idempotency work.
 
 | Exit | Meaning |
 |---:|---|
@@ -22,7 +26,7 @@ site.
 
 | Emitted refusal/failure family | Exit | Operator action | FailureSite rule |
 |---|---:|---|---|
-| `agent_binary_unlaunchable`, `agent_version_unparseable`, `version_skew; *`, `admin_credential_api_key`, `install failed: bundle validation: *`, local `install failed: assets-only: *` | 2 | Correct the named local input, agent/version, credentials, CA, or bundle and rerun. | `preflight` for engine paths; none for launcher-local validation. |
+| `agent_binary_unlaunchable`, `agent_version_unparseable`, `version_skew; *`, `admin_credential_api_key`, `assets_marker_directory`, `install failed: bundle validation: *`, local `RIGSIGNAL_E_ASSETS_ONLY: *` | 2 | Correct the named local input, marker directory, agent/version, credentials, CA, or bundle and rerun. | `preflight` for engine paths; none for launcher-local validation. |
 | malformed or unverifiable remote assets ownership/presence GET response | 3 | Treat the remote response as unsafe; correct/reconcile the target and rerun. | `asset_apply`, before the first mutation. |
 | argparse unknown/missing/invalid-choice | 2 | Correct CLI usage and rerun. | none. |
 | `asset_conflict_unproven` | 3 | Prove/remove the foreign target through its owner path; do not overwrite it. | `asset_apply` or current pre-write site. |

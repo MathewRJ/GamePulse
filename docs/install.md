@@ -74,9 +74,14 @@ persisted launcher configuration, then prompt. `--non-interactive` turns any
 missing value into an actionable failure. A CA pin is valid only with an
 explicit CA file. A resolved Kibana endpoint is atomically persisted and any
 installed eBPF system configuration is synchronized; the administrator password
-is not persisted. Re-running against the same bundle is marker-driven and
-idempotent; use `--repair`, `--upgrade`, or `--allow-downgrade` only for their
-corresponding explicit transitions.
+is not persisted. A pre-mutation local refusal (exit 2) is safe to correct and
+rerun. Successful same-bundle reruns are marker-driven; however, 0.3.2 does not
+make every interrupted remote apply CLI-recoverable. If an exit 4 occurs after
+a RigSignal Kibana object is created, remove the affected dashboards/saved
+objects, `rigsignal` space, or RigSignal role in Kibana → Stack Management,
+then rerun. Full partial-apply recovery is planned for 0.3.3. Use `--repair`,
+`--upgrade`, or `--allow-downgrade` only for their corresponding explicit
+transitions.
 
 `rigsignal-git` intentionally has no guessed GitHub release mapping. Use an
 offline bundle and its exact adjacent sidecar instead:

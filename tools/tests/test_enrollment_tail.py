@@ -338,6 +338,7 @@ class FailureSiteTests(unittest.TestCase):
             admin_credentials_file=Path("unused"), agent_binary=Path("unused"), profile="user",
             enrollment_root=root, dry_run=False, adopt_existing_w1_stream=False,
             ownership_profile=None, rollback=None, unsafe_test_injection=False,
+            assets_marker=root.parent / "marker" / INSTALL.ASSETS_MARKER_FILE,
         )
 
     def patch_through_asset_apply(self, patches: ExitStack, root: Path, bundle: INSTALL.Bundle) -> None:
@@ -642,6 +643,60 @@ class MainPreflightRecoveryTests(unittest.TestCase):
                     self.assertEqual(INSTALL.main(), 4)
             preflight.assert_called_once_with(root, Path("agent"), Path("unused"))
             self.assertEqual(stderr.getvalue(), "install refused: atomic_publication_filesystem_unsupported\n"
+                             "RIGSIGNAL_FAILURE_SITE root_prepare\n")
+            self.assertFalse((root / "state.json").exists())
+
+    def test_incomplete_recovery_precedes_bad_default_marker_refusal(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = INSTALL.secure_root(Path(raw) / "enrollment")
+            state = INSTALL.state_template("KUrXRgwRRQu-RikmIJhm0Q", INSTALL.TARGET_GENERATION_KAT,
+                                           None, str(root))
+            state.update(phase="mint_intent", pending_mint_name="unfinished")
+            INSTALL.atomic_write(root, "state.json", INSTALL.jcs(state) + b"\n")
+            state_home = Path(raw) / "state"
+            shared = state_home / "rigsignal"
+            shared.mkdir(parents=True, mode=0o755)
+            shared.chmod(0o755)
+            safe = Path(raw) / "safe"
+            safe.mkdir(mode=0o700)
+            (shared / "assets").symlink_to(safe, target_is_directory=True)
+            recovery_requests = []
+            asset = INSTALL.Asset("component_templates", "rigsignal-test", "unused", b"{}")
+
+            def recover_unfinished(_base, path, method, _authorization, data=None, headers=None):
+                recovery_requests.append((method, path))
+                if path == "/_security/api_key?name=unfinished&active_only=true" and method == "GET":
+                    return INSTALL.jcs({"api_keys": [{"name": "unfinished", "id": "orphan"}]})
+                if path == "/_security/api_key" and method == "DELETE":
+                    return INSTALL.jcs({"invalidated_api_keys": ["orphan"],
+                                        "previously_invalidated_api_keys": [], "error_count": 0,
+                                        "error_details": []})
+                self.fail("unexpected recovery request " + method + " " + path)
+
+            with patch.dict(os.environ, {"XDG_STATE_HOME": str(state_home)}), \
+                 patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=self.args(root)), \
+                 patch.object(INSTALL, "load_bundle", return_value=INSTALL.Bundle("test", "test", [asset])), \
+                 patch.object(INSTALL, "role_body", return_value={}), \
+                 patch.object(INSTALL, "check_install_root_ancestors"), \
+                 patch.object(INSTALL, "check_outbox_root"), \
+                 patch.object(INSTALL, "check_install_preflight",
+                              return_value=(Path("/canonical/ca.pem"), Path("/canonical/agent"))), \
+                 patch.object(INSTALL, "configure_https"), \
+                 patch.object(INSTALL, "admin_authorization", return_value="admin"), \
+                 patch.object(INSTALL, "admin_credential_kind", return_value="native_user"), \
+                 patch.object(INSTALL, "fence_remote_ownership_profile"), \
+                 patch.object(INSTALL, "run_topology_preflight"), \
+                 patch.object(INSTALL, "dispatch_clean_root", return_value=False), \
+                 patch.object(INSTALL, "cluster_uuid", return_value=state["expected_cluster_uuid"]), \
+                 patch.object(INSTALL, "request", side_effect=recover_unfinished):
+                stderr = io.StringIO()
+                with redirect_stderr(stderr):
+                    self.assertEqual(INSTALL.main(), 4)
+            self.assertEqual(recovery_requests, [
+                ("GET", "/_security/api_key?name=unfinished&active_only=true"),
+                ("DELETE", "/_security/api_key"),
+            ])
+            self.assertEqual(stderr.getvalue(), "install refused: assets_marker_directory\n"
                              "RIGSIGNAL_FAILURE_SITE root_prepare\n")
             self.assertFalse((root / "state.json").exists())
 
