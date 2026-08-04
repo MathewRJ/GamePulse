@@ -46,4 +46,4 @@ Full-flow enrollment recovery surfaces remain distinct: `clean` starts a new
 install; `committed` is verify/no-op or explicit change; `incomplete` uses the
 full-flow recovery/resume surface only; `rolled-back` needs owner confirmation
 before a fresh install; `remediation` permits no mutation and requires manual
-owner recovery.  No `assets resume` surface exists in 0.3.1.
+owner recovery.  No `assets resume` surface exists in 0.3.2.

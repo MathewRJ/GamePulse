@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.3.2] — 2026-08-04
+
+### Fixed
+
+- `rigsignal assets install` now secures its ownership-marker directory in
+  preflight with a dedicated `0700` subdirectory, so it no longer fails after
+  cluster assets are applied when the shared state directory is `0755` (for
+  example, after the agent or a prior enrollment ran). Marker-directory faults
+  now refuse cleanly before mutation and surface their real cause. Full
+  partial-apply idempotency remains a documented limitation; see the
+  [assets-install exit contract](docs/assets-install-exit-contract.md).
+
 ## [0.3.1] — 2026-08-01
 
 ### Added
