@@ -259,7 +259,7 @@ class FleetCoexistenceTests(unittest.TestCase):
             journal.pin_fleet_fence({stream: {"pre": snapshot[stream]}})
             with mock.patch.dict(INSTALL.os.environ, {"RIGSIGNAL_TEST_CRASH_AT":
                                                        "after-remote-mutation:index_templates/" + name}), \
-                 mock.patch.object(INSTALL.os, "_exit", side_effect=SystemExit(99)):
+                 mock.patch.object(INSTALL.os, "kill", side_effect=SystemExit(9)):
                 with self.assertRaises(SystemExit):
                     INSTALL.fault("after-remote-mutation", "index_templates/" + name)
             self.assertEqual(journal.value["intents"], [intent])
@@ -1552,14 +1552,16 @@ class FleetCoexistenceTests(unittest.TestCase):
                         INSTALL.TransactionJournal(root, "fleet-coexist", new_transaction=True)
 
     def test_fault_supports_bare_matching_and_nonmatching_qualified_forms(self):
-        with mock.patch.object(INSTALL.os, "_exit") as exit_hook:
+        with mock.patch.object(INSTALL.os, "getpid", return_value=1234), \
+             mock.patch.object(INSTALL.os, "kill") as kill_hook:
             with mock.patch.dict(INSTALL.os.environ, {"RIGSIGNAL_TEST_CRASH_AT": "point"}, clear=False):
                 INSTALL.fault("point", "asset/a")
             with mock.patch.dict(INSTALL.os.environ, {"RIGSIGNAL_TEST_CRASH_AT": "point:asset/a"}, clear=False):
                 INSTALL.fault("point", "asset/a")
             with mock.patch.dict(INSTALL.os.environ, {"RIGSIGNAL_TEST_CRASH_AT": "point:asset/b"}, clear=False):
                 INSTALL.fault("point", "asset/a")
-        self.assertEqual(exit_hook.call_count, 2)
+        self.assertEqual(kill_hook.call_args_list, [mock.call(1234, INSTALL.signal.SIGKILL),
+                                                    mock.call(1234, INSTALL.signal.SIGKILL)])
 
     def test_pause_requires_both_gates_and_flushes_ready_marker(self):
         with tempfile.TemporaryDirectory() as directory:

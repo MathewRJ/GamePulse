@@ -13,6 +13,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import socket
 import ssl
 import stat
@@ -1438,7 +1439,12 @@ def _v2_common_is_valid(value: object, binding: dict, targets: list[dict[str, st
     if not isinstance(value, dict):
         return False
     expected = {**binding, "targets": targets}
-    return all(value.get(key) == item for key, item in expected.items()) and value.get("schema_version") == 2
+    # AMBIGUITY-5: provenance is durable record data, not an inference from
+    # which reader happened to publish it.  Every v2 record says explicitly
+    # whether its lineage began as the former private v1 marker.
+    return (all(value.get(key) == item for key, item in expected.items())
+            and value.get("schema_version") == 2
+            and isinstance(value.get("migrated_from_v1"), bool))
 
 
 def _v2_targets_valid(targets: object, expected: list[dict[str, str]]) -> bool:
@@ -1483,7 +1489,7 @@ def _v2_installed_valid(value: object, binding: dict, targets: list[dict[str, st
     if not isinstance(value, dict):
         return False
     common = {"asset_set_sha256", "bundle_sha256", "bundle_version", "cluster_uuid", "kibana_target",
-              "ownership_profile", "schema_version", "source_commit", "state", "targets"}
+              "migrated_from_v1", "ownership_profile", "schema_version", "source_commit", "state", "targets"}
     # T-REC-4 is the controlling erratum: installed records retain the
     # completed caller obligations even though the earlier prose omitted it.
     if set(value) != common | {"caller_obligations", "completed_at", "completed_transaction_id", "destination_map", "verified_target_set_sha256"}:
@@ -1506,7 +1512,7 @@ def validate_transaction_record(raw: bytes, binding: dict, targets: list[dict[st
     if _v2_installed_valid(value, binding, targets):
         return value
     common = {"asset_set_sha256", "bundle_sha256", "bundle_version", "cluster_uuid", "kibana_target",
-              "ownership_profile", "schema_version", "source_commit", "state", "targets"}
+              "migrated_from_v1", "ownership_profile", "schema_version", "source_commit", "state", "targets"}
     required = common | {"caller_obligations", "created_at", "destination_map", "possible_mutation", "predecessor", "progress", "transaction_id"}
     if not isinstance(value, dict) or set(value) != required or value.get("state") != "installing" or not _v2_common_is_valid(value, binding, targets):
         raise InputError("assets transaction record is invalid")
@@ -1533,7 +1539,8 @@ def new_installing_record(binding: dict, targets: list[dict[str, str]], created_
     value = {**binding, "state": "installing", "targets": deepcopy(targets), "transaction_id": str(uuid.uuid4()),
              "created_at": created_at, "predecessor": None, "caller_obligations": [V2_ASSET_OBLIGATION],
              "destination_map": [],
-             "progress": {item["key"]: "planned" for item in targets}, "possible_mutation": False}
+             "progress": {item["key"]: "planned" for item in targets}, "possible_mutation": False,
+             "migrated_from_v1": False}
     validate_transaction_record(jcs(value), binding, targets)
     return value
 
@@ -1554,7 +1561,7 @@ def _installing_from_installed(record: dict, created_at: str) -> dict:
     return {
         **{key: deepcopy(record[key]) for key in (
             "asset_set_sha256", "bundle_sha256", "bundle_version", "cluster_uuid", "kibana_target",
-            "ownership_profile", "schema_version", "source_commit", "targets", "destination_map")},
+            "migrated_from_v1", "ownership_profile", "schema_version", "source_commit", "targets", "destination_map")},
         "state": "installing", "transaction_id": str(uuid.uuid4()), "created_at": created_at,
         "predecessor": deepcopy(record), "caller_obligations": deepcopy(record["caller_obligations"]),
         "progress": {item["key"]: "planned" for item in record["targets"]}, "possible_mutation": False,
@@ -1604,7 +1611,7 @@ def promote_transaction_record(record: dict, completed_at: str) -> dict:
     if record.get("state") != "installing" or any(state != "verified" for state in record.get("progress", {}).values()):
         raise InputError("assets transaction is not fully verified")
     common = {key: deepcopy(record[key]) for key in ("asset_set_sha256", "bundle_sha256", "bundle_version", "cluster_uuid",
-              "kibana_target", "ownership_profile", "schema_version", "source_commit", "targets")}
+              "kibana_target", "migrated_from_v1", "ownership_profile", "schema_version", "source_commit", "targets")}
     completed = {**common, "state": "installed", "caller_obligations": deepcopy(record["caller_obligations"]),
                  "destination_map": deepcopy(record["destination_map"]),
                  "completed_transaction_id": record["transaction_id"], "completed_at": completed_at,
@@ -1743,6 +1750,7 @@ def _migrate_private_v1_record(path: Path, bundle: Bundle, binding: dict, target
     if not _read_private_v1_marker(path, bundle):
         raise AssetTransactionRefusal("assets transaction legacy record is invalid")
     record = new_installing_record(binding, targets, _transaction_now())
+    record["migrated_from_v1"] = True
     if full_flow:
         record = expand_full_flow_record(record)
     for spec in _transaction_specs(bundle, full_flow):
@@ -3853,7 +3861,10 @@ def fault(point: str, argument: str | None = None) -> None:
         # on (solo leg-k at 698cdaf). Same discipline as test_pause.
         sys.stdout.flush()
         sys.stderr.flush()
-        os._exit(99)
+        # Crash-edge tests model abrupt process death, not a cooperative
+        # exception or a normal exit.  SIGKILL gives the subprocess contract
+        # its observable ``-9`` status and still skips every cleanup handler.
+        os.kill(os.getpid(), signal.SIGKILL)
 
 
 def test_rollover(point: str, es_url: str, authorization: str,

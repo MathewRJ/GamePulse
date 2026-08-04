@@ -349,7 +349,7 @@ i.atomic_publication(r, {n: ('new-' + n).encode() for n in ('credentials.toml','
             environment = os.environ | {"RIGSIGNAL_TEST_CRASH_AT": "publication-credentials.toml"}
             result = subprocess.run([sys.executable, "-c", program, str(root)], cwd=ROOT,
                                     env=environment, capture_output=True, check=False)
-            self.assertEqual(result.returncode, 99)
+            self.assertEqual(result.returncode, -9)
             self.assertEqual({name: (root / name).read_bytes() for name in names}, old)
 
     def test_canonical_get_requires_exact_single_projection(self):

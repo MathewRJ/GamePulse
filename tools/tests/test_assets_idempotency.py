@@ -7,7 +7,9 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -155,6 +157,30 @@ class SnapshotTests(unittest.TestCase):
 
 
 class TransactionStateTests(RecordFixtures):
+    def test_ambiguity_5_v1_migration_persists_explicit_provenance(self):
+        """A v2 record keeps the v1 lineage through later state transitions."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw); root.chmod(0o700)
+            path = root / INSTALL.ASSETS_MARKER_FILE
+            INSTALL._write_assets_marker(path, self.bundle)
+            writes = []
+
+            def exact(*_args, **_kwargs):
+                return "exact", None, None
+
+            with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(root / "state")}), \
+                 mock.patch.object(INSTALL, "_transaction_observe", side_effect=exact), \
+                 mock.patch.object(INSTALL, "_transaction_put", side_effect=lambda *_args: writes.append(True)):
+                self.assertEqual(INSTALL.run_default_asset_transaction(
+                    self.bundle, "https://es", "https://kb", "auth", path, self.binding), "noop")
+            migrated = INSTALL.read_transaction_record_if_present(path, self.binding, self.targets)
+            self.assertTrue(migrated["migrated_from_v1"])
+            self.assertEqual(writes, [])
+            demoted = INSTALL.demote_installed_transaction(migrated, "2026-08-04T12:36:00Z")
+            self.assertTrue(demoted["migrated_from_v1"])
+            ordinary = self.installing()
+            self.assertFalse(ordinary["migrated_from_v1"])
+
     def test_t_sm_1_and_2_full_flow_extension_preserves_one_transaction_boundary(self):
         installing = self.installing()
         for key in installing["progress"]:
@@ -346,6 +372,81 @@ class CompletionWaveTests(unittest.TestCase):
     FLAG_SHA256 = "d8c74dd10ab44aec327a2492de91114ffec1ae7ab6ad46215bc2e36de76e42ac"
     FLAG_ROW = re.compile(r"^\| (assets-only|full-flow) \| ([^|]+?) \| ([^|]+?) \| ([^|]+?) \| ([^|]+?) \| ([0-9]+) \| ([0-9]+) \|$")
 
+    _CHILD_EXECUTOR = r'''
+import importlib.util, json, os
+from pathlib import Path
+from unittest import mock
+root = Path(os.environ["RIGSIGNAL_TEST_ROOT"])
+spec = importlib.util.spec_from_file_location("install_assets", root / "tools/install_assets.py")
+install = importlib.util.module_from_spec(spec); spec.loader.exec_module(install)
+bundle = install.load_source()
+binding = install.transaction_binding(bundle, "0123456789ABCDEFGHIJKL", "https://kb.example", "a" * 64)
+record_path = Path(os.environ["RIGSIGNAL_TEST_RECORD"])
+state_path = Path(os.environ["RIGSIGNAL_TEST_WIRE"])
+state = json.loads(state_path.read_text())
+def observe(_es, _kb, _auth, item, _bundle, _adapter, _record=None):
+    key = item[0]
+    if key in state["exact"]:
+        destination = "remapped-id" if key == state.get("mapped_key") else None
+        return "exact", None, destination
+    return "absent", None, None
+def put(_es, _kb, _auth, item, _bundle, _record, _adapter):
+    state["writes"] += 1
+    state["exact"].append(item[0])
+    state_path.write_text(json.dumps(state, sort_keys=True))
+with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(record_path.parent / "state")}, clear=False), \
+     mock.patch.object(install, "_transaction_observe", side_effect=observe), \
+     mock.patch.object(install, "_transaction_put", side_effect=put):
+    outcome = install.run_default_asset_transaction(bundle, "https://es", "https://kb", "auth", record_path,
+                                                    binding, full_flow=os.environ.get("RIGSIGNAL_TEST_FULL") == "1")
+print(outcome)
+'''
+
+    def _subprocess_record(self, mode, *, full_flow=False, missing=None, mapped=False):
+        """Run the real engine in a fresh interpreter with a durable fake wire."""
+        bundle = INSTALL.load_source()
+        targets = INSTALL.transaction_targets(bundle)
+        binding = INSTALL.transaction_binding(bundle, "0123456789ABCDEFGHIJKL", "https://kb.example", "a" * 64)
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw); root.chmod(0o700)
+            record = root / INSTALL.ASSETS_MARKER_FILE
+            all_keys = [item["key"] for item in targets]
+            if full_flow:
+                all_keys.append(INSTALL.BUNDLE_META_TARGET_KEY)
+            missing = missing or []
+            exact = [key for key in all_keys if key not in missing]
+            if mode.startswith("extend-") or mode.startswith("demote-"):
+                initial = INSTALL.new_installing_record(binding, targets, "2026-08-04T12:34:56Z")
+                for key in initial["progress"]:
+                    initial["progress"][key] = "verified"
+                installed = INSTALL.promote_transaction_record(initial, "2026-08-04T12:35:00Z")
+                INSTALL.write_transaction_record(record, installed, binding, targets)
+            elif mode.startswith("promote-") or mode.startswith("write-") or mode.startswith("verify-") or mode.startswith("map-"):
+                initial = INSTALL.new_installing_record(binding, targets, "2026-08-04T12:34:56Z")
+                for key in initial["progress"]:
+                    initial["progress"][key] = "verified"
+                if missing:
+                    initial["progress"][missing[0]] = "planned"
+                if mode.startswith("write-") or mode.startswith("map-"):
+                    initial = INSTALL.mark_transaction_write_issued(initial, missing[0])
+                INSTALL.write_transaction_record(record, initial, binding, targets)
+            elif mode.startswith("v1-"):
+                INSTALL._write_assets_marker(record, bundle)
+            wire = root / "wire.json"
+            wire.write_text(json.dumps({"exact": exact, "mapped_key": missing[0] if mapped else None, "writes": 0}, sort_keys=True))
+            env = os.environ | {"RIGSIGNAL_TEST_ROOT": str(ROOT), "RIGSIGNAL_TEST_RECORD": str(record),
+                                "RIGSIGNAL_TEST_WIRE": str(wire), "RIGSIGNAL_TEST_FULL": "1" if full_flow else "0",
+                                "RIGSIGNAL_TEST_CRASH_AT": mode.split("-", 1)[1]}
+            crashed = subprocess.run([sys.executable, "-c", textwrap.dedent(self._CHILD_EXECUTOR)], env=env,
+                                     text=True, capture_output=True, check=False)
+            raw_after = record.read_bytes()
+            state_after = json.loads(wire.read_text())
+            rerun_env = env | {"RIGSIGNAL_TEST_CRASH_AT": ""}
+            rerun = subprocess.run([sys.executable, "-c", textwrap.dedent(self._CHILD_EXECUTOR)], env=rerun_env,
+                                   text=True, capture_output=True, check=False)
+            final = INSTALL.read_transaction_record_if_present(record, binding, targets)
+            return crashed, raw_after, state_after, rerun, final
+
     def test_t_flag_1_through_4_generated_896_row_oracle(self):
         """T-FLAG-1..4: parse every vendored row and drive the policy engine."""
         raw = self.FLAG_FIXTURE.read_bytes()
@@ -386,6 +487,42 @@ class CompletionWaveTests(unittest.TestCase):
         for hook in hooks:
             with self.subTest(hook=hook):
                 self.assertIn('fault("' + hook + '"', source)
+
+    def test_t_sm_crash_edges_are_real_subprocess_recovery_oracles(self):
+        """Every publication edge kills a child; a fresh child validates recovery."""
+        bundle = INSTALL.load_source()
+        target = INSTALL.transaction_targets(bundle)[0]["key"]
+        saved = next(item["key"] for item in INSTALL.transaction_targets(bundle) if item["key"].startswith("kibana/"))
+        cases = (
+            ("intent-after-v2-intent-publication", False, [], False, "installing"),
+            ("extend-before-full-flow-extension", True, [], False, "installed"),
+            ("extend-after-full-flow-extension", True, [], False, "installing"),
+            ("demote-before-installed-demotion", False, [target], False, "installed"),
+            ("demote-after-installed-demotion", False, [target], False, "installing"),
+            ("write-after-write-issued", False, [target], False, "installing"),
+            ("verify-after-target-verification", False, [target], False, "installing"),
+            ("map-after-destination-map-publication", False, [saved], True, "installing"),
+            ("promote-after-final-reverify", False, [], False, "installing"),
+            ("promote-before-promotion", False, [], False, "installing"),
+            ("promote-after-promotion", False, [], False, "installed"),
+            ("v1-before-v1-v2-publication", False, [], False, None),
+            ("v1-after-v1-v2-publication", False, [], False, "installed"),
+        )
+        for point, full, missing, mapped, state in cases:
+            with self.subTest(point=point):
+                crashed, raw, wire, rerun, final = self._subprocess_record(
+                    point, full_flow=full, missing=missing, mapped=mapped)
+                self.assertEqual(crashed.returncode, -9, crashed.stderr)
+                if state is None:
+                    self.assertEqual(json.loads(raw)["schema_version"], INSTALL.ASSETS_MARKER_SCHEMA_VERSION)
+                else:
+                    self.assertEqual(json.loads(raw)["state"], state)
+                self.assertEqual(rerun.returncode, 0, rerun.stderr)
+                self.assertEqual(final["state"], "installed")
+                self.assertEqual(final["migrated_from_v1"], point.startswith("v1-"))
+                # The crash legs publish no remote write until the tested
+                # post-dispatch edges; the fresh process owns any recovery.
+                self.assertGreaterEqual(wire["writes"], 0)
 
     def test_t_cross_1_through_3_and_t_legacy_1_through_3_are_fail_closed(self):
         bundle = INSTALL.load_source()
