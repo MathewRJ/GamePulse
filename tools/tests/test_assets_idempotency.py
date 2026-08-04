@@ -386,6 +386,167 @@ class CompletionWaveTests(unittest.TestCase):
         r"^\| (assets-only|full-flow) \| ([^|]+?) \| ([^|]+?) \| ([^|]+?) \| "
         r"([^|]+?) \| ([^|]+?) \| ([0-9]+) \| ([0-9]+) \|$")
 
+    @classmethod
+    def _flag_rows(cls):
+        rows = []
+        for line in cls.FLAG_FIXTURE.read_text(encoding="utf-8").splitlines():
+            match = cls.FLAG_ROW.match(line)
+            if match:
+                rows.append(tuple(item.strip() for item in match.groups()))
+        return rows
+
+    @staticmethod
+    def _table_flags(flags):
+        return () if flags == "none" else tuple(flags.split("+"))
+
+    @staticmethod
+    def _table_live_state(live):
+        return {
+            "absent:guarded-class": "absent",
+            "absent:pipeline-or-es-role": "absent",
+            "exact": "exact",
+            "es-stamped-divergent": "owned-divergent",
+            "es-foreign-divergent": "divergent",
+            "kibana-divergent": "divergent",
+            "unreadable": "unreadable",
+        }[live]
+
+    @staticmethod
+    def _table_obligation_label(record):
+        return ([INSTALL.V2_ASSET_OBLIGATION, INSTALL.V2_FULL_FLOW_OBLIGATION]
+                if "full" in record else [INSTALL.V2_ASSET_OBLIGATION])
+
+    def _table_installed(self, binding, targets, *, full=False):
+        record = INSTALL.new_installing_record(binding, targets, "2026-08-04T12:34:56Z")
+        if full:
+            record = INSTALL.expand_full_flow_record(record)
+        for key in record["progress"]:
+            record["progress"][key] = "verified"
+        return INSTALL.promote_transaction_record(record, "2026-08-04T12:35:00Z")
+
+    def _table_initial_record(self, label, binding, targets):
+        """Build each table record as a real protected v2 durable shape."""
+        if label == "N":
+            return None
+        full = "full" in label
+        prior = label.startswith("S-prior") or "with-valid-predecessor" in label
+        prior_binding = {**binding, "bundle_version": "0.3.2", "source_commit": "b" * 40}
+        predecessor = self._table_installed(prior_binding, targets, full=full) if prior else None
+        if label.startswith("S-"):
+            return predecessor if prior else self._table_installed(binding, targets, full=full)
+        record = INSTALL.new_installing_record(binding, targets, "2026-08-04T12:34:56Z")
+        if full:
+            record = INSTALL.expand_full_flow_record(record)
+        if predecessor is not None:
+            record["predecessor"] = predecessor
+        record["possible_mutation"] = label.endswith("pm1")
+        INSTALL.validate_transaction_record(INSTALL.jcs(record), binding, targets)
+        return record
+
+    @staticmethod
+    def _table_record_label(record, initial_label, initial_raw):
+        if record is None:
+            return "N"
+        raw = INSTALL.jcs(record)
+        # Current/prior installed labels carry useful source context only
+        # while the engine has correctly retained their exact bytes.
+        if record["state"] == "installed" and raw == initial_raw:
+            return initial_label
+        obligations = "+".join(record["caller_obligations"])
+        if record["state"] == "installed":
+            return "S[" + obligations + "]"
+        predecessor = ";predecessor=valid" if record["predecessor"] is not None else ""
+        return "I[" + obligations + predecessor + ";pm=" + str(int(record["possible_mutation"])) + "]"
+
+    def _run_table_row(self, row):
+        """Main-routed, one-row durable fixture with a transport write sentinel."""
+        (caller, record_label, ordinary, bundle_meta, flags,
+         expected_record, expected_writes, expected_exit) = row
+        bundle = INSTALL.load_source()
+        targets = INSTALL.transaction_targets(bundle)
+        binding = INSTALL.transaction_binding(
+            bundle, "0123456789ABCDEFGHIJKL", "https://kb.example", INSTALL.bundle_snapshot_digest(bundle))
+        ordinary_key = (next(item["key"] for item in targets if item["key"].startswith("kibana/"))
+                        if ordinary == "kibana-divergent" else
+                        next(item["key"] for item in targets if ("ingest-pipeline" in item["key"]
+                                                               if ordinary == "absent:pipeline-or-es-role"
+                                                               else "component-template" in item["key"])))
+        states = {item["key"]: "exact" for item in targets}
+        states[ordinary_key] = self._table_live_state(ordinary)
+        if caller == "full-flow":
+            states[INSTALL.BUNDLE_META_TARGET_KEY] = self._table_live_state(bundle_meta)
+        operations, attempts = [], {}
+        expected_writes = int(expected_writes)
+
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw); root.chmod(0o700)
+            path = root / INSTALL.ASSETS_MARKER_FILE
+            initial = self._table_initial_record(record_label, binding, targets)
+            if initial is not None:
+                # Prior S intentionally has a different archive binding, so
+                # it is published directly as the protected older record.
+                INSTALL.atomic_write(path.parent, path.name, INSTALL.jcs(initial))
+            initial_raw = path.read_bytes() if path.exists() else None
+
+            def observe(_es, _kb, _auth, spec, _bundle, _adapter, _record=None):
+                key = spec[0]
+                attempts[key] = attempts.get(key, 0) + 1
+                state = states.get(key, "exact")
+                if state == "unreadable":
+                    raise INSTALL.AssetTransactionRefusal("fixture remote read refused")
+                return state, None, None
+
+            def put(_es, _kb, _auth, spec, _bundle, _record, _adapter):
+                if len(operations) >= expected_writes:
+                    raise AssertionError("mutation sentinel tripped for " + spec[0])
+                operations.append(spec[0])
+                states[spec[0]] = "exact"
+
+            argv = ["install_assets.py", "--bundle", str(root / "bundle.tar"),
+                    "--endpoint", "https://es.example", "--ca-file", str(root / "es.pem"),
+                    "--kibana-endpoint", "https://kb.example", "--kibana-ca-file", str(root / "kb.pem"),
+                    "--admin-credentials-file", str(root / "admin.toml"),
+                    "--agent-binary", str(root / "agent"), "--profile", "user",
+                    "--assets-only", "--assets-marker", str(path)]
+            argv.extend("--" + flag for flag in self._table_flags(flags))
+            original_assets_only = INSTALL.assets_only_install
+
+            def caller_route(*args, **kwargs):
+                if caller == "assets-only":
+                    return original_assets_only(*args, **kwargs)
+                scenario_binding = INSTALL.transaction_binding(
+                    args[0], "0123456789ABCDEFGHIJKL", args[2], INSTALL.bundle_snapshot_digest(args[0]))
+                return INSTALL.run_default_asset_transaction(
+                    args[0], args[1], args[2], args[3], args[4], scenario_binding, full_flow=True,
+                    repair=kwargs.get("repair", False), upgrade=kwargs.get("upgrade", False),
+                    allow_downgrade=kwargs.get("allow_downgrade", False))
+
+            with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(root / "state")}, clear=False), \
+                 mock.patch.object(sys, "argv", argv), \
+                 mock.patch.object(INSTALL, "load_bundle", return_value=bundle), \
+                 mock.patch.object(INSTALL, "check_version_fence"), \
+                 mock.patch.object(INSTALL, "configure_https"), \
+                 mock.patch.object(INSTALL, "admin_authorization", return_value="auth"), \
+                 mock.patch.object(INSTALL, "cluster_uuid", return_value="0123456789ABCDEFGHIJKL"), \
+                 mock.patch.object(INSTALL, "_prepare_assets_marker_path", return_value=path), \
+                 mock.patch.object(INSTALL, "assets_only_install", side_effect=caller_route), \
+                 mock.patch.object(INSTALL, "_transaction_observe", side_effect=observe), \
+                 mock.patch.object(INSTALL, "_transaction_put", side_effect=put), \
+                 redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                exit_code = INSTALL.main()
+            final = (INSTALL.read_transaction_record_if_present(path, binding, targets)
+                     if path.exists() and not record_label.startswith("S-prior") else
+                     (json.loads(path.read_text()) if path.exists() else None))
+            # Step 11 is first in the engine's ordered full-flow spec.  A
+            # later ordinary refusal may therefore leave its write-issued
+            # record behind, but it may never run before a bundle-meta write.
+            if INSTALL.BUNDLE_META_TARGET_KEY in operations:
+                self.assertEqual(operations[0], INSTALL.BUNDLE_META_TARGET_KEY)
+            if caller == "full-flow" and expected_writes == 2:
+                self.assertEqual(operations[0], INSTALL.BUNDLE_META_TARGET_KEY)
+            return (self._table_record_label(final, record_label, initial_raw), len(operations), exit_code,
+                    final, attempts, expected_record, expected_writes, int(expected_exit))
+
     _CHILD_EXECUTOR = r'''
 import importlib.util, json, os
 from pathlib import Path
@@ -631,6 +792,33 @@ print(outcome)
                 self.assertIn(actual_writes, (0, 1, 2))
             writes_seen += actual_writes
         self.assertGreater(writes_seen, 0)
+
+    def test_t_flag_1_through_4_all_rows_main_routed_sharded(self):
+        """Execute every pinned policy row through main(), not a shadow planner.
+
+        The default shard is the complete 5,824-row set.  CI can split it
+        deterministically with ``RIGSIGNAL_FLAG_SHARDS`` and
+        ``RIGSIGNAL_FLAG_SHARD``; each row has exactly one SHA-256 shard.
+        """
+        rows = self._flag_rows()
+        self.assertEqual(len(rows), 5824)
+        shard_count = int(os.environ.get("RIGSIGNAL_FLAG_SHARDS", "1"))
+        shard = int(os.environ.get("RIGSIGNAL_FLAG_SHARD", "0"))
+        self.assertGreater(shard_count, 0)
+        self.assertGreaterEqual(shard, 0)
+        self.assertLess(shard, shard_count)
+        selected = [(index, row) for index, row in enumerate(rows)
+                    if int.from_bytes(hashlib.sha256((str(index) + "\\0" + "\\0".join(row)).encode()).digest()[:8], "big")
+                    % shard_count == shard]
+        self.assertTrue(selected)
+        for index, row in selected:
+            with self.subTest(row=index, caller=row[0], record=row[1], ordinary=row[2],
+                              bundle_meta=row[3], flags=row[4]):
+                (actual_record, writes, exit_code, _final, _attempts,
+                 expected_record, expected_writes, expected_exit) = self._run_table_row(row)
+                self.assertEqual(actual_record, expected_record)
+                self.assertEqual(writes, expected_writes)
+                self.assertEqual(exit_code, expected_exit)
 
     def test_t_dash_1_partial_dashboard_refuses_before_any_mutation_for_both_callers(self):
         """T-DASH-1: the real executor's N-state barrier is object-complete."""

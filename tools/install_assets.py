@@ -1541,6 +1541,49 @@ def _v2_destination_map_valid(value: object, targets: list[dict[str, str]]) -> b
     return True
 
 
+def _v2_prior_installed_valid(value: object, binding: dict) -> bool:
+    """Validate a complete prior release record used only for a transition.
+
+    A predecessor belongs to an earlier exact bundle binding, so comparing its
+    version, source commit, target digests, or archive digest to the current
+    bundle would make every legitimate upgrade indistinguishable from a bad
+    record.  Its own grammar and target-set digest still bind it tightly; the
+    live cluster and Kibana destination remain invariant across the handoff.
+    """
+    if not isinstance(value, dict):
+        return False
+    targets = value.get("targets")
+    if (not isinstance(targets, list) or len(targets) != 66
+            or targets != sorted(targets, key=lambda item: item.get("key", "").encode()
+                                if isinstance(item, dict) else b"")):
+        return False
+    if any(not isinstance(item, dict) or set(item) != {"digest", "key"}
+           or not valid_target_key(item.get("key"))
+           or not isinstance(item.get("digest"), str)
+           or _V2_SHA256_RE.fullmatch(item["digest"]) is None for item in targets):
+        return False
+    return (_v2_timestamp(value.get("completed_at"))
+            and isinstance(value.get("completed_transaction_id"), str)
+            and _V2_TRANSACTION_RE.fullmatch(value["completed_transaction_id"]) is not None
+            and value.get("schema_version") == V2_SCHEMA_VERSION
+            and value.get("ownership_profile") == "default"
+            and value.get("state") == "installed"
+            and value.get("cluster_uuid") == binding.get("cluster_uuid")
+            and value.get("kibana_target") == binding.get("kibana_target")
+            and isinstance(value.get("bundle_version"), str) and bool(value["bundle_version"])
+            and isinstance(value.get("source_commit"), str)
+            and _V2_COMMIT_RE.fullmatch(value["source_commit"]) is not None
+            and isinstance(value.get("bundle_sha256"), str)
+            and _V2_SHA256_RE.fullmatch(value["bundle_sha256"]) is not None
+            and value.get("asset_set_sha256") == _target_digest(targets)
+            and isinstance(value.get("migrated_from_v1"), bool)
+            and value.get("caller_obligations") in ([V2_ASSET_OBLIGATION],
+                                                      [V2_ASSET_OBLIGATION, V2_FULL_FLOW_OBLIGATION])
+            and _v2_destination_map_valid(value.get("destination_map"), targets)
+            and isinstance(value.get("verified_target_set_sha256"), str)
+            and _V2_SHA256_RE.fullmatch(value["verified_target_set_sha256"]) is not None)
+
+
 def _v2_installed_valid(value: object, binding: dict, targets: list[dict[str, str]], *, predecessor: bool = False) -> bool:
     if not isinstance(value, dict):
         return False
@@ -1550,8 +1593,10 @@ def _v2_installed_valid(value: object, binding: dict, targets: list[dict[str, st
     # completed caller obligations even though the earlier prose omitted it.
     if set(value) != common | {"caller_obligations", "completed_at", "completed_transaction_id", "destination_map", "verified_target_set_sha256"}:
         return False
-    return (value.get("state") == "installed" and _v2_common_is_valid(value, binding, targets)
-            and _v2_targets_valid(value.get("targets"), targets) and _v2_timestamp(value.get("completed_at"))
+    current_binding = (_v2_common_is_valid(value, binding, targets)
+                       and _v2_targets_valid(value.get("targets"), targets))
+    binding_is_valid = (_v2_prior_installed_valid(value, binding) if predecessor else current_binding)
+    return (value.get("state") == "installed" and binding_is_valid and _v2_timestamp(value.get("completed_at"))
             and value.get("caller_obligations") in ([V2_ASSET_OBLIGATION], [V2_ASSET_OBLIGATION, V2_FULL_FLOW_OBLIGATION])
             and _v2_destination_map_valid(value.get("destination_map"), targets)
             and isinstance(value.get("completed_transaction_id"), str)
@@ -1641,6 +1686,19 @@ def extend_installed_for_full_flow(record: dict, created_at: str) -> dict:
 def demote_installed_transaction(record: dict, created_at: str) -> dict:
     """Return the complete atomic installing shape used before any re-apply."""
     return _installing_from_installed(record, created_at)
+
+
+def transition_from_prior_installed(record: dict, binding: dict, targets: list[dict[str, str]],
+                                    created_at: str) -> dict:
+    """Create the current release intent while retaining a validated prior S."""
+    if not _v2_prior_installed_valid(record, binding):
+        raise InputError("assets transaction predecessor is invalid")
+    value = new_installing_record(binding, targets, created_at)
+    value["predecessor"] = deepcopy(record)
+    if record["caller_obligations"] == [V2_ASSET_OBLIGATION, V2_FULL_FLOW_OBLIGATION]:
+        value = expand_full_flow_record(value)
+    validate_transaction_record(jcs(value), binding, targets)
+    return value
 
 
 def mark_transaction_write_issued(record: dict, target_key: str) -> dict:
@@ -1756,6 +1814,24 @@ def read_transaction_record_if_present(path: Path, binding: dict | None, targets
         raise InputError("assets transaction record is unavailable") from error
     if binding is None or targets is None: raise InputError("transaction binding is required")
     return validate_transaction_record(protected_regular_file(path), binding, targets)
+
+
+def read_prior_installed_record_if_present(path: Path, binding: dict | None) -> dict | None:
+    """Read only a structurally complete previous-release record for transition."""
+    _validate_transaction_record_parent(path)
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        return None
+    except OSError as error:
+        raise InputError("assets transaction record is unavailable") from error
+    if binding is None:
+        raise InputError("transaction binding is required")
+    raw = protected_regular_file(path)
+    value = parse_json(raw, "assets transaction record")
+    if jcs(value) != raw or not _v2_prior_installed_valid(value, binding):
+        raise InputError("assets transaction record is invalid")
+    return value
 
 
 def write_transaction_record(path: Path, record: dict, binding: dict, targets: list[dict[str, str]]) -> None:
@@ -2169,17 +2245,28 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
     adapter = SavedObjectAdapter(kb_url, authorization)
     lock = AssetTransactionLock.acquire()
     try:
+        prior_installed = False
         try:
             record = read_transaction_record_if_present(record_path, binding, targets)
-        except InputError:
+        except InputError as current_error:
+            # A complete older release is not a malformed current record.  It
+            # can be consumed only by an explicit direction flag below; all
+            # other non-current shapes retain the established v1/invalid
+            # refusal behavior.
+            try:
+                record = read_prior_installed_record_if_present(record_path, binding)
+                prior_installed = record is not None
+            except InputError:
+                record = None
             # A v1 marker is the sole non-v2 primary that can be consumed.
             # Its reader and verification pass are intentionally isolated;
             # malformed v1/v2 inputs remain untouched refusals.
-            if not _read_private_v1_marker(record_path, bundle):
-                raise
-            record = _migrate_private_v1_record(record_path, bundle, binding, targets,
-                                                es_url, kb_url, authorization, adapter,
-                                                full_flow=full_flow)
+            if record is None:
+                if not _read_private_v1_marker(record_path, bundle):
+                    raise current_error
+                record = _migrate_private_v1_record(record_path, bundle, binding, targets,
+                                                    es_url, kb_url, authorization, adapter,
+                                                    full_flow=full_flow)
         # The initial no-record barrier is the one case where a stamped ES
         # divergence is a create-time reconciliation.  On a resumed/current
         # transaction it is a refusal until ``--repair`` is explicit.  This
@@ -2192,12 +2279,26 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
         # pre-read: no remote operation has happened in this invocation.
         if record is not None and record.get("state") == "installing" and record.get("possible_mutation") is True:
             raise AssetTransactionHalt("partial-remote-possible")
-        # Only after the durable uncertainty check may a version flag without
-        # a valid predecessor transition be rejected as local input (exit 2).
-        # The current-bundle v2 engine has no cross-version predecessor yet,
-        # so any supplied direction flag is that refusal and makes no read.
-        if upgrade or allow_downgrade:
+        version_flags = upgrade or allow_downgrade
+        transition_pending = False
+        if prior_installed:
+            if not version_flags:
+                raise AssetTransactionRefusal("assets transaction transition requires a direction flag")
+            # Keep the old S authoritative until a current write is needed or
+            # the whole current verification pass succeeds.  This prevents an
+            # unrelated later refusal from consuming a prior release record.
+            record = transition_from_prior_installed(record, binding, targets, _transaction_now())
+            transition_pending = True
+        has_valid_predecessor = (record is not None and record.get("state") == "installing"
+                                 and record.get("predecessor") is not None)
+        # Owner-ratified direction flags are meaningful only with a durable
+        # predecessor.  The table deliberately permits both flags to reach
+        # target classification; that combination simply has no stamped-ES
+        # reconciliation authority.
+        if version_flags and not has_valid_predecessor:
             raise InputError("assets transaction version flags require a validated predecessor")
+        if has_valid_predecessor and not version_flags:
+            raise AssetTransactionRefusal("assets transaction transition requires a direction flag")
         if record is None:
             # A new transaction has no pre-existing remote authority.  Finish
             # the complete no-write observation barrier before publishing
@@ -2213,7 +2314,11 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
             for spec in _transaction_specs(bundle):
                 if spec[0].startswith("es/"):
                     state, _live, _destination = _transaction_observe(es_url, kb_url, authorization, spec, bundle, adapter)
-                    if state in {"divergent", "owned-divergent"}:
+                    # A first-run stamped ES object is the one qualified
+                    # reconciliation case: once the complete no-write
+                    # barrier has excluded foreign/Kibana divergence, the
+                    # normal guarded write path records and verifies it.
+                    if state == "divergent":
                         raise AssetTransactionRefusal("asset target differs")
             record = new_installing_record(binding, targets, _transaction_now())
             write_transaction_record(record_path, record, binding, targets)
@@ -2241,7 +2346,12 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
               [V2_ASSET_OBLIGATION, V2_FULL_FLOW_OBLIGATION]):
             # T-SM-5/6: this caller cannot discharge Step 11, even if every
             # ordinary target happens to be exact.  Never silently promote.
-            raise AssetTransactionHalt("partial-remote-possible")
+            if not transition_pending:
+                raise AssetTransactionHalt("partial-remote-possible")
+            # A prior full-flow S already established Step 11.  The
+            # assets-only transition is permitted to retain that completed
+            # obligation while it revalidates the ordinary current targets.
+            record = mark_transaction_verified(record, BUNDLE_META_TARGET_KEY)
 
         specs = _transaction_specs(bundle, full_flow)
         for spec in specs:
@@ -2250,19 +2360,26 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
             if state == "exact":
                 if record["state"] == "installing":
                     record = mark_transaction_verified(record, key)
-                    write_transaction_record(record_path, record, binding, targets)
+                    if not transition_pending:
+                        write_transaction_record(record_path, record, binding, targets)
                 continue
             if state == "divergent":
                 raise AssetTransactionRefusal("asset target differs")
             if state == "owned-divergent" and spec[0].startswith("kibana/"):
                 raise AssetTransactionRefusal("Kibana target differs")
-            if state == "owned-divergent" and not (repair or started_without_record):
+            transition_es_authorized = (has_valid_predecessor and (upgrade ^ allow_downgrade))
+            repair_es_authorized = repair and not has_valid_predecessor
+            if state == "owned-divergent" and not (started_without_record or transition_es_authorized
+                                                    or repair_es_authorized):
                 raise AssetTransactionRefusal("stamped ES reconciliation requires --repair")
             if record["state"] == "installed":
                 fault("before-installed-demotion")
                 record = demote_installed_transaction(record, _transaction_now())
                 write_transaction_record(record_path, record, binding, targets)
                 fault("after-installed-demotion")
+            if transition_pending:
+                write_transaction_record(record_path, record, binding, targets)
+                transition_pending = False
             # A stamped ES divergent object is a qualified reconciliation;
             # transforms use their documented update endpoint, all other
             # classes retain their creation guard and reread conflict signal.
