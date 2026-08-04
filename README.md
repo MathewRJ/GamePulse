@@ -180,6 +180,7 @@ See [`docs/STATUS.md`](docs/STATUS.md) for current release state and
 | Getting started | [`docs/getting-started.md`](docs/getting-started.md) | First install + first session |
 | Installation | [`docs/install.md`](docs/install.md) | Full install guide: Elastic Cloud, self-hosted, AUR, packages, systemd |
 | Assets install contract | [`docs/assets-install-exit-contract.md`](docs/assets-install-exit-contract.md) | Assets/full-flow exit codes, refusal taxonomy, and recovery surfaces |
+| Asset recovery | [`docs/RECOVERY.md`](docs/RECOVERY.md) | Safe recovery boundaries for interrupted asset installation |
 | `diagnose display` (D6) | [`docs/diagnose-display.md`](docs/diagnose-display.md) | Display mode-override diagnostic — usage, verdicts, exit codes |
 | `diagnose gpu-boot` (D3) | [`docs/diagnose-gpu-boot.md`](docs/diagnose-gpu-boot.md) | PCI/journal GPU boot-enumeration diagnostic — explicit slot baseline, findings, and recovery |
 | Metrics reference | [`docs/metrics-reference.md`](docs/metrics-reference.md) | Field-by-field reference for every data stream |

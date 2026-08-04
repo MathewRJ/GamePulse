@@ -64,9 +64,23 @@ class RecordFixtures(unittest.TestCase):
             INSTALL.validate_transaction_record(INSTALL.jcs(value), self.binding, self.targets)
 
     def test_t_rec_3_rejects_mapping_and_predecessor_misuse(self):
-        value = self.installing(); value["saved_object_mappings"] = [{"submitted_key": "bad", "destination_key": "bad"}]
-        with self.assertRaises(INSTALL.InputError):
-            INSTALL.validate_transaction_record(INSTALL.jcs(value), self.binding, self.targets)
+        submitted = next(item["key"] for item in self.targets if item["key"].startswith("kibana/"))
+        destination = submitted.rsplit("/", 1)[0] + "/remapped-id"
+        valid = self.installing(destination_map=[{"submitted_key": submitted,
+                                                  "destination_key": destination}])
+        INSTALL.validate_transaction_record(INSTALL.jcs(valid), self.binding, self.targets)
+        malformed = [
+            [{"submitted_key": "bad", "destination_key": destination}],
+            [{"submitted_key": submitted, "destination_key": "bad"}],
+            [{"submitted_key": submitted, "destination_key": destination, "extra": True}],
+            [{"submitted_key": submitted, "destination_key": destination},
+             {"submitted_key": submitted, "destination_key": destination}],
+        ]
+        for mapping in malformed:
+            with self.subTest(mapping=mapping):
+                value = self.installing(destination_map=mapping)
+                with self.assertRaises(INSTALL.InputError):
+                    INSTALL.validate_transaction_record(INSTALL.jcs(value), self.binding, self.targets)
         value = self.installing(predecessor={"state": "installed"})
         with self.assertRaises(INSTALL.InputError):
             INSTALL.validate_transaction_record(INSTALL.jcs(value), self.binding, self.targets)
@@ -74,11 +88,15 @@ class RecordFixtures(unittest.TestCase):
     def test_t_rec_4_installed_retains_completed_obligations(self):
         value = self.installing()
         value = INSTALL.expand_full_flow_record(value)
+        submitted = next(item["key"] for item in self.targets if item["key"].startswith("kibana/"))
+        value["destination_map"] = [{"submitted_key": submitted,
+                                     "destination_key": submitted.rsplit("/", 1)[0] + "/remapped-id"}]
         value["possible_mutation"] = True
         for key in value["progress"]:
             value["progress"][key] = "verified"
         installed = INSTALL.promote_transaction_record(value, "2026-08-04T12:35:00Z")
         self.assertEqual(installed["caller_obligations"], ["assets-66", "full-flow-step-11"])
+        self.assertEqual(installed["destination_map"], value["destination_map"])
         self.assertIn("verified_target_set_sha256", installed)
         INSTALL.validate_transaction_record(INSTALL.jcs(installed), self.binding, self.targets)
 
@@ -131,6 +149,47 @@ class SnapshotTests(unittest.TestCase):
             root = Path(raw); temp = root / ".rigsignal-leftover"; temp.write_bytes(b"partial"); temp.chmod(0o600)
             self.assertIsNone(INSTALL.read_transaction_record_if_present(root / "assets-marker.json", None, None))
             self.assertTrue(temp.exists())
+
+
+class TransactionStateTests(RecordFixtures):
+    def test_t_sm_1_and_2_full_flow_extension_preserves_one_transaction_boundary(self):
+        installing = self.installing()
+        for key in installing["progress"]:
+            installing["progress"][key] = "verified"
+        installed = INSTALL.promote_transaction_record(installing, "2026-08-04T12:35:00Z")
+        extended = INSTALL.extend_installed_for_full_flow(installed, "2026-08-04T12:36:00Z")
+        self.assertEqual(extended["state"], "installing")
+        self.assertEqual(extended["caller_obligations"], ["assets-66", "full-flow-step-11"])
+        self.assertEqual(extended["progress"][INSTALL.BUNDLE_META_TARGET_KEY], "planned")
+        self.assertEqual(extended["predecessor"], installed)
+        INSTALL.validate_transaction_record(INSTALL.jcs(extended), self.binding, self.targets)
+
+    def test_t_sm_3_and_11_demotion_preserves_complete_predecessor(self):
+        installing = self.installing()
+        for key in installing["progress"]:
+            installing["progress"][key] = "verified"
+        installed = INSTALL.promote_transaction_record(installing, "2026-08-04T12:35:00Z")
+        demoted = INSTALL.demote_installed_transaction(installed, "2026-08-04T12:36:00Z")
+        self.assertEqual(demoted["predecessor"], installed)
+        self.assertFalse(demoted["possible_mutation"])
+        self.assertEqual(set(demoted["progress"].values()), {"planned"})
+        INSTALL.validate_transaction_record(INSTALL.jcs(demoted), self.binding, self.targets)
+
+    def test_t_sm_9_write_issued_is_durable_before_dispatch(self):
+        record = self.installing()
+        key = record["targets"][0]["key"]
+        issued = INSTALL.mark_transaction_write_issued(record, key)
+        self.assertTrue(issued["possible_mutation"])
+        self.assertEqual(issued["progress"][key], "write-issued")
+        INSTALL.validate_transaction_record(INSTALL.jcs(issued), self.binding, self.targets)
+
+    def test_state_replacements_publish_only_valid_complete_records(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw); root.chmod(0o700)
+            path = root / "assets-marker.json"
+            record = self.installing()
+            INSTALL.write_transaction_record(path, record, self.binding, self.targets)
+            self.assertEqual(INSTALL.read_transaction_record_if_present(path, self.binding, self.targets), record)
 
 
 class OriginAndLockTests(unittest.TestCase):

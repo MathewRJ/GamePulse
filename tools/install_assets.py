@@ -1371,6 +1371,36 @@ def _v2_targets_valid(targets: object, expected: list[dict[str, str]]) -> bool:
                and _V2_SHA256_RE.fullmatch(item["digest"]) for item in targets)
 
 
+def _v2_destination_map_valid(value: object, targets: list[dict[str, str]]) -> bool:
+    """Validate persisted submitted-to-destination saved-object identities.
+
+    A destination is deliberately retained in both active and completed
+    records.  Kibana may remap an imported object; forgetting that identity at
+    promotion would make the next verification guess at a physical object.
+    """
+    if not isinstance(value, list):
+        return False
+    submitted = set()
+    target_keys = {item["key"] for item in targets}
+    previous: bytes | None = None
+    for item in value:
+        if not isinstance(item, dict) or set(item) != {"destination_key", "submitted_key"}:
+            return False
+        source, destination = item.get("submitted_key"), item.get("destination_key")
+        if (not isinstance(source, str) or not isinstance(destination, str)
+                or source not in target_keys or not source.startswith("kibana/")
+                or not destination.startswith("kibana/")
+                or not valid_target_key(source) or not valid_target_key(destination)
+                or source in submitted):
+            return False
+        encoded = source.encode("utf-8")
+        if previous is not None and encoded <= previous:
+            return False
+        previous = encoded
+        submitted.add(source)
+    return True
+
+
 def _v2_installed_valid(value: object, binding: dict, targets: list[dict[str, str]], *, predecessor: bool = False) -> bool:
     if not isinstance(value, dict):
         return False
@@ -1378,11 +1408,12 @@ def _v2_installed_valid(value: object, binding: dict, targets: list[dict[str, st
               "ownership_profile", "schema_version", "source_commit", "state", "targets"}
     # T-REC-4 is the controlling erratum: installed records retain the
     # completed caller obligations even though the earlier prose omitted it.
-    if set(value) != common | {"caller_obligations", "completed_at", "completed_transaction_id", "verified_target_set_sha256"}:
+    if set(value) != common | {"caller_obligations", "completed_at", "completed_transaction_id", "destination_map", "verified_target_set_sha256"}:
         return False
     return (value.get("state") == "installed" and _v2_common_is_valid(value, binding, targets)
             and _v2_targets_valid(value.get("targets"), targets) and _v2_timestamp(value.get("completed_at"))
             and value.get("caller_obligations") in ([V2_ASSET_OBLIGATION], [V2_ASSET_OBLIGATION, V2_FULL_FLOW_OBLIGATION])
+            and _v2_destination_map_valid(value.get("destination_map"), targets)
             and isinstance(value.get("completed_transaction_id"), str)
             and _V2_TRANSACTION_RE.fullmatch(value["completed_transaction_id"]) is not None
             and isinstance(value.get("verified_target_set_sha256"), str)
@@ -1398,7 +1429,7 @@ def validate_transaction_record(raw: bytes, binding: dict, targets: list[dict[st
         return value
     common = {"asset_set_sha256", "bundle_sha256", "bundle_version", "cluster_uuid", "kibana_target",
               "ownership_profile", "schema_version", "source_commit", "state", "targets"}
-    required = common | {"caller_obligations", "created_at", "possible_mutation", "predecessor", "progress", "transaction_id"}
+    required = common | {"caller_obligations", "created_at", "destination_map", "possible_mutation", "predecessor", "progress", "transaction_id"}
     if not isinstance(value, dict) or set(value) != required or value.get("state") != "installing" or not _v2_common_is_valid(value, binding, targets):
         raise InputError("assets transaction record is invalid")
     obligations = value.get("caller_obligations")
@@ -1412,6 +1443,8 @@ def validate_transaction_record(raw: bytes, binding: dict, targets: list[dict[st
             or not isinstance(value.get("transaction_id"), str)
             or _V2_TRANSACTION_RE.fullmatch(value["transaction_id"]) is None):
         raise InputError("assets transaction record is invalid")
+    if not _v2_destination_map_valid(value.get("destination_map"), targets):
+        raise InputError("assets transaction record is invalid")
     predecessor_value = value.get("predecessor")
     if predecessor_value is not None and not _v2_installed_valid(predecessor_value, binding, targets, predecessor=True):
         raise InputError("assets transaction record is invalid")
@@ -1421,6 +1454,7 @@ def validate_transaction_record(raw: bytes, binding: dict, targets: list[dict[st
 def new_installing_record(binding: dict, targets: list[dict[str, str]], created_at: str) -> dict:
     value = {**binding, "state": "installing", "targets": deepcopy(targets), "transaction_id": str(uuid.uuid4()),
              "created_at": created_at, "predecessor": None, "caller_obligations": [V2_ASSET_OBLIGATION],
+             "destination_map": [],
              "progress": {item["key"]: "planned" for item in targets}, "possible_mutation": False}
     validate_transaction_record(jcs(value), binding, targets)
     return value
@@ -1435,12 +1469,66 @@ def expand_full_flow_record(record: dict) -> dict:
     return value
 
 
+def _installing_from_installed(record: dict, created_at: str) -> dict:
+    """Start a fresh active transaction while retaining its exact predecessor."""
+    if record.get("state") != "installed":
+        raise InputError("assets transaction predecessor is not installed")
+    return {
+        **{key: deepcopy(record[key]) for key in (
+            "asset_set_sha256", "bundle_sha256", "bundle_version", "cluster_uuid", "kibana_target",
+            "ownership_profile", "schema_version", "source_commit", "targets", "destination_map")},
+        "state": "installing", "transaction_id": str(uuid.uuid4()), "created_at": created_at,
+        "predecessor": deepcopy(record), "caller_obligations": deepcopy(record["caller_obligations"]),
+        "progress": {item["key"]: "planned" for item in record["targets"]}, "possible_mutation": False,
+    }
+
+
+def extend_installed_for_full_flow(record: dict, created_at: str) -> dict:
+    """Durably model the assets-only-to-full-flow handoff before Step 11."""
+    if record.get("state") != "installed":
+        raise InputError("assets transaction is not installed")
+    if record.get("caller_obligations") == [V2_ASSET_OBLIGATION, V2_FULL_FLOW_OBLIGATION]:
+        return deepcopy(record)
+    if record.get("caller_obligations") != [V2_ASSET_OBLIGATION]:
+        raise InputError("assets transaction obligations are invalid")
+    value = _installing_from_installed(record, created_at)
+    for key in value["progress"]:
+        value["progress"][key] = "verified"
+    return expand_full_flow_record(value)
+
+
+def demote_installed_transaction(record: dict, created_at: str) -> dict:
+    """Return the complete atomic installing shape used before any re-apply."""
+    return _installing_from_installed(record, created_at)
+
+
+def mark_transaction_write_issued(record: dict, target_key: str) -> dict:
+    """Persist the uncertain state which must precede every transport write."""
+    if record.get("state") != "installing" or record.get("progress", {}).get(target_key) not in {
+            "planned", "write-issued"}:
+        raise InputError("assets transaction target is not writable")
+    value = deepcopy(record)
+    value["progress"][target_key] = "write-issued"
+    value["possible_mutation"] = True
+    return value
+
+
+def mark_transaction_verified(record: dict, target_key: str) -> dict:
+    """Record a successful post-write or no-op verification."""
+    if record.get("state") != "installing" or target_key not in record.get("progress", {}):
+        raise InputError("assets transaction target is unknown")
+    value = deepcopy(record)
+    value["progress"][target_key] = "verified"
+    return value
+
+
 def promote_transaction_record(record: dict, completed_at: str) -> dict:
     if record.get("state") != "installing" or any(state != "verified" for state in record.get("progress", {}).values()):
         raise InputError("assets transaction is not fully verified")
     common = {key: deepcopy(record[key]) for key in ("asset_set_sha256", "bundle_sha256", "bundle_version", "cluster_uuid",
               "kibana_target", "ownership_profile", "schema_version", "source_commit", "targets")}
     completed = {**common, "state": "installed", "caller_obligations": deepcopy(record["caller_obligations"]),
+                 "destination_map": deepcopy(record["destination_map"]),
                  "completed_transaction_id": record["transaction_id"], "completed_at": completed_at,
                  "verified_target_set_sha256": _target_digest(record["progress"])}
     return completed
@@ -1504,9 +1592,25 @@ def cleanup_snapshot_residue(directory: Path, name: str) -> None:
 
 
 def read_transaction_record_if_present(path: Path, binding: dict | None, targets: list[dict[str, str]] | None) -> dict | None:
-    if not path.exists(): return None
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        return None
+    except OSError as error:
+        raise InputError("assets transaction record is unavailable") from error
     if binding is None or targets is None: raise InputError("transaction binding is required")
     return validate_transaction_record(protected_regular_file(path), binding, targets)
+
+
+def write_transaction_record(path: Path, record: dict, binding: dict, targets: list[dict[str, str]]) -> None:
+    """Atomically publish only a fully validated, byte-canonical v2 record."""
+    raw = jcs(record)
+    validate_transaction_record(raw, binding, targets)
+    atomic_write(path.parent, path.name, raw)
+    # Read-back is part of the durable transition boundary: callers must not
+    # continue to a remote write from an unverifiable local intent.
+    if protected_regular_file(path) != raw:
+        raise InputError("assets transaction record verification failed")
 
 
 class AssetLockHeld(InputError):
