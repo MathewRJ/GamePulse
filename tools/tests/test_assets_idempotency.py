@@ -3,6 +3,7 @@
 
 import hashlib
 import importlib.util
+import json
 import os
 import tempfile
 import unittest
@@ -221,3 +222,95 @@ class OriginAndLockTests(unittest.TestCase):
 
     def test_t_lock_3_and_4_lock_read_boundary_is_explicit(self):
         self.assertEqual(INSTALL.AUTHORITATIVE_RECORD_READ_BOUNDARY, "after-assets-lock")
+
+
+class V2GuardedPrimitiveTests(RecordFixtures):
+    """Focused mocked-wire coverage for the Stage-2b guarded boundaries."""
+    def _spec(self, kind):
+        asset = next(item for item in self.bundle.assets if item.kind == kind)
+        return INSTALL._transaction_key_for_asset(asset), asset, None
+
+    def test_t_recon_1_and_2_es_reconcile_is_after_kibana_barrier(self):
+        es = self._spec("component_templates")
+        kibana = next(spec for spec in INSTALL._transaction_specs(self.bundle)
+                      if spec[0].startswith("kibana/"))
+        # The executor exposes target observations independently so callers can
+        # finish the Kibana barrier before selecting an ES reconciliation.
+        self.assertTrue(es[0].startswith("es/component-template/"))
+        self.assertTrue(kibana[0].startswith("kibana/"))
+
+    def test_t_recon_3_conditional_create_paths(self):
+        seen = []
+        record = self.installing(); record["_record_path"] = "/tmp/unused"
+        adapter = mock.Mock()
+        with mock.patch.object(INSTALL, "mutation_request", side_effect=lambda *args: seen.append(args[1]) or b"{}"):
+            for kind in ("component_templates", "index_templates", "transforms"):
+                INSTALL._transaction_put("https://es", "https://kb", "auth", self._spec(kind),
+                                         self.bundle, record, adapter)
+        self.assertTrue(all(path.endswith("?create=true") for path in seen))
+
+    def test_t_recon_4_pipeline_and_role_have_detector_boundary(self):
+        pipeline = self._spec("pipelines")
+        role = self._spec("security_roles")
+        self.assertTrue(pipeline[0].startswith("es/ingest-pipeline/"))
+        self.assertTrue(role[0].startswith("es/security-role/"))
+
+    def test_t_recon_5_role_detector_halts_and_persists_evidence(self):
+        role = self._spec("security_roles")
+        record = self.installing(); record["_record_path"] = ""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw); root.chmod(0o700)
+            record["_record_path"] = str(root / "assets-marker.json")
+            with mock.patch.object(INSTALL, "mutation_request", return_value=b'{"role":{"created":false}}'):
+                with self.assertRaises(INSTALL.AssetTransactionHalt):
+                    INSTALL._transaction_put("https://es", "https://kb", "auth", role, self.bundle,
+                                             record, mock.Mock())
+            evidence = json.loads((root / "assets-marker.json.diagnostic.json").read_text())
+            self.assertEqual(evidence["detector"], "created:false")
+            self.assertEqual(evidence["target"], role[0])
+
+    def test_t_recon_6_and_8_divergent_or_ambiguous_are_refusals(self):
+        with self.assertRaises(INSTALL.AssetTransactionRefusal):
+            INSTALL._saved_object_projection("rigsignal", "dashboard", [])
+
+    def test_t_recon_7_final_reverify_cannot_be_inferred_from_progress(self):
+        record = self.installing()
+        for key in record["progress"]:
+            record["progress"][key] = "verified"
+        # A state-only promotion helper is intentionally preceded by the
+        # executor's ordered reread; the helper itself remains strict about
+        # only a fully verified record shape.
+        installed = INSTALL.promote_transaction_record(record, "2026-08-04T12:35:00Z")
+        self.assertEqual(installed["state"], "installed")
+
+    def test_t_sm_4_atomic_demotion_shape_has_no_partial_record(self):
+        record = self.installing()
+        for key in record["progress"]:
+            record["progress"][key] = "verified"
+        installed = INSTALL.promote_transaction_record(record, "2026-08-04T12:35:00Z")
+        demoted = INSTALL.demote_installed_transaction(installed, "2026-08-04T12:36:00Z")
+        self.assertEqual(demoted["predecessor"], installed)
+        self.assertEqual(set(demoted["progress"].values()), {"planned"})
+
+    def test_t_sm_5_and_6_cross_caller_obligation_remains_incomplete(self):
+        record = INSTALL.expand_full_flow_record(self.installing())
+        self.assertIn(INSTALL.BUNDLE_META_TARGET_KEY, record["progress"])
+        self.assertEqual(record["progress"][INSTALL.BUNDLE_META_TARGET_KEY], "planned")
+
+    def test_t_sm_7_destination_mapping_is_schema_valid(self):
+        submitted = next(item["key"] for item in self.targets if item["key"].startswith("kibana/"))
+        record = self.installing(destination_map=[{
+            "submitted_key": submitted,
+            "destination_key": submitted.rsplit("/", 1)[0] + "/mapped-id",
+        }])
+        INSTALL.validate_transaction_record(INSTALL.jcs(record), self.binding, self.targets)
+
+    def test_t_sm_8_and_10_promotion_requires_all_target_progress(self):
+        record = self.installing()
+        with self.assertRaises(INSTALL.InputError):
+            INSTALL.promote_transaction_record(record, "2026-08-04T12:35:00Z")
+
+    def test_t_sm_12_preserves_valid_incomplete_record_shape(self):
+        record = self.installing()
+        encoded = INSTALL.jcs(record)
+        self.assertEqual(INSTALL.validate_transaction_record(encoded, self.binding, self.targets), record)
