@@ -267,9 +267,11 @@ PY
         fi
     else
         if gh release view "$tag" -R "$repo" --json tagName,isDraft,databaseId,isImmutable >"$evidence_dir/release-view-$phase.json"; then :; else return 1; fi
-        if gh api -H 'Accept: application/vnd.github+json' "repos/$repo/releases/tags/$tag" >"$evidence_dir/release-api-$phase.json"; then :; else return 1; fi
+        # Use the databaseId from `gh release view` (which resolves DRAFT releases)
+        # as the release id. The repos/.../releases/tags/<tag> endpoint returns 404
+        # for a draft, so it cannot be used to validate a draft before publish.
         local release_id
-        if release_id="$(jq -er '.id' "$evidence_dir/release-api-$phase.json")"; then :; else return 1; fi
+        if release_id="$(jq -er '.databaseId' "$evidence_dir/release-view-$phase.json")"; then :; else return 1; fi
         if gh api --paginate -H 'Accept: application/vnd.github+json' "repos/$repo/releases/$release_id/assets?per_page=100" | jq -s 'add' >"$evidence_dir/release-assets-$phase.json"; then :; else return 1; fi
         if git ls-remote "https://github.com/$repo.git" "refs/tags/$tag^{}" | awk 'NR==1 {print $1}' >"$evidence_dir/tag-commit-$phase"; then :; else return 1; fi
     fi
@@ -390,9 +392,9 @@ PY
         if [ -n "$attestation_bundle_dir" ]; then
             digest="$(sha256 "$file")"
             bundle="$attestation_bundle_dir/sha256:$digest.jsonl"
-            if gh attestation verify "$file" -R "$repo" --source-ref "refs/tags/$tag" --source-digest "$source_commit" --signer-workflow '.github/workflows/release.yml' --bundle "$bundle" --custom-trusted-root "$trusted_root" --format json >"$output"; then :; else return 1; fi
+            if gh attestation verify "$file" -R "$repo" --source-ref "refs/tags/$tag" --source-digest "$source_commit" --signer-workflow "$repo/.github/workflows/release.yml" --bundle "$bundle" --custom-trusted-root "$trusted_root" --format json >"$output"; then :; else return 1; fi
         else
-            if gh attestation verify "$file" -R "$repo" --source-ref "refs/tags/$tag" --source-digest "$source_commit" --signer-workflow '.github/workflows/release.yml' --format json >"$output"; then :; else return 1; fi
+            if gh attestation verify "$file" -R "$repo" --source-ref "refs/tags/$tag" --source-digest "$source_commit" --signer-workflow "$repo/.github/workflows/release.yml" --format json >"$output"; then :; else return 1; fi
         fi
         if jq -e 'type == "array" and length > 0' "$output" >/dev/null; then :; else return 1; fi
         verified=$((verified + 1))
@@ -414,7 +416,14 @@ validate_owner_snapshot() {
 validate_drift() {
     local phase=$1
     if cmp "$evidence_dir/release-view-pre.json" "$evidence_dir/release-view-$phase.json"; then :; else return 1; fi
-    if cmp "$evidence_dir/release-assets-pre.json" "$evidence_dir/release-assets-$phase.json"; then :; else return 1; fi
+    # Compare the canonical, IMMUTABLE asset identity tuple (id,name,size,digest,
+    # state) — not the raw API JSON, which carries volatile fields (e.g.
+    # download_count, updated_at) that the window's own asset downloads mutate
+    # between the pre and re-fetch. Drift means an identity changed, not a counter.
+    if diff \
+        <(jq -S '[.[] | {id, name, size, digest, state}] | sort_by(.id)' "$evidence_dir/release-assets-pre.json") \
+        <(jq -S '[.[] | {id, name, size, digest, state}] | sort_by(.id)' "$evidence_dir/release-assets-$phase.json") \
+        >/dev/null; then :; else return 1; fi
     if cmp "$evidence_dir/tag-commit-pre" "$evidence_dir/tag-commit-$phase"; then :; else return 1; fi
 }
 
@@ -532,7 +541,10 @@ PY
         fi
     fi
     if "$agent_path" --build-info-json | jq -e --arg commit "$source_commit" '.commit == $commit' >/dev/null; then :; else return 1; fi
-    if grep -F -- "$source_commit" "$engine_path" >/dev/null; then :; else return 1; fi
+    # The engine (install_assets.py) does NOT embed the commit string — it is
+    # stdlib Python whose provenance is established by byte-equality with the
+    # attested tarball above (not by containing the commit literal). The agent's
+    # build-info commit is the runtime commit binding.
 }
 
 verify_proc_binding() {
