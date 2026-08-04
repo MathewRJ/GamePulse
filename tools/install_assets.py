@@ -1372,21 +1372,51 @@ def bundle_snapshot_digest(bundle: Bundle) -> str:
 def transaction_possible_mutation(path: Path) -> tuple[bool, str | None]:
     """Best-effort, redaction-safe uncertainty check for the exit boundary."""
     try:
-        value = parse_json(protected_regular_file(path), "assets transaction record")
+        raw = protected_regular_file(path)
+        value = parse_json(raw, "assets transaction record")
     except (InputError, OSError):
         return False, None
     token = value.get("transaction_id") if isinstance(value, dict) else None
-    return bool(isinstance(value, dict) and value.get("state") == "installing"
-                and value.get("possible_mutation") is True), (token[:8] if isinstance(token, str) else None)
+    return bool(isinstance(value, dict) and jcs(value) == raw
+                and value.get("schema_version") == V2_SCHEMA_VERSION
+                and value.get("state") == "installing"
+                and value.get("possible_mutation") is True
+                and isinstance(token, str) and _V2_TRANSACTION_RE.fullmatch(token) is not None), None
 
 
 def transaction_failure_status(record_path: Path) -> int:
-    possible, token = transaction_possible_mutation(record_path)
+    possible, _token = transaction_possible_mutation(record_path)
     if possible:
-        suffix = token or "redacted"
-        print("RIGSIGNAL_RECOVERY_STATE partial-remote-possible transaction=" + suffix, file=sys.stderr)
+        # The record is untrusted diagnostic input.  UUID grammar is checked
+        # above, but even a valid identifier is never emitted at this boundary.
+        print("RIGSIGNAL_RECOVERY_STATE partial-remote-possible transaction=<redacted>", file=sys.stderr)
         return 4
     return 3
+
+
+def transaction_boundary_preflight(record_path: Path) -> int | None:
+    """Consult persisted uncertainty before mutable bundle/version work (A6)."""
+    try:
+        raw = protected_regular_file(record_path)
+    except FileNotFoundError:
+        return None
+    except (InputError, OSError):
+        return 3
+    try:
+        value = parse_json(raw, "assets transaction record")
+    except InputError:
+        return 3
+    if jcs(value) != raw or not isinstance(value, dict):
+        return 3
+    token = value.get("transaction_id")
+    if (value.get("state") == "installing" and value.get("possible_mutation") is True
+            and isinstance(token, str) and _V2_TRANSACTION_RE.fullmatch(token) is not None):
+        return transaction_failure_status(record_path)
+    # A present record must at least be a recognizable v2 envelope.  Binding
+    # validation follows after snapshot/remote binding is available.
+    if value.get("schema_version") != V2_SCHEMA_VERSION:
+        return 3
+    return None
 
 
 def asset_executor_exit_code(outcome: str, record_path: Path | None = None) -> int:
@@ -1495,12 +1525,9 @@ def _v2_common_is_valid(value: object, binding: dict, targets: list[dict[str, st
     if not isinstance(value, dict):
         return False
     expected = {**binding, "targets": targets}
-    # AMBIGUITY-5: provenance is durable record data, not an inference from
-    # which reader happened to publish it.  Every v2 record says explicitly
-    # whether its lineage began as the former private v1 marker.
     return (all(value.get(key) == item for key, item in expected.items())
             and value.get("schema_version") == 2
-            and isinstance(value.get("migrated_from_v1"), bool))
+            and ("migrated_from_v1" not in value or isinstance(value.get("migrated_from_v1"), bool)))
 
 
 def _v2_targets_valid(targets: object, expected: list[dict[str, str]]) -> bool:
@@ -1576,7 +1603,6 @@ def _v2_prior_installed_valid(value: object, binding: dict) -> bool:
             and isinstance(value.get("bundle_sha256"), str)
             and _V2_SHA256_RE.fullmatch(value["bundle_sha256"]) is not None
             and value.get("asset_set_sha256") == _target_digest(targets)
-            and isinstance(value.get("migrated_from_v1"), bool)
             and value.get("caller_obligations") in ([V2_ASSET_OBLIGATION],
                                                       [V2_ASSET_OBLIGATION, V2_FULL_FLOW_OBLIGATION])
             and _v2_destination_map_valid(value.get("destination_map"), targets)
@@ -1588,10 +1614,11 @@ def _v2_installed_valid(value: object, binding: dict, targets: list[dict[str, st
     if not isinstance(value, dict):
         return False
     common = {"asset_set_sha256", "bundle_sha256", "bundle_version", "cluster_uuid", "kibana_target",
-              "migrated_from_v1", "ownership_profile", "schema_version", "source_commit", "state", "targets"}
+              "ownership_profile", "schema_version", "source_commit", "state", "targets"}
     # T-REC-4 is the controlling erratum: installed records retain the
     # completed caller obligations even though the earlier prose omitted it.
-    if set(value) != common | {"caller_obligations", "completed_at", "completed_transaction_id", "destination_map", "verified_target_set_sha256"}:
+    allowed = common | {"caller_obligations", "completed_at", "completed_transaction_id", "destination_map", "verified_target_set_sha256"}
+    if set(value) not in (allowed, allowed | {"migrated_from_v1"}):
         return False
     current_binding = (_v2_common_is_valid(value, binding, targets)
                        and _v2_targets_valid(value.get("targets"), targets))
@@ -1602,7 +1629,8 @@ def _v2_installed_valid(value: object, binding: dict, targets: list[dict[str, st
             and isinstance(value.get("completed_transaction_id"), str)
             and _V2_TRANSACTION_RE.fullmatch(value["completed_transaction_id"]) is not None
             and isinstance(value.get("verified_target_set_sha256"), str)
-            and _V2_SHA256_RE.fullmatch(value["verified_target_set_sha256"]) is not None)
+            and _V2_SHA256_RE.fullmatch(value["verified_target_set_sha256"]) is not None
+            and value["verified_target_set_sha256"] == _target_digest(value["targets"]))
 
 
 def validate_transaction_record(raw: bytes, binding: dict, targets: list[dict[str, str]]) -> dict:
@@ -1613,9 +1641,10 @@ def validate_transaction_record(raw: bytes, binding: dict, targets: list[dict[st
     if _v2_installed_valid(value, binding, targets):
         return value
     common = {"asset_set_sha256", "bundle_sha256", "bundle_version", "cluster_uuid", "kibana_target",
-              "migrated_from_v1", "ownership_profile", "schema_version", "source_commit", "state", "targets"}
+              "ownership_profile", "schema_version", "source_commit", "state", "targets"}
     required = common | {"caller_obligations", "created_at", "destination_map", "possible_mutation", "predecessor", "progress", "transaction_id"}
-    if not isinstance(value, dict) or set(value) != required or value.get("state") != "installing" or not _v2_common_is_valid(value, binding, targets):
+    if (not isinstance(value, dict) or set(value) not in (required, required | {"migrated_from_v1"})
+            or value.get("state") != "installing" or not _v2_common_is_valid(value, binding, targets)):
         raise InputError("assets transaction record is invalid")
     obligations = value.get("caller_obligations")
     if obligations not in ([V2_ASSET_OBLIGATION], [V2_ASSET_OBLIGATION, V2_FULL_FLOW_OBLIGATION]):
@@ -1640,8 +1669,7 @@ def new_installing_record(binding: dict, targets: list[dict[str, str]], created_
     value = {**binding, "state": "installing", "targets": deepcopy(targets), "transaction_id": str(uuid.uuid4()),
              "created_at": created_at, "predecessor": None, "caller_obligations": [V2_ASSET_OBLIGATION],
              "destination_map": [],
-             "progress": {item["key"]: "planned" for item in targets}, "possible_mutation": False,
-             "migrated_from_v1": False}
+             "progress": {item["key"]: "planned" for item in targets}, "possible_mutation": False}
     validate_transaction_record(jcs(value), binding, targets)
     return value
 
@@ -1662,7 +1690,8 @@ def _installing_from_installed(record: dict, created_at: str) -> dict:
     return {
         **{key: deepcopy(record[key]) for key in (
             "asset_set_sha256", "bundle_sha256", "bundle_version", "cluster_uuid", "kibana_target",
-            "migrated_from_v1", "ownership_profile", "schema_version", "source_commit", "targets", "destination_map")},
+            "ownership_profile", "schema_version", "source_commit", "targets", "destination_map")
+            if key in record},
         "state": "installing", "transaction_id": str(uuid.uuid4()), "created_at": created_at,
         "predecessor": deepcopy(record), "caller_obligations": deepcopy(record["caller_obligations"]),
         "progress": {item["key"]: "planned" for item in record["targets"]}, "possible_mutation": False,
@@ -1701,6 +1730,20 @@ def transition_from_prior_installed(record: dict, binding: dict, targets: list[d
     return value
 
 
+def _version_direction_is_valid(prior: str, current: str, *, upgrade: bool, allow_downgrade: bool) -> bool:
+    """Compare release versions without treating a same-version digest as a transition."""
+    def parts(value: str) -> tuple[object, ...]:
+        return tuple(int(piece) if piece.isdecimal() else piece for piece in re.split(r"[.+-]", value))
+    if prior == current or (upgrade and allow_downgrade) or not (upgrade or allow_downgrade):
+        return False
+    try:
+        comparison = (parts(prior) > parts(current)) - (parts(prior) < parts(current))
+    except TypeError:
+        # Mixed opaque prerelease spellings do not create transition authority.
+        return False
+    return comparison < 0 if upgrade else comparison > 0
+
+
 def mark_transaction_write_issued(record: dict, target_key: str) -> dict:
     """Persist the uncertain state which must precede every transport write."""
     if record.get("state") != "installing" or record.get("progress", {}).get(target_key) not in {
@@ -1725,11 +1768,11 @@ def promote_transaction_record(record: dict, completed_at: str) -> dict:
     if record.get("state") != "installing" or any(state != "verified" for state in record.get("progress", {}).values()):
         raise InputError("assets transaction is not fully verified")
     common = {key: deepcopy(record[key]) for key in ("asset_set_sha256", "bundle_sha256", "bundle_version", "cluster_uuid",
-              "kibana_target", "migrated_from_v1", "ownership_profile", "schema_version", "source_commit", "targets")}
+              "kibana_target", "ownership_profile", "schema_version", "source_commit", "targets")}
     completed = {**common, "state": "installed", "caller_obligations": deepcopy(record["caller_obligations"]),
                  "destination_map": deepcopy(record["destination_map"]),
                  "completed_transaction_id": record["transaction_id"], "completed_at": completed_at,
-                 "verified_target_set_sha256": _target_digest(record["progress"])}
+                 "verified_target_set_sha256": _target_digest(record["targets"])}
     return completed
 
 
@@ -1764,11 +1807,16 @@ def snapshot_bundle(bundle_path: Path, directory: Path, *, parse: bool = True) -
         raise InputError("cannot snapshot bundle") from error
     try:
         os.fchmod(fd, 0o600)
-        digest = hashlib.sha256()
         with os.fdopen(source_fd, "rb", closefd=True) as source, os.fdopen(fd, "wb", closefd=True) as output:
             while chunk := source.read(1024 * 1024):
-                digest.update(chunk); output.write(chunk)
+                output.write(chunk)
             output.flush(); os.fsync(output.fileno())
+        # ERRATA-1: bind the exact protected, fsynced snapshot bytes, rather
+        # than the mutable source stream we happened to copy from.
+        with open(temporary, "rb") as snapshot_handle:
+            digest = hashlib.sha256()
+            while chunk := snapshot_handle.read(1024 * 1024):
+                digest.update(chunk)
         snapshot = BundleSnapshot(Path(temporary), digest.hexdigest())
         if parse:
             load_bundle(snapshot.path)
@@ -1788,6 +1836,16 @@ def cleanup_snapshot_residue(directory: Path, name: str) -> None:
     if (not stat.S_ISREG(st.st_mode) or stat.S_ISLNK(st.st_mode) or st.st_uid != os.geteuid() or st.st_mode & 0o077):
         raise InputError("snapshot residue is unsafe")
     path.unlink()
+
+
+def cleanup_snapshot_residues(directory: Path) -> None:
+    """Remove only validated private snapshot residue before a new snapshot."""
+    try:
+        names = [entry.name for entry in directory.iterdir() if entry.name.startswith(".rigsignal-")]
+    except OSError as error:
+        raise InputError("cannot inspect snapshot residue") from error
+    for name in names:
+        cleanup_snapshot_residue(directory, name)
 
 
 def transaction_snapshot_directory(marker_path: Path | None) -> Path:
@@ -1839,7 +1897,8 @@ def write_transaction_record(path: Path, record: dict, binding: dict, targets: l
     _validate_transaction_record_parent(path)
     raw = jcs(record)
     validate_transaction_record(raw, binding, targets)
-    atomic_write(path.parent, path.name, raw)
+    expected_prior: bytes | None = protected_regular_file(path) if path.exists() else None
+    atomic_write(path.parent, path.name, raw, expected_prior=expected_prior)
     # Read-back is part of the durable transition boundary: callers must not
     # continue to a remote write from an unverifiable local intent.
     if protected_regular_file(path) != raw:
@@ -1882,7 +1941,6 @@ def _migrate_private_v1_record(path: Path, bundle: Bundle, binding: dict, target
     if not _read_private_v1_marker(path, bundle):
         raise AssetTransactionRefusal("assets transaction legacy record is invalid")
     record = new_installing_record(binding, targets, _transaction_now())
-    record["migrated_from_v1"] = True
     if full_flow:
         record = expand_full_flow_record(record)
     for spec in _transaction_specs(bundle, full_flow):
@@ -1976,6 +2034,7 @@ class SavedObjectAdapter:
         """
         requested = destination_id or object_id
         path = self._path(space, object_type, requested)
+        missing_submitted = False
         try:
             response = json_response(request(self.kb_url, path, "GET", self.authorization,
                                              headers={"kbn-xsrf": "true"}))
@@ -1983,8 +2042,12 @@ class SavedObjectAdapter:
             if error.status == 404:
                 if destination_id is not None:
                     raise AssetTransactionRefusal("saved-object destination is absent") from error
-                return "absent", None, object_id
-            raise AssetTransactionRefusal("saved-object read refused") from error
+                # A response-loss create may have been remapped.  Resolve the
+                # submitted identity before it is ever classified as absent.
+                missing_submitted = True
+                response = None
+            else:
+                raise AssetTransactionRefusal("saved-object read refused") from error
         # Resolve is a verification read too.  It is required for the alias /
         # destinationId path, but a normal literal GET remains compatible with
         # servers which reply 404 for resolve of a non-aliased object.
@@ -2016,6 +2079,10 @@ class SavedObjectAdapter:
                 if not isinstance(nested, dict):
                     raise AssetTransactionRefusal("saved-object resolve is ambiguous")
                 response = nested
+        if response is None:
+            if missing_submitted:
+                return "absent", None, object_id
+            raise AssetTransactionRefusal("saved-object response is ambiguous")
         return "present", _saved_object_projection(space, object_type, response), resolved_id
 
     def create(self, space: str, object_type: str, object_id: str, desired: dict) -> str:
@@ -2047,9 +2114,31 @@ def _transaction_diagnostic(record_path: Path, record: dict, *, target: str, non
     # record grammar.  Validate the same parent immediately before publishing
     # it: a detector must not turn a path substitution into a diagnostic write.
     _validate_transaction_record_parent(record_path)
-    safe = {"transaction": record["transaction_id"][:8], "target": target, "nonce": nonce,
-            "detector": detector, "observed": observed}
-    atomic_write(record_path.parent, record_path.name + ".diagnostic.json", jcs(safe))
+    def safe_scalar(value: object) -> object:
+        if value is None or isinstance(value, (bool, int, float)):
+            return value
+        # Remote strings and aggregate response values are deliberately not
+        # evidence payloads: they can contain credentials or origins.
+        return "<redacted>"
+    if not isinstance(target, str) or not isinstance(nonce, str) or not isinstance(detector, str):
+        raise InputError("assets transaction diagnostic is invalid")
+    safe = {"transaction": "<redacted>", "target": target, "nonce": nonce,
+            "detector": detector, "observed": safe_scalar(observed)}
+    diagnostic = record_path.parent / (record_path.name + ".diagnostic.json")
+    expected_prior: bytes | None = protected_regular_file(diagnostic) if diagnostic.exists() else None
+    atomic_write(record_path.parent, diagnostic.name, jcs(safe), expected_prior=expected_prior)
+
+
+def _transaction_diagnostic_preflight(record_path: Path) -> None:
+    """Reject an unsafe diagnostic sibling before an unconditional API PUT."""
+    _validate_transaction_record_parent(record_path)
+    diagnostic = record_path.parent / (record_path.name + ".diagnostic.json")
+    if not diagnostic.exists():
+        return
+    try:
+        protected_regular_file(diagnostic)
+    except FileNotFoundError:
+        return
 
 
 def _validate_transaction_record_parent(record_path: Path) -> None:
@@ -2075,6 +2164,17 @@ def _transaction_es_observe(es_url: str, authorization: str, asset: Asset, desir
         wanted = asset_adapters.get_projection(asset.kind, parse_json(desired.data, desired.path))
     except (asset_adapters.AdapterError, InputError) as error:
         raise AssetTransactionRefusal("ES target response is ambiguous") from error
+    # A nonce is required in the immediate post-write desired projection, but
+    # an installed record deliberately does not retain a transaction UUID.
+    # Later ordinary verification therefore recognizes the installer-only
+    # nonce as transport metadata, never as ownership or semantic drift.
+    if isinstance(live, dict) and isinstance(wanted, dict):
+        meta_key = "metadata" if asset.kind == "security_roles" else "_meta"
+        if meta_key not in wanted and isinstance(live.get(meta_key), dict):
+            live = deepcopy(live); live[meta_key].pop("controller_nonce", None)
+        elif (isinstance(live.get(meta_key), dict) and isinstance(wanted.get(meta_key), dict)
+              and "controller_nonce" not in wanted[meta_key]):
+            live = deepcopy(live); live[meta_key].pop("controller_nonce", None)
     if jcs(live) == jcs(wanted):
         return "exact", response
     if _es_object_is_owned(response, asset):
@@ -2117,7 +2217,7 @@ def _transaction_bundle_meta_asset(bundle: Bundle, record: dict) -> Asset:
 
 def _transaction_observe(es_url: str, kb_url: str, authorization: str, spec: tuple[str, Asset | None, dict | None],
                          bundle: Bundle, adapter: SavedObjectAdapter,
-                         record: dict | None = None) -> tuple[str, object | None, str | None]:
+                         record: dict | None = None, desired_override: Asset | None = None) -> tuple[str, object | None, str | None]:
     key, asset, saved = spec
     if key == BUNDLE_META_TARGET_KEY:
         if record is None:
@@ -2130,7 +2230,7 @@ def _transaction_observe(es_url: str, kb_url: str, authorization: str, spec: tup
         state, live, destination = _transaction_kibana_observe(adapter, asset, saved, record)
         return state, live, destination
     if asset.kind in _ES_ASSET_KINDS:
-        state, live = _transaction_es_observe(es_url, authorization, asset, stamped_asset(asset))
+        state, live = _transaction_es_observe(es_url, authorization, asset, desired_override or stamped_asset(asset))
         return state, live, None
     try:
         response = json_response(request(kb_url, kibana_path(asset), "GET", authorization, headers={"kbn-xsrf": "true"}))
@@ -2150,9 +2250,12 @@ def _transaction_observe(es_url: str, kb_url: str, authorization: str, spec: tup
 
 
 def _transaction_put(es_url: str, kb_url: str, authorization: str, spec: tuple[str, Asset | None, dict | None],
-                     bundle: Bundle, record: dict, adapter: SavedObjectAdapter) -> None:
+                     bundle: Bundle, record: dict, adapter: SavedObjectAdapter, *, live: object | None = None,
+                     state: str = "absent") -> Asset | None:
     """Perform exactly one class-specific guarded mutation after write-issued."""
     key, asset, saved = spec
+    live = record.get("_observed_live") if live is None else live
+    state = record.get("_observed_state", state)
     if saved is not None:
         space = dashboard_target_space(asset)
         remaps = {item["submitted_key"]: item["destination_key"] for item in record.get("destination_map", [])}
@@ -2166,30 +2269,36 @@ def _transaction_put(es_url: str, kb_url: str, authorization: str, spec: tuple[s
             references.append(item)
         adapter.create(space, saved["type"], saved["id"],
                        {"attributes": saved.get("attributes", {}), "references": references})
-        return
+        return None
     if key == BUNDLE_META_TARGET_KEY:
         marker = _transaction_bundle_meta_asset(bundle, record)
-        mutation_request(es_url, "/_component_template/rigsignal-bundle-meta?create=true", "PUT", authorization, marker.data)
-        return
+        suffix = "?create=true" if state == "absent" else ""
+        mutation_request(es_url, "/_component_template/rigsignal-bundle-meta" + suffix, "PUT", authorization, marker.data)
+        return None
     assert asset is not None
     if asset.kind == "kibana_spaces":
         mutation_request(kb_url, "/api/spaces/space", "POST", authorization, asset.data, {"kbn-xsrf": "true"})
-        return
+        return None
     if asset.kind == "kibana_roles":
-        mutation_request(kb_url, kibana_path(asset) + "?createOnly=true", "PUT", authorization, asset.data, {"kbn-xsrf": "true"})
-        return
+        suffix = "?createOnly=true" if state == "absent" else ""
+        mutation_request(kb_url, kibana_path(asset) + suffix, "PUT", authorization, asset.data, {"kbn-xsrf": "true"})
+        return None
     desired = stamped_asset(asset)
     if asset.kind in {"component_templates", "index_templates"}:
-        mutation_request(es_url, es_path(asset) + "?create=true", "PUT", authorization, desired.data)
-        return
+        suffix = "?create=true" if state == "absent" else ""
+        mutation_request(es_url, es_path(asset) + suffix, "PUT", authorization, desired.data)
+        return None
     if asset.kind == "transforms":
-        mutation_request(es_url, es_path(asset) + "?create=true", "PUT", authorization, desired.data)
-        return
+        mutation_request(es_url, es_path(asset) + ("?create=true" if state == "absent" else ""), "PUT", authorization, desired.data)
+        return None
     nonce = transaction_detector_nonce(record["transaction_id"], key)
     body = parse_json(desired.data, desired.path)
     metadata = "metadata" if asset.kind == "security_roles" else "_meta"
     body[metadata] = {**body.get(metadata, {}), "controller_nonce": nonce}
-    response = mutation_request(es_url, es_path(asset), "PUT", authorization, jcs(body))
+    version = live.get("version") if isinstance(live, dict) else None
+    suffix = "?if_version=" + urllib.parse.quote(str(version), safe="") if version is not None else ""
+    effective = Asset(asset.kind, asset.name, asset.path, jcs(body))
+    response = mutation_request(es_url, es_path(asset) + suffix, "PUT", authorization, effective.data)
     if asset.kind == "security_roles":
         try:
             parsed = json_response(response)
@@ -2212,6 +2321,7 @@ def _transaction_put(es_url: str, kb_url: str, authorization: str, spec: tuple[s
             _transaction_diagnostic(record_path=Path(record["_record_path"]), record=record, target=key,
                                     nonce=nonce, detector="created<modified", observed={"created": created, "modified": modified})
             raise AssetTransactionHalt("partial-remote-possible")
+    return effective
 
 
 def transaction_detector_nonce(transaction_id: str, target_key: str) -> str:
@@ -2234,7 +2344,9 @@ def transaction_detector_nonce(transaction_id: str, target_key: str) -> str:
 def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, authorization: str, record_path: Path,
                                   binding: dict, *, full_flow: bool = False,
                                   repair: bool = False, upgrade: bool = False,
-                                  allow_downgrade: bool = False) -> str:
+                                  allow_downgrade: bool = False, defer_step_11: bool = False,
+                                  step_11_only: bool = False,
+                                  lock: "AssetTransactionLock | None" = None) -> str:
     """Execute the v2 default-profile asset transaction under its global lock.
 
     The caller supplies the already snapshotted archive binding; this is what
@@ -2243,7 +2355,8 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
     _validate_transaction_record_parent(record_path)
     targets = transaction_targets(bundle)
     adapter = SavedObjectAdapter(kb_url, authorization)
-    lock = AssetTransactionLock.acquire()
+    owned_lock = lock is None
+    lock = lock or AssetTransactionLock.acquire()
     try:
         prior_installed = False
         try:
@@ -2277,20 +2390,29 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
         # mutation is never under-reported, even when the current command has
         # invalid flags or another local preflight refusal.  This is still
         # pre-read: no remote operation has happened in this invocation.
-        if record is not None and record.get("state") == "installing" and record.get("possible_mutation") is True:
-            raise AssetTransactionHalt("partial-remote-possible")
-        version_flags = upgrade or allow_downgrade
+        # A durable write-issued edge is uncertain, not terminal.  Every
+        # target is re-observed below and the record is promoted only after a
+        # complete fresh verification pass (T-HASH-5/T-SM-7/8/9/T-DASH-3/T-GATE-3).
+        reconciling_uncertainty = bool(record is not None and record.get("state") == "installing"
+                                       and record.get("possible_mutation") is True)
+        # Recovery re-observes first; it never lets a newly supplied flag turn
+        # a persisted unknown outcome into a local-input escape hatch.
+        version_flags = (upgrade or allow_downgrade) and not reconciling_uncertainty
         transition_pending = False
         if prior_installed:
             if not version_flags:
                 raise AssetTransactionRefusal("assets transaction transition requires a direction flag")
+            if not _version_direction_is_valid(record["bundle_version"], binding["bundle_version"],
+                                               upgrade=upgrade, allow_downgrade=allow_downgrade):
+                raise InputError("assets transaction version direction is invalid")
             # Keep the old S authoritative until a current write is needed or
             # the whole current verification pass succeeds.  This prevents an
             # unrelated later refusal from consuming a prior release record.
             record = transition_from_prior_installed(record, binding, targets, _transaction_now())
             transition_pending = True
         has_valid_predecessor = (record is not None and record.get("state") == "installing"
-                                 and record.get("predecessor") is not None)
+                                 and record.get("predecessor") is not None
+                                 and record["predecessor"].get("bundle_version") != binding["bundle_version"])
         # Owner-ratified direction flags are meaningful only with a durable
         # predecessor.  The table deliberately permits both flags to reach
         # target classification; that combination simply has no stamped-ES
@@ -2321,6 +2443,11 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
                     if state == "divergent":
                         raise AssetTransactionRefusal("asset target differs")
             record = new_installing_record(binding, targets, _transaction_now())
+            if full_flow:
+                # §3.4: the fresh full-flow intent contains M before the
+                # first ordinary asset mutation; its PUT itself is deferred to
+                # the real Step 11 site by the full-flow caller.
+                record = expand_full_flow_record(record)
             write_transaction_record(record_path, record, binding, targets)
             fault("after-v2-intent-publication")
         elif record["state"] == "installed":
@@ -2353,10 +2480,13 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
             # obligation while it revalidates the ordinary current targets.
             record = mark_transaction_verified(record, BUNDLE_META_TARGET_KEY)
 
-        specs = _transaction_specs(bundle, full_flow)
+        specs = _transaction_specs(bundle, full_flow and not defer_step_11)
+        if step_11_only:
+            specs = [spec for spec in _transaction_specs(bundle, True) if spec[0] == BUNDLE_META_TARGET_KEY]
         for spec in specs:
             key = spec[0]
-            state, _live, destination = _transaction_observe(es_url, kb_url, authorization, spec, bundle, adapter, record)
+            desired_override: Asset | None = None
+            state, live, destination = _transaction_observe(es_url, kb_url, authorization, spec, bundle, adapter, record)
             if state == "exact":
                 if record["state"] == "installing":
                     record = mark_transaction_verified(record, key)
@@ -2367,7 +2497,7 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
                 raise AssetTransactionRefusal("asset target differs")
             if state == "owned-divergent" and spec[0].startswith("kibana/"):
                 raise AssetTransactionRefusal("Kibana target differs")
-            transition_es_authorized = (has_valid_predecessor and (upgrade ^ allow_downgrade))
+            transition_es_authorized = (has_valid_predecessor and version_flags and (upgrade ^ allow_downgrade))
             repair_es_authorized = repair and not has_valid_predecessor
             if state == "owned-divergent" and not (started_without_record or transition_es_authorized
                                                     or repair_es_authorized):
@@ -2383,6 +2513,8 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
             # A stamped ES divergent object is a qualified reconciliation;
             # transforms use their documented update endpoint, all other
             # classes retain their creation guard and reread conflict signal.
+            if spec[1] is not None and spec[1].kind in {"pipelines", "security_roles"}:
+                _transaction_diagnostic_preflight(record_path)
             record = mark_transaction_write_issued(record, key)
             record["_record_path"] = str(record_path)  # runtime-only, never published
             public = deepcopy(record); del public["_record_path"]
@@ -2395,8 +2527,10 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
                                  jcs({key: value for key, value in parse_json(asset.data, asset.path).items() if key != "pivot"}))
             else:
                 runtime = deepcopy(record); runtime["_record_path"] = str(record_path)
-                _transaction_put(es_url, kb_url, authorization, spec, bundle, runtime, adapter)
-            state, _live, verified_destination = _transaction_observe(es_url, kb_url, authorization, spec, bundle, adapter, record)
+                runtime["_observed_live"] = live; runtime["_observed_state"] = state
+                desired_override = _transaction_put(es_url, kb_url, authorization, spec, bundle, runtime, adapter)
+            state, _live, verified_destination = _transaction_observe(es_url, kb_url, authorization, spec, bundle, adapter, record,
+                                                                       desired_override=desired_override)
             if state != "exact":
                 raise AssetTransactionHalt("partial-remote-possible")
             if spec[0].startswith("kibana/") and verified_destination is not None and verified_destination != spec[0].rsplit("/", 1)[1]:
@@ -2413,6 +2547,11 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
             write_transaction_record(record_path, record, binding, targets)
             fault("after-target-verification", key)
 
+        if defer_step_11:
+            # The executor's pre-Step-11 leg deliberately leaves M planned
+            # and cannot promote.  The caller retains this same lock through
+            # enrollment publication, handshake, revocation, and local commit.
+            return "deferred"
         # Promotion is preceded by a complete ordered reread, never progress
         # bookkeeping alone (T-SM-8/T-RECON-7).
         for spec in specs:
@@ -2428,7 +2567,8 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
         fault("after-promotion")
         return "applied"
     finally:
-        lock.close()
+        if owned_lock:
+            lock.close()
 
 
 class AssetLockHeld(InputError):
@@ -2440,7 +2580,7 @@ class AssetTransactionLock:
 
     @staticmethod
     def lock_path() -> Path:
-        state = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local" / "state")))
+        state = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local" / "state"))).expanduser().resolve()
         return state / "rigsignal" / "assets" / "assets-install.lock"
 
     @classmethod
@@ -2452,10 +2592,19 @@ class AssetTransactionLock:
             _validate_assets_marker_shared_parent(path.parent.parent)
             path.parent.mkdir(mode=0o700, exist_ok=True); secure_root(path.parent)
             fd = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0), 0o600)
-            os.fchmod(fd, 0o600); fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            os.fchmod(fd, 0o600)
+            descriptor = os.fstat(fd)
+            if (not stat.S_ISREG(descriptor.st_mode) or descriptor.st_uid != os.geteuid()
+                    or descriptor.st_mode & 0o077):
+                raise InputError("assets transaction lock is invalid")
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
+            try: os.close(fd)
+            except (OSError, UnboundLocalError): pass
             raise AssetLockHeld("assets transaction lock is held") from error
-        except OSError as error:
+        except (OSError, InputError) as error:
+            try: os.close(fd)
+            except (OSError, UnboundLocalError): pass
             raise InputError("assets transaction lock is invalid") from error
         return cls(fd)
 
@@ -3060,14 +3209,38 @@ def remove_recovered_state(root: Path) -> None:
         raise InputError("cannot remove recovered enrollment state") from error
 
 
-def atomic_write(root: Path, name: str, data: bytes) -> None:
+def atomic_write(root: Path, name: str, data: bytes, *, expected_prior: bytes | None | object = ... ) -> None:
     """Publish one protected file without following an existing target."""
     secure_root(root)
     if "/" in name or name.startswith("."):
         raise InputError("invalid enrollment file name")
     target = root / name
-    if target.exists() and target.is_symlink():
-        raise InputError("enrollment output is symlinked")
+
+    def protected_leaf() -> tuple[os.stat_result, bytes] | None:
+        try:
+            leaf_fd = os.open(target, os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0))
+        except FileNotFoundError:
+            return None
+        try:
+            leaf_stat = os.fstat(leaf_fd)
+            if (not stat.S_ISREG(leaf_stat.st_mode) or leaf_stat.st_uid != os.geteuid()
+                    or leaf_stat.st_mode & 0o077):
+                raise InputError("enrollment output is not protected")
+            with os.fdopen(leaf_fd, "rb", closefd=False) as leaf:
+                contents = leaf.read()
+            # Bind the validated descriptor to the name immediately before
+            # replacement; a substituted sibling is never overwrite authority.
+            named = os.lstat(target)
+            if (named.st_dev, named.st_ino) != (leaf_stat.st_dev, leaf_stat.st_ino):
+                raise InputError("enrollment output changed before replacement")
+            return leaf_stat, contents
+        finally:
+            os.close(leaf_fd)
+
+    prior = protected_leaf()
+    actual_prior = None if prior is None else prior[1]
+    if expected_prior is not ... and actual_prior != expected_prior:
+        raise InputError("enrollment output changed before replacement")
     fd, temporary = tempfile.mkstemp(prefix=".rigsignal-", dir=root)
     try:
         os.fchmod(fd, 0o600)
@@ -3075,6 +3248,13 @@ def atomic_write(root: Path, name: str, data: bytes) -> None:
             handle.write(data)
             handle.flush()
             os.fsync(handle.fileno())
+        # Repeat all leaf checks at the last possible point.  This is also
+        # used by record and diagnostic replacement, whose caller supplied
+        # the expected authoritative bytes.
+        prior = protected_leaf()
+        actual_prior = None if prior is None else prior[1]
+        if expected_prior is not ... and actual_prior != expected_prior:
+            raise InputError("enrollment output changed before replacement")
         os.replace(temporary, target)
         st = target.lstat()
         if not stat.S_ISREG(st.st_mode) or stat.S_ISLNK(st.st_mode) or st.st_mode & 0o077:
@@ -4624,6 +4804,7 @@ def assets_only_install(bundle: Bundle, es_url: str, kb_url: str, authorization:
     # the same v2 state machine.  An in-memory bundle has a deterministic
     # content digest; release CLI calls replace it with the protected archive
     # snapshot digest.
+    prerequisites(es_url, kb_url, authorization)
     binding = transaction_binding(bundle, cluster_uuid(es_url, authorization), kb_url,
                                   archive_sha256 or bundle_snapshot_digest(bundle))
     return run_default_asset_transaction(bundle, es_url, kb_url, authorization, marker_path,
@@ -6231,6 +6412,17 @@ def main() -> int:
     raw_ownership_profile = args.ownership_profile
     ownership_profile = raw_ownership_profile or "default"
     bundle_archive_sha256: str | None = None
+    default_asset_lock: AssetTransactionLock | None = None
+    # A6/T-EXIT-1: this deliberately precedes bundle loading and version
+    # fencing, so an unavailable exact bundle cannot hide durable uncertainty.
+    if ownership_profile == "default":
+        try:
+            early_marker = args.assets_marker or _asset_marker_default_path()
+            early_status = transaction_boundary_preflight(early_marker) if os.path.lexists(early_marker) else None
+        except (InputError, OSError):
+            early_status = 3
+        if early_status is not None:
+            return early_status
     try:
         if args.profile != "user":
             raise InputError("profile system is unsupported/broker-required")
@@ -6348,11 +6540,13 @@ def main() -> int:
             # enrollment root.
             check_version_fence(bundle, args.agent_binary)
             if args.bundle.is_file():
-                snapshot = snapshot_bundle(args.bundle,
-                                           transaction_snapshot_directory(getattr(args, "assets_marker", None)))
+                snapshot_dir = transaction_snapshot_directory(getattr(args, "assets_marker", None))
+                cleanup_snapshot_residues(snapshot_dir)
+                snapshot = snapshot_bundle(args.bundle, snapshot_dir)
                 try:
                     bundle = load_bundle(snapshot.path)
                     bundle_archive_sha256 = snapshot.sha256
+                    check_version_fence(bundle, args.agent_binary)  # re-fence the snapshotted bytes
                 finally:
                     snapshot.close()
             configure_https(args.ca_file)
@@ -6380,10 +6574,21 @@ def main() -> int:
                                                            local=is_local_failure_message(error.prefix))
         except (InputError, RequestFailure, OSError) as error:
             message = "RIGSIGNAL_E_ASSETS_ONLY: " + type(error).__name__ + ": " + str(error)
+            if "marker_path" in locals() and mutation_tracker.mutation_issued:
+                return transaction_failure_status(marker_path)
+            # Direction flags are parsed successfully but are locally invalid
+            # unless a validated predecessor authorizes their use.  Preserve
+            # the public local-input code rather than converting this into an
+            # ordinary remote refusal merely because it arose in the shared
+            # transaction executor.
+            if ("marker_path" in locals() and isinstance(error, InputError)
+                    and ("version flags" in str(error) or "version direction" in str(error))):
+                return asset_executor_exit_code("local-input", marker_path)
             return finalize_failure(message, failure_tracker,
                                     mutation_tracker,
                                     local=(not mutation_tracker.mutation_issued
-                                           and not isinstance(error, (RequestFailure, RemoteReadRefusal))))
+                                           and not isinstance(error, (RequestFailure, RemoteReadRefusal, AssetLockHeld))
+                                           and "assets transaction" not in str(error)))
 
     try:
         requested_root = args.enrollment_root or default_root()
@@ -6395,13 +6600,15 @@ def main() -> int:
             raise ProvisionError("install refused: adoption_flag_state_present")
         check_version_fence(bundle, args.agent_binary)
         if args.bundle.is_file():
-            snapshot = snapshot_bundle(args.bundle,
-                                       transaction_snapshot_directory(getattr(args, "assets_marker", None)))
+            snapshot_dir = transaction_snapshot_directory(getattr(args, "assets_marker", None))
+            cleanup_snapshot_residues(snapshot_dir)
+            snapshot = snapshot_bundle(args.bundle, snapshot_dir)
             try:
                 bundle = load_bundle(snapshot.path)
                 bundle_archive_sha256 = snapshot.sha256
                 role = role_body(bundle)
                 ownership = ownership_for_assets(bundle, ownership_profile)
+                check_version_fence(bundle, args.agent_binary)  # re-fence the snapshotted bytes
             finally:
                 snapshot.close()
         # Default to the no-HTTP publication guard.  Incomplete is the sole
@@ -6556,17 +6763,23 @@ def main() -> int:
                 raise InputError("assets transaction record path is unavailable")
             binding = transaction_binding(bundle, uuid_value, kb_url,
                                           bundle_archive_sha256 or bundle_snapshot_digest(bundle))
+            default_asset_lock = AssetTransactionLock.acquire()
             try:
                 run_default_asset_transaction(bundle, es_url, kb_url, authorization,
                                               default_marker_path, binding, full_flow=True,
                                               repair=getattr(args, "repair", False),
                                               upgrade=getattr(args, "upgrade", False),
-                                              allow_downgrade=getattr(args, "allow_downgrade", False))
+                                              allow_downgrade=getattr(args, "allow_downgrade", False),
+                                              defer_step_11=True, lock=default_asset_lock)
             except (AssetTransactionHalt, AssetTransactionRefusal):
                 status = asset_executor_exit_code("halt", default_marker_path)
                 if status == 4:
                     return 4
                 raise ProvisionError("install refused: assets_transaction_invalid")
+            except InputError:
+                # Version-flag direction/same-version errors are local at the
+                # actual full-flow boundary (ERRATA-6/T-EXIT-2).
+                return asset_executor_exit_code("local-input", default_marker_path)
             default_transaction_done = True
         if ownership_profile == "fleet-coexist":
             try:
@@ -6837,7 +7050,18 @@ def main() -> int:
         marker = Asset("component_templates", "rigsignal-bundle-meta", "", marker_body(
             bundle, ownership_profile, applied_owned_assets, verified_external_assets))
         try:
-            if not default_transaction_done:
+            if default_transaction_done:
+                if default_marker_path is None or default_asset_lock is None:
+                    raise InputError("assets transaction lock is unavailable")
+                binding = transaction_binding(bundle, uuid_value, kb_url,
+                                              bundle_archive_sha256 or bundle_snapshot_digest(bundle))
+                run_default_asset_transaction(bundle, es_url, kb_url, authorization,
+                                              default_marker_path, binding, full_flow=True,
+                                              repair=getattr(args, "repair", False),
+                                              upgrade=getattr(args, "upgrade", False),
+                                              allow_downgrade=getattr(args, "allow_downgrade", False),
+                                              step_11_only=True, lock=default_asset_lock)
+            else:
                 if journal is not None:
                     marker_records = journal_owned_asset(journal, es_url, kb_url, authorization, marker, "create")
                 mutation_request(es_url, es_path(marker), "PUT", authorization, marker.data)
@@ -6847,6 +7071,10 @@ def main() -> int:
                     journal.apply_ok()
         except (InputError, RequestFailure) as error:
             raise ProvisionError("install failed: bundle marker:") from error
+        finally:
+            if default_asset_lock is not None:
+                default_asset_lock.close()
+                default_asset_lock = None
         if ownership_profile == "fleet-coexist":
             print(f"applied {len(applied_owned_assets)} owned assets; verified "
                   f"{len(verified_external_assets)} external assets")
@@ -6859,6 +7087,8 @@ def main() -> int:
     except (InputError, RequestFailure, OSError):
         # The public contract deliberately avoids exposing response bodies and
         # exception text, which could contain credentials or cluster data.
+        if "default_marker_path" in locals() and default_marker_path is not None and mutation_tracker.mutation_issued:
+            return transaction_failure_status(default_marker_path)
         return finalize_failure("install failed: enrollment output:", failure_tracker,
                                 mutation_tracker, local=False)
 

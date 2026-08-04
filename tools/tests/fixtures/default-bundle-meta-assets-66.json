@@ -1,0 +1,266 @@
+[
+  {
+    "digest": "0ece8b16417a4ca6fa9acfd050414742ea1235ab08851ba79ebb46e25edd27c7",
+    "key": "es/component-template/logs-rigsignal.diagnosis-mappings"
+  },
+  {
+    "digest": "38947d7fb36b90d16a8163c6ab06792b91c1cb5c2f0da704ecec1721c94f2215",
+    "key": "es/component-template/logs-rigsignal.events%40package"
+  },
+  {
+    "digest": "6dc563a3dcd536ef4167294d885652f4309b3d04e6f8442ebf7b557629c3e703",
+    "key": "es/component-template/metrics-rigsignal.audio%40package"
+  },
+  {
+    "digest": "c96fe425d7c1b769d9242e265db78bb5c3da7628348757339162b3fb293ee809",
+    "key": "es/component-template/metrics-rigsignal.cpu%40package"
+  },
+  {
+    "digest": "d5787eedf5456a6a8a4e40ae669e6cc7f3d78ac3097c006bf01ac733efdcf015",
+    "key": "es/component-template/metrics-rigsignal.ebpf%40package"
+  },
+  {
+    "digest": "9c341adc308f277b5a3c8bb7288230b6ebb8434dbe12c86e5116d5d4049fb86e",
+    "key": "es/component-template/metrics-rigsignal.ebpf_thread%40package"
+  },
+  {
+    "digest": "3cfa74808ac1c6018d6671b2a6604431140d473c1fa6f9dd9c6acacfeadafd76",
+    "key": "es/component-template/metrics-rigsignal.frame%40package"
+  },
+  {
+    "digest": "51d1aa15ccf86a7821914935d7ab3651280928537ec8f64e1f0999418ff14044",
+    "key": "es/component-template/metrics-rigsignal.gpu%40package"
+  },
+  {
+    "digest": "01ba03d8a7c9b3ea5862ee4a0badf9f895b1f2a9fc9cbc7e43c37548211beb36",
+    "key": "es/component-template/metrics-rigsignal.memory%40package"
+  },
+  {
+    "digest": "12cc39a19603d4e0f0e078947610303963efb0948d37ffd7dad7345c29265f70",
+    "key": "es/component-template/metrics-rigsignal.network%40package"
+  },
+  {
+    "digest": "2b7a04c2ec589aa776c73cba23e2fc82979d0a0922d0ea5a100cdc5ad4cc68ff",
+    "key": "es/component-template/metrics-rigsignal.power%40package"
+  },
+  {
+    "digest": "4e53b92370cf83f7680526db030e6ac4f1f0a4c40e2d4e141743f16c3722131a",
+    "key": "es/component-template/metrics-rigsignal.session%40package"
+  },
+  {
+    "digest": "576cc3ce0c7caa8187ad655cf3c0453521005f6095a7485f23a1cf57e4576143",
+    "key": "es/component-template/metrics-rigsignal.storage%40package"
+  },
+  {
+    "digest": "d1b8d75102915edbbf975c1bdf24ee2283d726c0d15dd028a9322c0a74674711",
+    "key": "es/component-template/metrics-rigsignal.stream_client%40package"
+  },
+  {
+    "digest": "485828b81c63131dd1c77002cd195a8ee6f2b8134ef7fc46bb95f348555f1e4e",
+    "key": "es/index-template/logs-rigsignal.diagnosis"
+  },
+  {
+    "digest": "03c78f2492b0df52b4e5146b78b55039680a7c1564cf2298daceed569ccd0226",
+    "key": "es/index-template/logs-rigsignal.events"
+  },
+  {
+    "digest": "6443fd47e8be410ed73afd5e4030bc93ac81d51b52d9da9ba3e3a65384f7ec8f",
+    "key": "es/index-template/logs-rigsignal.stream"
+  },
+  {
+    "digest": "9c543f6378f2538b9c80cacd2aa277974ea6758717b8598871397b9b3662296b",
+    "key": "es/index-template/metrics-rigsignal.audio"
+  },
+  {
+    "digest": "eae2d036cb2d9d33c80cb1448b03fd034769d2478738be0e764dd83b40daea49",
+    "key": "es/index-template/metrics-rigsignal.cpu"
+  },
+  {
+    "digest": "f93c269afad1bed981048b766a55f1155c29c66d033d570f2bafe98205bbf5f5",
+    "key": "es/index-template/metrics-rigsignal.ebpf"
+  },
+  {
+    "digest": "0dcaab2ac02d2235d407e26e312dcc532f163ed7dfd845d37a0895fcc270a17c",
+    "key": "es/index-template/metrics-rigsignal.ebpf_thread"
+  },
+  {
+    "digest": "43f6d75e4c4aeae35866bb6cedec494d66a94273cca65592b66aaec8fdbe68c3",
+    "key": "es/index-template/metrics-rigsignal.frame"
+  },
+  {
+    "digest": "67abdec07f7818475c6f63158b6da9d3c41894d02ac04b367a829b1d1e71dafd",
+    "key": "es/index-template/metrics-rigsignal.gpu"
+  },
+  {
+    "digest": "a6f0827ab8359f07fa77451f3ead5d3a3e7630d359ef465f04a0d7150b1eb9c2",
+    "key": "es/index-template/metrics-rigsignal.memory"
+  },
+  {
+    "digest": "5c8aa1ccfcf8b8c7939d9cf69688f12b311bcd14b34a7554f7fb4687aab5790d",
+    "key": "es/index-template/metrics-rigsignal.network"
+  },
+  {
+    "digest": "493ae7cba74094611ae889bdc87d09a72730079552609038bd8ea099221ca287",
+    "key": "es/index-template/metrics-rigsignal.power"
+  },
+  {
+    "digest": "0310e36ebb4535736a47ab6d8d081c56b10bd845f8f96670103e7ceeaf09080a",
+    "key": "es/index-template/metrics-rigsignal.profiles"
+  },
+  {
+    "digest": "c4da6c52d8b53f7293e10dbd339e6e08883f64f4a8fe1a325d58cbfc1b502972",
+    "key": "es/index-template/metrics-rigsignal.session"
+  },
+  {
+    "digest": "1df38a9a5a22d04ffaefea748a78a41135be038ace2592529d5849f0129e6baa",
+    "key": "es/index-template/metrics-rigsignal.storage"
+  },
+  {
+    "digest": "9312ddb0b847d961d723699f4e3fc06d8b478fa93d2ca9c75ae3ef811c4f056e",
+    "key": "es/index-template/metrics-rigsignal.stream_client"
+  },
+  {
+    "digest": "71106ae82e15bddad1908d7237d55a4af8fa75211917a9a8e636ea239925bc8a",
+    "key": "es/ingest-pipeline/logs-rigsignal.events-0.5.0"
+  },
+  {
+    "digest": "276202be04bdabdd01bf7e6e41888d29ed33f95006b7590d44a8f13df06d38c6",
+    "key": "es/ingest-pipeline/logs-rigsignal.stream%40pipeline"
+  },
+  {
+    "digest": "998d1508a50fe403e8bc45f59a2874d585c386a94200c6a6e445842ac4ffac69",
+    "key": "es/ingest-pipeline/metrics-rigsignal.audio-0.5.0"
+  },
+  {
+    "digest": "b0d5dca05326f3618b827157eabe162018f892b8afee6d5021c4a43b8d822849",
+    "key": "es/ingest-pipeline/metrics-rigsignal.cpu-0.5.0"
+  },
+  {
+    "digest": "bb8132eec4317ef973473c21c1ba4c93df7a799df0c20958d7ad1f916484bcbf",
+    "key": "es/ingest-pipeline/metrics-rigsignal.ebpf-0.5.0"
+  },
+  {
+    "digest": "ac51eb86437a360046e0a3a7f694a5058219161ac7ac87d4530154e85631b3c7",
+    "key": "es/ingest-pipeline/metrics-rigsignal.ebpf_thread-0.5.0"
+  },
+  {
+    "digest": "24090a6b7b85db93c93ed341e37f29ed0dd72a6447d5302f45b88cf102b473b5",
+    "key": "es/ingest-pipeline/metrics-rigsignal.frame-0.5.0"
+  },
+  {
+    "digest": "e579cffb6024c05db0ede8f5a2275f95382b8c6491719b673f54c25f6c0cbb51",
+    "key": "es/ingest-pipeline/metrics-rigsignal.gpu-0.5.0"
+  },
+  {
+    "digest": "1328a27d7f4dc1135f5294435b5d426e260fc526156a2f7f8b05bd4a4c576814",
+    "key": "es/ingest-pipeline/metrics-rigsignal.memory-0.5.0"
+  },
+  {
+    "digest": "53237e3bab690a78c176d796607ea3e088e8165607cb9b67e43847f81ff016b3",
+    "key": "es/ingest-pipeline/metrics-rigsignal.network-0.5.0"
+  },
+  {
+    "digest": "75166bdfe71d322a9726eab97b66eb1de8d18d7aac62468c4980743ebe14d6b1",
+    "key": "es/ingest-pipeline/metrics-rigsignal.power-0.5.0"
+  },
+  {
+    "digest": "fd7d4214a4407337c501ca0b094b064aefe599dcc5e0f555a9f39953c97ccd09",
+    "key": "es/ingest-pipeline/metrics-rigsignal.session-0.5.0"
+  },
+  {
+    "digest": "c29061a22803dc5ed21a3d2e0201ddb75662039f22e1d9498906ee3592caf491",
+    "key": "es/ingest-pipeline/metrics-rigsignal.storage-0.5.0"
+  },
+  {
+    "digest": "0079604db1bd28c0f9a5d6649877efe0e50021b7a1f89d6db3ed798a2ba08c33",
+    "key": "es/ingest-pipeline/metrics-rigsignal.stream_client-0.5.0"
+  },
+  {
+    "digest": "0d2cb82708a69e4e9f492e7ea8d55edd797e2f68d89f842908ecccebef90883d",
+    "key": "es/security-role/rigsignal_shipper"
+  },
+  {
+    "digest": "d5f8a80020cabf827c8715905bd850bafc62a0dfc57b00c165fe1fa7bf6a519e",
+    "key": "es/transform/rigsignal-game-timeline"
+  },
+  {
+    "digest": "99cebac1b352b26dbaa2da984e3afdb76c75fdd3a766bd78413d3fbee9428dd7",
+    "key": "kibana/default/dashboard/rigsignal-pkg-streaming-lab"
+  },
+  {
+    "digest": "b60efd4d816252be569d354e4251a4c4f37b113d62618d500a5f64fd20b0a3da",
+    "key": "kibana/default/index-pattern/rigsignal-pkg-sl-d1-host-data-view"
+  },
+  {
+    "digest": "7230177e42094f4a6eb45f4c466465c632ad478706a91586e2463d8ad88de619",
+    "key": "kibana/default/index-pattern/rigsignal-pkg-sl-d1-stream-data-view"
+  },
+  {
+    "digest": "895f2689e3641d7e7b80e3cbf3d09c7956d486367d78c63e3818a3d0e8509731",
+    "key": "kibana/default/role/rigsignal_viewer"
+  },
+  {
+    "digest": "2466ca19293c1a3f55b005b7cd201add7808f659f62ed42d45c693d1ec2d4949",
+    "key": "kibana/rigsignal/dashboard/rigsignal-pkg-engine"
+  },
+  {
+    "digest": "82f9a64f3313e2a03b0390b8484d32b729ec3fbe6ca48395fd9ce23c46d1f8d8",
+    "key": "kibana/rigsignal/dashboard/rigsignal-pkg-flamegraph-dashboard"
+  },
+  {
+    "digest": "b8d194878439f87c9532cfb2b3616fc74686d92ad4573576ec690a00f0432cf4",
+    "key": "kibana/rigsignal/dashboard/rigsignal-pkg-game-perf"
+  },
+  {
+    "digest": "2c90b1dedb73af8b39ac400cceb738f9558de4feeeb61d73e757d0a148ea896d",
+    "key": "kibana/rigsignal/dashboard/rigsignal-pkg-home"
+  },
+  {
+    "digest": "4e8847f4582a825be3ba30c271390b00c4deb5f89720e03a8832c343e7e3ab34",
+    "key": "kibana/rigsignal/dashboard/rigsignal-pkg-software"
+  },
+  {
+    "digest": "51fe8a1bd385d01698e178834fbeb7cdfb3a9f4911dd3e449ef337f55c0e4654",
+    "key": "kibana/rigsignal/dashboard/rigsignal-pkg-system-health"
+  },
+  {
+    "digest": "29047bb03871e0e1275ec992377bffa80f7b7db10101655deb4692a8eb27e583",
+    "key": "kibana/rigsignal/index-pattern/rigsignal-pkg-flamegraph-data-view"
+  },
+  {
+    "digest": "63bf7fa2405da34a9c8c4b20515993403e4af2fe4db3dae707f75726e6589ece",
+    "key": "kibana/rigsignal/index-pattern/rigsignal-pkg-metrics-ebpf"
+  },
+  {
+    "digest": "d08927a39ccf44737f815ced27500fd80039f35d0a1868faeb70f94f90e0f2f9",
+    "key": "kibana/rigsignal/index-pattern/rigsignal-pkg-metrics-session"
+  },
+  {
+    "digest": "a3f0479028d8184941b1648a8fada352d0b1f12219c0341c9298ae105c5a282a",
+    "key": "kibana/rigsignal/search/rigsignal-pkg-flamegraph-top-function-delta"
+  },
+  {
+    "digest": "32f3346cea571a6366c66241fede100ed8ddbbe6b90d3294588b8f181f43fef5",
+    "key": "kibana/rigsignal/space/rigsignal"
+  },
+  {
+    "digest": "7d6d7d96c9fead6d91b0beff65079b4f4f9526171b182cd924f33e3745e30ee8",
+    "key": "kibana/rigsignal/tag/rigsignal-pkg-bundle"
+  },
+  {
+    "digest": "6d280ea8c540c5640f8779b9273ccf41ff59efdf9b2c0926f924b892e807301c",
+    "key": "kibana/rigsignal/tag/rigsignal-pkg-managed"
+  },
+  {
+    "digest": "508d71116dc2dcc334bbdcd0502e382d61a2abaf98d9554d23c1f2a657a53433",
+    "key": "kibana/rigsignal/visualization/rigsignal-pkg-flamegraph-vega-diff"
+  },
+  {
+    "digest": "bb0098378f845ebbb5f6a1e33338c74d0b32aef7411d5dc7be50bd5276ec857c",
+    "key": "kibana/rigsignal/visualization/rigsignal-pkg-flamegraph-vega-live-diff"
+  },
+  {
+    "digest": "be0a625b119cb2f6bb1cb3f1ec9750be9b987dd360ea6ff590ed75e5ec741787",
+    "key": "kibana/rigsignal/visualization/rigsignal-pkg-flamegraph-vega-single"
+  }
+]

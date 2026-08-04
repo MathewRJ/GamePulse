@@ -113,14 +113,10 @@ class AssetTransport:
             raise AssertionError("security role PUT rejects _meta; use metadata")
         store = self.es if asset.kind in INSTALL._ES_ASSET_KINDS else self.kibana
         if asset.kind == "pipelines":
-            # The nonce is a response-bound detector aid, not desired state;
-            # model the server's non-persistence of it while retaining its
-            # creation timestamps for the immediate detector GET.
-            body.get("_meta", {}).pop("controller_nonce", None)
+            # The nonce is persisted under _meta and is part of the immediate
+            # desired projection used for clean-create verification.
             body.setdefault("created_date_millis", 1)
             body.setdefault("modified_date_millis", 1)
-        if asset.kind == "security_roles":
-            body.get("metadata", {}).pop("controller_nonce", None)
         store[clean_path] = body
         if asset.kind == "security_roles":
             return b'{"role":{"created":true}}'
@@ -143,6 +139,7 @@ class AssetsOnlyInstallTests(unittest.TestCase):
     def install(self, transport, marker, **modes):
         with mock.patch.object(INSTALL, "request", transport.request), \
              mock.patch.object(INSTALL, "request_response", transport.request_response), \
+             mock.patch.object(INSTALL, "prerequisites"), \
              mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(marker.parent / ".state")}), \
              redirect_stdout(io.StringIO()):
             return INSTALL.assets_only_install(self.bundle, "https://es", "https://kb", "admin", marker,
@@ -164,6 +161,7 @@ class AssetsOnlyInstallTests(unittest.TestCase):
                    mock.patch.object(INSTALL, "load_bundle", return_value=load_bundle or self.bundle),
                    mock.patch.object(INSTALL, "role_body", return_value={}),
                    mock.patch.object(INSTALL, "check_version_fence"),
+                   mock.patch.object(INSTALL, "prerequisites"),
                    mock.patch.object(INSTALL, "configure_https"),
                    mock.patch.object(INSTALL, "admin_authorization", return_value="admin")]
         if transport is not None:

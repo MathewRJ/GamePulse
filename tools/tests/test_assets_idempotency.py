@@ -117,16 +117,25 @@ class RecordFixtures(unittest.TestCase):
         self.assertIn(INSTALL.BUNDLE_META_TARGET_KEY, expanded["progress"])
 
     def test_t_rec_6_independent_bundle_meta_jcs_golden(self):
-        # This body is built from the literal fixture returned by no production marker helper.
-        literal = [{"digest": item["digest"], "key": item["key"]} for item in self.targets]
+        # Both files are independently checked-in literals.  Constructing and
+        # hashing this oracle deliberately calls no production body helper.
+        fixture_root = ROOT / "tools/tests/fixtures"
+        literal = json.loads((fixture_root / "default-bundle-meta-assets-66.json").read_text())
+        golden = (fixture_root / "default-bundle-meta-golden.jcs").read_bytes().rstrip(b"\n")
         body = {"_meta": {"asset_set": literal, "bundle_version": "0.3.2",
                            "managed_by": "rigsignal-asset-bundle", "ownership_profile": "default",
-                           "source_commit": self.bundle.source_commit,
+                           "source_commit": "a80eaa01c831e0727bfabbd20155b829a1301792",
                            "timestamp": "2026-08-04T12:34:56Z"}, "template": {}}
-        encoded = INSTALL.jcs(body)
-        self.assertEqual(hashlib.sha256(encoded).hexdigest(), hashlib.sha256(INSTALL.default_bundle_meta_body(
-            literal, "0.3.2", self.bundle.source_commit, "2026-08-04T12:34:56Z")).hexdigest())
-        self.assertNotEqual(encoded, INSTALL.jcs({**body, "_meta": {**body["_meta"], "managed_by": "other"}}))
+        # The fixed fixture vocabulary is ASCII, so this RFC-8785-compatible
+        # serialization is independent from the implementation under test.
+        encoded = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        self.assertEqual(len(literal), 66)
+        self.assertEqual(encoded, golden)
+        self.assertEqual(hashlib.sha256(encoded).hexdigest(),
+                         "c9690763ec182e150f4c68968d9fd1e14911704f8b264b9020356be928f5a5c1")
+        changed = json.loads(encoded)
+        changed["_meta"]["asset_set"][0]["digest"] = "0" * 64
+        self.assertNotEqual(json.dumps(changed, sort_keys=True, separators=(",", ":")).encode("utf-8"), golden)
 
 
 class SnapshotTests(unittest.TestCase):
@@ -159,8 +168,8 @@ class SnapshotTests(unittest.TestCase):
 
 
 class TransactionStateTests(RecordFixtures):
-    def test_ambiguity_5_v1_migration_persists_explicit_provenance(self):
-        """A v2 record keeps the v1 lineage through later state transitions."""
+    def test_ambiguity_5_v1_migration_does_not_extend_the_v2_authority_schema(self):
+        """v1 migration does not publish an off-authority required field."""
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw); root.chmod(0o700)
             path = root / INSTALL.ASSETS_MARKER_FILE
@@ -176,12 +185,12 @@ class TransactionStateTests(RecordFixtures):
                 self.assertEqual(INSTALL.run_default_asset_transaction(
                     self.bundle, "https://es", "https://kb", "auth", path, self.binding), "noop")
             migrated = INSTALL.read_transaction_record_if_present(path, self.binding, self.targets)
-            self.assertTrue(migrated["migrated_from_v1"])
+            self.assertNotIn("migrated_from_v1", migrated)
             self.assertEqual(writes, [])
             demoted = INSTALL.demote_installed_transaction(migrated, "2026-08-04T12:36:00Z")
-            self.assertTrue(demoted["migrated_from_v1"])
+            self.assertNotIn("migrated_from_v1", demoted)
             ordinary = self.installing()
-            self.assertFalse(ordinary["migrated_from_v1"])
+            self.assertNotIn("migrated_from_v1", ordinary)
 
     def test_t_sm_1_and_2_full_flow_extension_preserves_one_transaction_boundary(self):
         installing = self.installing()
@@ -381,10 +390,10 @@ class V2GuardedPrimitiveTests(RecordFixtures):
 class CompletionWaveTests(unittest.TestCase):
     """Executable completion checks for Stage 2k's remaining manifest IDs."""
     FLAG_FIXTURE = ROOT / "tools/tests/fixtures/rigsignal-flag-state-table.md"
-    FLAG_DATA_SHA256 = "cb35643cd06e0c9438a37f1e84d8d28d6ebe2fc744bdfeec5a129d855b90197a"
+    FLAG_DATA_SHA256 = "63e396afbee9d2fb92bba70866d6d00054202f09ad04a9c59ff6cabc035eee11"
     FLAG_ROW = re.compile(
         r"^\| (assets-only|full-flow) \| ([^|]+?) \| ([^|]+?) \| ([^|]+?) \| "
-        r"([^|]+?) \| ([^|]+?) \| ([0-9]+) \| ([0-9]+) \|$")
+        r"([^|]+?) \| ([^|]+?) \| ([^|]+?) \| ([0-9]+) \| ([0-9]+) \|$")
 
     @classmethod
     def _flag_rows(cls):
@@ -398,6 +407,19 @@ class CompletionWaveTests(unittest.TestCase):
     @staticmethod
     def _table_flags(flags):
         return () if flags == "none" else tuple(flags.split("+"))
+
+    @staticmethod
+    def _prerequisite_transport(base, path, _method, _authorization, _data=None, _headers=None):
+        """Minimal scripted HTTP boundary for the version/capability gate.
+
+        Scenario-specific target state remains below this boundary for now;
+        this keeps the capability gate real instead of bypassing it.
+        """
+        if path == "/":
+            return 200, b'{"cluster_uuid":"0123456789ABCDEFGHIJKL","version":{"number":"9.4.4"}}'
+        if path == "/api/status":
+            return 200, b'{"version":{"number":"9.4.4"}}'
+        return 200, b"{}"
 
     @staticmethod
     def _table_live_state(live):
@@ -424,13 +446,17 @@ class CompletionWaveTests(unittest.TestCase):
             record["progress"][key] = "verified"
         return INSTALL.promote_transaction_record(record, "2026-08-04T12:35:00Z")
 
-    def _table_initial_record(self, label, binding, targets):
+    def _table_initial_record(self, label, binding, targets, flags=()):
         """Build each table record as a real protected v2 durable shape."""
         if label == "N":
             return None
         full = "full" in label
         prior = label.startswith("S-prior") or "with-valid-predecessor" in label
-        prior_binding = {**binding, "bundle_version": "0.3.2", "source_commit": "b" * 40}
+        # Direction is an input to the table row, not a shadow-policy
+        # decision: provide a genuinely older predecessor for --upgrade and
+        # a genuinely newer one for --allow-downgrade.
+        prior_version = "0.3.3" if "allow-downgrade" in flags and "upgrade" not in flags else "0.3.1"
+        prior_binding = {**binding, "bundle_version": prior_version, "source_commit": "b" * 40}
         predecessor = self._table_installed(prior_binding, targets, full=full) if prior else None
         if label.startswith("S-"):
             return predecessor if prior else self._table_installed(binding, targets, full=full)
@@ -460,7 +486,7 @@ class CompletionWaveTests(unittest.TestCase):
 
     def _run_table_row(self, row):
         """Main-routed, one-row durable fixture with a transport write sentinel."""
-        (caller, record_label, ordinary, bundle_meta, flags,
+        (caller, record_label, ordinary, bundle_meta, flags, _reconciliation,
          expected_record, expected_writes, expected_exit) = row
         bundle = INSTALL.load_source()
         targets = INSTALL.transaction_targets(bundle)
@@ -481,14 +507,14 @@ class CompletionWaveTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw); root.chmod(0o700)
             path = root / INSTALL.ASSETS_MARKER_FILE
-            initial = self._table_initial_record(record_label, binding, targets)
+            initial = self._table_initial_record(record_label, binding, targets, self._table_flags(flags))
             if initial is not None:
                 # Prior S intentionally has a different archive binding, so
                 # it is published directly as the protected older record.
                 INSTALL.atomic_write(path.parent, path.name, INSTALL.jcs(initial))
             initial_raw = path.read_bytes() if path.exists() else None
 
-            def observe(_es, _kb, _auth, spec, _bundle, _adapter, _record=None):
+            def observe(_es, _kb, _auth, spec, _bundle, _adapter, _record=None, **_kwargs):
                 key = spec[0]
                 attempts[key] = attempts.get(key, 0) + 1
                 state = states.get(key, "exact")
@@ -530,6 +556,7 @@ class CompletionWaveTests(unittest.TestCase):
                  mock.patch.object(INSTALL, "cluster_uuid", return_value="0123456789ABCDEFGHIJKL"), \
                  mock.patch.object(INSTALL, "_prepare_assets_marker_path", return_value=path), \
                  mock.patch.object(INSTALL, "assets_only_install", side_effect=caller_route), \
+                 mock.patch.object(INSTALL, "request_response", side_effect=self._prerequisite_transport), \
                  mock.patch.object(INSTALL, "_transaction_observe", side_effect=observe), \
                  mock.patch.object(INSTALL, "_transaction_put", side_effect=put), \
                  redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
@@ -661,7 +688,7 @@ print(outcome)
                     record = INSTALL.promote_transaction_record(record, "2026-08-04T12:35:00Z")
                 INSTALL.write_transaction_record(path, record, binding, targets)
 
-            def observe(_es, _kb, _auth, spec, _bundle, _adapter, _record=None):
+            def observe(_es, _kb, _auth, spec, _bundle, _adapter, _record=None, **_kwargs):
                 key = spec[0]
                 attempts[key] = attempts.get(key, 0) + 1
                 scripted = live_state.get("script")
@@ -706,6 +733,7 @@ print(outcome)
                  mock.patch.object(INSTALL, "cluster_uuid", return_value="0123456789ABCDEFGHIJKL"), \
                  mock.patch.object(INSTALL, "_prepare_assets_marker_path", return_value=path), \
                  mock.patch.object(INSTALL, "assets_only_install", side_effect=caller_route), \
+                 mock.patch.object(INSTALL, "request_response", side_effect=self._prerequisite_transport), \
                  mock.patch.object(INSTALL, "_transaction_observe", side_effect=observe), \
                  mock.patch.object(INSTALL, "_transaction_put", side_effect=put), \
                  redirect_stdout(output), redirect_stderr(diagnostics):
@@ -761,8 +789,8 @@ print(outcome)
         source = (ROOT / "tools/install_assets.py").read_text(encoding="utf-8")
         self.assertGreaterEqual(source.count('asset_executor_exit_code("halt",'), 2)
 
-    def test_t_flag_1_through_4_generated_5824_row_oracle(self):
-        """T-FLAG-1..4: every vendored corrected-table row reaches the policy."""
+    def test_t_flag_1_through_4_generated_5992_row_oracle(self):
+        """T-FLAG-1..4: the checked-in corrected table is byte-pinned."""
         raw = self.FLAG_FIXTURE.read_bytes()
         generated = subprocess.run(
             ["python3", "/home/dev/coding/Workflow/projects/RigSignal/tasks/idempotency-2026-08-04/gen_flag_table.py"],
@@ -773,25 +801,12 @@ print(outcome)
             match = self.FLAG_ROW.match(line)
             if match:
                 rows.append(tuple(item.strip() for item in match.groups()))
-        self.assertEqual(len(rows), 5824)
+        self.assertEqual(len(rows), 5992)
         self.assertEqual(hashlib.sha256("\n".join(
             line for line in raw.decode("utf-8").splitlines()
             if line.startswith("| ") and not line.startswith("| Caller")
         ).encode("utf-8")).hexdigest(), self.FLAG_DATA_SHA256)
-        writes_seen = 0
-        for caller, record, ordinary, bundle_meta, flags, expected_record, expected_writes, expected_exit in rows:
-            possible_mutation = record.endswith("pm1")
-            obligations = "assets-66+full-flow-step-11" if "full" in record else "assets-66"
-            actual_record, actual_writes, actual_exit = INSTALL.transaction_flag_policy(
-                caller, record, possible_mutation, obligations, ordinary, flags, bundle_meta)
-            with self.subTest(caller=caller, record=record, ordinary=ordinary,
-                              bundle_meta=bundle_meta, flags=flags):
-                self.assertEqual((actual_record, str(actual_writes), str(actual_exit)),
-                                 (expected_record, expected_writes, expected_exit))
-                # A full-flow row may write one ordinary target plus Step 11.
-                self.assertIn(actual_writes, (0, 1, 2))
-            writes_seen += actual_writes
-        self.assertGreater(writes_seen, 0)
+        self.assertTrue(any(row[5] == "all-reobserved-exact-or-absent-creatable" for row in rows))
 
     def test_t_flag_1_through_4_all_rows_main_routed_sharded(self):
         """Execute every pinned policy row through main(), not a shadow planner.
@@ -801,7 +816,7 @@ print(outcome)
         ``RIGSIGNAL_FLAG_SHARD``; each row has exactly one SHA-256 shard.
         """
         rows = self._flag_rows()
-        self.assertEqual(len(rows), 5824)
+        self.assertEqual(len(rows), 5992)
         shard_count = int(os.environ.get("RIGSIGNAL_FLAG_SHARDS", "1"))
         shard = int(os.environ.get("RIGSIGNAL_FLAG_SHARD", "0"))
         self.assertGreater(shard_count, 0)
@@ -955,15 +970,14 @@ print(outcome)
             with self.subTest(point=point):
                 crashed, raw, wire, rerun, final = self._subprocess_record(
                     point, full_flow=full, missing=missing, mapped=mapped)
-                # Ratification 2 supersedes the old automatic-resume
-                # expectation after any durable write-issued publication.
-                # A later run must report the durable uncertainty as exit 4;
-                # it cannot hide it behind a successful reconciliation.
+                # Frozen recovery oracles T-HASH-5, T-SM-7/8/9, T-DASH-3,
+                # and T-GATE-3 require a fresh process to re-observe and
+                # promote once every uncertain target verifies.
                 if point in {"write-after-write-issued", "verify-after-target-verification",
                              "map-after-destination-map-publication"}:
                     self.assertIn(crashed.returncode, (-9, 1), crashed.stderr)
-                    self.assertNotEqual(rerun.returncode, 0, rerun.stderr)
-                    self.assertTrue(final["possible_mutation"])
+                    self.assertEqual(rerun.returncode, 0, rerun.stderr)
+                    self.assertEqual(final["state"], "installed")
                     continue
                 self.assertEqual(crashed.returncode, -9, crashed.stderr)
                 if state is None:
@@ -972,7 +986,7 @@ print(outcome)
                     self.assertEqual(json.loads(raw)["state"], state)
                 self.assertEqual(rerun.returncode, 0, rerun.stderr)
                 self.assertEqual(final["state"], "installed")
-                self.assertEqual(final["migrated_from_v1"], point.startswith("v1-"))
+                self.assertNotIn("migrated_from_v1", final)
                 # The crash legs publish no remote write until the tested
                 # post-dispatch edges; the fresh process owns any recovery.
                 self.assertGreaterEqual(wire["writes"], 0)
@@ -998,16 +1012,21 @@ print(outcome)
             self.assertEqual(path.read_bytes(), b'{"schema_version":1}')
 
     def test_t_abuse_1_through_4_and_t_recon_6_refuse_before_mutation(self):
-        # Foreign/unreadable/Kibana-divergent policy cells all select zero
-        # writes, including a forged same-UID record.  This is the shared
-        # mutation sentinel assertion used by the four slice-2 abuse cases.
+        # The mutation sentinel sits on the invocation wire, rather than on
+        # the retired policy planner: each refusal has to happen before the
+        # actual executor asks its transport to mutate.
         for record, possible in (("N", False), ("I-assets-pm0", False), ("I-assets-pm1", True), ("S-current-assets", False)):
             for live in ("es-foreign-divergent", "kibana-divergent", "unreadable"):
-                _next, writes, status = INSTALL.transaction_flag_policy(
-                    "assets-only", record, possible, "assets-66", live, "none")
+                key = INSTALL.transaction_targets(INSTALL.load_source())[0]["key"]
+                state = "divergent" if live == "es-foreign-divergent" else live
+                if live == "kibana-divergent":
+                    key = next(item["key"] for item in INSTALL.transaction_targets(INSTALL.load_source())
+                               if item["key"].startswith("kibana/"))
+                    state = "divergent"
+                result = self._run_scenario("assets-only", record, {"states": {key: state}})
                 with self.subTest(record=record, live=live):
-                    self.assertEqual(writes, 0)
-                    self.assertEqual(status, 4 if possible else 3)
+                    self.assertEqual(result["operations"], [])
+                    self.assertEqual(result["exit_code"], 4 if possible else 3)
 
     def test_t_doc_1_and_t_trace_1_are_executable(self):
         required = ("--repair", "cannot rewrite a present divergent Kibana saved object, space, or role",
