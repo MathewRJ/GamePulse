@@ -333,6 +333,7 @@ class V2GuardedPrimitiveTests(RecordFixtures):
         with tempfile.TemporaryDirectory() as raw:
             path = Path(raw) / INSTALL.ASSETS_MARKER_FILE
             with mock.patch.object(INSTALL, "cluster_uuid", return_value="0123456789ABCDEFGHIJKL"), \
+                 mock.patch.object(INSTALL, "prerequisites"), \
                  mock.patch.object(INSTALL, "run_default_asset_transaction", return_value="applied") as run:
                 self.assertEqual(INSTALL.assets_only_install(
                     self.bundle, "https://es", "https://kb", "auth", path,
@@ -486,7 +487,7 @@ class CompletionWaveTests(unittest.TestCase):
 
     def _run_table_row(self, row):
         """Main-routed, one-row durable fixture with a transport write sentinel."""
-        (caller, record_label, ordinary, bundle_meta, flags, _reconciliation,
+        (caller, record_label, ordinary, bundle_meta, flags, reconciliation,
          expected_record, expected_writes, expected_exit) = row
         bundle = INSTALL.load_source()
         targets = INSTALL.transaction_targets(bundle)
@@ -499,6 +500,12 @@ class CompletionWaveTests(unittest.TestCase):
                                                                else "component-template" in item["key"])))
         states = {item["key"]: "exact" for item in targets}
         states[ordinary_key] = self._table_live_state(ordinary)
+        # The table's pm=true detector-positive/unreachable branch is a
+        # transport read halt, not an ordinary absent target that the executor
+        # may create.  Keep it on the wire so the main-routed runner exercises
+        # the exit-4 boundary rather than consuming the row's write sentinel.
+        if reconciliation.startswith("halt:"):
+            states[ordinary_key] = "unreadable"
         if caller == "full-flow":
             states[INSTALL.BUNDLE_META_TARGET_KEY] = self._table_live_state(bundle_meta)
         operations, attempts = [], {}

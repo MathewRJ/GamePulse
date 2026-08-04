@@ -1395,7 +1395,14 @@ def transaction_failure_status(record_path: Path) -> int:
 
 
 def transaction_boundary_preflight(record_path: Path) -> int | None:
-    """Consult persisted uncertainty before mutable bundle/version work (A6)."""
+    """Reject an unparseable durable boundary before mutable setup (A6).
+
+    A syntactically valid ``possible_mutation`` record is deliberately *not*
+    terminal here.  The shared transaction executor owns its recovery: it
+    re-observes every target and may safely promote only after that complete
+    verification pass.  Returning exit 4 at this early CLI boundary would
+    bypass that recovery path for both callers.
+    """
     try:
         raw = protected_regular_file(record_path)
     except FileNotFoundError:
@@ -1408,10 +1415,6 @@ def transaction_boundary_preflight(record_path: Path) -> int | None:
         return 3
     if jcs(value) != raw or not isinstance(value, dict):
         return 3
-    token = value.get("transaction_id")
-    if (value.get("state") == "installing" and value.get("possible_mutation") is True
-            and isinstance(token, str) and _V2_TRANSACTION_RE.fullmatch(token) is not None):
-        return transaction_failure_status(record_path)
     # A present record must at least be a recognizable v2 envelope.  Binding
     # validation follows after snapshot/remote binding is available.
     if value.get("schema_version") != V2_SCHEMA_VERSION:
@@ -1734,13 +1737,18 @@ def _version_direction_is_valid(prior: str, current: str, *, upgrade: bool, allo
     """Compare release versions without treating a same-version digest as a transition."""
     def parts(value: str) -> tuple[object, ...]:
         return tuple(int(piece) if piece.isdecimal() else piece for piece in re.split(r"[.+-]", value))
-    if prior == current or (upgrade and allow_downgrade) or not (upgrade or allow_downgrade):
+    if prior == current or not (upgrade or allow_downgrade):
         return False
     try:
         comparison = (parts(prior) > parts(current)) - (parts(prior) < parts(current))
     except TypeError:
         # Mixed opaque prerelease spellings do not create transition authority.
         return False
+    # Supplying both flags authorizes a version transition in either
+    # direction, but deliberately grants no stamped-ES reconciliation
+    # authority (the executor keeps that stricter XOR check below).
+    if upgrade and allow_downgrade:
+        return comparison != 0
     return comparison < 0 if upgrade else comparison > 0
 
 
@@ -2421,6 +2429,7 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
             raise InputError("assets transaction version flags require a validated predecessor")
         if has_valid_predecessor and not version_flags:
             raise AssetTransactionRefusal("assets transaction transition requires a direction flag")
+        defer_full_flow_extension = False
         if record is None:
             # A new transaction has no pre-existing remote authority.  Finish
             # the complete no-write observation barrier before publishing
@@ -2465,10 +2474,11 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
             # needs a create-only write (T-SM-3), never merely because a
             # caller has begun a no-op verification pass.
         elif full_flow and record["caller_obligations"] == [V2_ASSET_OBLIGATION]:
-            fault("before-full-flow-extension")
-            record = expand_full_flow_record(record)
-            write_transaction_record(record_path, record, binding, targets)
-            fault("after-full-flow-extension")
+            # A resumed assets-only intent earns the Step-11 obligation only
+            # after the full-flow zero-write barrier below.  Otherwise a later
+            # foreign target could turn a read-only refusal into durable
+            # full-flow intent without reaching Step 11.
+            defer_full_flow_extension = True
         elif (not full_flow and record["caller_obligations"] ==
               [V2_ASSET_OBLIGATION, V2_FULL_FLOW_OBLIGATION]):
             # T-SM-5/6: this caller cannot discharge Step 11, even if every
@@ -2483,6 +2493,24 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
         specs = _transaction_specs(bundle, full_flow and not defer_step_11)
         if step_11_only:
             specs = [spec for spec in _transaction_specs(bundle, True) if spec[0] == BUNDLE_META_TARGET_KEY]
+        # A resumed full-flow transaction must not let the lexically first
+        # Step-11 target escape ahead of a later ordinary refusal.  Re-observe
+        # the complete dispatch set before *any* guarded write; this preserves
+        # the same zero-write barrier used for a fresh transaction while still
+        # allowing absent targets to take their normal create paths below.
+        if full_flow and record is not None and not step_11_only:
+            for barrier_spec in specs:
+                barrier_state, _barrier_live, _barrier_destination = _transaction_observe(
+                    es_url, kb_url, authorization, barrier_spec, bundle, adapter, record)
+                if barrier_state == "divergent":
+                    raise AssetTransactionRefusal("asset target differs")
+                if barrier_state == "owned-divergent" and barrier_spec[0].startswith("kibana/"):
+                    raise AssetTransactionRefusal("Kibana target differs")
+        if defer_full_flow_extension:
+            fault("before-full-flow-extension")
+            record = expand_full_flow_record(record)
+            write_transaction_record(record_path, record, binding, targets)
+            fault("after-full-flow-extension")
         for spec in specs:
             key = spec[0]
             desired_override: Asset | None = None
