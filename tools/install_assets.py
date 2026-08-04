@@ -2069,7 +2069,7 @@ def _transaction_put(es_url: str, kb_url: str, authorization: str, spec: tuple[s
     if asset.kind == "transforms":
         mutation_request(es_url, es_path(asset) + "?create=true", "PUT", authorization, desired.data)
         return
-    nonce = uuid.uuid4().hex
+    nonce = transaction_detector_nonce(record["transaction_id"], key)
     body = parse_json(desired.data, desired.path)
     metadata = "metadata" if asset.kind == "security_roles" else "_meta"
     body[metadata] = {**body.get(metadata, {}), "controller_nonce": nonce}
@@ -2098,6 +2098,23 @@ def _transaction_put(es_url: str, kb_url: str, authorization: str, spec: tuple[s
             raise AssetTransactionHalt("partial-remote-possible")
 
 
+def transaction_detector_nonce(transaction_id: str, target_key: str) -> str:
+    """Derive the detector nonce without extending the v2 record schema.
+
+    Owner ratification 6 (TEST-MANIFEST residual entry 6, 2026-08-04)
+    preserves the qualified ES-update race as a named residual; it does not
+    authorize another durable record field.  The per-target nonce is therefore
+    the deterministic SHA-256 of the canonical transaction UUID, a NUL
+    separator, and the canonical target key.  AMBIGUITY-4 keeps observed
+    detector values in the protected sibling diagnostic instead of the record.
+    """
+    if not isinstance(transaction_id, str) or _V2_TRANSACTION_RE.fullmatch(transaction_id) is None:
+        raise InputError("assets transaction nonce binding is invalid")
+    if not isinstance(target_key, str) or not target_key:
+        raise InputError("assets transaction nonce target is invalid")
+    return hashlib.sha256((transaction_id + "\0" + target_key).encode("utf-8")).hexdigest()
+
+
 def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, authorization: str, record_path: Path,
                                   binding: dict, *, full_flow: bool = False,
                                   repair: bool = False, upgrade: bool = False,
@@ -2107,12 +2124,6 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
     The caller supplies the already snapshotted archive binding; this is what
     keeps a resume tied to the exact opened bundle bytes rather than a pathname.
     """
-    # These are deliberately rejected before acquiring the lock or performing
-    # any network read.  A v2 record binds one exact release; a direction flag
-    # only becomes meaningful at the separately validated predecessor
-    # transition boundary, never as a same-version force switch.
-    if upgrade or allow_downgrade:
-        raise InputError("assets transaction version flags require a validated predecessor")
     _validate_transaction_record_parent(record_path)
     targets = transaction_targets(bundle)
     adapter = SavedObjectAdapter(kb_url, authorization)
@@ -2129,6 +2140,18 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
             record = _migrate_private_v1_record(record_path, bundle, binding, targets,
                                                 es_url, kb_url, authorization, adapter,
                                                 full_flow=full_flow)
+        # Owner ratification 2 is absolute (T-EXIT-1): a persisted possible
+        # mutation is never under-reported, even when the current command has
+        # invalid flags or another local preflight refusal.  This is still
+        # pre-read: no remote operation has happened in this invocation.
+        if record is not None and record.get("state") == "installing" and record.get("possible_mutation") is True:
+            raise AssetTransactionHalt("partial-remote-possible")
+        # Only after the durable uncertainty check may a version flag without
+        # a valid predecessor transition be rejected as local input (exit 2).
+        # The current-bundle v2 engine has no cross-version predecessor yet,
+        # so any supplied direction flag is that refusal and makes no read.
+        if upgrade or allow_downgrade:
+            raise InputError("assets transaction version flags require a validated predecessor")
         if record is None:
             # A new transaction has no pre-existing remote authority.  Finish
             # the complete no-write observation barrier before publishing

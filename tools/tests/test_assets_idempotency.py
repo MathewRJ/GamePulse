@@ -299,6 +299,16 @@ class V2GuardedPrimitiveTests(RecordFixtures):
             self.assertEqual(evidence["detector"], "created:false")
             self.assertEqual(evidence["target"], role[0])
 
+    def test_ambiguity_4_and_6_detector_nonce_is_deterministic_and_schema_free(self):
+        """R-A6: nonce is transaction/target-derived; observations stay sibling-only."""
+        record = self.installing()
+        first, second = record["targets"][0]["key"], record["targets"][1]["key"]
+        nonce = INSTALL.transaction_detector_nonce(record["transaction_id"], first)
+        self.assertEqual(nonce, INSTALL.transaction_detector_nonce(record["transaction_id"], first))
+        self.assertNotEqual(nonce, INSTALL.transaction_detector_nonce(record["transaction_id"], second))
+        self.assertRegex(nonce, r"^[0-9a-f]{64}$")
+        self.assertNotIn("controller_nonce", record)
+
     def test_t_recon_5_diagnostic_uses_the_record_parent_security_preflight(self):
         """AMBIGUITY-4: evidence is a protected sibling, never record data."""
         record = self.installing()
@@ -649,17 +659,17 @@ print(outcome)
         """T-CROSS-1, both literal Step-11 cases, on the shared executor."""
         for meta_state, expected_writes in (("exact", 0), ("absent", 1)):
             with self.subTest(bundle_meta=meta_state):
-                held = self._real_transaction(record_kind="I-full-pm1", absent=(
+                held = self._real_transaction(record_kind="I-full-pm0", absent=(
                     (INSTALL.BUNDLE_META_TARGET_KEY,) if meta_state == "absent" else ()))
                 # assets-only must not reach its transport at all while the
                 # full-flow obligation is active.
                 self.assertEqual((held["status"], held["writes"], held["record"]["state"]),
-                                 (4, [], "installing"))
+                                 (3, [], "installing"))
                 self.assertEqual(held["record"]["caller_obligations"],
                                  ["assets-66", "full-flow-step-11"])
 
                 # Rebuild the same input for the permitted full-flow caller.
-                resumed = self._real_transaction(record_kind="I-full-pm1", full_flow=True, absent=(
+                resumed = self._real_transaction(record_kind="I-full-pm0", full_flow=True, absent=(
                     (INSTALL.BUNDLE_META_TARGET_KEY,) if meta_state == "absent" else ()))
                 self.assertEqual(resumed["status"], 0)
                 self.assertEqual(len(resumed["writes"]), expected_writes)
@@ -682,6 +692,17 @@ print(outcome)
                 self.assertEqual(result["status"], 2)
                 self.assertEqual(result["writes"], [])
                 self.assertFalse(result["path_exists"])
+
+    def test_r_a1_persisted_possible_mutation_precedes_invalid_version_flags(self):
+        """Ratification 2: durable uncertainty wins before flag preflight."""
+        key = INSTALL.transaction_targets(INSTALL.load_source())[0]["key"]
+        for flags in (("upgrade",), ("allow-downgrade",), ("upgrade", "allow-downgrade")):
+            with self.subTest(flags=flags):
+                result = self._run_scenario(
+                    "assets-only", "I-assets-pm1", {"states": {key: "unreadable"}}, flags)
+                self.assertEqual(result["exit_code"], 4)
+                self.assertEqual(result["operations"], [])
+                self.assertEqual(result["record"]["possible_mutation"], True)
 
     def test_t_sm_1_through_12_every_durable_edge_has_a_guarded_crash_hook(self):
         source = (ROOT / "tools/install_assets.py").read_text()
@@ -719,6 +740,16 @@ print(outcome)
             with self.subTest(point=point):
                 crashed, raw, wire, rerun, final = self._subprocess_record(
                     point, full_flow=full, missing=missing, mapped=mapped)
+                # Ratification 2 supersedes the old automatic-resume
+                # expectation after any durable write-issued publication.
+                # A later run must report the durable uncertainty as exit 4;
+                # it cannot hide it behind a successful reconciliation.
+                if point in {"write-after-write-issued", "verify-after-target-verification",
+                             "map-after-destination-map-publication"}:
+                    self.assertIn(crashed.returncode, (-9, 1), crashed.stderr)
+                    self.assertNotEqual(rerun.returncode, 0, rerun.stderr)
+                    self.assertTrue(final["possible_mutation"])
+                    continue
                 self.assertEqual(crashed.returncode, -9, crashed.stderr)
                 if state is None:
                     self.assertEqual(json.loads(raw)["schema_version"], INSTALL.ASSETS_MARKER_SCHEMA_VERSION)
