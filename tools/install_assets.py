@@ -1388,6 +1388,52 @@ def transaction_failure_status(record_path: Path) -> int:
     return 3
 
 
+def transaction_flag_policy(caller: str, record: str, possible_mutation: bool,
+                            obligations: str, live: str, flags: str) -> tuple[str, int, int]:
+    """The executable v2 flag/state policy used by the conformance fixture.
+
+    It is intentionally transport-free: classification must complete before a
+    mutation is selected, and callers turn ``writes == 1`` into exactly one
+    guarded primitive.  Keeping the decision here makes the generated 896-row
+    table a test oracle rather than a second planner hidden in a test helper.
+    """
+    if caller not in {"assets-only", "full-flow"}:
+        raise InputError("assets transaction caller is invalid")
+    if record not in {"N", "I-assets-pm0", "I-assets-pm1", "I-full-pm0", "I-full-pm1",
+                      "S-current-assets", "S-current-full", "S-prior-valid-direction"}:
+        raise InputError("assets transaction record class is invalid")
+    if live not in {"absent:guarded-class", "absent:pipeline-or-es-role", "exact",
+                    "es-stamped-divergent", "es-foreign-divergent", "kibana-divergent", "unreadable"}:
+        raise InputError("assets transaction live class is invalid")
+    allowed_flags = {"none", "repair", "upgrade", "allow-downgrade", "repair+upgrade",
+                     "repair+allow-downgrade", "upgrade+allow-downgrade",
+                     "repair+upgrade+allow-downgrade"}
+    if flags not in allowed_flags:
+        raise InputError("assets transaction flags are invalid")
+    version_flags = "upgrade" in flags or "allow-downgrade" in flags
+    conflicting = "upgrade" in flags and "allow-downgrade" in flags
+    prior = record == "S-prior-valid-direction"
+    held_step11 = record.startswith("I-full") and caller == "assets-only"
+    retained = f"I[{obligations};pm={int(possible_mutation)}]" if record.startswith("I-") else record
+    complete_obligations = obligations if caller == "assets-only" else "assets-66+full-flow-step-11"
+    normal_done = f"S[{complete_obligations}]"
+    if conflicting or (version_flags and not prior):
+        return (retained if record != "N" else "N"), 0, 2
+    if prior and not version_flags:
+        return record, 0, 3
+    if live.startswith("absent:"):
+        return (retained, 0, 4) if held_step11 else (normal_done, 1, 0)
+    if live == "exact":
+        return (retained, 0, 4) if held_step11 else (normal_done, 0, 0)
+    if live == "es-stamped-divergent":
+        permitted = flags in {"repair", "repair+upgrade", "repair+allow-downgrade"} or (record == "N" and flags == "none")
+        if prior and version_flags:
+            permitted = flags in {"upgrade", "allow-downgrade", "repair+upgrade", "repair+allow-downgrade"}
+        if permitted and not held_step11:
+            return normal_done, 1, 0
+    return (retained if record != "N" else "N"), 0, (4 if possible_mutation else 3)
+
+
 def _v2_common_is_valid(value: object, binding: dict, targets: list[dict[str, str]]) -> bool:
     if not isinstance(value, dict):
         return False
@@ -1659,6 +1705,56 @@ def write_transaction_record(path: Path, record: dict, binding: dict, targets: l
     # continue to a remote write from an unverifiable local intent.
     if protected_regular_file(path) != raw:
         raise InputError("assets transaction record verification failed")
+
+
+def _read_private_v1_marker(path: Path, bundle: Bundle) -> bool:
+    """Recognize only the former private v1 ownership marker.
+
+    This reader is intentionally isolated from the old planner: it accepts no
+    partial state and cannot create an active transaction.  A legacy marker in
+    the old shared location is rejected by ``_prepare_assets_marker_path``;
+    this is only the protected primary leaf migration described in §3.6.
+    """
+    value = parse_json(protected_regular_file(path), "assets transaction record")
+    if (not isinstance(value, dict)
+            or set(value) != {"schema_version", "bundle_version", "source_commit", "identities"}
+            or value.get("schema_version") != ASSETS_MARKER_SCHEMA_VERSION
+            or value.get("bundle_version") != bundle.version
+            or value.get("source_commit") != bundle.source_commit
+            or not isinstance(value.get("identities"), list)):
+        return False
+    expected = _asset_marker_identities(bundle)
+    if any(not isinstance(item, dict) for item in value["identities"]):
+        return False
+    return value["identities"] == expected and len({(item["kind"], item["name"])
+                                                     for item in value["identities"]}) == len(expected)
+
+
+def _migrate_private_v1_record(path: Path, bundle: Bundle, binding: dict, targets: list[dict[str, str]],
+                               es_url: str, kb_url: str, authorization: str, adapter: "SavedObjectAdapter",
+                               *, full_flow: bool) -> dict:
+    """Verify a current private v1 marker then replace it with installed v2.
+
+    The operation is deliberately all-read until the final local replacement.
+    A mismatch, ambiguity, or incomplete object set is refusal rather than an
+    opportunity to repair a record whose former ownership semantics were less
+    strict.
+    """
+    if not _read_private_v1_marker(path, bundle):
+        raise AssetTransactionRefusal("assets transaction legacy record is invalid")
+    record = new_installing_record(binding, targets, _transaction_now())
+    if full_flow:
+        record = expand_full_flow_record(record)
+    for spec in _transaction_specs(bundle, full_flow):
+        state, _live, _destination = _transaction_observe(es_url, kb_url, authorization, spec, bundle, adapter, record)
+        if state != "exact":
+            raise AssetTransactionRefusal("assets transaction legacy record is not exact")
+        record = mark_transaction_verified(record, spec[0])
+    migrated = promote_transaction_record(record, _transaction_now())
+    fault("before-v1-v2-publication")
+    write_transaction_record(path, migrated, binding, targets)
+    fault("after-v1-v2-publication")
+    return migrated
 
 
 # The v2 executor deliberately lives beside the record implementation rather
@@ -1979,18 +2075,36 @@ def _transaction_put(es_url: str, kb_url: str, authorization: str, spec: tuple[s
 
 
 def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, authorization: str, record_path: Path,
-                                  binding: dict, *, full_flow: bool = False) -> str:
+                                  binding: dict, *, full_flow: bool = False,
+                                  repair: bool = False, upgrade: bool = False,
+                                  allow_downgrade: bool = False) -> str:
     """Execute the v2 default-profile asset transaction under its global lock.
 
     The caller supplies the already snapshotted archive binding; this is what
     keeps a resume tied to the exact opened bundle bytes rather than a pathname.
     """
+    # These are deliberately rejected before acquiring the lock or performing
+    # any network read.  A v2 record binds one exact release; a direction flag
+    # only becomes meaningful at the separately validated predecessor
+    # transition boundary, never as a same-version force switch.
+    if upgrade or allow_downgrade:
+        raise InputError("assets transaction version flags require a validated predecessor")
     _validate_transaction_record_parent(record_path)
     targets = transaction_targets(bundle)
     adapter = SavedObjectAdapter(kb_url, authorization)
     lock = AssetTransactionLock.acquire()
     try:
-        record = read_transaction_record_if_present(record_path, binding, targets)
+        try:
+            record = read_transaction_record_if_present(record_path, binding, targets)
+        except InputError:
+            # A v1 marker is the sole non-v2 primary that can be consumed.
+            # Its reader and verification pass are intentionally isolated;
+            # malformed v1/v2 inputs remain untouched refusals.
+            if not _read_private_v1_marker(record_path, bundle):
+                raise
+            record = _migrate_private_v1_record(record_path, bundle, binding, targets,
+                                                es_url, kb_url, authorization, adapter,
+                                                full_flow=full_flow)
         if record is None:
             # T-RECON-2: complete Kibana fail-closed preflight before intent or
             # an ES self-heal.  Exact and absent are both safe observations.
@@ -2001,10 +2115,13 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
                         raise AssetTransactionRefusal("Kibana target differs")
             record = new_installing_record(binding, targets, _transaction_now())
             write_transaction_record(record_path, record, binding, targets)
+            fault("after-v2-intent-publication")
         elif record["state"] == "installed":
             if full_flow and record["caller_obligations"] == [V2_ASSET_OBLIGATION]:
+                fault("before-full-flow-extension")
                 record = extend_installed_for_full_flow(record, _transaction_now())
                 write_transaction_record(record_path, record, binding, targets)
+                fault("after-full-flow-extension")
             elif not full_flow and record["caller_obligations"] == [V2_ASSET_OBLIGATION, V2_FULL_FLOW_OBLIGATION]:
                 # Assets-only may validate but must never complete the missing
                 # Step-11 obligation.
@@ -2014,8 +2131,10 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
             # needs a create-only write (T-SM-3), never merely because a
             # caller has begun a no-op verification pass.
         elif full_flow and record["caller_obligations"] == [V2_ASSET_OBLIGATION]:
+            fault("before-full-flow-extension")
             record = expand_full_flow_record(record)
             write_transaction_record(record_path, record, binding, targets)
+            fault("after-full-flow-extension")
         elif (not full_flow and record["caller_obligations"] ==
               [V2_ASSET_OBLIGATION, V2_FULL_FLOW_OBLIGATION]):
             # T-SM-5/6: this caller cannot discharge Step 11, even if every
@@ -2036,8 +2155,10 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
             if state == "owned-divergent" and spec[0].startswith("kibana/"):
                 raise AssetTransactionRefusal("Kibana target differs")
             if record["state"] == "installed":
+                fault("before-installed-demotion")
                 record = demote_installed_transaction(record, _transaction_now())
                 write_transaction_record(record_path, record, binding, targets)
+                fault("after-installed-demotion")
             # A stamped ES divergent object is a qualified reconciliation;
             # transforms use their documented update endpoint, all other
             # classes retain their creation guard and reread conflict signal.
@@ -2046,6 +2167,7 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
             public = deepcopy(record); del public["_record_path"]
             write_transaction_record(record_path, public, binding, targets)
             record = public
+            fault("after-write-issued", key)
             if state == "owned-divergent" and spec[1] is not None and spec[1].kind == "transforms":
                 asset = stamped_asset(spec[1])
                 mutation_request(es_url, es_path(asset) + "/_update", "POST", authorization,
@@ -2061,8 +2183,14 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
                 record["destination_map"] = sorted([item for item in record["destination_map"]
                                                      if item["submitted_key"] != key] + [mapping],
                                                    key=lambda item: item["submitted_key"].encode())
+                # Mapping is its own durable edge.  A response-loss crash may
+                # leave write-issued progress, but never loses the physical
+                # saved-object identity learned from a successful create.
+                write_transaction_record(record_path, record, binding, targets)
+                fault("after-destination-map-publication", key)
             record = mark_transaction_verified(record, key)
             write_transaction_record(record_path, record, binding, targets)
+            fault("after-target-verification", key)
 
         # Promotion is preceded by a complete ordered reread, never progress
         # bookkeeping alone (T-SM-8/T-RECON-7).
@@ -2070,10 +2198,13 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
             state, _live, _destination = _transaction_observe(es_url, kb_url, authorization, spec, bundle, adapter, record)
             if state != "exact":
                 raise AssetTransactionHalt("partial-remote-possible")
+        fault("after-final-reverify")
         if record["state"] == "installed":
             return "noop"
+        fault("before-promotion")
         record = promote_transaction_record(record, _transaction_now())
         write_transaction_record(record_path, record, binding, targets)
+        fault("after-promotion")
         return "applied"
     finally:
         lock.close()
@@ -4265,29 +4396,15 @@ def assets_only_install(bundle: Bundle, es_url: str, kb_url: str, authorization:
                         archive_sha256: str | None = None) -> str:
     """Run the shared v2 default asset transaction for the assets-only caller."""
     marker_path = marker_path or _prepare_assets_marker_path(None, bundle)
-    # Compatibility entry point for older in-memory callers.  Public CLI
-    # dispatch always supplies the archive snapshot digest below; it is the
-    # only production path permitted to establish a v2 binding.
-    if archive_sha256 is None:
-        plan = assets_ownership_plan(bundle, es_url, kb_url, authorization, marker_path,
-                                     repair=repair, upgrade=upgrade,
-                                     allow_downgrade=allow_downgrade)
-        if all(action == "noop" for _asset, action in plan):
-            return "noop"
-        for asset, action in sorted(plan, key=lambda item: item[0].kind not in _ES_ASSET_KINDS):
-            if action != "noop":
-                install_asset(es_url, kb_url, authorization, asset, managed=True)
-        _write_assets_marker(marker_path, bundle)
-        return "applied"
-    if upgrade or allow_downgrade:
-        # Version-direction authorization is available only to a real
-        # predecessor transition.  An assets-only same-bundle invocation has
-        # no such authority and must fail before its first remote read.
-        raise InputError("assets transaction version flags require a validated predecessor")
+    # All default-profile callers, including in-memory test callers, enter
+    # the same v2 state machine.  An in-memory bundle has a deterministic
+    # content digest; release CLI calls replace it with the protected archive
+    # snapshot digest.
     binding = transaction_binding(bundle, cluster_uuid(es_url, authorization), kb_url,
                                   archive_sha256 or bundle_snapshot_digest(bundle))
     return run_default_asset_transaction(bundle, es_url, kb_url, authorization, marker_path,
-                                         binding, full_flow=False)
+                                         binding, full_flow=False, repair=repair,
+                                         upgrade=upgrade, allow_downgrade=allow_downgrade)
 
 
 def install_asset(es_url: str, kb_url: str, authorization: str, asset: Asset, *, managed: bool = False) -> object:
@@ -6099,23 +6216,8 @@ def main() -> int:
         fence_remote_ownership_profile(es_url, authorization, ownership_profile,
                                        raw_ownership_profile is None)
         run_topology_preflight(bundle, es_url, kb_url, authorization, ownership_profile)
-        # The shared default-profile ownership barrier belongs before even a
-        # local enrollment-root mutation or incomplete-key recovery.  It is a
-        # complete read pass over all 55 target identities.
-        default_asset_actions: dict[tuple[str, str], str] = {}
-        # Main receives a verified member map from load_bundle().  A missing
-        # map identifies an in-memory legacy unit fixture, never a CLI bundle.
-        # Release archives use the shared v2 transaction.  Keep the isolated
-        # in-memory compatibility harness on its old planner so it can test
-        # the pre-v2 enrollment boundary without pretending to be a bundle.
-        if (ownership_profile == "default" and bundle.files is not None
-                and condition != "incomplete" and not args.bundle.is_file()):
-            default_asset_actions = {(asset.kind, asset.name): action
-                                     for asset, action in assets_ownership_plan(
-                                         bundle, es_url, kb_url, authorization, default_marker_path,
-                                         repair=getattr(args, "repair", False),
-                                         upgrade=getattr(args, "upgrade", False),
-                                         allow_downgrade=getattr(args, "allow_downgrade", False))}
+        # Default profile has one transaction engine for every caller.  The
+        # Fleet-coexist journal remains the only legacy transaction path.
         test_pause("after-topology-preflight", args.unsafe_test_injection)
         failure_tracker.mark(FailureSite.ROOT_PREPARE)
         root = prepare_install_root(requested_root)
@@ -6223,24 +6325,23 @@ def main() -> int:
         post_fleet_snapshot: dict[str, object] | None = None
         candidate_drift_done = False
         default_transaction_done = False
-        if ownership_profile == "default" and bundle.files is not None and args.bundle.is_file():
+        if ownership_profile == "default":
             if default_marker_path is None:
                 raise InputError("assets transaction record path is unavailable")
             binding = transaction_binding(bundle, uuid_value, kb_url,
                                           bundle_archive_sha256 or bundle_snapshot_digest(bundle))
             try:
                 run_default_asset_transaction(bundle, es_url, kb_url, authorization,
-                                              default_marker_path, binding, full_flow=True)
+                                              default_marker_path, binding, full_flow=True,
+                                              repair=getattr(args, "repair", False),
+                                              upgrade=getattr(args, "upgrade", False),
+                                              allow_downgrade=getattr(args, "allow_downgrade", False))
             except (AssetTransactionHalt, AssetTransactionRefusal):
                 status = transaction_failure_status(default_marker_path)
                 if status == 4:
                     return 4
                 raise ProvisionError("install refused: assets_transaction_invalid")
             default_transaction_done = True
-        elif ownership_profile == "default":
-            # Source-tree/in-memory compatibility fixtures do not carry the
-            # immutable release member map required by the v2 archive binding.
-            planned_actions = {(asset.kind, asset.name): "update" for asset in bundle.assets}
         if ownership_profile == "fleet-coexist":
             try:
                 # This capture dynamically enumerates the active stream set;

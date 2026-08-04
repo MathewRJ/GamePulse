@@ -143,6 +143,8 @@ See [`docs/install.md`](docs/install.md) for the full installation guide,
 including self-hosted Elasticsearch/Kibana setup, package managers, systemd
 service management, and troubleshooting.
 
+`rigsignal assets install --repair` can reconcile only a proven RigSignal-owned Elasticsearch object. It cannot rewrite a present divergent Kibana saved object, space, or role: delete it in Kibana and rerun the installer so its guarded create path can recreate it.
+
 ---
 
 ## What RigSignal ships today

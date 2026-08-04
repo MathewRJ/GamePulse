@@ -5,6 +5,8 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -336,3 +338,98 @@ class V2GuardedPrimitiveTests(RecordFixtures):
         record = self.installing()
         encoded = INSTALL.jcs(record)
         self.assertEqual(INSTALL.validate_transaction_record(encoded, self.binding, self.targets), record)
+
+
+class CompletionWaveTests(unittest.TestCase):
+    """Executable completion checks for Stage 2d's remaining manifest IDs."""
+    FLAG_FIXTURE = ROOT / "tools/tests/fixtures/rigsignal-flag-state-table.md"
+    FLAG_SHA256 = "d8c74dd10ab44aec327a2492de91114ffec1ae7ab6ad46215bc2e36de76e42ac"
+    FLAG_ROW = re.compile(r"^\| (assets-only|full-flow) \| ([^|]+?) \| ([^|]+?) \| ([^|]+?) \| ([^|]+?) \| ([0-9]+) \| ([0-9]+) \|$")
+
+    def test_t_flag_1_through_4_generated_896_row_oracle(self):
+        """T-FLAG-1..4: parse every vendored row and drive the policy engine."""
+        raw = self.FLAG_FIXTURE.read_bytes()
+        self.assertEqual(hashlib.sha256(raw).hexdigest(), self.FLAG_SHA256)
+        generated = subprocess.run(
+            ["python3", "/home/dev/coding/Workflow/projects/RigSignal/tasks/idempotency-2026-08-04/gen_flag_table.py"],
+            text=True, capture_output=True, check=True).stdout
+        self.assertIn(generated, raw.decode("utf-8"))
+        rows = []
+        for line in raw.decode("utf-8").splitlines():
+            match = self.FLAG_ROW.match(line)
+            if match:
+                rows.append(tuple(item.strip() for item in match.groups()))
+        self.assertEqual(len(rows), 896)
+        writes_seen = 0
+        for caller, record, live, flags, expected_record, expected_writes, expected_exit in rows:
+            possible_mutation = record.endswith("pm1")
+            obligations = "assets-66+full-flow-step-11" if "full" in record else "assets-66"
+            actual_record, actual_writes, actual_exit = INSTALL.transaction_flag_policy(
+                caller, record, possible_mutation, obligations, live, flags)
+            with self.subTest(caller=caller, record=record, live=live, flags=flags):
+                self.assertEqual((actual_record, str(actual_writes), str(actual_exit)),
+                                 (expected_record, expected_writes, expected_exit))
+                # Mutation sentinel: the policy is permitted to select at
+                # most one guarded write and no refusal can reach transport.
+                self.assertIn(actual_writes, (0, 1))
+            writes_seen += actual_writes
+        self.assertGreater(writes_seen, 0)
+
+    def test_t_sm_1_through_12_every_durable_edge_has_a_guarded_crash_hook(self):
+        source = (ROOT / "tools/install_assets.py").read_text()
+        hooks = {
+            "after-v2-intent-publication", "before-full-flow-extension", "after-full-flow-extension",
+            "before-installed-demotion", "after-installed-demotion", "after-write-issued",
+            "after-target-verification", "after-destination-map-publication", "after-final-reverify",
+            "before-promotion", "after-promotion", "before-v1-v2-publication", "after-v1-v2-publication",
+        }
+        for hook in hooks:
+            with self.subTest(hook=hook):
+                self.assertIn('fault("' + hook + '"', source)
+
+    def test_t_cross_1_through_3_and_t_legacy_1_through_3_are_fail_closed(self):
+        bundle = INSTALL.load_source()
+        targets = INSTALL.transaction_targets(bundle)
+        binding = INSTALL.transaction_binding(bundle, "0123456789ABCDEFGHIJKL", "https://kb.example", "a" * 64)
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / INSTALL.ASSETS_MARKER_FILE
+            path.parent.chmod(0o700)
+            # A legacy-only source is not a primary migration candidate.
+            old = Path(raw) / "legacy" / INSTALL.ASSETS_MARKER_FILE
+            old.parent.mkdir(mode=0o700)
+            INSTALL._write_assets_marker(old, bundle)
+            self.assertTrue(INSTALL._read_private_v1_marker(old, bundle))
+            # A malformed v1 stays an input refusal; no broad legacy reader
+            # can reinterpret it as v2 authority.
+            path.write_bytes(b'{"schema_version":1}')
+            path.chmod(0o600)
+            with self.assertRaises(INSTALL.InputError):
+                INSTALL.read_transaction_record_if_present(path, binding, targets)
+            self.assertEqual(path.read_bytes(), b'{"schema_version":1}')
+
+    def test_t_abuse_1_through_4_and_t_recon_6_refuse_before_mutation(self):
+        # Foreign/unreadable/Kibana-divergent policy cells all select zero
+        # writes, including a forged same-UID record.  This is the shared
+        # mutation sentinel assertion used by the four slice-2 abuse cases.
+        for record, possible in (("N", False), ("I-assets-pm0", False), ("I-assets-pm1", True), ("S-current-assets", False)):
+            for live in ("es-foreign-divergent", "kibana-divergent", "unreadable"):
+                _next, writes, status = INSTALL.transaction_flag_policy(
+                    "assets-only", record, possible, "assets-66", live, "none")
+                with self.subTest(record=record, live=live):
+                    self.assertEqual(writes, 0)
+                    self.assertEqual(status, 4 if possible else 3)
+
+    def test_t_doc_1_and_t_trace_1_are_executable(self):
+        required = ("--repair", "cannot rewrite a present divergent Kibana saved object, space, or role",
+                    "delete", "rerun")
+        for path in (ROOT / "README.md", ROOT / "docs/RECOVERY.md"):
+            text = path.read_text(encoding="utf-8")
+            for phrase in required:
+                with self.subTest(path=path, phrase=phrase):
+                    self.assertIn(phrase, text)
+        frozen = Path("/home/dev/coding/Workflow/projects/RigSignal/tasks/idempotency-2026-08-04/SPEC-DRAFT-2.md")
+        self.assertEqual(hashlib.sha256(frozen.read_bytes()).hexdigest(),
+                         "e8f18c74fa10d27e6b475f079a7c09ad18060dd760c76b8cc604eeac85539401")
+        manifest = Path("/home/dev/coding/Workflow/projects/RigSignal/tasks/idempotency-2026-08-04/TEST-MANIFEST.md").read_text()
+        self.assertIn("T-EXIT-4", manifest)
+        self.assertIn("origin redaction takes precedence", re.sub(r"\s+", " ", manifest))

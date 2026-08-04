@@ -80,6 +80,23 @@ run_noninteractive() {
     HOME="$home" XDG_CONFIG_HOME="$home/.config" TMPDIR="$tmp/runtime" RIGSIGNAL_ASSETS_TEST_ARGS="$args" RIGSIGNAL_ASSETS_TEST_CREDENTIAL="$credential_probe" "$bin/rigsignal" assets install --bundle "$bundle" --endpoint http://127.0.0.1:9200 --ca-file "$ca" --kibana-endpoint https://kibana.example.invalid --admin-credentials-file "$credentials" --non-interactive "$@"
 }
 
+# T-EXIT-4: this is deliberately a launcher-boundary subprocess test.  The
+# fixture engine does no network work; its status must pass through the
+# background-child wait path exactly, including the persisted-uncertainty 4.
+write_exit_engine() {
+    printf '%s\n' '#!/usr/bin/env python3' 'import os, sys' 'raise SystemExit(int(os.environ["RIGSIGNAL_TEST_ENGINE_STATUS"]))' >"$engine/install_assets.py"
+    chmod 755 "$engine/install_assets.py"
+}
+for engine_status in 2 3 4; do
+    write_exit_engine
+    set +e
+    RIGSIGNAL_TEST_ENGINE_STATUS="$engine_status" run_noninteractive >"$tmp/engine-status-$engine_status.out" 2>&1
+    RUN_STATUS=$?
+    set -e
+    require_status "$engine_status" "$RUN_STATUS" "engine status $engine_status was not preserved by launcher wait"
+done
+write_success_engine
+
 # Every corpus assertion is fail-closed: neither a failed command in an &&
 # list nor a bare negated grep can make this test pass.
 while IFS=$'\t' read -r name encoded expected; do
