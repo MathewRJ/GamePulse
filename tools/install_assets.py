@@ -7,6 +7,7 @@ import ctypes
 import contextvars
 import datetime
 import fnmatch
+import fcntl
 import hashlib
 import json
 import os
@@ -1221,6 +1222,324 @@ def jcs(value: object) -> bytes:
     """
     return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"),
                       allow_nan=False).encode("utf-8")
+
+
+# v2 default-profile transaction foundations.  These deliberately do not alter
+# the established v1 marker/apply flow; Stage 2 wires the state machine to them.
+V2_SCHEMA_VERSION = 2
+V2_ASSET_OBLIGATION = "assets-66"
+V2_FULL_FLOW_OBLIGATION = "full-flow-step-11"
+BUNDLE_META_TARGET_KEY = "es/bundle-meta/rigsignal-bundle-meta"
+AUTHORITATIVE_RECORD_READ_BOUNDARY = "after-assets-lock"
+_V2_SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
+_V2_COMMIT_RE = re.compile(r"[0-9a-f]{40}\Z")
+_V2_CLUSTER_RE = re.compile(r"[A-Za-z0-9_-]{22}\Z")
+_V2_TRANSACTION_RE = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\Z")
+_V2_SEGMENT_RE = re.compile(r"(?:[A-Za-z0-9._~-]|%[0-9A-F]{2})+\Z")
+_V2_TIMESTAMP_RE = re.compile(
+    r"[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T"
+    r"([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\.[0-9]{1,9})?Z\Z")
+
+
+def _v2_timestamp(value: object) -> bool:
+    if not isinstance(value, str) or _V2_TIMESTAMP_RE.fullmatch(value) is None:
+        return False
+    try:
+        datetime.datetime.fromisoformat(value.removesuffix("Z") + "+00:00")
+    except ValueError:
+        return False
+    return True
+
+
+def _v2_segment(value: object) -> bool:
+    return isinstance(value, str) and _V2_SEGMENT_RE.fullmatch(value) is not None
+
+
+def valid_target_key(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    parts = value.split("/")
+    if len(parts) == 3 and parts[0] == "es":
+        return parts[1] in {"component-template", "index-template", "ingest-pipeline",
+                            "security-role", "transform", "bundle-meta"} and _v2_segment(parts[2])
+    return len(parts) == 4 and parts[0] == "kibana" and all(_v2_segment(part) for part in parts[1:])
+
+
+def _v2_quote(value: str) -> str:
+    return urllib.parse.quote(value, safe="-._~")
+
+
+def _target_digest(value: object) -> str:
+    return hashlib.sha256(jcs(value)).hexdigest()
+
+
+def transaction_targets(bundle: Bundle) -> list[dict[str, str]]:
+    """Expand 46 ES + 18 saved-object + space + role identities to 66 targets."""
+    es_kinds = {"component_templates": "component-template", "index_templates": "index-template",
+                "pipelines": "ingest-pipeline", "security_roles": "security-role",
+                "transforms": "transform"}
+    targets: dict[str, str] = {}
+
+    def add(key: str, semantic: object) -> None:
+        digest = _target_digest(semantic)
+        prior = targets.setdefault(key, digest)
+        if prior != digest:
+            raise InputError("duplicate expanded target differs")
+
+    for asset in bundle.assets:
+        if asset.kind in es_kinds:
+            add("es/" + es_kinds[asset.kind] + "/" + _v2_quote(asset.name),
+                parse_json(stamped_asset(asset).data, asset.path))
+        elif asset.kind == "kibana_spaces":
+            add("kibana/rigsignal/space/" + _v2_quote(asset.name), parse_json(asset.data, asset.path))
+        elif asset.kind == "kibana_roles":
+            add("kibana/default/role/" + _v2_quote(asset.name), parse_json(asset.data, asset.path))
+        elif asset.kind == "dashboard":
+            for line in asset.data.decode("utf-8").splitlines():
+                if not line.strip():
+                    continue
+                saved = parse_json(line.encode("utf-8"), asset.path)
+                if not isinstance(saved, dict) or not isinstance(saved.get("type"), str) or not isinstance(saved.get("id"), str):
+                    raise InputError("dashboard object is invalid")
+                space = dashboard_target_space(asset)
+                semantic = {key: saved[key] for key in ("attributes", "references") if key in saved}
+                semantic["references"] = semantic.get("references", [])
+                add("kibana/" + _v2_quote(space) + "/" + _v2_quote(saved["type"]) + "/" +
+                    _v2_quote(saved["id"]), semantic)
+    result = [{"digest": digest, "key": key} for key, digest in targets.items()]
+    result.sort(key=lambda item: item["key"].encode("utf-8"))
+    if len(result) != 66:
+        raise InputError("expanded transaction target accounting is invalid")
+    return result
+
+
+def canonical_https_origin(value: str, flag: str) -> str:
+    """Return the redaction-safe, comparison-safe HTTPS origin spelling."""
+    try:
+        parsed = urllib.parse.urlsplit(value)
+        port = parsed.port
+    except ValueError as error:
+        raise InputError(f"{flag} must be an HTTPS origin") from error
+    if (not isinstance(value, str) or parsed.scheme.lower() != "https" or not parsed.netloc
+            or parsed.username is not None or parsed.password is not None or parsed.query or parsed.fragment
+            or parsed.path not in ("", "/") or parsed.hostname is None):
+        raise InputError(f"{flag} must be an HTTPS origin")
+    host = parsed.hostname
+    if "%" in host:
+        raise InputError(f"{flag} must be an HTTPS origin")
+    try:
+        import ipaddress
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        try:
+            canonical_host = host.encode("idna").decode("ascii").lower()
+        except UnicodeError as error:
+            raise InputError(f"{flag} must be an HTTPS origin") from error
+        if not canonical_host:
+            raise InputError(f"{flag} must be an HTTPS origin")
+    else:
+        canonical_host = str(address)
+        if address.version == 6:
+            canonical_host = "[" + canonical_host + "]"
+    if port is not None and not 1 <= port <= 65535:
+        raise InputError(f"{flag} must be an HTTPS origin")
+    return "https://" + canonical_host + ("" if port in (None, 443) else ":" + str(port))
+
+
+def transaction_binding(bundle: Bundle, cluster: str, kibana_origin: str, archive_sha256: str) -> dict:
+    """Construct the immutable binding after archive snapshot and remote binding."""
+    return {"schema_version": V2_SCHEMA_VERSION, "cluster_uuid": cluster,
+            "kibana_target": {"origin": canonical_https_origin(kibana_origin, "--kibana-endpoint"),
+                              "spaces": ["default", "rigsignal"]}, "ownership_profile": "default",
+            "bundle_version": bundle.version, "source_commit": bundle.source_commit,
+            "bundle_sha256": archive_sha256, "asset_set_sha256": _target_digest(transaction_targets(bundle))}
+
+
+def _v2_common_is_valid(value: object, binding: dict, targets: list[dict[str, str]]) -> bool:
+    if not isinstance(value, dict):
+        return False
+    expected = {**binding, "targets": targets}
+    return all(value.get(key) == item for key, item in expected.items()) and value.get("schema_version") == 2
+
+
+def _v2_targets_valid(targets: object, expected: list[dict[str, str]]) -> bool:
+    if not isinstance(targets, list) or targets != expected or len(targets) != 66:
+        return False
+    return all(isinstance(item, dict) and set(item) == {"digest", "key"}
+               and valid_target_key(item["key"]) and isinstance(item["digest"], str)
+               and _V2_SHA256_RE.fullmatch(item["digest"]) for item in targets)
+
+
+def _v2_installed_valid(value: object, binding: dict, targets: list[dict[str, str]], *, predecessor: bool = False) -> bool:
+    if not isinstance(value, dict):
+        return False
+    common = {"asset_set_sha256", "bundle_sha256", "bundle_version", "cluster_uuid", "kibana_target",
+              "ownership_profile", "schema_version", "source_commit", "state", "targets"}
+    # T-REC-4 is the controlling erratum: installed records retain the
+    # completed caller obligations even though the earlier prose omitted it.
+    if set(value) != common | {"caller_obligations", "completed_at", "completed_transaction_id", "verified_target_set_sha256"}:
+        return False
+    return (value.get("state") == "installed" and _v2_common_is_valid(value, binding, targets)
+            and _v2_targets_valid(value.get("targets"), targets) and _v2_timestamp(value.get("completed_at"))
+            and value.get("caller_obligations") in ([V2_ASSET_OBLIGATION], [V2_ASSET_OBLIGATION, V2_FULL_FLOW_OBLIGATION])
+            and isinstance(value.get("completed_transaction_id"), str)
+            and _V2_TRANSACTION_RE.fullmatch(value["completed_transaction_id"]) is not None
+            and isinstance(value.get("verified_target_set_sha256"), str)
+            and _V2_SHA256_RE.fullmatch(value["verified_target_set_sha256"]) is not None)
+
+
+def validate_transaction_record(raw: bytes, binding: dict, targets: list[dict[str, str]]) -> dict:
+    """Strictly validate one byte-canonical v2 record without mutating it."""
+    value = parse_json(raw, "assets transaction record")
+    if jcs(value) != raw or not _v2_targets_valid(value.get("targets") if isinstance(value, dict) else None, targets):
+        raise InputError("assets transaction record is invalid")
+    if _v2_installed_valid(value, binding, targets):
+        return value
+    common = {"asset_set_sha256", "bundle_sha256", "bundle_version", "cluster_uuid", "kibana_target",
+              "ownership_profile", "schema_version", "source_commit", "state", "targets"}
+    required = common | {"caller_obligations", "created_at", "possible_mutation", "predecessor", "progress", "transaction_id"}
+    if not isinstance(value, dict) or set(value) != required or value.get("state") != "installing" or not _v2_common_is_valid(value, binding, targets):
+        raise InputError("assets transaction record is invalid")
+    obligations = value.get("caller_obligations")
+    if obligations not in ([V2_ASSET_OBLIGATION], [V2_ASSET_OBLIGATION, V2_FULL_FLOW_OBLIGATION]):
+        raise InputError("assets transaction record is invalid")
+    keys = [item["key"] for item in targets] + ([BUNDLE_META_TARGET_KEY] if len(obligations) == 2 else [])
+    progress = value.get("progress")
+    if (not isinstance(progress, dict) or set(progress) != set(keys)
+            or any(status not in {"planned", "write-issued", "verified"} for status in progress.values())
+            or not _v2_timestamp(value.get("created_at")) or not isinstance(value.get("possible_mutation"), bool)
+            or not isinstance(value.get("transaction_id"), str)
+            or _V2_TRANSACTION_RE.fullmatch(value["transaction_id"]) is None):
+        raise InputError("assets transaction record is invalid")
+    predecessor_value = value.get("predecessor")
+    if predecessor_value is not None and not _v2_installed_valid(predecessor_value, binding, targets, predecessor=True):
+        raise InputError("assets transaction record is invalid")
+    return value
+
+
+def new_installing_record(binding: dict, targets: list[dict[str, str]], created_at: str) -> dict:
+    value = {**binding, "state": "installing", "targets": deepcopy(targets), "transaction_id": str(uuid.uuid4()),
+             "created_at": created_at, "predecessor": None, "caller_obligations": [V2_ASSET_OBLIGATION],
+             "progress": {item["key"]: "planned" for item in targets}, "possible_mutation": False}
+    validate_transaction_record(jcs(value), binding, targets)
+    return value
+
+
+def expand_full_flow_record(record: dict) -> dict:
+    if record.get("state") != "installing" or record.get("caller_obligations") != [V2_ASSET_OBLIGATION]:
+        raise InputError("assets transaction cannot add full-flow obligation")
+    value = deepcopy(record)
+    value["caller_obligations"] = [V2_ASSET_OBLIGATION, V2_FULL_FLOW_OBLIGATION]
+    value["progress"][BUNDLE_META_TARGET_KEY] = "planned"
+    return value
+
+
+def promote_transaction_record(record: dict, completed_at: str) -> dict:
+    if record.get("state") != "installing" or any(state != "verified" for state in record.get("progress", {}).values()):
+        raise InputError("assets transaction is not fully verified")
+    common = {key: deepcopy(record[key]) for key in ("asset_set_sha256", "bundle_sha256", "bundle_version", "cluster_uuid",
+              "kibana_target", "ownership_profile", "schema_version", "source_commit", "targets")}
+    completed = {**common, "state": "installed", "caller_obligations": deepcopy(record["caller_obligations"]),
+                 "completed_transaction_id": record["transaction_id"], "completed_at": completed_at,
+                 "verified_target_set_sha256": _target_digest(record["progress"])}
+    return completed
+
+
+def default_bundle_meta_body(targets: list[dict[str, str]], version: str, source_commit: str, timestamp: str) -> bytes:
+    return jcs({"_meta": {"asset_set": targets, "bundle_version": version,
+                            "managed_by": RIGSIGNAL_MANAGED_BY, "ownership_profile": "default",
+                            "source_commit": source_commit, "timestamp": timestamp}, "template": {}})
+
+
+@dataclass
+class BundleSnapshot:
+    path: Path
+    sha256: str
+
+    def close(self) -> None:
+        try:
+            self.path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def snapshot_bundle(bundle_path: Path, directory: Path, *, parse: bool = True) -> BundleSnapshot:
+    """Copy a single no-follow opened archive to a private fsynced snapshot."""
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        source_fd = os.open(bundle_path, flags)
+        source_stat = os.fstat(source_fd)
+        if not stat.S_ISREG(source_stat.st_mode):
+            raise InputError("bundle is not a regular file")
+        fd, temporary = tempfile.mkstemp(prefix=".rigsignal-archive-", dir=directory)
+    except OSError as error:
+        raise InputError("cannot snapshot bundle") from error
+    try:
+        os.fchmod(fd, 0o600)
+        digest = hashlib.sha256()
+        with os.fdopen(source_fd, "rb", closefd=True) as source, os.fdopen(fd, "wb", closefd=True) as output:
+            while chunk := source.read(1024 * 1024):
+                digest.update(chunk); output.write(chunk)
+            output.flush(); os.fsync(output.fileno())
+        snapshot = BundleSnapshot(Path(temporary), digest.hexdigest())
+        if parse:
+            load_bundle(snapshot.path)
+        return snapshot
+    except Exception:
+        try: os.unlink(temporary)
+        except OSError: pass
+        raise
+
+
+def cleanup_snapshot_residue(directory: Path, name: str) -> None:
+    if not name.startswith(".rigsignal-") or "/" in name:
+        raise InputError("snapshot residue is invalid")
+    path = directory / name
+    try: st = path.lstat()
+    except FileNotFoundError: return
+    if (not stat.S_ISREG(st.st_mode) or stat.S_ISLNK(st.st_mode) or st.st_uid != os.geteuid() or st.st_mode & 0o077):
+        raise InputError("snapshot residue is unsafe")
+    path.unlink()
+
+
+def read_transaction_record_if_present(path: Path, binding: dict | None, targets: list[dict[str, str]] | None) -> dict | None:
+    if not path.exists(): return None
+    if binding is None or targets is None: raise InputError("transaction binding is required")
+    return validate_transaction_record(protected_regular_file(path), binding, targets)
+
+
+class AssetLockHeld(InputError):
+    pass
+
+
+class AssetTransactionLock:
+    def __init__(self, fd: int): self.fd = fd
+
+    @staticmethod
+    def lock_path() -> Path:
+        state = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local" / "state")))
+        return state / "rigsignal" / "assets" / "assets-install.lock"
+
+    @classmethod
+    def acquire(cls) -> "AssetTransactionLock":
+        path = cls.lock_path()
+        try:
+            _reject_symlinked_path(path.parent.parent)
+            path.parent.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
+            _validate_assets_marker_shared_parent(path.parent.parent)
+            path.parent.mkdir(mode=0o700, exist_ok=True); secure_root(path.parent)
+            fd = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0), 0o600)
+            os.fchmod(fd, 0o600); fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise AssetLockHeld("assets transaction lock is held") from error
+        except OSError as error:
+            raise InputError("assets transaction lock is invalid") from error
+        return cls(fd)
+
+    def close(self) -> None:
+        try: fcntl.flock(self.fd, fcntl.LOCK_UN)
+        finally: os.close(self.fd)
 
 
 def json_response(data: bytes) -> object:
