@@ -1406,18 +1406,23 @@ def asset_executor_exit_code(outcome: str, record_path: Path | None = None) -> i
 
 
 def transaction_flag_policy(caller: str, record: str, possible_mutation: bool,
-                            obligations: str, live: str, flags: str) -> tuple[str, int, int]:
+                            obligations: str, live: str, flags: str,
+                            bundle_meta_live: str = "not-applicable", *,
+                            predecessor: bool = False, active: bool | None = None) -> tuple[str, int, int]:
     """The executable v2 flag/state policy used by the conformance fixture.
 
     It is intentionally transport-free: classification must complete before a
-    mutation is selected, and callers turn ``writes == 1`` into exactly one
-    guarded primitive.  Keeping the decision here makes the generated 896-row
+    mutation is selected, and callers turn ``writes`` into guarded primitives.
+    Keeping the Step-11 dimension here makes the generated 5,824-row
     table a test oracle rather than a second planner hidden in a test helper.
     """
     if caller not in {"assets-only", "full-flow"}:
         raise InputError("assets transaction caller is invalid")
     if record not in {"N", "I-assets-pm0", "I-assets-pm1", "I-full-pm0", "I-full-pm1",
-                      "S-current-assets", "S-current-full", "S-prior-valid-direction"}:
+                      "I-with-valid-predecessor-assets-pm0", "I-with-valid-predecessor-assets-pm1",
+                      "I-with-valid-predecessor-full-pm0", "I-with-valid-predecessor-full-pm1",
+                      "S-current-assets", "S-current-full", "S-prior-valid-direction",
+                      "S-prior-full-flow-installed"}:
         raise InputError("assets transaction record class is invalid")
     if live not in {"absent:guarded-class", "absent:pipeline-or-es-role", "exact",
                     "es-stamped-divergent", "es-foreign-divergent", "kibana-divergent", "unreadable"}:
@@ -1427,28 +1432,63 @@ def transaction_flag_policy(caller: str, record: str, possible_mutation: bool,
                      "repair+upgrade+allow-downgrade"}
     if flags not in allowed_flags:
         raise InputError("assets transaction flags are invalid")
+    live_states = {"absent:guarded-class", "absent:pipeline-or-es-role", "exact",
+                   "es-stamped-divergent", "es-foreign-divergent", "kibana-divergent", "unreadable"}
+    if caller == "assets-only" and bundle_meta_live != "not-applicable":
+        raise InputError("assets-only bundle-meta state is invalid")
+    if caller == "full-flow" and bundle_meta_live not in live_states:
+        raise InputError("full-flow bundle-meta state is invalid")
+    predecessor = predecessor or "valid-predecessor" in record or record.startswith("S-prior")
+    active = record.startswith("I-") if active is None else active
     version_flags = "upgrade" in flags or "allow-downgrade" in flags
-    conflicting = "upgrade" in flags and "allow-downgrade" in flags
-    prior = record == "S-prior-valid-direction"
-    held_step11 = record.startswith("I-full") and caller == "assets-only"
-    retained = f"I[{obligations};pm={int(possible_mutation)}]" if record.startswith("I-") else record
-    complete_obligations = obligations if caller == "assets-only" else "assets-66+full-flow-step-11"
-    normal_done = f"S[{complete_obligations}]"
-    if conflicting or (version_flags and not prior):
-        return (retained if record != "N" else "N"), 0, 2
-    if prior and not version_flags:
-        return record, 0, 3
-    if live.startswith("absent:"):
-        return (retained, 0, 4) if held_step11 else (normal_done, 1, 0)
-    if live == "exact":
-        return (retained, 0, 4) if held_step11 else (normal_done, 0, 0)
-    if live == "es-stamped-divergent":
-        permitted = flags in {"repair", "repair+upgrade", "repair+allow-downgrade"} or (record == "N" and flags == "none")
-        if prior and version_flags:
-            permitted = flags in {"upgrade", "allow-downgrade", "repair+upgrade", "repair+allow-downgrade"}
-        if permitted and not held_step11:
-            return normal_done, 1, 0
-    return (retained if record != "N" else "N"), 0, (4 if possible_mutation else 3)
+    suffix = ";predecessor=valid" if predecessor else ""
+    retained = (f"I[{obligations}{suffix};pm={int(possible_mutation)}]"
+                if active else record)
+    full_obligations = "assets-66+full-flow-step-11"
+    done = f"S[{obligations if caller == 'assets-only' else full_obligations}]"
+    if possible_mutation:  # T-EXIT-1 before local version preflight.
+        return retained, 0, 4
+    # A validated predecessor reaches target classification even if both
+    # direction switches were supplied; its target predicate refuses that
+    # combination.  Non-predecessor records reject all version flags locally.
+    if version_flags and not predecessor:
+        return retained if record != "N" else "N", 0, 2
+    if predecessor and not version_flags:
+        return retained, 0, 3
+    if caller == "assets-only" and active and obligations == full_obligations:
+        return retained, 0, 3
+    if caller == "assets-only" and record == "S-current-full":
+        return record, 0, 0
+
+    def target(live_state: str) -> tuple[int, int]:
+        if live_state.startswith("absent:"):
+            return 1, 0
+        if live_state == "exact":
+            return 0, 0
+        if live_state == "es-stamped-divergent":
+            permitted = flags in {"repair", "repair+upgrade", "repair+allow-downgrade"}
+            permitted |= record == "N" and flags == "none"
+            if predecessor and version_flags:
+                permitted = flags in {"upgrade", "allow-downgrade", "repair+upgrade", "repair+allow-downgrade"}
+            return (1, 0) if permitted else (0, 3)
+        return 0, 3
+
+    ordinary_writes, ordinary_exit = target(live)
+    if caller == "assets-only":
+        return (retained, 0, ordinary_exit) if ordinary_exit else (done, ordinary_writes, 0)
+    meta_writes, meta_exit = target(bundle_meta_live)
+    if meta_exit:
+        return retained, 0, meta_exit
+    if ordinary_exit:
+        if meta_writes:
+            # Step 11 is published before the later ordinary-target refusal.
+            # It therefore extends an assets-only obligation into the full
+            # obligation; an already-full record retains its predecessor.
+            uncertain = (f"I[{full_obligations};pm=1]" if obligations != full_obligations
+                         else f"I[{obligations}{suffix};pm=1]")
+            return uncertain, 1, 4
+        return retained, 0, ordinary_exit
+    return done, meta_writes + ordinary_writes, 0
 
 
 def _v2_common_is_valid(value: object, binding: dict, targets: list[dict[str, str]]) -> bool:
@@ -2140,6 +2180,12 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
             record = _migrate_private_v1_record(record_path, bundle, binding, targets,
                                                 es_url, kb_url, authorization, adapter,
                                                 full_flow=full_flow)
+        # The initial no-record barrier is the one case where a stamped ES
+        # divergence is a create-time reconciliation.  On a resumed/current
+        # transaction it is a refusal until ``--repair`` is explicit.  This
+        # is the engine counterpart of corrected table rows such as
+        # I-assets-pm0/es-stamped-divergent/none (T-FLAG-3).
+        started_without_record = record is None
         # Owner ratification 2 is absolute (T-EXIT-1): a persisted possible
         # mutation is never under-reported, even when the current command has
         # invalid flags or another local preflight refusal.  This is still
@@ -2210,6 +2256,8 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
                 raise AssetTransactionRefusal("asset target differs")
             if state == "owned-divergent" and spec[0].startswith("kibana/"):
                 raise AssetTransactionRefusal("Kibana target differs")
+            if state == "owned-divergent" and not (repair or started_without_record):
+                raise AssetTransactionRefusal("stamped ES reconciliation requires --repair")
             if record["state"] == "installed":
                 fault("before-installed-demotion")
                 record = demote_installed_transaction(record, _transaction_now())

@@ -379,10 +379,12 @@ class V2GuardedPrimitiveTests(RecordFixtures):
 
 
 class CompletionWaveTests(unittest.TestCase):
-    """Executable completion checks for Stage 2d's remaining manifest IDs."""
+    """Executable completion checks for Stage 2k's remaining manifest IDs."""
     FLAG_FIXTURE = ROOT / "tools/tests/fixtures/rigsignal-flag-state-table.md"
-    FLAG_SHA256 = "d8c74dd10ab44aec327a2492de91114ffec1ae7ab6ad46215bc2e36de76e42ac"
-    FLAG_ROW = re.compile(r"^\| (assets-only|full-flow) \| ([^|]+?) \| ([^|]+?) \| ([^|]+?) \| ([^|]+?) \| ([0-9]+) \| ([0-9]+) \|$")
+    FLAG_DATA_SHA256 = "cb35643cd06e0c9438a37f1e84d8d28d6ebe2fc744bdfeec5a129d855b90197a"
+    FLAG_ROW = re.compile(
+        r"^\| (assets-only|full-flow) \| ([^|]+?) \| ([^|]+?) \| ([^|]+?) \| "
+        r"([^|]+?) \| ([^|]+?) \| ([0-9]+) \| ([0-9]+) \|$")
 
     _CHILD_EXECUTOR = r'''
 import importlib.util, json, os
@@ -598,32 +600,35 @@ print(outcome)
         source = (ROOT / "tools/install_assets.py").read_text(encoding="utf-8")
         self.assertGreaterEqual(source.count('asset_executor_exit_code("halt",'), 2)
 
-    def test_t_flag_1_through_4_generated_896_row_oracle(self):
-        """T-FLAG-1..4: parse every vendored row and drive the policy engine."""
+    def test_t_flag_1_through_4_generated_5824_row_oracle(self):
+        """T-FLAG-1..4: every vendored corrected-table row reaches the policy."""
         raw = self.FLAG_FIXTURE.read_bytes()
-        self.assertEqual(hashlib.sha256(raw).hexdigest(), self.FLAG_SHA256)
         generated = subprocess.run(
             ["python3", "/home/dev/coding/Workflow/projects/RigSignal/tasks/idempotency-2026-08-04/gen_flag_table.py"],
             text=True, capture_output=True, check=True).stdout
-        self.assertIn(generated, raw.decode("utf-8"))
+        self.assertEqual(raw.decode("utf-8").strip(), generated.strip())
         rows = []
         for line in raw.decode("utf-8").splitlines():
             match = self.FLAG_ROW.match(line)
             if match:
                 rows.append(tuple(item.strip() for item in match.groups()))
-        self.assertEqual(len(rows), 896)
+        self.assertEqual(len(rows), 5824)
+        self.assertEqual(hashlib.sha256("\n".join(
+            line for line in raw.decode("utf-8").splitlines()
+            if line.startswith("| ") and not line.startswith("| Caller")
+        ).encode("utf-8")).hexdigest(), self.FLAG_DATA_SHA256)
         writes_seen = 0
-        for caller, record, live, flags, expected_record, expected_writes, expected_exit in rows:
+        for caller, record, ordinary, bundle_meta, flags, expected_record, expected_writes, expected_exit in rows:
             possible_mutation = record.endswith("pm1")
             obligations = "assets-66+full-flow-step-11" if "full" in record else "assets-66"
             actual_record, actual_writes, actual_exit = INSTALL.transaction_flag_policy(
-                caller, record, possible_mutation, obligations, live, flags)
-            with self.subTest(caller=caller, record=record, live=live, flags=flags):
+                caller, record, possible_mutation, obligations, ordinary, flags, bundle_meta)
+            with self.subTest(caller=caller, record=record, ordinary=ordinary,
+                              bundle_meta=bundle_meta, flags=flags):
                 self.assertEqual((actual_record, str(actual_writes), str(actual_exit)),
                                  (expected_record, expected_writes, expected_exit))
-                # Mutation sentinel: the policy is permitted to select at
-                # most one guarded write and no refusal can reach transport.
-                self.assertIn(actual_writes, (0, 1))
+                # A full-flow row may write one ordinary target plus Step 11.
+                self.assertIn(actual_writes, (0, 1, 2))
             writes_seen += actual_writes
         self.assertGreater(writes_seen, 0)
 
@@ -692,6 +697,28 @@ print(outcome)
                 self.assertEqual(result["status"], 2)
                 self.assertEqual(result["writes"], [])
                 self.assertFalse(result["path_exists"])
+
+    def test_t_flag_3_resumed_stamped_es_requires_repair_through_main(self):
+        """Corrected-table I-assets-pm0 stamped-ES rows use the real route."""
+        key = INSTALL.transaction_targets(INSTALL.load_source())[0]["key"]
+        for flags, expected_status, expected_writes in (((), 3, 0), (("repair",), 0, 1)):
+            with self.subTest(flags=flags):
+                result = self._run_scenario(
+                    "assets-only", "I-assets-pm0", {"states": {key: "owned-divergent"}}, flags)
+                self.assertEqual(result["exit_code"], expected_status)
+                self.assertEqual(len(result["operations"]), expected_writes)
+                self.assertEqual(result["record"]["state"], "installed" if expected_status == 0 else "installing")
+
+    def test_t_exit_4_real_cli_and_launcher_wait_status_anchor(self):
+        """The packaged launcher subprocess preserves all engine contract codes."""
+        cli = subprocess.run([sys.executable, str(ROOT / "tools/install_assets.py"), "--unknown-flag"],
+                             text=True, capture_output=True, check=False)
+        self.assertEqual(cli.returncode, 2)
+        self.assertIn("usage: install_assets.py", cli.stderr)
+        launcher = subprocess.run(["bash", str(ROOT / "packaging/tests/test-assets-launcher.sh")],
+                                  cwd=ROOT, text=True, capture_output=True, check=False)
+        self.assertEqual(launcher.returncode, 0, launcher.stdout + launcher.stderr)
+        self.assertIn("rigsignal assets launcher: PASS", launcher.stdout)
 
     def test_r_a1_persisted_possible_mutation_precedes_invalid_version_flags(self):
         """Ratification 2: durable uncertainty wins before flag preflight."""

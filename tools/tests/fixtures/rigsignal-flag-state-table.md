@@ -1,911 +1,5832 @@
-# Generated RigSignal flag/state oracle
-
-This fixture is generated from the frozen task generator:
-`python3 /home/dev/coding/Workflow/projects/RigSignal/tasks/idempotency-2026-08-04/gen_flag_table.py`.
-Tests pin its SHA-256 and parse every row; do not hand-edit it.
-
 <!-- BEGIN GENERATED FLAG-STATE TABLE -->
-**Generator:** `python3 gen_flag_table.py --manifest TEST-MANIFEST.md`.  **Cross product:** 2 callers × 8 record states × 7 live states × 8 flag sets = **896 rows**.  Pipeline/ES-role absence rows are the clean detector-negative branch; T-RECON-5/7 own every detector-positive halt.
+**Generator:** `python3 gen_flag_table.py --manifest TEST-MANIFEST.md`.  **Cross product:** 13 record states × 7 ordinary live states × 8 flag sets × (1 assets-only Step-11 state + 7 full-flow Step-11 states) = **5824 rows**.  Pipeline/ES-role absence rows are the clean detector-negative branch; T-RECON-5/7 own every detector-positive halt.
 
-| Caller | Record state | Live state | Flags | Expected next record | Remote writes | Exit |
-|---|---|---|---|---|---:|---:|
-| assets-only | N | absent:guarded-class | none | S[assets-66] | 1 | 0 |
-| assets-only | N | absent:guarded-class | repair | S[assets-66] | 1 | 0 |
-| assets-only | N | absent:guarded-class | upgrade | N | 0 | 2 |
-| assets-only | N | absent:guarded-class | allow-downgrade | N | 0 | 2 |
-| assets-only | N | absent:guarded-class | repair+upgrade | N | 0 | 2 |
-| assets-only | N | absent:guarded-class | repair+allow-downgrade | N | 0 | 2 |
-| assets-only | N | absent:guarded-class | upgrade+allow-downgrade | N | 0 | 2 |
-| assets-only | N | absent:guarded-class | repair+upgrade+allow-downgrade | N | 0 | 2 |
-| assets-only | N | absent:pipeline-or-es-role | none | S[assets-66] | 1 | 0 |
-| assets-only | N | absent:pipeline-or-es-role | repair | S[assets-66] | 1 | 0 |
-| assets-only | N | absent:pipeline-or-es-role | upgrade | N | 0 | 2 |
-| assets-only | N | absent:pipeline-or-es-role | allow-downgrade | N | 0 | 2 |
-| assets-only | N | absent:pipeline-or-es-role | repair+upgrade | N | 0 | 2 |
-| assets-only | N | absent:pipeline-or-es-role | repair+allow-downgrade | N | 0 | 2 |
-| assets-only | N | absent:pipeline-or-es-role | upgrade+allow-downgrade | N | 0 | 2 |
-| assets-only | N | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | N | 0 | 2 |
-| assets-only | N | exact | none | S[assets-66] | 0 | 0 |
-| assets-only | N | exact | repair | S[assets-66] | 0 | 0 |
-| assets-only | N | exact | upgrade | N | 0 | 2 |
-| assets-only | N | exact | allow-downgrade | N | 0 | 2 |
-| assets-only | N | exact | repair+upgrade | N | 0 | 2 |
-| assets-only | N | exact | repair+allow-downgrade | N | 0 | 2 |
-| assets-only | N | exact | upgrade+allow-downgrade | N | 0 | 2 |
-| assets-only | N | exact | repair+upgrade+allow-downgrade | N | 0 | 2 |
-| assets-only | N | es-stamped-divergent | none | S[assets-66] | 1 | 0 |
-| assets-only | N | es-stamped-divergent | repair | S[assets-66] | 1 | 0 |
-| assets-only | N | es-stamped-divergent | upgrade | N | 0 | 2 |
-| assets-only | N | es-stamped-divergent | allow-downgrade | N | 0 | 2 |
-| assets-only | N | es-stamped-divergent | repair+upgrade | N | 0 | 2 |
-| assets-only | N | es-stamped-divergent | repair+allow-downgrade | N | 0 | 2 |
-| assets-only | N | es-stamped-divergent | upgrade+allow-downgrade | N | 0 | 2 |
-| assets-only | N | es-stamped-divergent | repair+upgrade+allow-downgrade | N | 0 | 2 |
-| assets-only | N | es-foreign-divergent | none | N | 0 | 3 |
-| assets-only | N | es-foreign-divergent | repair | N | 0 | 3 |
-| assets-only | N | es-foreign-divergent | upgrade | N | 0 | 2 |
-| assets-only | N | es-foreign-divergent | allow-downgrade | N | 0 | 2 |
-| assets-only | N | es-foreign-divergent | repair+upgrade | N | 0 | 2 |
-| assets-only | N | es-foreign-divergent | repair+allow-downgrade | N | 0 | 2 |
-| assets-only | N | es-foreign-divergent | upgrade+allow-downgrade | N | 0 | 2 |
-| assets-only | N | es-foreign-divergent | repair+upgrade+allow-downgrade | N | 0 | 2 |
-| assets-only | N | kibana-divergent | none | N | 0 | 3 |
-| assets-only | N | kibana-divergent | repair | N | 0 | 3 |
-| assets-only | N | kibana-divergent | upgrade | N | 0 | 2 |
-| assets-only | N | kibana-divergent | allow-downgrade | N | 0 | 2 |
-| assets-only | N | kibana-divergent | repair+upgrade | N | 0 | 2 |
-| assets-only | N | kibana-divergent | repair+allow-downgrade | N | 0 | 2 |
-| assets-only | N | kibana-divergent | upgrade+allow-downgrade | N | 0 | 2 |
-| assets-only | N | kibana-divergent | repair+upgrade+allow-downgrade | N | 0 | 2 |
-| assets-only | N | unreadable | none | N | 0 | 3 |
-| assets-only | N | unreadable | repair | N | 0 | 3 |
-| assets-only | N | unreadable | upgrade | N | 0 | 2 |
-| assets-only | N | unreadable | allow-downgrade | N | 0 | 2 |
-| assets-only | N | unreadable | repair+upgrade | N | 0 | 2 |
-| assets-only | N | unreadable | repair+allow-downgrade | N | 0 | 2 |
-| assets-only | N | unreadable | upgrade+allow-downgrade | N | 0 | 2 |
-| assets-only | N | unreadable | repair+upgrade+allow-downgrade | N | 0 | 2 |
-| assets-only | I-assets-pm0 | absent:guarded-class | none | S[assets-66] | 1 | 0 |
-| assets-only | I-assets-pm0 | absent:guarded-class | repair | S[assets-66] | 1 | 0 |
-| assets-only | I-assets-pm0 | absent:guarded-class | upgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | absent:guarded-class | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | absent:guarded-class | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | absent:guarded-class | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | absent:guarded-class | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | absent:pipeline-or-es-role | none | S[assets-66] | 1 | 0 |
-| assets-only | I-assets-pm0 | absent:pipeline-or-es-role | repair | S[assets-66] | 1 | 0 |
-| assets-only | I-assets-pm0 | absent:pipeline-or-es-role | upgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | absent:pipeline-or-es-role | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | absent:pipeline-or-es-role | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | exact | none | S[assets-66] | 0 | 0 |
-| assets-only | I-assets-pm0 | exact | repair | S[assets-66] | 0 | 0 |
-| assets-only | I-assets-pm0 | exact | upgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | exact | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | exact | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | exact | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | exact | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | exact | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | es-stamped-divergent | none | I[assets-66;pm=0] | 0 | 3 |
-| assets-only | I-assets-pm0 | es-stamped-divergent | repair | S[assets-66] | 1 | 0 |
-| assets-only | I-assets-pm0 | es-stamped-divergent | upgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | es-stamped-divergent | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | es-stamped-divergent | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | es-stamped-divergent | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | es-foreign-divergent | none | I[assets-66;pm=0] | 0 | 3 |
-| assets-only | I-assets-pm0 | es-foreign-divergent | repair | I[assets-66;pm=0] | 0 | 3 |
-| assets-only | I-assets-pm0 | es-foreign-divergent | upgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | es-foreign-divergent | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | es-foreign-divergent | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | es-foreign-divergent | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | kibana-divergent | none | I[assets-66;pm=0] | 0 | 3 |
-| assets-only | I-assets-pm0 | kibana-divergent | repair | I[assets-66;pm=0] | 0 | 3 |
-| assets-only | I-assets-pm0 | kibana-divergent | upgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | kibana-divergent | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | kibana-divergent | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | kibana-divergent | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | kibana-divergent | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | unreadable | none | I[assets-66;pm=0] | 0 | 3 |
-| assets-only | I-assets-pm0 | unreadable | repair | I[assets-66;pm=0] | 0 | 3 |
-| assets-only | I-assets-pm0 | unreadable | upgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | unreadable | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | unreadable | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | unreadable | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | unreadable | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm0 | unreadable | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| assets-only | I-assets-pm1 | absent:guarded-class | none | S[assets-66] | 1 | 0 |
-| assets-only | I-assets-pm1 | absent:guarded-class | repair | S[assets-66] | 1 | 0 |
-| assets-only | I-assets-pm1 | absent:guarded-class | upgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | absent:guarded-class | allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | absent:guarded-class | repair+upgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | absent:guarded-class | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | absent:guarded-class | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | absent:pipeline-or-es-role | none | S[assets-66] | 1 | 0 |
-| assets-only | I-assets-pm1 | absent:pipeline-or-es-role | repair | S[assets-66] | 1 | 0 |
-| assets-only | I-assets-pm1 | absent:pipeline-or-es-role | upgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | absent:pipeline-or-es-role | allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | absent:pipeline-or-es-role | repair+upgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | exact | none | S[assets-66] | 0 | 0 |
-| assets-only | I-assets-pm1 | exact | repair | S[assets-66] | 0 | 0 |
-| assets-only | I-assets-pm1 | exact | upgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | exact | allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | exact | repair+upgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | exact | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | exact | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | exact | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | es-stamped-divergent | none | I[assets-66;pm=1] | 0 | 4 |
-| assets-only | I-assets-pm1 | es-stamped-divergent | repair | S[assets-66] | 1 | 0 |
-| assets-only | I-assets-pm1 | es-stamped-divergent | upgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | es-stamped-divergent | allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | es-stamped-divergent | repair+upgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | es-stamped-divergent | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | es-foreign-divergent | none | I[assets-66;pm=1] | 0 | 4 |
-| assets-only | I-assets-pm1 | es-foreign-divergent | repair | I[assets-66;pm=1] | 0 | 4 |
-| assets-only | I-assets-pm1 | es-foreign-divergent | upgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | es-foreign-divergent | allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | es-foreign-divergent | repair+upgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | es-foreign-divergent | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | kibana-divergent | none | I[assets-66;pm=1] | 0 | 4 |
-| assets-only | I-assets-pm1 | kibana-divergent | repair | I[assets-66;pm=1] | 0 | 4 |
-| assets-only | I-assets-pm1 | kibana-divergent | upgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | kibana-divergent | allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | kibana-divergent | repair+upgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | kibana-divergent | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | kibana-divergent | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | unreadable | none | I[assets-66;pm=1] | 0 | 4 |
-| assets-only | I-assets-pm1 | unreadable | repair | I[assets-66;pm=1] | 0 | 4 |
-| assets-only | I-assets-pm1 | unreadable | upgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | unreadable | allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | unreadable | repair+upgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | unreadable | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | unreadable | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-assets-pm1 | unreadable | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| assets-only | I-full-pm0 | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 4 |
-| assets-only | I-full-pm0 | absent:guarded-class | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 4 |
-| assets-only | I-full-pm0 | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 4 |
-| assets-only | I-full-pm0 | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 4 |
-| assets-only | I-full-pm0 | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | exact | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 4 |
-| assets-only | I-full-pm0 | exact | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 4 |
-| assets-only | I-full-pm0 | exact | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | exact | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | exact | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | es-stamped-divergent | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
-| assets-only | I-full-pm0 | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
-| assets-only | I-full-pm0 | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | es-foreign-divergent | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
-| assets-only | I-full-pm0 | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
-| assets-only | I-full-pm0 | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | kibana-divergent | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
-| assets-only | I-full-pm0 | kibana-divergent | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
-| assets-only | I-full-pm0 | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | unreadable | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
-| assets-only | I-full-pm0 | unreadable | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
-| assets-only | I-full-pm0 | unreadable | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm0 | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| assets-only | I-full-pm1 | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
-| assets-only | I-full-pm1 | absent:guarded-class | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
-| assets-only | I-full-pm1 | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
-| assets-only | I-full-pm1 | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
-| assets-only | I-full-pm1 | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | exact | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
-| assets-only | I-full-pm1 | exact | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
-| assets-only | I-full-pm1 | exact | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | exact | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | exact | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | es-stamped-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
-| assets-only | I-full-pm1 | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
-| assets-only | I-full-pm1 | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | es-foreign-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
-| assets-only | I-full-pm1 | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
-| assets-only | I-full-pm1 | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | kibana-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
-| assets-only | I-full-pm1 | kibana-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
-| assets-only | I-full-pm1 | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | unreadable | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
-| assets-only | I-full-pm1 | unreadable | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
-| assets-only | I-full-pm1 | unreadable | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | I-full-pm1 | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| assets-only | S-current-assets | absent:guarded-class | none | S[assets-66] | 1 | 0 |
-| assets-only | S-current-assets | absent:guarded-class | repair | S[assets-66] | 1 | 0 |
-| assets-only | S-current-assets | absent:guarded-class | upgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | absent:guarded-class | allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | absent:guarded-class | repair+upgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | absent:guarded-class | repair+allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | absent:guarded-class | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | absent:guarded-class | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | absent:pipeline-or-es-role | none | S[assets-66] | 1 | 0 |
-| assets-only | S-current-assets | absent:pipeline-or-es-role | repair | S[assets-66] | 1 | 0 |
-| assets-only | S-current-assets | absent:pipeline-or-es-role | upgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | absent:pipeline-or-es-role | allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | absent:pipeline-or-es-role | repair+upgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | absent:pipeline-or-es-role | repair+allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | absent:pipeline-or-es-role | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | exact | none | S[assets-66] | 0 | 0 |
-| assets-only | S-current-assets | exact | repair | S[assets-66] | 0 | 0 |
-| assets-only | S-current-assets | exact | upgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | exact | allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | exact | repair+upgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | exact | repair+allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | exact | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | exact | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | es-stamped-divergent | none | S-current-assets | 0 | 3 |
-| assets-only | S-current-assets | es-stamped-divergent | repair | S[assets-66] | 1 | 0 |
-| assets-only | S-current-assets | es-stamped-divergent | upgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | es-stamped-divergent | allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | es-stamped-divergent | repair+upgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | es-stamped-divergent | repair+allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | es-stamped-divergent | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | es-stamped-divergent | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | es-foreign-divergent | none | S-current-assets | 0 | 3 |
-| assets-only | S-current-assets | es-foreign-divergent | repair | S-current-assets | 0 | 3 |
-| assets-only | S-current-assets | es-foreign-divergent | upgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | es-foreign-divergent | allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | es-foreign-divergent | repair+upgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | es-foreign-divergent | repair+allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | es-foreign-divergent | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | es-foreign-divergent | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | kibana-divergent | none | S-current-assets | 0 | 3 |
-| assets-only | S-current-assets | kibana-divergent | repair | S-current-assets | 0 | 3 |
-| assets-only | S-current-assets | kibana-divergent | upgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | kibana-divergent | allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | kibana-divergent | repair+upgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | kibana-divergent | repair+allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | kibana-divergent | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | kibana-divergent | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | unreadable | none | S-current-assets | 0 | 3 |
-| assets-only | S-current-assets | unreadable | repair | S-current-assets | 0 | 3 |
-| assets-only | S-current-assets | unreadable | upgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | unreadable | allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | unreadable | repair+upgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | unreadable | repair+allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | unreadable | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-assets | unreadable | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| assets-only | S-current-full | absent:guarded-class | none | S[assets-66+full-flow-step-11] | 1 | 0 |
-| assets-only | S-current-full | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
-| assets-only | S-current-full | absent:guarded-class | upgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | absent:guarded-class | allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | absent:guarded-class | repair+upgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | absent:guarded-class | repair+allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | absent:guarded-class | upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | absent:guarded-class | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | absent:pipeline-or-es-role | none | S[assets-66+full-flow-step-11] | 1 | 0 |
-| assets-only | S-current-full | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
-| assets-only | S-current-full | absent:pipeline-or-es-role | upgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | absent:pipeline-or-es-role | allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | absent:pipeline-or-es-role | repair+upgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | absent:pipeline-or-es-role | repair+allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | absent:pipeline-or-es-role | upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | exact | none | S[assets-66+full-flow-step-11] | 0 | 0 |
-| assets-only | S-current-full | exact | repair | S[assets-66+full-flow-step-11] | 0 | 0 |
-| assets-only | S-current-full | exact | upgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | exact | allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | exact | repair+upgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | exact | repair+allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | exact | upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | exact | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | es-stamped-divergent | none | S-current-full | 0 | 3 |
-| assets-only | S-current-full | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
-| assets-only | S-current-full | es-stamped-divergent | upgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | es-stamped-divergent | allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | es-stamped-divergent | repair+upgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | es-stamped-divergent | repair+allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | es-stamped-divergent | upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | es-stamped-divergent | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | es-foreign-divergent | none | S-current-full | 0 | 3 |
-| assets-only | S-current-full | es-foreign-divergent | repair | S-current-full | 0 | 3 |
-| assets-only | S-current-full | es-foreign-divergent | upgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | es-foreign-divergent | allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | es-foreign-divergent | repair+upgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | es-foreign-divergent | repair+allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | es-foreign-divergent | upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | es-foreign-divergent | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | kibana-divergent | none | S-current-full | 0 | 3 |
-| assets-only | S-current-full | kibana-divergent | repair | S-current-full | 0 | 3 |
-| assets-only | S-current-full | kibana-divergent | upgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | kibana-divergent | allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | kibana-divergent | repair+upgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | kibana-divergent | repair+allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | kibana-divergent | upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | kibana-divergent | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | unreadable | none | S-current-full | 0 | 3 |
-| assets-only | S-current-full | unreadable | repair | S-current-full | 0 | 3 |
-| assets-only | S-current-full | unreadable | upgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | unreadable | allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | unreadable | repair+upgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | unreadable | repair+allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | unreadable | upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-current-full | unreadable | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| assets-only | S-prior-valid-direction | absent:guarded-class | none | S-prior-valid-direction | 0 | 3 |
-| assets-only | S-prior-valid-direction | absent:guarded-class | repair | S-prior-valid-direction | 0 | 3 |
-| assets-only | S-prior-valid-direction | absent:guarded-class | upgrade | S[assets-66] | 1 | 0 |
-| assets-only | S-prior-valid-direction | absent:guarded-class | allow-downgrade | S[assets-66] | 1 | 0 |
-| assets-only | S-prior-valid-direction | absent:guarded-class | repair+upgrade | S[assets-66] | 1 | 0 |
-| assets-only | S-prior-valid-direction | absent:guarded-class | repair+allow-downgrade | S[assets-66] | 1 | 0 |
-| assets-only | S-prior-valid-direction | absent:guarded-class | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
-| assets-only | S-prior-valid-direction | absent:guarded-class | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
-| assets-only | S-prior-valid-direction | absent:pipeline-or-es-role | none | S-prior-valid-direction | 0 | 3 |
-| assets-only | S-prior-valid-direction | absent:pipeline-or-es-role | repair | S-prior-valid-direction | 0 | 3 |
-| assets-only | S-prior-valid-direction | absent:pipeline-or-es-role | upgrade | S[assets-66] | 1 | 0 |
-| assets-only | S-prior-valid-direction | absent:pipeline-or-es-role | allow-downgrade | S[assets-66] | 1 | 0 |
-| assets-only | S-prior-valid-direction | absent:pipeline-or-es-role | repair+upgrade | S[assets-66] | 1 | 0 |
-| assets-only | S-prior-valid-direction | absent:pipeline-or-es-role | repair+allow-downgrade | S[assets-66] | 1 | 0 |
-| assets-only | S-prior-valid-direction | absent:pipeline-or-es-role | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
-| assets-only | S-prior-valid-direction | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
-| assets-only | S-prior-valid-direction | exact | none | S-prior-valid-direction | 0 | 3 |
-| assets-only | S-prior-valid-direction | exact | repair | S-prior-valid-direction | 0 | 3 |
-| assets-only | S-prior-valid-direction | exact | upgrade | S[assets-66] | 0 | 0 |
-| assets-only | S-prior-valid-direction | exact | allow-downgrade | S[assets-66] | 0 | 0 |
-| assets-only | S-prior-valid-direction | exact | repair+upgrade | S[assets-66] | 0 | 0 |
-| assets-only | S-prior-valid-direction | exact | repair+allow-downgrade | S[assets-66] | 0 | 0 |
-| assets-only | S-prior-valid-direction | exact | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
-| assets-only | S-prior-valid-direction | exact | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
-| assets-only | S-prior-valid-direction | es-stamped-divergent | none | S-prior-valid-direction | 0 | 3 |
-| assets-only | S-prior-valid-direction | es-stamped-divergent | repair | S-prior-valid-direction | 0 | 3 |
-| assets-only | S-prior-valid-direction | es-stamped-divergent | upgrade | S[assets-66] | 1 | 0 |
-| assets-only | S-prior-valid-direction | es-stamped-divergent | allow-downgrade | S[assets-66] | 1 | 0 |
-| assets-only | S-prior-valid-direction | es-stamped-divergent | repair+upgrade | S[assets-66] | 1 | 0 |
-| assets-only | S-prior-valid-direction | es-stamped-divergent | repair+allow-downgrade | S[assets-66] | 1 | 0 |
-| assets-only | S-prior-valid-direction | es-stamped-divergent | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
-| assets-only | S-prior-valid-direction | es-stamped-divergent | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
-| assets-only | S-prior-valid-direction | es-foreign-divergent | none | S-prior-valid-direction | 0 | 3 |
-| assets-only | S-prior-valid-direction | es-foreign-divergent | repair | S-prior-valid-direction | 0 | 3 |
-| assets-only | S-prior-valid-direction | es-foreign-divergent | upgrade | S-prior-valid-direction | 0 | 3 |
-| assets-only | S-prior-valid-direction | es-foreign-divergent | allow-downgrade | S-prior-valid-direction | 0 | 3 |
-| assets-only | S-prior-valid-direction | es-foreign-divergent | repair+upgrade | S-prior-valid-direction | 0 | 3 |
-| assets-only | S-prior-valid-direction | es-foreign-divergent | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
-| assets-only | S-prior-valid-direction | es-foreign-divergent | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
-| assets-only | S-prior-valid-direction | es-foreign-divergent | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
-| assets-only | S-prior-valid-direction | kibana-divergent | none | S-prior-valid-direction | 0 | 3 |
-| assets-only | S-prior-valid-direction | kibana-divergent | repair | S-prior-valid-direction | 0 | 3 |
-| assets-only | S-prior-valid-direction | kibana-divergent | upgrade | S-prior-valid-direction | 0 | 3 |
-| assets-only | S-prior-valid-direction | kibana-divergent | allow-downgrade | S-prior-valid-direction | 0 | 3 |
-| assets-only | S-prior-valid-direction | kibana-divergent | repair+upgrade | S-prior-valid-direction | 0 | 3 |
-| assets-only | S-prior-valid-direction | kibana-divergent | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
-| assets-only | S-prior-valid-direction | kibana-divergent | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
-| assets-only | S-prior-valid-direction | kibana-divergent | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
-| assets-only | S-prior-valid-direction | unreadable | none | S-prior-valid-direction | 0 | 3 |
-| assets-only | S-prior-valid-direction | unreadable | repair | S-prior-valid-direction | 0 | 3 |
-| assets-only | S-prior-valid-direction | unreadable | upgrade | S-prior-valid-direction | 0 | 3 |
-| assets-only | S-prior-valid-direction | unreadable | allow-downgrade | S-prior-valid-direction | 0 | 3 |
-| assets-only | S-prior-valid-direction | unreadable | repair+upgrade | S-prior-valid-direction | 0 | 3 |
-| assets-only | S-prior-valid-direction | unreadable | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
-| assets-only | S-prior-valid-direction | unreadable | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
-| assets-only | S-prior-valid-direction | unreadable | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
-| full-flow | N | absent:guarded-class | none | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | N | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | N | absent:guarded-class | upgrade | N | 0 | 2 |
-| full-flow | N | absent:guarded-class | allow-downgrade | N | 0 | 2 |
-| full-flow | N | absent:guarded-class | repair+upgrade | N | 0 | 2 |
-| full-flow | N | absent:guarded-class | repair+allow-downgrade | N | 0 | 2 |
-| full-flow | N | absent:guarded-class | upgrade+allow-downgrade | N | 0 | 2 |
-| full-flow | N | absent:guarded-class | repair+upgrade+allow-downgrade | N | 0 | 2 |
-| full-flow | N | absent:pipeline-or-es-role | none | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | N | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | N | absent:pipeline-or-es-role | upgrade | N | 0 | 2 |
-| full-flow | N | absent:pipeline-or-es-role | allow-downgrade | N | 0 | 2 |
-| full-flow | N | absent:pipeline-or-es-role | repair+upgrade | N | 0 | 2 |
-| full-flow | N | absent:pipeline-or-es-role | repair+allow-downgrade | N | 0 | 2 |
-| full-flow | N | absent:pipeline-or-es-role | upgrade+allow-downgrade | N | 0 | 2 |
-| full-flow | N | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | N | 0 | 2 |
-| full-flow | N | exact | none | S[assets-66+full-flow-step-11] | 0 | 0 |
-| full-flow | N | exact | repair | S[assets-66+full-flow-step-11] | 0 | 0 |
-| full-flow | N | exact | upgrade | N | 0 | 2 |
-| full-flow | N | exact | allow-downgrade | N | 0 | 2 |
-| full-flow | N | exact | repair+upgrade | N | 0 | 2 |
-| full-flow | N | exact | repair+allow-downgrade | N | 0 | 2 |
-| full-flow | N | exact | upgrade+allow-downgrade | N | 0 | 2 |
-| full-flow | N | exact | repair+upgrade+allow-downgrade | N | 0 | 2 |
-| full-flow | N | es-stamped-divergent | none | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | N | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | N | es-stamped-divergent | upgrade | N | 0 | 2 |
-| full-flow | N | es-stamped-divergent | allow-downgrade | N | 0 | 2 |
-| full-flow | N | es-stamped-divergent | repair+upgrade | N | 0 | 2 |
-| full-flow | N | es-stamped-divergent | repair+allow-downgrade | N | 0 | 2 |
-| full-flow | N | es-stamped-divergent | upgrade+allow-downgrade | N | 0 | 2 |
-| full-flow | N | es-stamped-divergent | repair+upgrade+allow-downgrade | N | 0 | 2 |
-| full-flow | N | es-foreign-divergent | none | N | 0 | 3 |
-| full-flow | N | es-foreign-divergent | repair | N | 0 | 3 |
-| full-flow | N | es-foreign-divergent | upgrade | N | 0 | 2 |
-| full-flow | N | es-foreign-divergent | allow-downgrade | N | 0 | 2 |
-| full-flow | N | es-foreign-divergent | repair+upgrade | N | 0 | 2 |
-| full-flow | N | es-foreign-divergent | repair+allow-downgrade | N | 0 | 2 |
-| full-flow | N | es-foreign-divergent | upgrade+allow-downgrade | N | 0 | 2 |
-| full-flow | N | es-foreign-divergent | repair+upgrade+allow-downgrade | N | 0 | 2 |
-| full-flow | N | kibana-divergent | none | N | 0 | 3 |
-| full-flow | N | kibana-divergent | repair | N | 0 | 3 |
-| full-flow | N | kibana-divergent | upgrade | N | 0 | 2 |
-| full-flow | N | kibana-divergent | allow-downgrade | N | 0 | 2 |
-| full-flow | N | kibana-divergent | repair+upgrade | N | 0 | 2 |
-| full-flow | N | kibana-divergent | repair+allow-downgrade | N | 0 | 2 |
-| full-flow | N | kibana-divergent | upgrade+allow-downgrade | N | 0 | 2 |
-| full-flow | N | kibana-divergent | repair+upgrade+allow-downgrade | N | 0 | 2 |
-| full-flow | N | unreadable | none | N | 0 | 3 |
-| full-flow | N | unreadable | repair | N | 0 | 3 |
-| full-flow | N | unreadable | upgrade | N | 0 | 2 |
-| full-flow | N | unreadable | allow-downgrade | N | 0 | 2 |
-| full-flow | N | unreadable | repair+upgrade | N | 0 | 2 |
-| full-flow | N | unreadable | repair+allow-downgrade | N | 0 | 2 |
-| full-flow | N | unreadable | upgrade+allow-downgrade | N | 0 | 2 |
-| full-flow | N | unreadable | repair+upgrade+allow-downgrade | N | 0 | 2 |
-| full-flow | I-assets-pm0 | absent:guarded-class | none | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | I-assets-pm0 | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | I-assets-pm0 | absent:guarded-class | upgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | absent:guarded-class | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | absent:guarded-class | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | absent:guarded-class | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | absent:guarded-class | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | none | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | upgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | exact | none | S[assets-66+full-flow-step-11] | 0 | 0 |
-| full-flow | I-assets-pm0 | exact | repair | S[assets-66+full-flow-step-11] | 0 | 0 |
-| full-flow | I-assets-pm0 | exact | upgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | exact | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | exact | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | exact | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | exact | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | exact | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | es-stamped-divergent | none | I[assets-66;pm=0] | 0 | 3 |
-| full-flow | I-assets-pm0 | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | I-assets-pm0 | es-stamped-divergent | upgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | es-stamped-divergent | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | es-stamped-divergent | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | es-stamped-divergent | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | es-foreign-divergent | none | I[assets-66;pm=0] | 0 | 3 |
-| full-flow | I-assets-pm0 | es-foreign-divergent | repair | I[assets-66;pm=0] | 0 | 3 |
-| full-flow | I-assets-pm0 | es-foreign-divergent | upgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | es-foreign-divergent | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | es-foreign-divergent | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | es-foreign-divergent | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | kibana-divergent | none | I[assets-66;pm=0] | 0 | 3 |
-| full-flow | I-assets-pm0 | kibana-divergent | repair | I[assets-66;pm=0] | 0 | 3 |
-| full-flow | I-assets-pm0 | kibana-divergent | upgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | kibana-divergent | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | kibana-divergent | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | kibana-divergent | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | kibana-divergent | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | unreadable | none | I[assets-66;pm=0] | 0 | 3 |
-| full-flow | I-assets-pm0 | unreadable | repair | I[assets-66;pm=0] | 0 | 3 |
-| full-flow | I-assets-pm0 | unreadable | upgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | unreadable | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | unreadable | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | unreadable | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | unreadable | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm0 | unreadable | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
-| full-flow | I-assets-pm1 | absent:guarded-class | none | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | I-assets-pm1 | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | I-assets-pm1 | absent:guarded-class | upgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | absent:guarded-class | allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | absent:guarded-class | repair+upgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | absent:guarded-class | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | absent:guarded-class | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | none | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | upgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | repair+upgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | exact | none | S[assets-66+full-flow-step-11] | 0 | 0 |
-| full-flow | I-assets-pm1 | exact | repair | S[assets-66+full-flow-step-11] | 0 | 0 |
-| full-flow | I-assets-pm1 | exact | upgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | exact | allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | exact | repair+upgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | exact | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | exact | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | exact | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | es-stamped-divergent | none | I[assets-66;pm=1] | 0 | 4 |
-| full-flow | I-assets-pm1 | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | I-assets-pm1 | es-stamped-divergent | upgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | es-stamped-divergent | allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | es-stamped-divergent | repair+upgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | es-stamped-divergent | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | es-foreign-divergent | none | I[assets-66;pm=1] | 0 | 4 |
-| full-flow | I-assets-pm1 | es-foreign-divergent | repair | I[assets-66;pm=1] | 0 | 4 |
-| full-flow | I-assets-pm1 | es-foreign-divergent | upgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | es-foreign-divergent | allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | es-foreign-divergent | repair+upgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | es-foreign-divergent | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | kibana-divergent | none | I[assets-66;pm=1] | 0 | 4 |
-| full-flow | I-assets-pm1 | kibana-divergent | repair | I[assets-66;pm=1] | 0 | 4 |
-| full-flow | I-assets-pm1 | kibana-divergent | upgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | kibana-divergent | allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | kibana-divergent | repair+upgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | kibana-divergent | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | kibana-divergent | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | unreadable | none | I[assets-66;pm=1] | 0 | 4 |
-| full-flow | I-assets-pm1 | unreadable | repair | I[assets-66;pm=1] | 0 | 4 |
-| full-flow | I-assets-pm1 | unreadable | upgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | unreadable | allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | unreadable | repair+upgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | unreadable | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | unreadable | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-assets-pm1 | unreadable | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 2 |
-| full-flow | I-full-pm0 | absent:guarded-class | none | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | I-full-pm0 | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | I-full-pm0 | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | absent:pipeline-or-es-role | none | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | I-full-pm0 | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | I-full-pm0 | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | exact | none | S[assets-66+full-flow-step-11] | 0 | 0 |
-| full-flow | I-full-pm0 | exact | repair | S[assets-66+full-flow-step-11] | 0 | 0 |
-| full-flow | I-full-pm0 | exact | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | exact | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | exact | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | es-stamped-divergent | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
-| full-flow | I-full-pm0 | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | I-full-pm0 | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | es-foreign-divergent | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
-| full-flow | I-full-pm0 | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
-| full-flow | I-full-pm0 | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | kibana-divergent | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
-| full-flow | I-full-pm0 | kibana-divergent | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
-| full-flow | I-full-pm0 | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | unreadable | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
-| full-flow | I-full-pm0 | unreadable | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
-| full-flow | I-full-pm0 | unreadable | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm0 | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
-| full-flow | I-full-pm1 | absent:guarded-class | none | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | I-full-pm1 | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | I-full-pm1 | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | absent:pipeline-or-es-role | none | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | I-full-pm1 | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | I-full-pm1 | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | exact | none | S[assets-66+full-flow-step-11] | 0 | 0 |
-| full-flow | I-full-pm1 | exact | repair | S[assets-66+full-flow-step-11] | 0 | 0 |
-| full-flow | I-full-pm1 | exact | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | exact | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | exact | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | es-stamped-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
-| full-flow | I-full-pm1 | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | I-full-pm1 | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | es-foreign-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
-| full-flow | I-full-pm1 | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
-| full-flow | I-full-pm1 | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | kibana-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
-| full-flow | I-full-pm1 | kibana-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
-| full-flow | I-full-pm1 | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | unreadable | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
-| full-flow | I-full-pm1 | unreadable | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
-| full-flow | I-full-pm1 | unreadable | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | I-full-pm1 | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 2 |
-| full-flow | S-current-assets | absent:guarded-class | none | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | S-current-assets | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | S-current-assets | absent:guarded-class | upgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | absent:guarded-class | allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | absent:guarded-class | repair+upgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | absent:guarded-class | repair+allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | absent:guarded-class | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | absent:guarded-class | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | absent:pipeline-or-es-role | none | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | S-current-assets | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | S-current-assets | absent:pipeline-or-es-role | upgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | absent:pipeline-or-es-role | allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | absent:pipeline-or-es-role | repair+upgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | absent:pipeline-or-es-role | repair+allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | absent:pipeline-or-es-role | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | exact | none | S[assets-66+full-flow-step-11] | 0 | 0 |
-| full-flow | S-current-assets | exact | repair | S[assets-66+full-flow-step-11] | 0 | 0 |
-| full-flow | S-current-assets | exact | upgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | exact | allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | exact | repair+upgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | exact | repair+allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | exact | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | exact | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | es-stamped-divergent | none | S-current-assets | 0 | 3 |
-| full-flow | S-current-assets | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | S-current-assets | es-stamped-divergent | upgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | es-stamped-divergent | allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | es-stamped-divergent | repair+upgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | es-stamped-divergent | repair+allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | es-stamped-divergent | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | es-stamped-divergent | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | es-foreign-divergent | none | S-current-assets | 0 | 3 |
-| full-flow | S-current-assets | es-foreign-divergent | repair | S-current-assets | 0 | 3 |
-| full-flow | S-current-assets | es-foreign-divergent | upgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | es-foreign-divergent | allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | es-foreign-divergent | repair+upgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | es-foreign-divergent | repair+allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | es-foreign-divergent | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | es-foreign-divergent | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | kibana-divergent | none | S-current-assets | 0 | 3 |
-| full-flow | S-current-assets | kibana-divergent | repair | S-current-assets | 0 | 3 |
-| full-flow | S-current-assets | kibana-divergent | upgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | kibana-divergent | allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | kibana-divergent | repair+upgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | kibana-divergent | repair+allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | kibana-divergent | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | kibana-divergent | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | unreadable | none | S-current-assets | 0 | 3 |
-| full-flow | S-current-assets | unreadable | repair | S-current-assets | 0 | 3 |
-| full-flow | S-current-assets | unreadable | upgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | unreadable | allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | unreadable | repair+upgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | unreadable | repair+allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | unreadable | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-assets | unreadable | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
-| full-flow | S-current-full | absent:guarded-class | none | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | S-current-full | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | S-current-full | absent:guarded-class | upgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | absent:guarded-class | allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | absent:guarded-class | repair+upgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | absent:guarded-class | repair+allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | absent:guarded-class | upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | absent:guarded-class | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | absent:pipeline-or-es-role | none | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | S-current-full | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | S-current-full | absent:pipeline-or-es-role | upgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | absent:pipeline-or-es-role | allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | absent:pipeline-or-es-role | repair+upgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | absent:pipeline-or-es-role | repair+allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | absent:pipeline-or-es-role | upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | exact | none | S[assets-66+full-flow-step-11] | 0 | 0 |
-| full-flow | S-current-full | exact | repair | S[assets-66+full-flow-step-11] | 0 | 0 |
-| full-flow | S-current-full | exact | upgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | exact | allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | exact | repair+upgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | exact | repair+allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | exact | upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | exact | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | es-stamped-divergent | none | S-current-full | 0 | 3 |
-| full-flow | S-current-full | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | S-current-full | es-stamped-divergent | upgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | es-stamped-divergent | allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | es-stamped-divergent | repair+upgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | es-stamped-divergent | repair+allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | es-stamped-divergent | upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | es-stamped-divergent | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | es-foreign-divergent | none | S-current-full | 0 | 3 |
-| full-flow | S-current-full | es-foreign-divergent | repair | S-current-full | 0 | 3 |
-| full-flow | S-current-full | es-foreign-divergent | upgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | es-foreign-divergent | allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | es-foreign-divergent | repair+upgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | es-foreign-divergent | repair+allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | es-foreign-divergent | upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | es-foreign-divergent | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | kibana-divergent | none | S-current-full | 0 | 3 |
-| full-flow | S-current-full | kibana-divergent | repair | S-current-full | 0 | 3 |
-| full-flow | S-current-full | kibana-divergent | upgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | kibana-divergent | allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | kibana-divergent | repair+upgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | kibana-divergent | repair+allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | kibana-divergent | upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | kibana-divergent | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | unreadable | none | S-current-full | 0 | 3 |
-| full-flow | S-current-full | unreadable | repair | S-current-full | 0 | 3 |
-| full-flow | S-current-full | unreadable | upgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | unreadable | allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | unreadable | repair+upgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | unreadable | repair+allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | unreadable | upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-current-full | unreadable | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
-| full-flow | S-prior-valid-direction | absent:guarded-class | none | S-prior-valid-direction | 0 | 3 |
-| full-flow | S-prior-valid-direction | absent:guarded-class | repair | S-prior-valid-direction | 0 | 3 |
-| full-flow | S-prior-valid-direction | absent:guarded-class | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | S-prior-valid-direction | absent:guarded-class | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | S-prior-valid-direction | absent:guarded-class | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | S-prior-valid-direction | absent:guarded-class | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | S-prior-valid-direction | absent:guarded-class | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
-| full-flow | S-prior-valid-direction | absent:guarded-class | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
-| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | none | S-prior-valid-direction | 0 | 3 |
-| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | repair | S-prior-valid-direction | 0 | 3 |
-| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
-| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
-| full-flow | S-prior-valid-direction | exact | none | S-prior-valid-direction | 0 | 3 |
-| full-flow | S-prior-valid-direction | exact | repair | S-prior-valid-direction | 0 | 3 |
-| full-flow | S-prior-valid-direction | exact | upgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
-| full-flow | S-prior-valid-direction | exact | allow-downgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
-| full-flow | S-prior-valid-direction | exact | repair+upgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
-| full-flow | S-prior-valid-direction | exact | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
-| full-flow | S-prior-valid-direction | exact | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
-| full-flow | S-prior-valid-direction | exact | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
-| full-flow | S-prior-valid-direction | es-stamped-divergent | none | S-prior-valid-direction | 0 | 3 |
-| full-flow | S-prior-valid-direction | es-stamped-divergent | repair | S-prior-valid-direction | 0 | 3 |
-| full-flow | S-prior-valid-direction | es-stamped-divergent | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | S-prior-valid-direction | es-stamped-divergent | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | S-prior-valid-direction | es-stamped-divergent | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | S-prior-valid-direction | es-stamped-divergent | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
-| full-flow | S-prior-valid-direction | es-stamped-divergent | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
-| full-flow | S-prior-valid-direction | es-stamped-divergent | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
-| full-flow | S-prior-valid-direction | es-foreign-divergent | none | S-prior-valid-direction | 0 | 3 |
-| full-flow | S-prior-valid-direction | es-foreign-divergent | repair | S-prior-valid-direction | 0 | 3 |
-| full-flow | S-prior-valid-direction | es-foreign-divergent | upgrade | S-prior-valid-direction | 0 | 3 |
-| full-flow | S-prior-valid-direction | es-foreign-divergent | allow-downgrade | S-prior-valid-direction | 0 | 3 |
-| full-flow | S-prior-valid-direction | es-foreign-divergent | repair+upgrade | S-prior-valid-direction | 0 | 3 |
-| full-flow | S-prior-valid-direction | es-foreign-divergent | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
-| full-flow | S-prior-valid-direction | es-foreign-divergent | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
-| full-flow | S-prior-valid-direction | es-foreign-divergent | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
-| full-flow | S-prior-valid-direction | kibana-divergent | none | S-prior-valid-direction | 0 | 3 |
-| full-flow | S-prior-valid-direction | kibana-divergent | repair | S-prior-valid-direction | 0 | 3 |
-| full-flow | S-prior-valid-direction | kibana-divergent | upgrade | S-prior-valid-direction | 0 | 3 |
-| full-flow | S-prior-valid-direction | kibana-divergent | allow-downgrade | S-prior-valid-direction | 0 | 3 |
-| full-flow | S-prior-valid-direction | kibana-divergent | repair+upgrade | S-prior-valid-direction | 0 | 3 |
-| full-flow | S-prior-valid-direction | kibana-divergent | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
-| full-flow | S-prior-valid-direction | kibana-divergent | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
-| full-flow | S-prior-valid-direction | kibana-divergent | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
-| full-flow | S-prior-valid-direction | unreadable | none | S-prior-valid-direction | 0 | 3 |
-| full-flow | S-prior-valid-direction | unreadable | repair | S-prior-valid-direction | 0 | 3 |
-| full-flow | S-prior-valid-direction | unreadable | upgrade | S-prior-valid-direction | 0 | 3 |
-| full-flow | S-prior-valid-direction | unreadable | allow-downgrade | S-prior-valid-direction | 0 | 3 |
-| full-flow | S-prior-valid-direction | unreadable | repair+upgrade | S-prior-valid-direction | 0 | 3 |
-| full-flow | S-prior-valid-direction | unreadable | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
-| full-flow | S-prior-valid-direction | unreadable | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
-| full-flow | S-prior-valid-direction | unreadable | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 2 |
+| Caller | Record state | Ordinary live state | Bundle-meta live state | Flags | Expected next record | Remote writes | Exit |
+|---|---|---|---|---|---|---:|---:|
+| assets-only | N | absent:guarded-class | not-applicable | none | S[assets-66] | 1 | 0 |
+| assets-only | N | absent:guarded-class | not-applicable | repair | S[assets-66] | 1 | 0 |
+| assets-only | N | absent:guarded-class | not-applicable | upgrade | N | 0 | 2 |
+| assets-only | N | absent:guarded-class | not-applicable | allow-downgrade | N | 0 | 2 |
+| assets-only | N | absent:guarded-class | not-applicable | repair+upgrade | N | 0 | 2 |
+| assets-only | N | absent:guarded-class | not-applicable | repair+allow-downgrade | N | 0 | 2 |
+| assets-only | N | absent:guarded-class | not-applicable | upgrade+allow-downgrade | N | 0 | 2 |
+| assets-only | N | absent:guarded-class | not-applicable | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| assets-only | N | absent:pipeline-or-es-role | not-applicable | none | S[assets-66] | 1 | 0 |
+| assets-only | N | absent:pipeline-or-es-role | not-applicable | repair | S[assets-66] | 1 | 0 |
+| assets-only | N | absent:pipeline-or-es-role | not-applicable | upgrade | N | 0 | 2 |
+| assets-only | N | absent:pipeline-or-es-role | not-applicable | allow-downgrade | N | 0 | 2 |
+| assets-only | N | absent:pipeline-or-es-role | not-applicable | repair+upgrade | N | 0 | 2 |
+| assets-only | N | absent:pipeline-or-es-role | not-applicable | repair+allow-downgrade | N | 0 | 2 |
+| assets-only | N | absent:pipeline-or-es-role | not-applicable | upgrade+allow-downgrade | N | 0 | 2 |
+| assets-only | N | absent:pipeline-or-es-role | not-applicable | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| assets-only | N | exact | not-applicable | none | S[assets-66] | 0 | 0 |
+| assets-only | N | exact | not-applicable | repair | S[assets-66] | 0 | 0 |
+| assets-only | N | exact | not-applicable | upgrade | N | 0 | 2 |
+| assets-only | N | exact | not-applicable | allow-downgrade | N | 0 | 2 |
+| assets-only | N | exact | not-applicable | repair+upgrade | N | 0 | 2 |
+| assets-only | N | exact | not-applicable | repair+allow-downgrade | N | 0 | 2 |
+| assets-only | N | exact | not-applicable | upgrade+allow-downgrade | N | 0 | 2 |
+| assets-only | N | exact | not-applicable | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| assets-only | N | es-stamped-divergent | not-applicable | none | S[assets-66] | 1 | 0 |
+| assets-only | N | es-stamped-divergent | not-applicable | repair | S[assets-66] | 1 | 0 |
+| assets-only | N | es-stamped-divergent | not-applicable | upgrade | N | 0 | 2 |
+| assets-only | N | es-stamped-divergent | not-applicable | allow-downgrade | N | 0 | 2 |
+| assets-only | N | es-stamped-divergent | not-applicable | repair+upgrade | N | 0 | 2 |
+| assets-only | N | es-stamped-divergent | not-applicable | repair+allow-downgrade | N | 0 | 2 |
+| assets-only | N | es-stamped-divergent | not-applicable | upgrade+allow-downgrade | N | 0 | 2 |
+| assets-only | N | es-stamped-divergent | not-applicable | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| assets-only | N | es-foreign-divergent | not-applicable | none | N | 0 | 3 |
+| assets-only | N | es-foreign-divergent | not-applicable | repair | N | 0 | 3 |
+| assets-only | N | es-foreign-divergent | not-applicable | upgrade | N | 0 | 2 |
+| assets-only | N | es-foreign-divergent | not-applicable | allow-downgrade | N | 0 | 2 |
+| assets-only | N | es-foreign-divergent | not-applicable | repair+upgrade | N | 0 | 2 |
+| assets-only | N | es-foreign-divergent | not-applicable | repair+allow-downgrade | N | 0 | 2 |
+| assets-only | N | es-foreign-divergent | not-applicable | upgrade+allow-downgrade | N | 0 | 2 |
+| assets-only | N | es-foreign-divergent | not-applicable | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| assets-only | N | kibana-divergent | not-applicable | none | N | 0 | 3 |
+| assets-only | N | kibana-divergent | not-applicable | repair | N | 0 | 3 |
+| assets-only | N | kibana-divergent | not-applicable | upgrade | N | 0 | 2 |
+| assets-only | N | kibana-divergent | not-applicable | allow-downgrade | N | 0 | 2 |
+| assets-only | N | kibana-divergent | not-applicable | repair+upgrade | N | 0 | 2 |
+| assets-only | N | kibana-divergent | not-applicable | repair+allow-downgrade | N | 0 | 2 |
+| assets-only | N | kibana-divergent | not-applicable | upgrade+allow-downgrade | N | 0 | 2 |
+| assets-only | N | kibana-divergent | not-applicable | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| assets-only | N | unreadable | not-applicable | none | N | 0 | 3 |
+| assets-only | N | unreadable | not-applicable | repair | N | 0 | 3 |
+| assets-only | N | unreadable | not-applicable | upgrade | N | 0 | 2 |
+| assets-only | N | unreadable | not-applicable | allow-downgrade | N | 0 | 2 |
+| assets-only | N | unreadable | not-applicable | repair+upgrade | N | 0 | 2 |
+| assets-only | N | unreadable | not-applicable | repair+allow-downgrade | N | 0 | 2 |
+| assets-only | N | unreadable | not-applicable | upgrade+allow-downgrade | N | 0 | 2 |
+| assets-only | N | unreadable | not-applicable | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| assets-only | I-assets-pm0 | absent:guarded-class | not-applicable | none | S[assets-66] | 1 | 0 |
+| assets-only | I-assets-pm0 | absent:guarded-class | not-applicable | repair | S[assets-66] | 1 | 0 |
+| assets-only | I-assets-pm0 | absent:guarded-class | not-applicable | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | absent:guarded-class | not-applicable | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | absent:guarded-class | not-applicable | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | absent:guarded-class | not-applicable | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | absent:guarded-class | not-applicable | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | absent:guarded-class | not-applicable | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | absent:pipeline-or-es-role | not-applicable | none | S[assets-66] | 1 | 0 |
+| assets-only | I-assets-pm0 | absent:pipeline-or-es-role | not-applicable | repair | S[assets-66] | 1 | 0 |
+| assets-only | I-assets-pm0 | absent:pipeline-or-es-role | not-applicable | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | absent:pipeline-or-es-role | not-applicable | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | absent:pipeline-or-es-role | not-applicable | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | absent:pipeline-or-es-role | not-applicable | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | absent:pipeline-or-es-role | not-applicable | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | absent:pipeline-or-es-role | not-applicable | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | exact | not-applicable | none | S[assets-66] | 0 | 0 |
+| assets-only | I-assets-pm0 | exact | not-applicable | repair | S[assets-66] | 0 | 0 |
+| assets-only | I-assets-pm0 | exact | not-applicable | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | exact | not-applicable | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | exact | not-applicable | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | exact | not-applicable | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | exact | not-applicable | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | exact | not-applicable | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | es-stamped-divergent | not-applicable | none | I[assets-66;pm=0] | 0 | 3 |
+| assets-only | I-assets-pm0 | es-stamped-divergent | not-applicable | repair | S[assets-66] | 1 | 0 |
+| assets-only | I-assets-pm0 | es-stamped-divergent | not-applicable | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | es-stamped-divergent | not-applicable | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | es-stamped-divergent | not-applicable | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | es-stamped-divergent | not-applicable | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | es-stamped-divergent | not-applicable | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | es-stamped-divergent | not-applicable | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | es-foreign-divergent | not-applicable | none | I[assets-66;pm=0] | 0 | 3 |
+| assets-only | I-assets-pm0 | es-foreign-divergent | not-applicable | repair | I[assets-66;pm=0] | 0 | 3 |
+| assets-only | I-assets-pm0 | es-foreign-divergent | not-applicable | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | es-foreign-divergent | not-applicable | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | es-foreign-divergent | not-applicable | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | es-foreign-divergent | not-applicable | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | es-foreign-divergent | not-applicable | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | es-foreign-divergent | not-applicable | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | kibana-divergent | not-applicable | none | I[assets-66;pm=0] | 0 | 3 |
+| assets-only | I-assets-pm0 | kibana-divergent | not-applicable | repair | I[assets-66;pm=0] | 0 | 3 |
+| assets-only | I-assets-pm0 | kibana-divergent | not-applicable | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | kibana-divergent | not-applicable | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | kibana-divergent | not-applicable | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | kibana-divergent | not-applicable | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | kibana-divergent | not-applicable | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | kibana-divergent | not-applicable | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | unreadable | not-applicable | none | I[assets-66;pm=0] | 0 | 3 |
+| assets-only | I-assets-pm0 | unreadable | not-applicable | repair | I[assets-66;pm=0] | 0 | 3 |
+| assets-only | I-assets-pm0 | unreadable | not-applicable | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | unreadable | not-applicable | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | unreadable | not-applicable | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | unreadable | not-applicable | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | unreadable | not-applicable | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm0 | unreadable | not-applicable | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| assets-only | I-assets-pm1 | absent:guarded-class | not-applicable | none | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | absent:guarded-class | not-applicable | repair | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | absent:guarded-class | not-applicable | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | absent:guarded-class | not-applicable | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | absent:guarded-class | not-applicable | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | absent:guarded-class | not-applicable | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | absent:guarded-class | not-applicable | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | absent:guarded-class | not-applicable | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | absent:pipeline-or-es-role | not-applicable | none | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | absent:pipeline-or-es-role | not-applicable | repair | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | absent:pipeline-or-es-role | not-applicable | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | absent:pipeline-or-es-role | not-applicable | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | absent:pipeline-or-es-role | not-applicable | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | absent:pipeline-or-es-role | not-applicable | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | absent:pipeline-or-es-role | not-applicable | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | absent:pipeline-or-es-role | not-applicable | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | exact | not-applicable | none | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | exact | not-applicable | repair | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | exact | not-applicable | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | exact | not-applicable | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | exact | not-applicable | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | exact | not-applicable | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | exact | not-applicable | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | exact | not-applicable | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | es-stamped-divergent | not-applicable | none | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | es-stamped-divergent | not-applicable | repair | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | es-stamped-divergent | not-applicable | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | es-stamped-divergent | not-applicable | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | es-stamped-divergent | not-applicable | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | es-stamped-divergent | not-applicable | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | es-stamped-divergent | not-applicable | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | es-stamped-divergent | not-applicable | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | es-foreign-divergent | not-applicable | none | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | es-foreign-divergent | not-applicable | repair | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | es-foreign-divergent | not-applicable | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | es-foreign-divergent | not-applicable | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | es-foreign-divergent | not-applicable | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | es-foreign-divergent | not-applicable | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | es-foreign-divergent | not-applicable | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | es-foreign-divergent | not-applicable | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | kibana-divergent | not-applicable | none | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | kibana-divergent | not-applicable | repair | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | kibana-divergent | not-applicable | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | kibana-divergent | not-applicable | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | kibana-divergent | not-applicable | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | kibana-divergent | not-applicable | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | kibana-divergent | not-applicable | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | kibana-divergent | not-applicable | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | unreadable | not-applicable | none | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | unreadable | not-applicable | repair | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | unreadable | not-applicable | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | unreadable | not-applicable | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | unreadable | not-applicable | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | unreadable | not-applicable | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | unreadable | not-applicable | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-assets-pm1 | unreadable | not-applicable | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| assets-only | I-full-pm0 | absent:guarded-class | not-applicable | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| assets-only | I-full-pm0 | absent:guarded-class | not-applicable | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| assets-only | I-full-pm0 | absent:guarded-class | not-applicable | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | absent:guarded-class | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | absent:guarded-class | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | absent:guarded-class | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | absent:guarded-class | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | absent:guarded-class | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | absent:pipeline-or-es-role | not-applicable | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| assets-only | I-full-pm0 | absent:pipeline-or-es-role | not-applicable | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| assets-only | I-full-pm0 | absent:pipeline-or-es-role | not-applicable | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | absent:pipeline-or-es-role | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | absent:pipeline-or-es-role | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | absent:pipeline-or-es-role | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | absent:pipeline-or-es-role | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | absent:pipeline-or-es-role | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | exact | not-applicable | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| assets-only | I-full-pm0 | exact | not-applicable | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| assets-only | I-full-pm0 | exact | not-applicable | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | exact | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | exact | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | exact | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | exact | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | exact | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | es-stamped-divergent | not-applicable | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| assets-only | I-full-pm0 | es-stamped-divergent | not-applicable | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| assets-only | I-full-pm0 | es-stamped-divergent | not-applicable | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | es-stamped-divergent | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | es-stamped-divergent | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | es-stamped-divergent | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | es-stamped-divergent | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | es-stamped-divergent | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | es-foreign-divergent | not-applicable | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| assets-only | I-full-pm0 | es-foreign-divergent | not-applicable | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| assets-only | I-full-pm0 | es-foreign-divergent | not-applicable | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | es-foreign-divergent | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | es-foreign-divergent | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | es-foreign-divergent | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | es-foreign-divergent | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | es-foreign-divergent | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | kibana-divergent | not-applicable | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| assets-only | I-full-pm0 | kibana-divergent | not-applicable | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| assets-only | I-full-pm0 | kibana-divergent | not-applicable | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | kibana-divergent | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | kibana-divergent | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | kibana-divergent | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | kibana-divergent | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | kibana-divergent | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | unreadable | not-applicable | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| assets-only | I-full-pm0 | unreadable | not-applicable | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| assets-only | I-full-pm0 | unreadable | not-applicable | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | unreadable | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | unreadable | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | unreadable | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | unreadable | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm0 | unreadable | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| assets-only | I-full-pm1 | absent:guarded-class | not-applicable | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | absent:guarded-class | not-applicable | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | absent:guarded-class | not-applicable | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | absent:guarded-class | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | absent:guarded-class | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | absent:guarded-class | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | absent:guarded-class | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | absent:guarded-class | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | absent:pipeline-or-es-role | not-applicable | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | absent:pipeline-or-es-role | not-applicable | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | absent:pipeline-or-es-role | not-applicable | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | absent:pipeline-or-es-role | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | absent:pipeline-or-es-role | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | absent:pipeline-or-es-role | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | absent:pipeline-or-es-role | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | absent:pipeline-or-es-role | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | exact | not-applicable | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | exact | not-applicable | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | exact | not-applicable | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | exact | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | exact | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | exact | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | exact | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | exact | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | es-stamped-divergent | not-applicable | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | es-stamped-divergent | not-applicable | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | es-stamped-divergent | not-applicable | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | es-stamped-divergent | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | es-stamped-divergent | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | es-stamped-divergent | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | es-stamped-divergent | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | es-stamped-divergent | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | es-foreign-divergent | not-applicable | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | es-foreign-divergent | not-applicable | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | es-foreign-divergent | not-applicable | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | es-foreign-divergent | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | es-foreign-divergent | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | es-foreign-divergent | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | es-foreign-divergent | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | es-foreign-divergent | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | kibana-divergent | not-applicable | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | kibana-divergent | not-applicable | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | kibana-divergent | not-applicable | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | kibana-divergent | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | kibana-divergent | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | kibana-divergent | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | kibana-divergent | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | kibana-divergent | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | unreadable | not-applicable | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | unreadable | not-applicable | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | unreadable | not-applicable | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | unreadable | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | unreadable | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | unreadable | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | unreadable | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-full-pm1 | unreadable | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | not-applicable | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | not-applicable | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | not-applicable | upgrade | S[assets-66] | 1 | 0 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | not-applicable | allow-downgrade | S[assets-66] | 1 | 0 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | not-applicable | repair+upgrade | S[assets-66] | 1 | 0 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | not-applicable | repair+allow-downgrade | S[assets-66] | 1 | 0 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | not-applicable | upgrade+allow-downgrade | S[assets-66] | 1 | 0 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | not-applicable | repair+upgrade+allow-downgrade | S[assets-66] | 1 | 0 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | not-applicable | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | not-applicable | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | not-applicable | upgrade | S[assets-66] | 1 | 0 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | not-applicable | allow-downgrade | S[assets-66] | 1 | 0 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | not-applicable | repair+upgrade | S[assets-66] | 1 | 0 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | not-applicable | repair+allow-downgrade | S[assets-66] | 1 | 0 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | not-applicable | upgrade+allow-downgrade | S[assets-66] | 1 | 0 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | not-applicable | repair+upgrade+allow-downgrade | S[assets-66] | 1 | 0 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | exact | not-applicable | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | exact | not-applicable | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | exact | not-applicable | upgrade | S[assets-66] | 0 | 0 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | exact | not-applicable | allow-downgrade | S[assets-66] | 0 | 0 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | exact | not-applicable | repair+upgrade | S[assets-66] | 0 | 0 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | exact | not-applicable | repair+allow-downgrade | S[assets-66] | 0 | 0 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | exact | not-applicable | upgrade+allow-downgrade | S[assets-66] | 0 | 0 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | exact | not-applicable | repair+upgrade+allow-downgrade | S[assets-66] | 0 | 0 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | not-applicable | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | not-applicable | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | not-applicable | upgrade | S[assets-66] | 1 | 0 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | not-applicable | allow-downgrade | S[assets-66] | 1 | 0 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | not-applicable | repair+upgrade | S[assets-66] | 1 | 0 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | not-applicable | repair+allow-downgrade | S[assets-66] | 1 | 0 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | not-applicable | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | not-applicable | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | not-applicable | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | not-applicable | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | not-applicable | upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | not-applicable | allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | not-applicable | repair+upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | not-applicable | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | not-applicable | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | not-applicable | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | kibana-divergent | not-applicable | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | kibana-divergent | not-applicable | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | kibana-divergent | not-applicable | upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | kibana-divergent | not-applicable | allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | kibana-divergent | not-applicable | repair+upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | kibana-divergent | not-applicable | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | kibana-divergent | not-applicable | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | kibana-divergent | not-applicable | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | unreadable | not-applicable | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | unreadable | not-applicable | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | unreadable | not-applicable | upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | unreadable | not-applicable | allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | unreadable | not-applicable | repair+upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | unreadable | not-applicable | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | unreadable | not-applicable | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm0 | unreadable | not-applicable | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | not-applicable | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | not-applicable | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | not-applicable | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | not-applicable | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | not-applicable | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | not-applicable | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | not-applicable | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | not-applicable | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | not-applicable | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | not-applicable | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | not-applicable | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | not-applicable | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | not-applicable | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | not-applicable | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | not-applicable | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | not-applicable | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | exact | not-applicable | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | exact | not-applicable | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | exact | not-applicable | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | exact | not-applicable | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | exact | not-applicable | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | exact | not-applicable | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | exact | not-applicable | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | exact | not-applicable | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | not-applicable | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | not-applicable | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | not-applicable | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | not-applicable | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | not-applicable | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | not-applicable | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | not-applicable | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | not-applicable | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | not-applicable | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | not-applicable | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | not-applicable | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | not-applicable | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | not-applicable | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | not-applicable | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | not-applicable | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | not-applicable | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | kibana-divergent | not-applicable | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | kibana-divergent | not-applicable | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | kibana-divergent | not-applicable | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | kibana-divergent | not-applicable | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | kibana-divergent | not-applicable | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | kibana-divergent | not-applicable | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | kibana-divergent | not-applicable | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | kibana-divergent | not-applicable | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | unreadable | not-applicable | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | unreadable | not-applicable | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | unreadable | not-applicable | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | unreadable | not-applicable | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | unreadable | not-applicable | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | unreadable | not-applicable | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | unreadable | not-applicable | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-assets-pm1 | unreadable | not-applicable | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm0 | absent:guarded-class | not-applicable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | absent:guarded-class | not-applicable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | absent:guarded-class | not-applicable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | absent:guarded-class | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | absent:guarded-class | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | absent:guarded-class | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | absent:guarded-class | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | absent:guarded-class | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | not-applicable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | not-applicable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | not-applicable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | exact | not-applicable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | exact | not-applicable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | exact | not-applicable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | exact | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | exact | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | exact | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | exact | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | exact | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | not-applicable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | not-applicable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | not-applicable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | not-applicable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | not-applicable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | not-applicable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | kibana-divergent | not-applicable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | kibana-divergent | not-applicable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | kibana-divergent | not-applicable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | kibana-divergent | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | kibana-divergent | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | kibana-divergent | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | kibana-divergent | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | kibana-divergent | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | unreadable | not-applicable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | unreadable | not-applicable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | unreadable | not-applicable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | unreadable | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | unreadable | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | unreadable | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | unreadable | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm0 | unreadable | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| assets-only | I-with-valid-predecessor-full-pm1 | absent:guarded-class | not-applicable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | absent:guarded-class | not-applicable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | absent:guarded-class | not-applicable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | absent:guarded-class | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | absent:guarded-class | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | absent:guarded-class | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | absent:guarded-class | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | absent:guarded-class | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | not-applicable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | not-applicable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | not-applicable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | exact | not-applicable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | exact | not-applicable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | exact | not-applicable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | exact | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | exact | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | exact | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | exact | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | exact | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | not-applicable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | not-applicable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | not-applicable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | not-applicable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | not-applicable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | not-applicable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | kibana-divergent | not-applicable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | kibana-divergent | not-applicable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | kibana-divergent | not-applicable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | kibana-divergent | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | kibana-divergent | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | kibana-divergent | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | kibana-divergent | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | kibana-divergent | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | unreadable | not-applicable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | unreadable | not-applicable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | unreadable | not-applicable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | unreadable | not-applicable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | unreadable | not-applicable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | unreadable | not-applicable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | unreadable | not-applicable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | I-with-valid-predecessor-full-pm1 | unreadable | not-applicable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| assets-only | S-current-assets | absent:guarded-class | not-applicable | none | S[assets-66] | 1 | 0 |
+| assets-only | S-current-assets | absent:guarded-class | not-applicable | repair | S[assets-66] | 1 | 0 |
+| assets-only | S-current-assets | absent:guarded-class | not-applicable | upgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | absent:guarded-class | not-applicable | allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | absent:guarded-class | not-applicable | repair+upgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | absent:guarded-class | not-applicable | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | absent:guarded-class | not-applicable | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | absent:guarded-class | not-applicable | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | absent:pipeline-or-es-role | not-applicable | none | S[assets-66] | 1 | 0 |
+| assets-only | S-current-assets | absent:pipeline-or-es-role | not-applicable | repair | S[assets-66] | 1 | 0 |
+| assets-only | S-current-assets | absent:pipeline-or-es-role | not-applicable | upgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | absent:pipeline-or-es-role | not-applicable | allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | absent:pipeline-or-es-role | not-applicable | repair+upgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | absent:pipeline-or-es-role | not-applicable | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | absent:pipeline-or-es-role | not-applicable | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | absent:pipeline-or-es-role | not-applicable | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | exact | not-applicable | none | S[assets-66] | 0 | 0 |
+| assets-only | S-current-assets | exact | not-applicable | repair | S[assets-66] | 0 | 0 |
+| assets-only | S-current-assets | exact | not-applicable | upgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | exact | not-applicable | allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | exact | not-applicable | repair+upgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | exact | not-applicable | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | exact | not-applicable | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | exact | not-applicable | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | es-stamped-divergent | not-applicable | none | S-current-assets | 0 | 3 |
+| assets-only | S-current-assets | es-stamped-divergent | not-applicable | repair | S[assets-66] | 1 | 0 |
+| assets-only | S-current-assets | es-stamped-divergent | not-applicable | upgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | es-stamped-divergent | not-applicable | allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | es-stamped-divergent | not-applicable | repair+upgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | es-stamped-divergent | not-applicable | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | es-stamped-divergent | not-applicable | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | es-stamped-divergent | not-applicable | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | es-foreign-divergent | not-applicable | none | S-current-assets | 0 | 3 |
+| assets-only | S-current-assets | es-foreign-divergent | not-applicable | repair | S-current-assets | 0 | 3 |
+| assets-only | S-current-assets | es-foreign-divergent | not-applicable | upgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | es-foreign-divergent | not-applicable | allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | es-foreign-divergent | not-applicable | repair+upgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | es-foreign-divergent | not-applicable | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | es-foreign-divergent | not-applicable | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | es-foreign-divergent | not-applicable | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | kibana-divergent | not-applicable | none | S-current-assets | 0 | 3 |
+| assets-only | S-current-assets | kibana-divergent | not-applicable | repair | S-current-assets | 0 | 3 |
+| assets-only | S-current-assets | kibana-divergent | not-applicable | upgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | kibana-divergent | not-applicable | allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | kibana-divergent | not-applicable | repair+upgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | kibana-divergent | not-applicable | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | kibana-divergent | not-applicable | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | kibana-divergent | not-applicable | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | unreadable | not-applicable | none | S-current-assets | 0 | 3 |
+| assets-only | S-current-assets | unreadable | not-applicable | repair | S-current-assets | 0 | 3 |
+| assets-only | S-current-assets | unreadable | not-applicable | upgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | unreadable | not-applicable | allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | unreadable | not-applicable | repair+upgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | unreadable | not-applicable | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | unreadable | not-applicable | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-assets | unreadable | not-applicable | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| assets-only | S-current-full | absent:guarded-class | not-applicable | none | S-current-full | 0 | 0 |
+| assets-only | S-current-full | absent:guarded-class | not-applicable | repair | S-current-full | 0 | 0 |
+| assets-only | S-current-full | absent:guarded-class | not-applicable | upgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | absent:guarded-class | not-applicable | allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | absent:guarded-class | not-applicable | repair+upgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | absent:guarded-class | not-applicable | repair+allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | absent:guarded-class | not-applicable | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | absent:guarded-class | not-applicable | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | absent:pipeline-or-es-role | not-applicable | none | S-current-full | 0 | 0 |
+| assets-only | S-current-full | absent:pipeline-or-es-role | not-applicable | repair | S-current-full | 0 | 0 |
+| assets-only | S-current-full | absent:pipeline-or-es-role | not-applicable | upgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | absent:pipeline-or-es-role | not-applicable | allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | absent:pipeline-or-es-role | not-applicable | repair+upgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | absent:pipeline-or-es-role | not-applicable | repair+allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | absent:pipeline-or-es-role | not-applicable | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | absent:pipeline-or-es-role | not-applicable | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | exact | not-applicable | none | S-current-full | 0 | 0 |
+| assets-only | S-current-full | exact | not-applicable | repair | S-current-full | 0 | 0 |
+| assets-only | S-current-full | exact | not-applicable | upgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | exact | not-applicable | allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | exact | not-applicable | repair+upgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | exact | not-applicable | repair+allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | exact | not-applicable | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | exact | not-applicable | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | es-stamped-divergent | not-applicable | none | S-current-full | 0 | 0 |
+| assets-only | S-current-full | es-stamped-divergent | not-applicable | repair | S-current-full | 0 | 0 |
+| assets-only | S-current-full | es-stamped-divergent | not-applicable | upgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | es-stamped-divergent | not-applicable | allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | es-stamped-divergent | not-applicable | repair+upgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | es-stamped-divergent | not-applicable | repair+allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | es-stamped-divergent | not-applicable | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | es-stamped-divergent | not-applicable | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | es-foreign-divergent | not-applicable | none | S-current-full | 0 | 0 |
+| assets-only | S-current-full | es-foreign-divergent | not-applicable | repair | S-current-full | 0 | 0 |
+| assets-only | S-current-full | es-foreign-divergent | not-applicable | upgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | es-foreign-divergent | not-applicable | allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | es-foreign-divergent | not-applicable | repair+upgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | es-foreign-divergent | not-applicable | repair+allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | es-foreign-divergent | not-applicable | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | es-foreign-divergent | not-applicable | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | kibana-divergent | not-applicable | none | S-current-full | 0 | 0 |
+| assets-only | S-current-full | kibana-divergent | not-applicable | repair | S-current-full | 0 | 0 |
+| assets-only | S-current-full | kibana-divergent | not-applicable | upgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | kibana-divergent | not-applicable | allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | kibana-divergent | not-applicable | repair+upgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | kibana-divergent | not-applicable | repair+allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | kibana-divergent | not-applicable | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | kibana-divergent | not-applicable | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | unreadable | not-applicable | none | S-current-full | 0 | 0 |
+| assets-only | S-current-full | unreadable | not-applicable | repair | S-current-full | 0 | 0 |
+| assets-only | S-current-full | unreadable | not-applicable | upgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | unreadable | not-applicable | allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | unreadable | not-applicable | repair+upgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | unreadable | not-applicable | repair+allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | unreadable | not-applicable | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-current-full | unreadable | not-applicable | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| assets-only | S-prior-valid-direction | absent:guarded-class | not-applicable | none | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | absent:guarded-class | not-applicable | repair | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | absent:guarded-class | not-applicable | upgrade | S[assets-66] | 1 | 0 |
+| assets-only | S-prior-valid-direction | absent:guarded-class | not-applicable | allow-downgrade | S[assets-66] | 1 | 0 |
+| assets-only | S-prior-valid-direction | absent:guarded-class | not-applicable | repair+upgrade | S[assets-66] | 1 | 0 |
+| assets-only | S-prior-valid-direction | absent:guarded-class | not-applicable | repair+allow-downgrade | S[assets-66] | 1 | 0 |
+| assets-only | S-prior-valid-direction | absent:guarded-class | not-applicable | upgrade+allow-downgrade | S[assets-66] | 1 | 0 |
+| assets-only | S-prior-valid-direction | absent:guarded-class | not-applicable | repair+upgrade+allow-downgrade | S[assets-66] | 1 | 0 |
+| assets-only | S-prior-valid-direction | absent:pipeline-or-es-role | not-applicable | none | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | absent:pipeline-or-es-role | not-applicable | repair | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | absent:pipeline-or-es-role | not-applicable | upgrade | S[assets-66] | 1 | 0 |
+| assets-only | S-prior-valid-direction | absent:pipeline-or-es-role | not-applicable | allow-downgrade | S[assets-66] | 1 | 0 |
+| assets-only | S-prior-valid-direction | absent:pipeline-or-es-role | not-applicable | repair+upgrade | S[assets-66] | 1 | 0 |
+| assets-only | S-prior-valid-direction | absent:pipeline-or-es-role | not-applicable | repair+allow-downgrade | S[assets-66] | 1 | 0 |
+| assets-only | S-prior-valid-direction | absent:pipeline-or-es-role | not-applicable | upgrade+allow-downgrade | S[assets-66] | 1 | 0 |
+| assets-only | S-prior-valid-direction | absent:pipeline-or-es-role | not-applicable | repair+upgrade+allow-downgrade | S[assets-66] | 1 | 0 |
+| assets-only | S-prior-valid-direction | exact | not-applicable | none | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | exact | not-applicable | repair | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | exact | not-applicable | upgrade | S[assets-66] | 0 | 0 |
+| assets-only | S-prior-valid-direction | exact | not-applicable | allow-downgrade | S[assets-66] | 0 | 0 |
+| assets-only | S-prior-valid-direction | exact | not-applicable | repair+upgrade | S[assets-66] | 0 | 0 |
+| assets-only | S-prior-valid-direction | exact | not-applicable | repair+allow-downgrade | S[assets-66] | 0 | 0 |
+| assets-only | S-prior-valid-direction | exact | not-applicable | upgrade+allow-downgrade | S[assets-66] | 0 | 0 |
+| assets-only | S-prior-valid-direction | exact | not-applicable | repair+upgrade+allow-downgrade | S[assets-66] | 0 | 0 |
+| assets-only | S-prior-valid-direction | es-stamped-divergent | not-applicable | none | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | es-stamped-divergent | not-applicable | repair | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | es-stamped-divergent | not-applicable | upgrade | S[assets-66] | 1 | 0 |
+| assets-only | S-prior-valid-direction | es-stamped-divergent | not-applicable | allow-downgrade | S[assets-66] | 1 | 0 |
+| assets-only | S-prior-valid-direction | es-stamped-divergent | not-applicable | repair+upgrade | S[assets-66] | 1 | 0 |
+| assets-only | S-prior-valid-direction | es-stamped-divergent | not-applicable | repair+allow-downgrade | S[assets-66] | 1 | 0 |
+| assets-only | S-prior-valid-direction | es-stamped-divergent | not-applicable | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | es-stamped-divergent | not-applicable | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | es-foreign-divergent | not-applicable | none | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | es-foreign-divergent | not-applicable | repair | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | es-foreign-divergent | not-applicable | upgrade | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | es-foreign-divergent | not-applicable | allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | es-foreign-divergent | not-applicable | repair+upgrade | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | es-foreign-divergent | not-applicable | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | es-foreign-divergent | not-applicable | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | es-foreign-divergent | not-applicable | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | kibana-divergent | not-applicable | none | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | kibana-divergent | not-applicable | repair | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | kibana-divergent | not-applicable | upgrade | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | kibana-divergent | not-applicable | allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | kibana-divergent | not-applicable | repair+upgrade | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | kibana-divergent | not-applicable | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | kibana-divergent | not-applicable | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | kibana-divergent | not-applicable | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | unreadable | not-applicable | none | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | unreadable | not-applicable | repair | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | unreadable | not-applicable | upgrade | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | unreadable | not-applicable | allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | unreadable | not-applicable | repair+upgrade | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | unreadable | not-applicable | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | unreadable | not-applicable | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-valid-direction | unreadable | not-applicable | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | absent:guarded-class | not-applicable | none | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | absent:guarded-class | not-applicable | repair | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | absent:guarded-class | not-applicable | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| assets-only | S-prior-full-flow-installed | absent:guarded-class | not-applicable | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| assets-only | S-prior-full-flow-installed | absent:guarded-class | not-applicable | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| assets-only | S-prior-full-flow-installed | absent:guarded-class | not-applicable | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| assets-only | S-prior-full-flow-installed | absent:guarded-class | not-applicable | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| assets-only | S-prior-full-flow-installed | absent:guarded-class | not-applicable | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| assets-only | S-prior-full-flow-installed | absent:pipeline-or-es-role | not-applicable | none | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | absent:pipeline-or-es-role | not-applicable | repair | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | absent:pipeline-or-es-role | not-applicable | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| assets-only | S-prior-full-flow-installed | absent:pipeline-or-es-role | not-applicable | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| assets-only | S-prior-full-flow-installed | absent:pipeline-or-es-role | not-applicable | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| assets-only | S-prior-full-flow-installed | absent:pipeline-or-es-role | not-applicable | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| assets-only | S-prior-full-flow-installed | absent:pipeline-or-es-role | not-applicable | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| assets-only | S-prior-full-flow-installed | absent:pipeline-or-es-role | not-applicable | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| assets-only | S-prior-full-flow-installed | exact | not-applicable | none | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | exact | not-applicable | repair | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | exact | not-applicable | upgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| assets-only | S-prior-full-flow-installed | exact | not-applicable | allow-downgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| assets-only | S-prior-full-flow-installed | exact | not-applicable | repair+upgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| assets-only | S-prior-full-flow-installed | exact | not-applicable | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| assets-only | S-prior-full-flow-installed | exact | not-applicable | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| assets-only | S-prior-full-flow-installed | exact | not-applicable | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| assets-only | S-prior-full-flow-installed | es-stamped-divergent | not-applicable | none | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | es-stamped-divergent | not-applicable | repair | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | es-stamped-divergent | not-applicable | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| assets-only | S-prior-full-flow-installed | es-stamped-divergent | not-applicable | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| assets-only | S-prior-full-flow-installed | es-stamped-divergent | not-applicable | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| assets-only | S-prior-full-flow-installed | es-stamped-divergent | not-applicable | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| assets-only | S-prior-full-flow-installed | es-stamped-divergent | not-applicable | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | es-stamped-divergent | not-applicable | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | es-foreign-divergent | not-applicable | none | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | es-foreign-divergent | not-applicable | repair | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | es-foreign-divergent | not-applicable | upgrade | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | es-foreign-divergent | not-applicable | allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | es-foreign-divergent | not-applicable | repair+upgrade | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | es-foreign-divergent | not-applicable | repair+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | es-foreign-divergent | not-applicable | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | es-foreign-divergent | not-applicable | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | kibana-divergent | not-applicable | none | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | kibana-divergent | not-applicable | repair | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | kibana-divergent | not-applicable | upgrade | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | kibana-divergent | not-applicable | allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | kibana-divergent | not-applicable | repair+upgrade | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | kibana-divergent | not-applicable | repair+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | kibana-divergent | not-applicable | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | kibana-divergent | not-applicable | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | unreadable | not-applicable | none | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | unreadable | not-applicable | repair | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | unreadable | not-applicable | upgrade | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | unreadable | not-applicable | allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | unreadable | not-applicable | repair+upgrade | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | unreadable | not-applicable | repair+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | unreadable | not-applicable | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| assets-only | S-prior-full-flow-installed | unreadable | not-applicable | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | N | absent:guarded-class | absent:guarded-class | none | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | N | absent:guarded-class | absent:pipeline-or-es-role | none | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | N | absent:guarded-class | exact | none | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | N | absent:guarded-class | es-stamped-divergent | none | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | N | absent:guarded-class | es-foreign-divergent | none | N | 0 | 3 |
+| full-flow | N | absent:guarded-class | kibana-divergent | none | N | 0 | 3 |
+| full-flow | N | absent:guarded-class | unreadable | none | N | 0 | 3 |
+| full-flow | N | absent:guarded-class | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | N | absent:guarded-class | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | N | absent:guarded-class | exact | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | N | absent:guarded-class | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | N | absent:guarded-class | es-foreign-divergent | repair | N | 0 | 3 |
+| full-flow | N | absent:guarded-class | kibana-divergent | repair | N | 0 | 3 |
+| full-flow | N | absent:guarded-class | unreadable | repair | N | 0 | 3 |
+| full-flow | N | absent:guarded-class | absent:guarded-class | upgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | absent:pipeline-or-es-role | upgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | exact | upgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | es-stamped-divergent | upgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | es-foreign-divergent | upgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | kibana-divergent | upgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | unreadable | upgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | absent:guarded-class | allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | absent:pipeline-or-es-role | allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | exact | allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | es-stamped-divergent | allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | es-foreign-divergent | allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | kibana-divergent | allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | unreadable | allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | absent:guarded-class | repair+upgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | absent:pipeline-or-es-role | repair+upgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | exact | repair+upgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | es-stamped-divergent | repair+upgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | es-foreign-divergent | repair+upgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | kibana-divergent | repair+upgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | unreadable | repair+upgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | absent:guarded-class | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | absent:pipeline-or-es-role | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | exact | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | es-stamped-divergent | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | es-foreign-divergent | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | kibana-divergent | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | unreadable | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | absent:guarded-class | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | absent:pipeline-or-es-role | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | exact | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | es-stamped-divergent | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | es-foreign-divergent | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | kibana-divergent | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | unreadable | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | absent:guarded-class | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | exact | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | es-stamped-divergent | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | es-foreign-divergent | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | kibana-divergent | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:guarded-class | unreadable | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | absent:guarded-class | none | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | N | absent:pipeline-or-es-role | absent:pipeline-or-es-role | none | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | N | absent:pipeline-or-es-role | exact | none | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | N | absent:pipeline-or-es-role | es-stamped-divergent | none | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | N | absent:pipeline-or-es-role | es-foreign-divergent | none | N | 0 | 3 |
+| full-flow | N | absent:pipeline-or-es-role | kibana-divergent | none | N | 0 | 3 |
+| full-flow | N | absent:pipeline-or-es-role | unreadable | none | N | 0 | 3 |
+| full-flow | N | absent:pipeline-or-es-role | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | N | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | N | absent:pipeline-or-es-role | exact | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | N | absent:pipeline-or-es-role | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | N | absent:pipeline-or-es-role | es-foreign-divergent | repair | N | 0 | 3 |
+| full-flow | N | absent:pipeline-or-es-role | kibana-divergent | repair | N | 0 | 3 |
+| full-flow | N | absent:pipeline-or-es-role | unreadable | repair | N | 0 | 3 |
+| full-flow | N | absent:pipeline-or-es-role | absent:guarded-class | upgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | absent:pipeline-or-es-role | upgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | exact | upgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | es-stamped-divergent | upgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | es-foreign-divergent | upgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | kibana-divergent | upgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | unreadable | upgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | absent:guarded-class | allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | absent:pipeline-or-es-role | allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | exact | allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | es-stamped-divergent | allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | es-foreign-divergent | allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | kibana-divergent | allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | unreadable | allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | absent:guarded-class | repair+upgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+upgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | exact | repair+upgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | es-stamped-divergent | repair+upgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | es-foreign-divergent | repair+upgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | kibana-divergent | repair+upgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | unreadable | repair+upgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | absent:guarded-class | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | exact | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | es-stamped-divergent | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | es-foreign-divergent | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | kibana-divergent | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | unreadable | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | absent:guarded-class | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | absent:pipeline-or-es-role | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | exact | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | es-stamped-divergent | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | es-foreign-divergent | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | kibana-divergent | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | unreadable | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | absent:guarded-class | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | exact | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | es-stamped-divergent | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | es-foreign-divergent | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | kibana-divergent | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | absent:pipeline-or-es-role | unreadable | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | absent:guarded-class | none | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | N | exact | absent:pipeline-or-es-role | none | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | N | exact | exact | none | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | N | exact | es-stamped-divergent | none | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | N | exact | es-foreign-divergent | none | N | 0 | 3 |
+| full-flow | N | exact | kibana-divergent | none | N | 0 | 3 |
+| full-flow | N | exact | unreadable | none | N | 0 | 3 |
+| full-flow | N | exact | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | N | exact | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | N | exact | exact | repair | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | N | exact | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | N | exact | es-foreign-divergent | repair | N | 0 | 3 |
+| full-flow | N | exact | kibana-divergent | repair | N | 0 | 3 |
+| full-flow | N | exact | unreadable | repair | N | 0 | 3 |
+| full-flow | N | exact | absent:guarded-class | upgrade | N | 0 | 2 |
+| full-flow | N | exact | absent:pipeline-or-es-role | upgrade | N | 0 | 2 |
+| full-flow | N | exact | exact | upgrade | N | 0 | 2 |
+| full-flow | N | exact | es-stamped-divergent | upgrade | N | 0 | 2 |
+| full-flow | N | exact | es-foreign-divergent | upgrade | N | 0 | 2 |
+| full-flow | N | exact | kibana-divergent | upgrade | N | 0 | 2 |
+| full-flow | N | exact | unreadable | upgrade | N | 0 | 2 |
+| full-flow | N | exact | absent:guarded-class | allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | absent:pipeline-or-es-role | allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | exact | allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | es-stamped-divergent | allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | es-foreign-divergent | allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | kibana-divergent | allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | unreadable | allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | absent:guarded-class | repair+upgrade | N | 0 | 2 |
+| full-flow | N | exact | absent:pipeline-or-es-role | repair+upgrade | N | 0 | 2 |
+| full-flow | N | exact | exact | repair+upgrade | N | 0 | 2 |
+| full-flow | N | exact | es-stamped-divergent | repair+upgrade | N | 0 | 2 |
+| full-flow | N | exact | es-foreign-divergent | repair+upgrade | N | 0 | 2 |
+| full-flow | N | exact | kibana-divergent | repair+upgrade | N | 0 | 2 |
+| full-flow | N | exact | unreadable | repair+upgrade | N | 0 | 2 |
+| full-flow | N | exact | absent:guarded-class | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | absent:pipeline-or-es-role | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | exact | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | es-stamped-divergent | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | es-foreign-divergent | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | kibana-divergent | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | unreadable | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | absent:guarded-class | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | absent:pipeline-or-es-role | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | exact | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | es-stamped-divergent | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | es-foreign-divergent | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | kibana-divergent | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | unreadable | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | absent:guarded-class | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | exact | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | es-stamped-divergent | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | es-foreign-divergent | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | kibana-divergent | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | exact | unreadable | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | absent:guarded-class | none | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | N | es-stamped-divergent | absent:pipeline-or-es-role | none | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | N | es-stamped-divergent | exact | none | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | N | es-stamped-divergent | es-stamped-divergent | none | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | N | es-stamped-divergent | es-foreign-divergent | none | N | 0 | 3 |
+| full-flow | N | es-stamped-divergent | kibana-divergent | none | N | 0 | 3 |
+| full-flow | N | es-stamped-divergent | unreadable | none | N | 0 | 3 |
+| full-flow | N | es-stamped-divergent | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | N | es-stamped-divergent | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | N | es-stamped-divergent | exact | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | N | es-stamped-divergent | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | N | es-stamped-divergent | es-foreign-divergent | repair | N | 0 | 3 |
+| full-flow | N | es-stamped-divergent | kibana-divergent | repair | N | 0 | 3 |
+| full-flow | N | es-stamped-divergent | unreadable | repair | N | 0 | 3 |
+| full-flow | N | es-stamped-divergent | absent:guarded-class | upgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | absent:pipeline-or-es-role | upgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | exact | upgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | es-stamped-divergent | upgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | es-foreign-divergent | upgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | kibana-divergent | upgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | unreadable | upgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | absent:guarded-class | allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | absent:pipeline-or-es-role | allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | exact | allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | es-stamped-divergent | allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | es-foreign-divergent | allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | kibana-divergent | allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | unreadable | allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | absent:guarded-class | repair+upgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | absent:pipeline-or-es-role | repair+upgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | exact | repair+upgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | es-stamped-divergent | repair+upgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | es-foreign-divergent | repair+upgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | kibana-divergent | repair+upgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | unreadable | repair+upgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | absent:guarded-class | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | exact | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | es-stamped-divergent | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | es-foreign-divergent | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | kibana-divergent | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | unreadable | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | absent:guarded-class | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | exact | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | es-stamped-divergent | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | es-foreign-divergent | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | kibana-divergent | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | unreadable | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | exact | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | kibana-divergent | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-stamped-divergent | unreadable | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | N | es-foreign-divergent | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | N | es-foreign-divergent | exact | none | N | 0 | 3 |
+| full-flow | N | es-foreign-divergent | es-stamped-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | N | es-foreign-divergent | es-foreign-divergent | none | N | 0 | 3 |
+| full-flow | N | es-foreign-divergent | kibana-divergent | none | N | 0 | 3 |
+| full-flow | N | es-foreign-divergent | unreadable | none | N | 0 | 3 |
+| full-flow | N | es-foreign-divergent | absent:guarded-class | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | N | es-foreign-divergent | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | N | es-foreign-divergent | exact | repair | N | 0 | 3 |
+| full-flow | N | es-foreign-divergent | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | N | es-foreign-divergent | es-foreign-divergent | repair | N | 0 | 3 |
+| full-flow | N | es-foreign-divergent | kibana-divergent | repair | N | 0 | 3 |
+| full-flow | N | es-foreign-divergent | unreadable | repair | N | 0 | 3 |
+| full-flow | N | es-foreign-divergent | absent:guarded-class | upgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | absent:pipeline-or-es-role | upgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | exact | upgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | es-stamped-divergent | upgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | es-foreign-divergent | upgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | kibana-divergent | upgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | unreadable | upgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | absent:guarded-class | allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | absent:pipeline-or-es-role | allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | exact | allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | es-stamped-divergent | allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | es-foreign-divergent | allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | kibana-divergent | allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | unreadable | allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | absent:guarded-class | repair+upgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | absent:pipeline-or-es-role | repair+upgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | exact | repair+upgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | es-stamped-divergent | repair+upgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | es-foreign-divergent | repair+upgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | kibana-divergent | repair+upgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | unreadable | repair+upgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | absent:guarded-class | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | exact | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | es-stamped-divergent | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | es-foreign-divergent | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | kibana-divergent | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | unreadable | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | absent:guarded-class | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | exact | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | es-stamped-divergent | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | es-foreign-divergent | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | kibana-divergent | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | unreadable | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | exact | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | kibana-divergent | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | es-foreign-divergent | unreadable | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | N | kibana-divergent | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | N | kibana-divergent | exact | none | N | 0 | 3 |
+| full-flow | N | kibana-divergent | es-stamped-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | N | kibana-divergent | es-foreign-divergent | none | N | 0 | 3 |
+| full-flow | N | kibana-divergent | kibana-divergent | none | N | 0 | 3 |
+| full-flow | N | kibana-divergent | unreadable | none | N | 0 | 3 |
+| full-flow | N | kibana-divergent | absent:guarded-class | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | N | kibana-divergent | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | N | kibana-divergent | exact | repair | N | 0 | 3 |
+| full-flow | N | kibana-divergent | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | N | kibana-divergent | es-foreign-divergent | repair | N | 0 | 3 |
+| full-flow | N | kibana-divergent | kibana-divergent | repair | N | 0 | 3 |
+| full-flow | N | kibana-divergent | unreadable | repair | N | 0 | 3 |
+| full-flow | N | kibana-divergent | absent:guarded-class | upgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | absent:pipeline-or-es-role | upgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | exact | upgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | es-stamped-divergent | upgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | es-foreign-divergent | upgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | kibana-divergent | upgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | unreadable | upgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | absent:guarded-class | allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | absent:pipeline-or-es-role | allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | exact | allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | es-stamped-divergent | allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | es-foreign-divergent | allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | kibana-divergent | allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | unreadable | allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | absent:guarded-class | repair+upgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | absent:pipeline-or-es-role | repair+upgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | exact | repair+upgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | es-stamped-divergent | repair+upgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | es-foreign-divergent | repair+upgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | kibana-divergent | repair+upgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | unreadable | repair+upgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | absent:guarded-class | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | exact | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | es-stamped-divergent | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | es-foreign-divergent | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | kibana-divergent | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | unreadable | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | absent:guarded-class | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | exact | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | es-stamped-divergent | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | es-foreign-divergent | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | kibana-divergent | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | unreadable | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | exact | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | kibana-divergent | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | kibana-divergent | unreadable | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | N | unreadable | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | N | unreadable | exact | none | N | 0 | 3 |
+| full-flow | N | unreadable | es-stamped-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | N | unreadable | es-foreign-divergent | none | N | 0 | 3 |
+| full-flow | N | unreadable | kibana-divergent | none | N | 0 | 3 |
+| full-flow | N | unreadable | unreadable | none | N | 0 | 3 |
+| full-flow | N | unreadable | absent:guarded-class | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | N | unreadable | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | N | unreadable | exact | repair | N | 0 | 3 |
+| full-flow | N | unreadable | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | N | unreadable | es-foreign-divergent | repair | N | 0 | 3 |
+| full-flow | N | unreadable | kibana-divergent | repair | N | 0 | 3 |
+| full-flow | N | unreadable | unreadable | repair | N | 0 | 3 |
+| full-flow | N | unreadable | absent:guarded-class | upgrade | N | 0 | 2 |
+| full-flow | N | unreadable | absent:pipeline-or-es-role | upgrade | N | 0 | 2 |
+| full-flow | N | unreadable | exact | upgrade | N | 0 | 2 |
+| full-flow | N | unreadable | es-stamped-divergent | upgrade | N | 0 | 2 |
+| full-flow | N | unreadable | es-foreign-divergent | upgrade | N | 0 | 2 |
+| full-flow | N | unreadable | kibana-divergent | upgrade | N | 0 | 2 |
+| full-flow | N | unreadable | unreadable | upgrade | N | 0 | 2 |
+| full-flow | N | unreadable | absent:guarded-class | allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | absent:pipeline-or-es-role | allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | exact | allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | es-stamped-divergent | allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | es-foreign-divergent | allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | kibana-divergent | allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | unreadable | allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | absent:guarded-class | repair+upgrade | N | 0 | 2 |
+| full-flow | N | unreadable | absent:pipeline-or-es-role | repair+upgrade | N | 0 | 2 |
+| full-flow | N | unreadable | exact | repair+upgrade | N | 0 | 2 |
+| full-flow | N | unreadable | es-stamped-divergent | repair+upgrade | N | 0 | 2 |
+| full-flow | N | unreadable | es-foreign-divergent | repair+upgrade | N | 0 | 2 |
+| full-flow | N | unreadable | kibana-divergent | repair+upgrade | N | 0 | 2 |
+| full-flow | N | unreadable | unreadable | repair+upgrade | N | 0 | 2 |
+| full-flow | N | unreadable | absent:guarded-class | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | absent:pipeline-or-es-role | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | exact | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | es-stamped-divergent | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | es-foreign-divergent | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | kibana-divergent | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | unreadable | repair+allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | absent:guarded-class | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | absent:pipeline-or-es-role | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | exact | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | es-stamped-divergent | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | es-foreign-divergent | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | kibana-divergent | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | unreadable | upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | absent:guarded-class | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | exact | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | es-stamped-divergent | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | es-foreign-divergent | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | kibana-divergent | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | N | unreadable | unreadable | repair+upgrade+allow-downgrade | N | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | absent:guarded-class | none | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-assets-pm0 | absent:guarded-class | absent:pipeline-or-es-role | none | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-assets-pm0 | absent:guarded-class | exact | none | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-assets-pm0 | absent:guarded-class | es-stamped-divergent | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | absent:guarded-class | es-foreign-divergent | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | absent:guarded-class | kibana-divergent | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | absent:guarded-class | unreadable | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | absent:guarded-class | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-assets-pm0 | absent:guarded-class | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-assets-pm0 | absent:guarded-class | exact | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-assets-pm0 | absent:guarded-class | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-assets-pm0 | absent:guarded-class | es-foreign-divergent | repair | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | absent:guarded-class | kibana-divergent | repair | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | absent:guarded-class | unreadable | repair | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | absent:guarded-class | absent:guarded-class | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | absent:pipeline-or-es-role | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | exact | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | es-stamped-divergent | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | es-foreign-divergent | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | kibana-divergent | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | unreadable | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | absent:guarded-class | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | absent:pipeline-or-es-role | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | exact | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | es-stamped-divergent | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | es-foreign-divergent | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | kibana-divergent | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | unreadable | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | absent:guarded-class | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | absent:pipeline-or-es-role | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | exact | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | es-stamped-divergent | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | es-foreign-divergent | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | kibana-divergent | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | unreadable | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | absent:guarded-class | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | exact | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | es-stamped-divergent | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | es-foreign-divergent | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | kibana-divergent | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | unreadable | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | absent:guarded-class | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | exact | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | kibana-divergent | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | unreadable | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | exact | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:guarded-class | unreadable | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | absent:guarded-class | none | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | none | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | exact | none | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | kibana-divergent | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | unreadable | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | exact | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | repair | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | kibana-divergent | repair | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | unreadable | repair | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | absent:guarded-class | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | exact | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | kibana-divergent | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | unreadable | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | absent:guarded-class | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | exact | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | kibana-divergent | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | unreadable | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | absent:guarded-class | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | exact | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | kibana-divergent | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | unreadable | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | absent:guarded-class | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | exact | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | kibana-divergent | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | unreadable | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | absent:guarded-class | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | exact | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | kibana-divergent | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | unreadable | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | exact | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | absent:pipeline-or-es-role | unreadable | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | absent:guarded-class | none | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-assets-pm0 | exact | absent:pipeline-or-es-role | none | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-assets-pm0 | exact | exact | none | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | I-assets-pm0 | exact | es-stamped-divergent | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | exact | es-foreign-divergent | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | exact | kibana-divergent | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | exact | unreadable | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | exact | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-assets-pm0 | exact | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-assets-pm0 | exact | exact | repair | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | I-assets-pm0 | exact | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-assets-pm0 | exact | es-foreign-divergent | repair | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | exact | kibana-divergent | repair | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | exact | unreadable | repair | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | exact | absent:guarded-class | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | absent:pipeline-or-es-role | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | exact | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | es-stamped-divergent | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | es-foreign-divergent | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | kibana-divergent | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | unreadable | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | absent:guarded-class | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | absent:pipeline-or-es-role | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | exact | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | es-stamped-divergent | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | es-foreign-divergent | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | kibana-divergent | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | unreadable | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | absent:guarded-class | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | absent:pipeline-or-es-role | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | exact | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | es-stamped-divergent | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | es-foreign-divergent | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | kibana-divergent | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | unreadable | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | absent:guarded-class | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | exact | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | es-stamped-divergent | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | es-foreign-divergent | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | kibana-divergent | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | unreadable | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | absent:guarded-class | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | exact | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | kibana-divergent | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | unreadable | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | exact | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | exact | unreadable | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | exact | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | es-stamped-divergent | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | es-foreign-divergent | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | kibana-divergent | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | unreadable | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | exact | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | es-foreign-divergent | repair | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | kibana-divergent | repair | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | unreadable | repair | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | absent:guarded-class | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | exact | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | es-stamped-divergent | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | es-foreign-divergent | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | kibana-divergent | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | unreadable | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | absent:guarded-class | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | exact | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | es-stamped-divergent | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | es-foreign-divergent | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | kibana-divergent | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | unreadable | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | absent:guarded-class | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | exact | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | es-stamped-divergent | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | es-foreign-divergent | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | kibana-divergent | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | unreadable | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | absent:guarded-class | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | exact | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | es-stamped-divergent | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | es-foreign-divergent | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | kibana-divergent | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | unreadable | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | exact | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | kibana-divergent | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | unreadable | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | exact | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-stamped-divergent | unreadable | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | exact | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | es-stamped-divergent | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | es-foreign-divergent | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | kibana-divergent | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | unreadable | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | absent:guarded-class | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | exact | repair | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | es-foreign-divergent | repair | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | kibana-divergent | repair | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | unreadable | repair | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | absent:guarded-class | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | exact | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | es-stamped-divergent | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | es-foreign-divergent | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | kibana-divergent | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | unreadable | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | absent:guarded-class | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | exact | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | es-stamped-divergent | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | es-foreign-divergent | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | kibana-divergent | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | unreadable | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | absent:guarded-class | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | exact | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | es-stamped-divergent | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | es-foreign-divergent | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | kibana-divergent | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | unreadable | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | absent:guarded-class | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | exact | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | es-stamped-divergent | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | es-foreign-divergent | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | kibana-divergent | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | unreadable | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | exact | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | kibana-divergent | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | unreadable | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | exact | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | es-foreign-divergent | unreadable | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-assets-pm0 | kibana-divergent | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-assets-pm0 | kibana-divergent | exact | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | kibana-divergent | es-stamped-divergent | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | kibana-divergent | es-foreign-divergent | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | kibana-divergent | kibana-divergent | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | kibana-divergent | unreadable | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | kibana-divergent | absent:guarded-class | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-assets-pm0 | kibana-divergent | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-assets-pm0 | kibana-divergent | exact | repair | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | kibana-divergent | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-assets-pm0 | kibana-divergent | es-foreign-divergent | repair | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | kibana-divergent | kibana-divergent | repair | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | kibana-divergent | unreadable | repair | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | kibana-divergent | absent:guarded-class | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | absent:pipeline-or-es-role | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | exact | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | es-stamped-divergent | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | es-foreign-divergent | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | kibana-divergent | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | unreadable | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | absent:guarded-class | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | absent:pipeline-or-es-role | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | exact | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | es-stamped-divergent | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | es-foreign-divergent | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | kibana-divergent | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | unreadable | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | absent:guarded-class | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | absent:pipeline-or-es-role | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | exact | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | es-stamped-divergent | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | es-foreign-divergent | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | kibana-divergent | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | unreadable | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | absent:guarded-class | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | exact | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | es-stamped-divergent | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | es-foreign-divergent | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | kibana-divergent | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | unreadable | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | exact | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | kibana-divergent | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | unreadable | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | exact | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | kibana-divergent | unreadable | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-assets-pm0 | unreadable | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-assets-pm0 | unreadable | exact | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | unreadable | es-stamped-divergent | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | unreadable | es-foreign-divergent | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | unreadable | kibana-divergent | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | unreadable | unreadable | none | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | unreadable | absent:guarded-class | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-assets-pm0 | unreadable | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-assets-pm0 | unreadable | exact | repair | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | unreadable | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-assets-pm0 | unreadable | es-foreign-divergent | repair | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | unreadable | kibana-divergent | repair | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | unreadable | unreadable | repair | I[assets-66;pm=0] | 0 | 3 |
+| full-flow | I-assets-pm0 | unreadable | absent:guarded-class | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | absent:pipeline-or-es-role | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | exact | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | es-stamped-divergent | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | es-foreign-divergent | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | kibana-divergent | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | unreadable | upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | absent:guarded-class | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | absent:pipeline-or-es-role | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | exact | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | es-stamped-divergent | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | es-foreign-divergent | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | kibana-divergent | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | unreadable | allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | absent:guarded-class | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | absent:pipeline-or-es-role | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | exact | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | es-stamped-divergent | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | es-foreign-divergent | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | kibana-divergent | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | unreadable | repair+upgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | absent:guarded-class | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | exact | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | es-stamped-divergent | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | es-foreign-divergent | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | kibana-divergent | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | unreadable | repair+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | absent:guarded-class | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | exact | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | kibana-divergent | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | unreadable | upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | exact | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm0 | unreadable | unreadable | repair+upgrade+allow-downgrade | I[assets-66;pm=0] | 0 | 2 |
+| full-flow | I-assets-pm1 | absent:guarded-class | absent:guarded-class | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | absent:pipeline-or-es-role | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | exact | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | es-stamped-divergent | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | es-foreign-divergent | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | kibana-divergent | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | unreadable | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | absent:guarded-class | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | absent:pipeline-or-es-role | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | exact | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | es-stamped-divergent | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | es-foreign-divergent | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | kibana-divergent | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | unreadable | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | absent:guarded-class | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | absent:pipeline-or-es-role | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | exact | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | es-stamped-divergent | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | es-foreign-divergent | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | kibana-divergent | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | unreadable | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | absent:guarded-class | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | absent:pipeline-or-es-role | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | exact | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | es-stamped-divergent | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | es-foreign-divergent | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | kibana-divergent | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | unreadable | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | absent:guarded-class | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | absent:pipeline-or-es-role | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | exact | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | es-stamped-divergent | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | es-foreign-divergent | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | kibana-divergent | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | unreadable | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | absent:guarded-class | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | exact | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | es-stamped-divergent | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | es-foreign-divergent | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | kibana-divergent | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | unreadable | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | absent:guarded-class | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | exact | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | kibana-divergent | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | unreadable | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | exact | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:guarded-class | unreadable | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | absent:guarded-class | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | exact | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | kibana-divergent | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | unreadable | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | absent:guarded-class | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | exact | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | kibana-divergent | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | unreadable | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | absent:guarded-class | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | exact | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | kibana-divergent | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | unreadable | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | absent:guarded-class | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | exact | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | kibana-divergent | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | unreadable | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | absent:guarded-class | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | exact | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | kibana-divergent | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | unreadable | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | absent:guarded-class | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | exact | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | kibana-divergent | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | unreadable | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | absent:guarded-class | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | exact | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | kibana-divergent | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | unreadable | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | exact | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | absent:pipeline-or-es-role | unreadable | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | absent:guarded-class | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | absent:pipeline-or-es-role | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | exact | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | es-stamped-divergent | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | es-foreign-divergent | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | kibana-divergent | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | unreadable | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | absent:guarded-class | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | absent:pipeline-or-es-role | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | exact | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | es-stamped-divergent | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | es-foreign-divergent | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | kibana-divergent | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | unreadable | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | absent:guarded-class | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | absent:pipeline-or-es-role | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | exact | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | es-stamped-divergent | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | es-foreign-divergent | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | kibana-divergent | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | unreadable | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | absent:guarded-class | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | absent:pipeline-or-es-role | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | exact | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | es-stamped-divergent | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | es-foreign-divergent | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | kibana-divergent | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | unreadable | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | absent:guarded-class | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | absent:pipeline-or-es-role | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | exact | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | es-stamped-divergent | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | es-foreign-divergent | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | kibana-divergent | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | unreadable | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | absent:guarded-class | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | exact | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | es-stamped-divergent | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | es-foreign-divergent | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | kibana-divergent | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | unreadable | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | absent:guarded-class | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | exact | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | kibana-divergent | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | unreadable | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | exact | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | exact | unreadable | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | absent:guarded-class | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | exact | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | es-stamped-divergent | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | es-foreign-divergent | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | kibana-divergent | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | unreadable | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | absent:guarded-class | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | exact | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | es-stamped-divergent | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | es-foreign-divergent | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | kibana-divergent | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | unreadable | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | absent:guarded-class | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | exact | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | es-stamped-divergent | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | es-foreign-divergent | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | kibana-divergent | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | unreadable | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | absent:guarded-class | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | exact | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | es-stamped-divergent | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | es-foreign-divergent | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | kibana-divergent | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | unreadable | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | absent:guarded-class | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | exact | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | es-stamped-divergent | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | es-foreign-divergent | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | kibana-divergent | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | unreadable | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | absent:guarded-class | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | exact | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | es-stamped-divergent | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | es-foreign-divergent | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | kibana-divergent | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | unreadable | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | exact | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | kibana-divergent | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | unreadable | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | exact | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-stamped-divergent | unreadable | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | absent:guarded-class | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | exact | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | es-stamped-divergent | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | es-foreign-divergent | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | kibana-divergent | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | unreadable | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | absent:guarded-class | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | exact | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | es-stamped-divergent | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | es-foreign-divergent | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | kibana-divergent | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | unreadable | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | absent:guarded-class | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | exact | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | es-stamped-divergent | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | es-foreign-divergent | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | kibana-divergent | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | unreadable | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | absent:guarded-class | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | exact | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | es-stamped-divergent | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | es-foreign-divergent | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | kibana-divergent | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | unreadable | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | absent:guarded-class | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | exact | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | es-stamped-divergent | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | es-foreign-divergent | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | kibana-divergent | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | unreadable | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | absent:guarded-class | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | exact | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | es-stamped-divergent | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | es-foreign-divergent | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | kibana-divergent | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | unreadable | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | exact | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | kibana-divergent | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | unreadable | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | exact | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | es-foreign-divergent | unreadable | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | absent:guarded-class | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | absent:pipeline-or-es-role | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | exact | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | es-stamped-divergent | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | es-foreign-divergent | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | kibana-divergent | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | unreadable | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | absent:guarded-class | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | absent:pipeline-or-es-role | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | exact | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | es-stamped-divergent | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | es-foreign-divergent | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | kibana-divergent | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | unreadable | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | absent:guarded-class | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | absent:pipeline-or-es-role | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | exact | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | es-stamped-divergent | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | es-foreign-divergent | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | kibana-divergent | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | unreadable | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | absent:guarded-class | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | absent:pipeline-or-es-role | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | exact | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | es-stamped-divergent | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | es-foreign-divergent | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | kibana-divergent | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | unreadable | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | absent:guarded-class | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | absent:pipeline-or-es-role | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | exact | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | es-stamped-divergent | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | es-foreign-divergent | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | kibana-divergent | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | unreadable | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | absent:guarded-class | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | exact | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | es-stamped-divergent | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | es-foreign-divergent | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | kibana-divergent | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | unreadable | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | exact | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | kibana-divergent | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | unreadable | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | exact | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | kibana-divergent | unreadable | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | absent:guarded-class | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | absent:pipeline-or-es-role | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | exact | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | es-stamped-divergent | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | es-foreign-divergent | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | kibana-divergent | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | unreadable | none | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | absent:guarded-class | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | absent:pipeline-or-es-role | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | exact | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | es-stamped-divergent | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | es-foreign-divergent | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | kibana-divergent | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | unreadable | repair | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | absent:guarded-class | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | absent:pipeline-or-es-role | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | exact | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | es-stamped-divergent | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | es-foreign-divergent | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | kibana-divergent | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | unreadable | upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | absent:guarded-class | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | absent:pipeline-or-es-role | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | exact | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | es-stamped-divergent | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | es-foreign-divergent | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | kibana-divergent | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | unreadable | allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | absent:guarded-class | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | absent:pipeline-or-es-role | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | exact | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | es-stamped-divergent | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | es-foreign-divergent | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | kibana-divergent | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | unreadable | repair+upgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | absent:guarded-class | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | exact | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | es-stamped-divergent | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | es-foreign-divergent | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | kibana-divergent | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | unreadable | repair+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | absent:guarded-class | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | exact | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | kibana-divergent | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | unreadable | upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | exact | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-assets-pm1 | unreadable | unreadable | repair+upgrade+allow-downgrade | I[assets-66;pm=1] | 0 | 4 |
+| full-flow | I-full-pm0 | absent:guarded-class | absent:guarded-class | none | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-full-pm0 | absent:guarded-class | absent:pipeline-or-es-role | none | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-full-pm0 | absent:guarded-class | exact | none | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-full-pm0 | absent:guarded-class | es-stamped-divergent | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | absent:guarded-class | es-foreign-divergent | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | absent:guarded-class | kibana-divergent | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | absent:guarded-class | unreadable | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | absent:guarded-class | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-full-pm0 | absent:guarded-class | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-full-pm0 | absent:guarded-class | exact | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-full-pm0 | absent:guarded-class | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-full-pm0 | absent:guarded-class | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | absent:guarded-class | kibana-divergent | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | absent:guarded-class | unreadable | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | absent:guarded-class | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | exact | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | unreadable | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | exact | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | exact | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:guarded-class | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | absent:guarded-class | none | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | none | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | exact | none | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | kibana-divergent | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | unreadable | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | exact | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | kibana-divergent | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | unreadable | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | exact | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | unreadable | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | exact | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | exact | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | absent:pipeline-or-es-role | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | absent:guarded-class | none | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-full-pm0 | exact | absent:pipeline-or-es-role | none | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-full-pm0 | exact | exact | none | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | I-full-pm0 | exact | es-stamped-divergent | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | exact | es-foreign-divergent | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | exact | kibana-divergent | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | exact | unreadable | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | exact | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-full-pm0 | exact | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-full-pm0 | exact | exact | repair | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | I-full-pm0 | exact | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-full-pm0 | exact | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | exact | kibana-divergent | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | exact | unreadable | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | exact | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | exact | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | unreadable | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | exact | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | exact | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | exact | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-full-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-full-pm0 | es-stamped-divergent | exact | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | es-stamped-divergent | es-stamped-divergent | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | es-stamped-divergent | es-foreign-divergent | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | es-stamped-divergent | kibana-divergent | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | es-stamped-divergent | unreadable | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | es-stamped-divergent | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-full-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-full-pm0 | es-stamped-divergent | exact | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-full-pm0 | es-stamped-divergent | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-full-pm0 | es-stamped-divergent | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | es-stamped-divergent | kibana-divergent | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | es-stamped-divergent | unreadable | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | es-stamped-divergent | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | exact | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | unreadable | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | exact | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | exact | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-stamped-divergent | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-full-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-full-pm0 | es-foreign-divergent | exact | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | es-foreign-divergent | es-stamped-divergent | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | es-foreign-divergent | es-foreign-divergent | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | es-foreign-divergent | kibana-divergent | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | es-foreign-divergent | unreadable | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | es-foreign-divergent | absent:guarded-class | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-full-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-full-pm0 | es-foreign-divergent | exact | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | es-foreign-divergent | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-full-pm0 | es-foreign-divergent | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | es-foreign-divergent | kibana-divergent | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | es-foreign-divergent | unreadable | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | es-foreign-divergent | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | exact | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | unreadable | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | exact | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | exact | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | es-foreign-divergent | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-full-pm0 | kibana-divergent | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-full-pm0 | kibana-divergent | exact | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | kibana-divergent | es-stamped-divergent | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | kibana-divergent | es-foreign-divergent | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | kibana-divergent | kibana-divergent | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | kibana-divergent | unreadable | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | kibana-divergent | absent:guarded-class | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-full-pm0 | kibana-divergent | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-full-pm0 | kibana-divergent | exact | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | kibana-divergent | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-full-pm0 | kibana-divergent | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | kibana-divergent | kibana-divergent | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | kibana-divergent | unreadable | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | kibana-divergent | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | exact | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | unreadable | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | exact | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | exact | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | kibana-divergent | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-full-pm0 | unreadable | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-full-pm0 | unreadable | exact | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | unreadable | es-stamped-divergent | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | unreadable | es-foreign-divergent | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | unreadable | kibana-divergent | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | unreadable | unreadable | none | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | unreadable | absent:guarded-class | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-full-pm0 | unreadable | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-full-pm0 | unreadable | exact | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | unreadable | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-full-pm0 | unreadable | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | unreadable | kibana-divergent | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | unreadable | unreadable | repair | I[assets-66+full-flow-step-11;pm=0] | 0 | 3 |
+| full-flow | I-full-pm0 | unreadable | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | exact | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | unreadable | upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | exact | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | exact | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm0 | unreadable | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=0] | 0 | 2 |
+| full-flow | I-full-pm1 | absent:guarded-class | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | exact | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | es-stamped-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | es-foreign-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | kibana-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | unreadable | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | absent:guarded-class | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | exact | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | kibana-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | unreadable | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | exact | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | unreadable | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | exact | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | exact | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:guarded-class | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | exact | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | kibana-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | unreadable | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | absent:guarded-class | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | exact | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | kibana-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | unreadable | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | exact | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | unreadable | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | exact | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | exact | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | absent:pipeline-or-es-role | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | exact | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | es-stamped-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | es-foreign-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | kibana-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | unreadable | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | absent:guarded-class | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | exact | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | kibana-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | unreadable | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | exact | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | unreadable | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | exact | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | exact | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | exact | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | exact | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | es-stamped-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | es-foreign-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | kibana-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | unreadable | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | absent:guarded-class | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | exact | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | kibana-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | unreadable | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | exact | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | unreadable | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | exact | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | exact | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-stamped-divergent | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | exact | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | es-stamped-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | es-foreign-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | kibana-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | unreadable | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | absent:guarded-class | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | exact | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | kibana-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | unreadable | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | exact | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | unreadable | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | exact | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | exact | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | es-foreign-divergent | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | exact | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | es-stamped-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | es-foreign-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | kibana-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | unreadable | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | absent:guarded-class | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | exact | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | kibana-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | unreadable | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | exact | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | unreadable | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | exact | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | exact | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | kibana-divergent | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | exact | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | es-stamped-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | es-foreign-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | kibana-divergent | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | unreadable | none | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | absent:guarded-class | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | exact | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | kibana-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | unreadable | repair | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | exact | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | unreadable | upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | exact | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | exact | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-full-pm1 | unreadable | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | absent:guarded-class | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | absent:pipeline-or-es-role | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | exact | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | es-stamped-divergent | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | es-foreign-divergent | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | kibana-divergent | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | unreadable | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | absent:guarded-class | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | absent:pipeline-or-es-role | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | exact | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | es-stamped-divergent | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | es-foreign-divergent | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | kibana-divergent | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | unreadable | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | absent:guarded-class | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | absent:pipeline-or-es-role | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | exact | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | es-stamped-divergent | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | es-foreign-divergent | upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | kibana-divergent | upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | unreadable | upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | absent:guarded-class | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | absent:pipeline-or-es-role | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | exact | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | es-stamped-divergent | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | es-foreign-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | kibana-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | unreadable | allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | absent:guarded-class | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | absent:pipeline-or-es-role | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | exact | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | es-stamped-divergent | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | es-foreign-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | kibana-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | unreadable | repair+upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | absent:guarded-class | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | absent:pipeline-or-es-role | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | exact | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | es-stamped-divergent | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | es-foreign-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | kibana-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | unreadable | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | absent:guarded-class | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | absent:pipeline-or-es-role | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | exact | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | kibana-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | unreadable | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | absent:guarded-class | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | exact | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:guarded-class | unreadable | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | absent:guarded-class | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | exact | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | kibana-divergent | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | unreadable | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | absent:guarded-class | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | exact | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | kibana-divergent | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | unreadable | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | absent:guarded-class | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | exact | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | kibana-divergent | upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | unreadable | upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | absent:guarded-class | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | exact | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | kibana-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | unreadable | allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | absent:guarded-class | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | exact | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | kibana-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | unreadable | repair+upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | absent:guarded-class | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | exact | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | kibana-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | unreadable | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | absent:guarded-class | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | exact | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | kibana-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | unreadable | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | absent:guarded-class | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | exact | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | absent:pipeline-or-es-role | unreadable | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | absent:guarded-class | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | absent:pipeline-or-es-role | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | exact | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | es-stamped-divergent | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | es-foreign-divergent | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | kibana-divergent | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | unreadable | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | absent:guarded-class | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | absent:pipeline-or-es-role | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | exact | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | es-stamped-divergent | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | es-foreign-divergent | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | kibana-divergent | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | unreadable | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | absent:guarded-class | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | absent:pipeline-or-es-role | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | exact | upgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | es-stamped-divergent | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | es-foreign-divergent | upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | kibana-divergent | upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | unreadable | upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | absent:guarded-class | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | absent:pipeline-or-es-role | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | exact | allow-downgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | es-stamped-divergent | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | es-foreign-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | kibana-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | unreadable | allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | absent:guarded-class | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | absent:pipeline-or-es-role | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | exact | repair+upgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | es-stamped-divergent | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | es-foreign-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | kibana-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | unreadable | repair+upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | absent:guarded-class | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | absent:pipeline-or-es-role | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | exact | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | es-stamped-divergent | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | es-foreign-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | kibana-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | unreadable | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | absent:guarded-class | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | absent:pipeline-or-es-role | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | exact | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | kibana-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | unreadable | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | absent:guarded-class | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | exact | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | exact | unreadable | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | absent:guarded-class | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | exact | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | es-stamped-divergent | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | es-foreign-divergent | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | kibana-divergent | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | unreadable | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | absent:guarded-class | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | exact | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | es-stamped-divergent | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | es-foreign-divergent | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | kibana-divergent | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | unreadable | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | absent:guarded-class | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | exact | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | es-stamped-divergent | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | es-foreign-divergent | upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | kibana-divergent | upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | unreadable | upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | absent:guarded-class | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | exact | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | es-stamped-divergent | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | es-foreign-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | kibana-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | unreadable | allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | absent:guarded-class | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | exact | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | es-stamped-divergent | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | es-foreign-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | kibana-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | unreadable | repair+upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | absent:guarded-class | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | exact | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | es-stamped-divergent | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | es-foreign-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | kibana-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | unreadable | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | exact | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | kibana-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | unreadable | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | exact | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-stamped-divergent | unreadable | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | absent:guarded-class | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | exact | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | es-stamped-divergent | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | es-foreign-divergent | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | kibana-divergent | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | unreadable | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | absent:guarded-class | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | exact | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | es-stamped-divergent | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | es-foreign-divergent | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | kibana-divergent | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | unreadable | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | exact | upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | es-foreign-divergent | upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | kibana-divergent | upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | unreadable | upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | exact | allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | es-foreign-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | kibana-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | unreadable | allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | exact | repair+upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | es-foreign-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | kibana-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | unreadable | repair+upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | exact | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | es-foreign-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | kibana-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | unreadable | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | exact | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | kibana-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | unreadable | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | exact | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | es-foreign-divergent | unreadable | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | absent:guarded-class | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | absent:pipeline-or-es-role | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | exact | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | es-stamped-divergent | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | es-foreign-divergent | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | kibana-divergent | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | unreadable | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | absent:guarded-class | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | absent:pipeline-or-es-role | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | exact | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | es-stamped-divergent | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | es-foreign-divergent | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | kibana-divergent | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | unreadable | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | exact | upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | es-foreign-divergent | upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | kibana-divergent | upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | unreadable | upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | exact | allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | es-foreign-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | kibana-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | unreadable | allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | exact | repair+upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | es-foreign-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | kibana-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | unreadable | repair+upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | exact | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | es-foreign-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | kibana-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | unreadable | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | exact | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | kibana-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | unreadable | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | exact | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | kibana-divergent | unreadable | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | absent:guarded-class | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | absent:pipeline-or-es-role | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | exact | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | es-stamped-divergent | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | es-foreign-divergent | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | kibana-divergent | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | unreadable | none | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | absent:guarded-class | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | absent:pipeline-or-es-role | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | exact | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | es-stamped-divergent | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | es-foreign-divergent | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | kibana-divergent | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | unreadable | repair | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | exact | upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | es-foreign-divergent | upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | kibana-divergent | upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | unreadable | upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | exact | allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | es-foreign-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | kibana-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | unreadable | allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | exact | repair+upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | es-foreign-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | kibana-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | unreadable | repair+upgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | exact | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | es-foreign-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | kibana-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | unreadable | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | exact | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | kibana-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | unreadable | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | exact | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm0 | unreadable | unreadable | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | absent:guarded-class | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | absent:pipeline-or-es-role | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | exact | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | es-stamped-divergent | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | es-foreign-divergent | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | kibana-divergent | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | unreadable | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | absent:guarded-class | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | absent:pipeline-or-es-role | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | exact | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | es-stamped-divergent | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | es-foreign-divergent | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | kibana-divergent | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | unreadable | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | absent:guarded-class | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | absent:pipeline-or-es-role | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | exact | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | es-stamped-divergent | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | es-foreign-divergent | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | kibana-divergent | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | unreadable | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | absent:guarded-class | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | absent:pipeline-or-es-role | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | exact | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | es-stamped-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | es-foreign-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | kibana-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | unreadable | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | absent:guarded-class | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | absent:pipeline-or-es-role | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | exact | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | es-stamped-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | es-foreign-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | kibana-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | unreadable | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | absent:guarded-class | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | exact | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | es-stamped-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | es-foreign-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | kibana-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | unreadable | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | absent:guarded-class | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | exact | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | kibana-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | unreadable | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | exact | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:guarded-class | unreadable | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | absent:guarded-class | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | exact | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | kibana-divergent | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | unreadable | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | absent:guarded-class | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | exact | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | kibana-divergent | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | unreadable | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | absent:guarded-class | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | exact | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | kibana-divergent | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | unreadable | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | absent:guarded-class | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | exact | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | kibana-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | unreadable | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | absent:guarded-class | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | exact | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | kibana-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | unreadable | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | absent:guarded-class | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | exact | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | kibana-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | unreadable | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | absent:guarded-class | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | exact | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | kibana-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | unreadable | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | exact | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | absent:pipeline-or-es-role | unreadable | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | absent:guarded-class | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | absent:pipeline-or-es-role | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | exact | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | es-stamped-divergent | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | es-foreign-divergent | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | kibana-divergent | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | unreadable | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | absent:guarded-class | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | absent:pipeline-or-es-role | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | exact | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | es-stamped-divergent | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | es-foreign-divergent | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | kibana-divergent | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | unreadable | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | absent:guarded-class | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | absent:pipeline-or-es-role | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | exact | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | es-stamped-divergent | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | es-foreign-divergent | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | kibana-divergent | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | unreadable | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | absent:guarded-class | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | absent:pipeline-or-es-role | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | exact | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | es-stamped-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | es-foreign-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | kibana-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | unreadable | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | absent:guarded-class | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | absent:pipeline-or-es-role | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | exact | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | es-stamped-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | es-foreign-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | kibana-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | unreadable | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | absent:guarded-class | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | exact | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | es-stamped-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | es-foreign-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | kibana-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | unreadable | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | absent:guarded-class | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | exact | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | kibana-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | unreadable | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | exact | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | exact | unreadable | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | absent:guarded-class | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | exact | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | es-stamped-divergent | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | es-foreign-divergent | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | kibana-divergent | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | unreadable | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | absent:guarded-class | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | exact | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | es-stamped-divergent | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | es-foreign-divergent | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | kibana-divergent | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | unreadable | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | absent:guarded-class | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | exact | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | es-stamped-divergent | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | es-foreign-divergent | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | kibana-divergent | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | unreadable | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | absent:guarded-class | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | exact | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | es-stamped-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | es-foreign-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | kibana-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | unreadable | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | absent:guarded-class | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | exact | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | es-stamped-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | es-foreign-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | kibana-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | unreadable | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | absent:guarded-class | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | exact | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | es-stamped-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | es-foreign-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | kibana-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | unreadable | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | exact | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | kibana-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | unreadable | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | exact | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-stamped-divergent | unreadable | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | absent:guarded-class | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | exact | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | es-stamped-divergent | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | es-foreign-divergent | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | kibana-divergent | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | unreadable | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | absent:guarded-class | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | exact | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | es-stamped-divergent | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | es-foreign-divergent | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | kibana-divergent | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | unreadable | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | absent:guarded-class | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | exact | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | es-stamped-divergent | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | es-foreign-divergent | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | kibana-divergent | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | unreadable | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | absent:guarded-class | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | exact | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | es-stamped-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | es-foreign-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | kibana-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | unreadable | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | absent:guarded-class | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | exact | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | es-stamped-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | es-foreign-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | kibana-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | unreadable | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | absent:guarded-class | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | exact | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | es-stamped-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | es-foreign-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | kibana-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | unreadable | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | exact | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | kibana-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | unreadable | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | exact | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | es-foreign-divergent | unreadable | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | absent:guarded-class | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | absent:pipeline-or-es-role | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | exact | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | es-stamped-divergent | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | es-foreign-divergent | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | kibana-divergent | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | unreadable | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | absent:guarded-class | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | absent:pipeline-or-es-role | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | exact | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | es-stamped-divergent | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | es-foreign-divergent | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | kibana-divergent | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | unreadable | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | absent:guarded-class | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | absent:pipeline-or-es-role | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | exact | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | es-stamped-divergent | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | es-foreign-divergent | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | kibana-divergent | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | unreadable | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | absent:guarded-class | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | absent:pipeline-or-es-role | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | exact | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | es-stamped-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | es-foreign-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | kibana-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | unreadable | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | absent:guarded-class | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | absent:pipeline-or-es-role | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | exact | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | es-stamped-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | es-foreign-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | kibana-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | unreadable | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | absent:guarded-class | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | exact | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | es-stamped-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | es-foreign-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | kibana-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | unreadable | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | exact | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | kibana-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | unreadable | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | exact | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | kibana-divergent | unreadable | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | absent:guarded-class | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | absent:pipeline-or-es-role | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | exact | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | es-stamped-divergent | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | es-foreign-divergent | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | kibana-divergent | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | unreadable | none | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | absent:guarded-class | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | absent:pipeline-or-es-role | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | exact | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | es-stamped-divergent | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | es-foreign-divergent | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | kibana-divergent | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | unreadable | repair | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | absent:guarded-class | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | absent:pipeline-or-es-role | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | exact | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | es-stamped-divergent | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | es-foreign-divergent | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | kibana-divergent | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | unreadable | upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | absent:guarded-class | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | absent:pipeline-or-es-role | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | exact | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | es-stamped-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | es-foreign-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | kibana-divergent | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | unreadable | allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | absent:guarded-class | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | absent:pipeline-or-es-role | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | exact | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | es-stamped-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | es-foreign-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | kibana-divergent | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | unreadable | repair+upgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | absent:guarded-class | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | exact | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | es-stamped-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | es-foreign-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | kibana-divergent | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | unreadable | repair+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | absent:guarded-class | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | exact | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | kibana-divergent | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | unreadable | upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | exact | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-assets-pm1 | unreadable | unreadable | repair+upgrade+allow-downgrade | I[assets-66;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | absent:guarded-class | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | exact | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | es-stamped-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | es-foreign-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | kibana-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | unreadable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | absent:guarded-class | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | exact | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | kibana-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | unreadable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | absent:guarded-class | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | absent:pipeline-or-es-role | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | exact | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | es-stamped-divergent | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | unreadable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | absent:guarded-class | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | absent:pipeline-or-es-role | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | exact | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | es-stamped-divergent | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | absent:guarded-class | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | absent:pipeline-or-es-role | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | exact | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | es-stamped-divergent | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | absent:guarded-class | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | absent:pipeline-or-es-role | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | exact | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | es-stamped-divergent | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | absent:guarded-class | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | absent:pipeline-or-es-role | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | exact | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | absent:guarded-class | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | exact | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:guarded-class | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | absent:guarded-class | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | exact | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | kibana-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | unreadable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | absent:guarded-class | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | exact | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | kibana-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | unreadable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | absent:guarded-class | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | exact | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | unreadable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | absent:guarded-class | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | exact | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | absent:guarded-class | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | exact | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | absent:guarded-class | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | exact | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | absent:guarded-class | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | exact | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | absent:guarded-class | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | exact | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | absent:pipeline-or-es-role | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | absent:guarded-class | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | exact | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | es-stamped-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | es-foreign-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | kibana-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | unreadable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | absent:guarded-class | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | exact | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | kibana-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | unreadable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | absent:guarded-class | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | absent:pipeline-or-es-role | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | exact | upgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | es-stamped-divergent | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | unreadable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | absent:guarded-class | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | absent:pipeline-or-es-role | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | exact | allow-downgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | es-stamped-divergent | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | absent:guarded-class | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | absent:pipeline-or-es-role | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | exact | repair+upgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | es-stamped-divergent | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | absent:guarded-class | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | absent:pipeline-or-es-role | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | exact | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | es-stamped-divergent | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | absent:guarded-class | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | absent:pipeline-or-es-role | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | exact | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | absent:guarded-class | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | exact | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | exact | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | absent:guarded-class | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | exact | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | es-stamped-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | es-foreign-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | kibana-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | unreadable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | absent:guarded-class | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | exact | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | kibana-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | unreadable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | absent:guarded-class | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | exact | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | es-stamped-divergent | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | unreadable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | absent:guarded-class | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | exact | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | es-stamped-divergent | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | absent:guarded-class | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | exact | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | es-stamped-divergent | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | absent:guarded-class | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | exact | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | es-stamped-divergent | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-stamped-divergent | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | absent:guarded-class | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | exact | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | es-stamped-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | es-foreign-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | kibana-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | unreadable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | absent:guarded-class | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | exact | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | kibana-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | unreadable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | exact | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | unreadable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | exact | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | exact | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | es-foreign-divergent | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | absent:guarded-class | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | exact | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | es-stamped-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | es-foreign-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | kibana-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | unreadable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | absent:guarded-class | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | exact | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | kibana-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | unreadable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | exact | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | unreadable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | exact | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | exact | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | kibana-divergent | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | absent:guarded-class | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | exact | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | es-stamped-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | es-foreign-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | kibana-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | unreadable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | absent:guarded-class | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | exact | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | kibana-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | unreadable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | exact | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | unreadable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | exact | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | exact | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm0 | unreadable | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=0] | 0 | 3 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | absent:guarded-class | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | exact | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | es-stamped-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | es-foreign-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | kibana-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | unreadable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | absent:guarded-class | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | exact | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | kibana-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | unreadable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | exact | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | unreadable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | exact | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | exact | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:guarded-class | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | absent:guarded-class | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | exact | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | kibana-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | unreadable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | absent:guarded-class | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | exact | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | kibana-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | unreadable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | exact | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | unreadable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | exact | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | exact | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | absent:pipeline-or-es-role | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | absent:guarded-class | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | exact | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | es-stamped-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | es-foreign-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | kibana-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | unreadable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | absent:guarded-class | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | exact | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | kibana-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | unreadable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | exact | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | unreadable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | exact | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | exact | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | exact | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | absent:guarded-class | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | exact | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | es-stamped-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | es-foreign-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | kibana-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | unreadable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | absent:guarded-class | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | exact | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | kibana-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | unreadable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | exact | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | unreadable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | exact | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | exact | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-stamped-divergent | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | absent:guarded-class | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | exact | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | es-stamped-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | es-foreign-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | kibana-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | unreadable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | absent:guarded-class | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | exact | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | kibana-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | unreadable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | exact | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | unreadable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | exact | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | exact | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | es-foreign-divergent | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | absent:guarded-class | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | exact | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | es-stamped-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | es-foreign-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | kibana-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | unreadable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | absent:guarded-class | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | exact | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | kibana-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | unreadable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | exact | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | unreadable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | exact | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | exact | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | kibana-divergent | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | absent:guarded-class | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | exact | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | es-stamped-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | es-foreign-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | kibana-divergent | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | unreadable | none | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | absent:guarded-class | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | exact | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | es-foreign-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | kibana-divergent | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | unreadable | repair | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | exact | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | es-foreign-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | kibana-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | unreadable | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | exact | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | es-foreign-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | kibana-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | unreadable | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | exact | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | es-foreign-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | kibana-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | unreadable | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | exact | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | es-foreign-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | kibana-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | unreadable | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | exact | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | es-stamped-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | es-foreign-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | kibana-divergent | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | unreadable | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | exact | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | es-stamped-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | es-foreign-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | kibana-divergent | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | I-with-valid-predecessor-full-pm1 | unreadable | unreadable | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 0 | 4 |
+| full-flow | S-current-assets | absent:guarded-class | absent:guarded-class | none | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-current-assets | absent:guarded-class | absent:pipeline-or-es-role | none | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-current-assets | absent:guarded-class | exact | none | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-current-assets | absent:guarded-class | es-stamped-divergent | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | absent:guarded-class | es-foreign-divergent | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | absent:guarded-class | kibana-divergent | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | absent:guarded-class | unreadable | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | absent:guarded-class | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-current-assets | absent:guarded-class | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-current-assets | absent:guarded-class | exact | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-current-assets | absent:guarded-class | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-current-assets | absent:guarded-class | es-foreign-divergent | repair | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | absent:guarded-class | kibana-divergent | repair | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | absent:guarded-class | unreadable | repair | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | absent:guarded-class | absent:guarded-class | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | absent:pipeline-or-es-role | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | exact | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | es-stamped-divergent | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | es-foreign-divergent | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | kibana-divergent | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | unreadable | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | absent:guarded-class | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | absent:pipeline-or-es-role | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | exact | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | es-stamped-divergent | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | es-foreign-divergent | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | kibana-divergent | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | unreadable | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | absent:guarded-class | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | absent:pipeline-or-es-role | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | exact | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | es-stamped-divergent | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | es-foreign-divergent | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | kibana-divergent | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | unreadable | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | absent:guarded-class | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | absent:pipeline-or-es-role | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | exact | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | es-stamped-divergent | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | es-foreign-divergent | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | kibana-divergent | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | unreadable | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | absent:guarded-class | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | absent:pipeline-or-es-role | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | exact | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | es-stamped-divergent | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | es-foreign-divergent | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | kibana-divergent | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | unreadable | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | absent:guarded-class | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | exact | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | es-stamped-divergent | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | es-foreign-divergent | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | kibana-divergent | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:guarded-class | unreadable | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | absent:guarded-class | none | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | absent:pipeline-or-es-role | none | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | exact | none | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | es-stamped-divergent | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | es-foreign-divergent | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | kibana-divergent | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | unreadable | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | exact | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | es-foreign-divergent | repair | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | kibana-divergent | repair | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | unreadable | repair | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | absent:guarded-class | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | absent:pipeline-or-es-role | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | exact | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | es-stamped-divergent | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | es-foreign-divergent | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | kibana-divergent | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | unreadable | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | absent:guarded-class | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | absent:pipeline-or-es-role | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | exact | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | es-stamped-divergent | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | es-foreign-divergent | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | kibana-divergent | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | unreadable | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | absent:guarded-class | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | exact | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | es-stamped-divergent | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | es-foreign-divergent | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | kibana-divergent | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | unreadable | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | absent:guarded-class | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | exact | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | es-stamped-divergent | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | es-foreign-divergent | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | kibana-divergent | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | unreadable | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | absent:guarded-class | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | absent:pipeline-or-es-role | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | exact | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | es-stamped-divergent | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | es-foreign-divergent | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | kibana-divergent | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | unreadable | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | absent:guarded-class | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | exact | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | es-stamped-divergent | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | es-foreign-divergent | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | kibana-divergent | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | absent:pipeline-or-es-role | unreadable | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | absent:guarded-class | none | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-current-assets | exact | absent:pipeline-or-es-role | none | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-current-assets | exact | exact | none | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | S-current-assets | exact | es-stamped-divergent | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | exact | es-foreign-divergent | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | exact | kibana-divergent | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | exact | unreadable | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | exact | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-current-assets | exact | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-current-assets | exact | exact | repair | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | S-current-assets | exact | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-current-assets | exact | es-foreign-divergent | repair | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | exact | kibana-divergent | repair | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | exact | unreadable | repair | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | exact | absent:guarded-class | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | absent:pipeline-or-es-role | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | exact | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | es-stamped-divergent | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | es-foreign-divergent | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | kibana-divergent | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | unreadable | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | absent:guarded-class | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | absent:pipeline-or-es-role | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | exact | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | es-stamped-divergent | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | es-foreign-divergent | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | kibana-divergent | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | unreadable | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | absent:guarded-class | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | absent:pipeline-or-es-role | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | exact | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | es-stamped-divergent | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | es-foreign-divergent | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | kibana-divergent | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | unreadable | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | absent:guarded-class | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | absent:pipeline-or-es-role | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | exact | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | es-stamped-divergent | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | es-foreign-divergent | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | kibana-divergent | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | unreadable | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | absent:guarded-class | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | absent:pipeline-or-es-role | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | exact | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | es-stamped-divergent | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | es-foreign-divergent | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | kibana-divergent | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | unreadable | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | absent:guarded-class | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | exact | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | es-stamped-divergent | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | es-foreign-divergent | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | kibana-divergent | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | exact | unreadable | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-assets | es-stamped-divergent | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-assets | es-stamped-divergent | exact | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | es-stamped-divergent | es-stamped-divergent | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | es-stamped-divergent | es-foreign-divergent | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | es-stamped-divergent | kibana-divergent | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | es-stamped-divergent | unreadable | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | es-stamped-divergent | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-current-assets | es-stamped-divergent | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-current-assets | es-stamped-divergent | exact | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-current-assets | es-stamped-divergent | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-current-assets | es-stamped-divergent | es-foreign-divergent | repair | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | es-stamped-divergent | kibana-divergent | repair | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | es-stamped-divergent | unreadable | repair | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | es-stamped-divergent | absent:guarded-class | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | absent:pipeline-or-es-role | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | exact | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | es-stamped-divergent | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | es-foreign-divergent | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | kibana-divergent | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | unreadable | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | absent:guarded-class | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | absent:pipeline-or-es-role | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | exact | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | es-stamped-divergent | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | es-foreign-divergent | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | kibana-divergent | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | unreadable | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | absent:guarded-class | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | absent:pipeline-or-es-role | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | exact | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | es-stamped-divergent | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | es-foreign-divergent | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | kibana-divergent | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | unreadable | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | absent:guarded-class | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | exact | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | es-stamped-divergent | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | es-foreign-divergent | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | kibana-divergent | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | unreadable | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | absent:guarded-class | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | exact | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | es-stamped-divergent | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | es-foreign-divergent | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | kibana-divergent | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | unreadable | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | exact | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | kibana-divergent | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-stamped-divergent | unreadable | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-assets | es-foreign-divergent | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-assets | es-foreign-divergent | exact | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | es-foreign-divergent | es-stamped-divergent | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | es-foreign-divergent | es-foreign-divergent | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | es-foreign-divergent | kibana-divergent | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | es-foreign-divergent | unreadable | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | es-foreign-divergent | absent:guarded-class | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-assets | es-foreign-divergent | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-assets | es-foreign-divergent | exact | repair | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | es-foreign-divergent | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-assets | es-foreign-divergent | es-foreign-divergent | repair | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | es-foreign-divergent | kibana-divergent | repair | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | es-foreign-divergent | unreadable | repair | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | es-foreign-divergent | absent:guarded-class | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | absent:pipeline-or-es-role | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | exact | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | es-stamped-divergent | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | es-foreign-divergent | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | kibana-divergent | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | unreadable | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | absent:guarded-class | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | absent:pipeline-or-es-role | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | exact | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | es-stamped-divergent | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | es-foreign-divergent | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | kibana-divergent | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | unreadable | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | absent:guarded-class | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | absent:pipeline-or-es-role | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | exact | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | es-stamped-divergent | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | es-foreign-divergent | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | kibana-divergent | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | unreadable | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | absent:guarded-class | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | exact | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | es-stamped-divergent | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | es-foreign-divergent | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | kibana-divergent | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | unreadable | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | absent:guarded-class | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | exact | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | es-stamped-divergent | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | es-foreign-divergent | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | kibana-divergent | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | unreadable | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | exact | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | kibana-divergent | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | es-foreign-divergent | unreadable | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-assets | kibana-divergent | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-assets | kibana-divergent | exact | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | kibana-divergent | es-stamped-divergent | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | kibana-divergent | es-foreign-divergent | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | kibana-divergent | kibana-divergent | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | kibana-divergent | unreadable | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | kibana-divergent | absent:guarded-class | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-assets | kibana-divergent | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-assets | kibana-divergent | exact | repair | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | kibana-divergent | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-assets | kibana-divergent | es-foreign-divergent | repair | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | kibana-divergent | kibana-divergent | repair | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | kibana-divergent | unreadable | repair | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | kibana-divergent | absent:guarded-class | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | absent:pipeline-or-es-role | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | exact | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | es-stamped-divergent | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | es-foreign-divergent | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | kibana-divergent | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | unreadable | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | absent:guarded-class | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | absent:pipeline-or-es-role | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | exact | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | es-stamped-divergent | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | es-foreign-divergent | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | kibana-divergent | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | unreadable | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | absent:guarded-class | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | absent:pipeline-or-es-role | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | exact | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | es-stamped-divergent | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | es-foreign-divergent | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | kibana-divergent | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | unreadable | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | absent:guarded-class | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | exact | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | es-stamped-divergent | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | es-foreign-divergent | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | kibana-divergent | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | unreadable | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | absent:guarded-class | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | exact | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | es-stamped-divergent | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | es-foreign-divergent | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | kibana-divergent | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | unreadable | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | exact | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | kibana-divergent | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | kibana-divergent | unreadable | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-assets | unreadable | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-assets | unreadable | exact | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | unreadable | es-stamped-divergent | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | unreadable | es-foreign-divergent | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | unreadable | kibana-divergent | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | unreadable | unreadable | none | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | unreadable | absent:guarded-class | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-assets | unreadable | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-assets | unreadable | exact | repair | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | unreadable | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-assets | unreadable | es-foreign-divergent | repair | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | unreadable | kibana-divergent | repair | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | unreadable | unreadable | repair | S-current-assets | 0 | 3 |
+| full-flow | S-current-assets | unreadable | absent:guarded-class | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | absent:pipeline-or-es-role | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | exact | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | es-stamped-divergent | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | es-foreign-divergent | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | kibana-divergent | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | unreadable | upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | absent:guarded-class | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | absent:pipeline-or-es-role | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | exact | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | es-stamped-divergent | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | es-foreign-divergent | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | kibana-divergent | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | unreadable | allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | absent:guarded-class | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | absent:pipeline-or-es-role | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | exact | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | es-stamped-divergent | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | es-foreign-divergent | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | kibana-divergent | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | unreadable | repair+upgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | absent:guarded-class | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | absent:pipeline-or-es-role | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | exact | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | es-stamped-divergent | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | es-foreign-divergent | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | kibana-divergent | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | unreadable | repair+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | absent:guarded-class | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | absent:pipeline-or-es-role | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | exact | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | es-stamped-divergent | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | es-foreign-divergent | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | kibana-divergent | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | unreadable | upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | absent:guarded-class | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | exact | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | es-stamped-divergent | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | es-foreign-divergent | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | kibana-divergent | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-assets | unreadable | unreadable | repair+upgrade+allow-downgrade | S-current-assets | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | absent:guarded-class | none | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-current-full | absent:guarded-class | absent:pipeline-or-es-role | none | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-current-full | absent:guarded-class | exact | none | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-current-full | absent:guarded-class | es-stamped-divergent | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | absent:guarded-class | es-foreign-divergent | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | absent:guarded-class | kibana-divergent | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | absent:guarded-class | unreadable | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | absent:guarded-class | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-current-full | absent:guarded-class | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-current-full | absent:guarded-class | exact | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-current-full | absent:guarded-class | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-current-full | absent:guarded-class | es-foreign-divergent | repair | S-current-full | 0 | 3 |
+| full-flow | S-current-full | absent:guarded-class | kibana-divergent | repair | S-current-full | 0 | 3 |
+| full-flow | S-current-full | absent:guarded-class | unreadable | repair | S-current-full | 0 | 3 |
+| full-flow | S-current-full | absent:guarded-class | absent:guarded-class | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | absent:pipeline-or-es-role | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | exact | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | es-stamped-divergent | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | es-foreign-divergent | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | kibana-divergent | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | unreadable | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | absent:guarded-class | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | absent:pipeline-or-es-role | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | exact | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | es-stamped-divergent | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | es-foreign-divergent | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | kibana-divergent | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | unreadable | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | absent:guarded-class | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | absent:pipeline-or-es-role | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | exact | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | es-stamped-divergent | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | es-foreign-divergent | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | kibana-divergent | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | unreadable | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | absent:guarded-class | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | absent:pipeline-or-es-role | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | exact | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | es-stamped-divergent | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | es-foreign-divergent | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | kibana-divergent | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | unreadable | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | absent:guarded-class | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | absent:pipeline-or-es-role | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | exact | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | es-stamped-divergent | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | es-foreign-divergent | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | kibana-divergent | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | unreadable | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | absent:guarded-class | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | exact | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | es-stamped-divergent | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | es-foreign-divergent | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | kibana-divergent | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:guarded-class | unreadable | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | absent:guarded-class | none | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | absent:pipeline-or-es-role | none | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | exact | none | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | es-stamped-divergent | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | es-foreign-divergent | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | kibana-divergent | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | unreadable | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | exact | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | es-foreign-divergent | repair | S-current-full | 0 | 3 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | kibana-divergent | repair | S-current-full | 0 | 3 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | unreadable | repair | S-current-full | 0 | 3 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | absent:guarded-class | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | absent:pipeline-or-es-role | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | exact | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | es-stamped-divergent | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | es-foreign-divergent | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | kibana-divergent | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | unreadable | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | absent:guarded-class | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | absent:pipeline-or-es-role | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | exact | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | es-stamped-divergent | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | es-foreign-divergent | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | kibana-divergent | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | unreadable | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | absent:guarded-class | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | exact | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | es-stamped-divergent | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | es-foreign-divergent | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | kibana-divergent | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | unreadable | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | absent:guarded-class | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | exact | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | es-stamped-divergent | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | es-foreign-divergent | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | kibana-divergent | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | unreadable | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | absent:guarded-class | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | absent:pipeline-or-es-role | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | exact | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | es-stamped-divergent | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | es-foreign-divergent | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | kibana-divergent | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | unreadable | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | absent:guarded-class | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | exact | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | es-stamped-divergent | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | es-foreign-divergent | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | kibana-divergent | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | absent:pipeline-or-es-role | unreadable | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | absent:guarded-class | none | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-current-full | exact | absent:pipeline-or-es-role | none | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-current-full | exact | exact | none | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | S-current-full | exact | es-stamped-divergent | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | exact | es-foreign-divergent | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | exact | kibana-divergent | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | exact | unreadable | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | exact | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-current-full | exact | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-current-full | exact | exact | repair | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | S-current-full | exact | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-current-full | exact | es-foreign-divergent | repair | S-current-full | 0 | 3 |
+| full-flow | S-current-full | exact | kibana-divergent | repair | S-current-full | 0 | 3 |
+| full-flow | S-current-full | exact | unreadable | repair | S-current-full | 0 | 3 |
+| full-flow | S-current-full | exact | absent:guarded-class | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | absent:pipeline-or-es-role | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | exact | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | es-stamped-divergent | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | es-foreign-divergent | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | kibana-divergent | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | unreadable | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | absent:guarded-class | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | absent:pipeline-or-es-role | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | exact | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | es-stamped-divergent | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | es-foreign-divergent | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | kibana-divergent | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | unreadable | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | absent:guarded-class | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | absent:pipeline-or-es-role | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | exact | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | es-stamped-divergent | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | es-foreign-divergent | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | kibana-divergent | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | unreadable | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | absent:guarded-class | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | absent:pipeline-or-es-role | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | exact | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | es-stamped-divergent | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | es-foreign-divergent | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | kibana-divergent | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | unreadable | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | absent:guarded-class | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | absent:pipeline-or-es-role | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | exact | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | es-stamped-divergent | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | es-foreign-divergent | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | kibana-divergent | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | unreadable | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | absent:guarded-class | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | exact | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | es-stamped-divergent | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | es-foreign-divergent | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | kibana-divergent | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | exact | unreadable | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-full | es-stamped-divergent | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-full | es-stamped-divergent | exact | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | es-stamped-divergent | es-stamped-divergent | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | es-stamped-divergent | es-foreign-divergent | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | es-stamped-divergent | kibana-divergent | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | es-stamped-divergent | unreadable | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | es-stamped-divergent | absent:guarded-class | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-current-full | es-stamped-divergent | absent:pipeline-or-es-role | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-current-full | es-stamped-divergent | exact | repair | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-current-full | es-stamped-divergent | es-stamped-divergent | repair | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-current-full | es-stamped-divergent | es-foreign-divergent | repair | S-current-full | 0 | 3 |
+| full-flow | S-current-full | es-stamped-divergent | kibana-divergent | repair | S-current-full | 0 | 3 |
+| full-flow | S-current-full | es-stamped-divergent | unreadable | repair | S-current-full | 0 | 3 |
+| full-flow | S-current-full | es-stamped-divergent | absent:guarded-class | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | absent:pipeline-or-es-role | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | exact | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | es-stamped-divergent | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | es-foreign-divergent | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | kibana-divergent | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | unreadable | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | absent:guarded-class | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | absent:pipeline-or-es-role | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | exact | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | es-stamped-divergent | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | es-foreign-divergent | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | kibana-divergent | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | unreadable | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | absent:guarded-class | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | absent:pipeline-or-es-role | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | exact | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | es-stamped-divergent | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | es-foreign-divergent | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | kibana-divergent | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | unreadable | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | absent:guarded-class | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | exact | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | es-stamped-divergent | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | es-foreign-divergent | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | kibana-divergent | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | unreadable | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | absent:guarded-class | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | exact | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | es-stamped-divergent | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | es-foreign-divergent | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | kibana-divergent | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | unreadable | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | exact | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | kibana-divergent | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-stamped-divergent | unreadable | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-full | es-foreign-divergent | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-full | es-foreign-divergent | exact | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | es-foreign-divergent | es-stamped-divergent | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | es-foreign-divergent | es-foreign-divergent | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | es-foreign-divergent | kibana-divergent | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | es-foreign-divergent | unreadable | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | es-foreign-divergent | absent:guarded-class | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-full | es-foreign-divergent | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-full | es-foreign-divergent | exact | repair | S-current-full | 0 | 3 |
+| full-flow | S-current-full | es-foreign-divergent | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-full | es-foreign-divergent | es-foreign-divergent | repair | S-current-full | 0 | 3 |
+| full-flow | S-current-full | es-foreign-divergent | kibana-divergent | repair | S-current-full | 0 | 3 |
+| full-flow | S-current-full | es-foreign-divergent | unreadable | repair | S-current-full | 0 | 3 |
+| full-flow | S-current-full | es-foreign-divergent | absent:guarded-class | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | absent:pipeline-or-es-role | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | exact | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | es-stamped-divergent | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | es-foreign-divergent | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | kibana-divergent | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | unreadable | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | absent:guarded-class | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | absent:pipeline-or-es-role | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | exact | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | es-stamped-divergent | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | es-foreign-divergent | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | kibana-divergent | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | unreadable | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | absent:guarded-class | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | absent:pipeline-or-es-role | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | exact | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | es-stamped-divergent | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | es-foreign-divergent | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | kibana-divergent | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | unreadable | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | absent:guarded-class | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | exact | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | es-stamped-divergent | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | es-foreign-divergent | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | kibana-divergent | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | unreadable | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | absent:guarded-class | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | exact | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | es-stamped-divergent | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | es-foreign-divergent | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | kibana-divergent | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | unreadable | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | exact | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | kibana-divergent | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | es-foreign-divergent | unreadable | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-full | kibana-divergent | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-full | kibana-divergent | exact | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | kibana-divergent | es-stamped-divergent | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | kibana-divergent | es-foreign-divergent | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | kibana-divergent | kibana-divergent | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | kibana-divergent | unreadable | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | kibana-divergent | absent:guarded-class | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-full | kibana-divergent | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-full | kibana-divergent | exact | repair | S-current-full | 0 | 3 |
+| full-flow | S-current-full | kibana-divergent | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-full | kibana-divergent | es-foreign-divergent | repair | S-current-full | 0 | 3 |
+| full-flow | S-current-full | kibana-divergent | kibana-divergent | repair | S-current-full | 0 | 3 |
+| full-flow | S-current-full | kibana-divergent | unreadable | repair | S-current-full | 0 | 3 |
+| full-flow | S-current-full | kibana-divergent | absent:guarded-class | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | absent:pipeline-or-es-role | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | exact | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | es-stamped-divergent | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | es-foreign-divergent | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | kibana-divergent | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | unreadable | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | absent:guarded-class | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | absent:pipeline-or-es-role | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | exact | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | es-stamped-divergent | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | es-foreign-divergent | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | kibana-divergent | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | unreadable | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | absent:guarded-class | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | absent:pipeline-or-es-role | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | exact | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | es-stamped-divergent | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | es-foreign-divergent | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | kibana-divergent | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | unreadable | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | absent:guarded-class | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | exact | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | es-stamped-divergent | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | es-foreign-divergent | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | kibana-divergent | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | unreadable | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | absent:guarded-class | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | exact | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | es-stamped-divergent | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | es-foreign-divergent | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | kibana-divergent | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | unreadable | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | exact | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | kibana-divergent | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | kibana-divergent | unreadable | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | absent:guarded-class | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-full | unreadable | absent:pipeline-or-es-role | none | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-full | unreadable | exact | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | unreadable | es-stamped-divergent | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | unreadable | es-foreign-divergent | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | unreadable | kibana-divergent | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | unreadable | unreadable | none | S-current-full | 0 | 3 |
+| full-flow | S-current-full | unreadable | absent:guarded-class | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-full | unreadable | absent:pipeline-or-es-role | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-full | unreadable | exact | repair | S-current-full | 0 | 3 |
+| full-flow | S-current-full | unreadable | es-stamped-divergent | repair | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-current-full | unreadable | es-foreign-divergent | repair | S-current-full | 0 | 3 |
+| full-flow | S-current-full | unreadable | kibana-divergent | repair | S-current-full | 0 | 3 |
+| full-flow | S-current-full | unreadable | unreadable | repair | S-current-full | 0 | 3 |
+| full-flow | S-current-full | unreadable | absent:guarded-class | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | absent:pipeline-or-es-role | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | exact | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | es-stamped-divergent | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | es-foreign-divergent | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | kibana-divergent | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | unreadable | upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | absent:guarded-class | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | absent:pipeline-or-es-role | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | exact | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | es-stamped-divergent | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | es-foreign-divergent | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | kibana-divergent | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | unreadable | allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | absent:guarded-class | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | absent:pipeline-or-es-role | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | exact | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | es-stamped-divergent | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | es-foreign-divergent | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | kibana-divergent | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | unreadable | repair+upgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | absent:guarded-class | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | absent:pipeline-or-es-role | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | exact | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | es-stamped-divergent | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | es-foreign-divergent | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | kibana-divergent | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | unreadable | repair+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | absent:guarded-class | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | absent:pipeline-or-es-role | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | exact | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | es-stamped-divergent | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | es-foreign-divergent | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | kibana-divergent | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | unreadable | upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | absent:guarded-class | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | exact | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | es-stamped-divergent | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | es-foreign-divergent | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | kibana-divergent | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-current-full | unreadable | unreadable | repair+upgrade+allow-downgrade | S-current-full | 0 | 2 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | absent:guarded-class | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | absent:pipeline-or-es-role | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | exact | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | es-stamped-divergent | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | es-foreign-divergent | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | kibana-divergent | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | unreadable | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | absent:guarded-class | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | absent:pipeline-or-es-role | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | exact | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | es-stamped-divergent | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | es-foreign-divergent | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | kibana-divergent | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | unreadable | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | absent:guarded-class | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | absent:pipeline-or-es-role | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | exact | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | es-stamped-divergent | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | es-foreign-divergent | upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | kibana-divergent | upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | unreadable | upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | absent:guarded-class | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | absent:pipeline-or-es-role | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | exact | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | es-stamped-divergent | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | es-foreign-divergent | allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | kibana-divergent | allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | unreadable | allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | absent:guarded-class | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | absent:pipeline-or-es-role | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | exact | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | es-stamped-divergent | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | es-foreign-divergent | repair+upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | kibana-divergent | repair+upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | unreadable | repair+upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | absent:guarded-class | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | absent:pipeline-or-es-role | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | exact | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | es-stamped-divergent | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | es-foreign-divergent | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | kibana-divergent | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | unreadable | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | absent:guarded-class | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | absent:pipeline-or-es-role | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | exact | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | es-stamped-divergent | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | es-foreign-divergent | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | kibana-divergent | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | unreadable | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | absent:guarded-class | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | exact | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | es-stamped-divergent | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | es-foreign-divergent | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | kibana-divergent | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:guarded-class | unreadable | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | absent:guarded-class | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | absent:pipeline-or-es-role | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | exact | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | es-stamped-divergent | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | es-foreign-divergent | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | kibana-divergent | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | unreadable | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | absent:guarded-class | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | exact | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | es-stamped-divergent | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | es-foreign-divergent | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | kibana-divergent | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | unreadable | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | absent:guarded-class | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | absent:pipeline-or-es-role | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | exact | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | es-stamped-divergent | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | es-foreign-divergent | upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | kibana-divergent | upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | unreadable | upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | absent:guarded-class | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | absent:pipeline-or-es-role | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | exact | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | es-stamped-divergent | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | es-foreign-divergent | allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | kibana-divergent | allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | unreadable | allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | absent:guarded-class | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | exact | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | es-stamped-divergent | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | es-foreign-divergent | repair+upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | kibana-divergent | repair+upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | unreadable | repair+upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | absent:guarded-class | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | exact | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | es-stamped-divergent | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | es-foreign-divergent | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | kibana-divergent | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | unreadable | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | absent:guarded-class | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | absent:pipeline-or-es-role | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | exact | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | es-stamped-divergent | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | es-foreign-divergent | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | kibana-divergent | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | unreadable | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | absent:guarded-class | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | exact | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | es-stamped-divergent | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | es-foreign-divergent | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | kibana-divergent | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | absent:pipeline-or-es-role | unreadable | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | absent:guarded-class | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | absent:pipeline-or-es-role | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | exact | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | es-stamped-divergent | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | es-foreign-divergent | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | kibana-divergent | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | unreadable | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | absent:guarded-class | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | absent:pipeline-or-es-role | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | exact | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | es-stamped-divergent | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | es-foreign-divergent | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | kibana-divergent | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | unreadable | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | absent:guarded-class | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | exact | absent:pipeline-or-es-role | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | exact | exact | upgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | S-prior-valid-direction | exact | es-stamped-divergent | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | exact | es-foreign-divergent | upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | kibana-divergent | upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | unreadable | upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | absent:guarded-class | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | exact | absent:pipeline-or-es-role | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | exact | exact | allow-downgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | S-prior-valid-direction | exact | es-stamped-divergent | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | exact | es-foreign-divergent | allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | kibana-divergent | allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | unreadable | allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | absent:guarded-class | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | exact | absent:pipeline-or-es-role | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | exact | exact | repair+upgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | S-prior-valid-direction | exact | es-stamped-divergent | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | exact | es-foreign-divergent | repair+upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | kibana-divergent | repair+upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | unreadable | repair+upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | absent:guarded-class | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | exact | absent:pipeline-or-es-role | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | exact | exact | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | S-prior-valid-direction | exact | es-stamped-divergent | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | exact | es-foreign-divergent | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | kibana-divergent | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | unreadable | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | absent:guarded-class | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | exact | absent:pipeline-or-es-role | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | exact | exact | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | S-prior-valid-direction | exact | es-stamped-divergent | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | es-foreign-divergent | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | kibana-divergent | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | unreadable | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | absent:guarded-class | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | exact | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | exact | exact | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | S-prior-valid-direction | exact | es-stamped-divergent | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | es-foreign-divergent | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | kibana-divergent | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | exact | unreadable | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | absent:guarded-class | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | absent:pipeline-or-es-role | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | exact | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | es-stamped-divergent | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | es-foreign-divergent | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | kibana-divergent | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | unreadable | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | absent:guarded-class | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | absent:pipeline-or-es-role | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | exact | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | es-stamped-divergent | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | es-foreign-divergent | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | kibana-divergent | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | unreadable | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | absent:guarded-class | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | absent:pipeline-or-es-role | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | exact | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | es-stamped-divergent | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | es-foreign-divergent | upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | kibana-divergent | upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | unreadable | upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | absent:guarded-class | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | absent:pipeline-or-es-role | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | exact | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | es-stamped-divergent | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | es-foreign-divergent | allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | kibana-divergent | allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | unreadable | allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | absent:guarded-class | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | absent:pipeline-or-es-role | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | exact | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | es-stamped-divergent | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | es-foreign-divergent | repair+upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | kibana-divergent | repair+upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | unreadable | repair+upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | absent:guarded-class | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | exact | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | es-stamped-divergent | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | es-foreign-divergent | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | kibana-divergent | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | unreadable | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | exact | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | es-stamped-divergent | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | es-foreign-divergent | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | kibana-divergent | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | unreadable | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | exact | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | kibana-divergent | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-stamped-divergent | unreadable | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | absent:guarded-class | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | absent:pipeline-or-es-role | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | exact | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | es-stamped-divergent | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | es-foreign-divergent | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | kibana-divergent | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | unreadable | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | absent:guarded-class | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | absent:pipeline-or-es-role | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | exact | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | es-stamped-divergent | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | es-foreign-divergent | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | kibana-divergent | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | unreadable | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | exact | upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | es-foreign-divergent | upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | kibana-divergent | upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | unreadable | upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | exact | allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | es-foreign-divergent | allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | kibana-divergent | allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | unreadable | allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | exact | repair+upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | es-foreign-divergent | repair+upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | kibana-divergent | repair+upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | unreadable | repair+upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | exact | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | es-foreign-divergent | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | kibana-divergent | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | unreadable | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | exact | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | es-stamped-divergent | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | es-foreign-divergent | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | kibana-divergent | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | unreadable | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | exact | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | kibana-divergent | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | es-foreign-divergent | unreadable | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | absent:guarded-class | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | absent:pipeline-or-es-role | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | exact | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | es-stamped-divergent | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | es-foreign-divergent | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | kibana-divergent | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | unreadable | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | absent:guarded-class | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | absent:pipeline-or-es-role | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | exact | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | es-stamped-divergent | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | es-foreign-divergent | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | kibana-divergent | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | unreadable | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | kibana-divergent | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | kibana-divergent | exact | upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | kibana-divergent | es-foreign-divergent | upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | kibana-divergent | upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | unreadable | upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | kibana-divergent | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | kibana-divergent | exact | allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | kibana-divergent | es-foreign-divergent | allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | kibana-divergent | allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | unreadable | allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | kibana-divergent | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | kibana-divergent | exact | repair+upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | kibana-divergent | es-foreign-divergent | repair+upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | kibana-divergent | repair+upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | unreadable | repair+upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | kibana-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | kibana-divergent | exact | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | kibana-divergent | es-foreign-divergent | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | kibana-divergent | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | unreadable | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | kibana-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | kibana-divergent | exact | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | es-stamped-divergent | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | es-foreign-divergent | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | kibana-divergent | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | unreadable | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | kibana-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | kibana-divergent | exact | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | kibana-divergent | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | kibana-divergent | unreadable | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | absent:guarded-class | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | absent:pipeline-or-es-role | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | exact | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | es-stamped-divergent | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | es-foreign-divergent | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | kibana-divergent | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | unreadable | none | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | absent:guarded-class | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | absent:pipeline-or-es-role | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | exact | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | es-stamped-divergent | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | es-foreign-divergent | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | kibana-divergent | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | unreadable | repair | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | unreadable | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | unreadable | exact | upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | unreadable | es-foreign-divergent | upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | kibana-divergent | upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | unreadable | upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | unreadable | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | unreadable | exact | allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | unreadable | es-foreign-divergent | allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | kibana-divergent | allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | unreadable | allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | unreadable | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | unreadable | exact | repair+upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | unreadable | es-foreign-divergent | repair+upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | kibana-divergent | repair+upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | unreadable | repair+upgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | unreadable | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | unreadable | exact | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | unreadable | es-foreign-divergent | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | kibana-divergent | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | unreadable | repair+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | unreadable | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | unreadable | exact | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | es-stamped-divergent | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | es-foreign-divergent | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | kibana-divergent | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | unreadable | upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | unreadable | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;pm=1] | 1 | 4 |
+| full-flow | S-prior-valid-direction | unreadable | exact | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | es-stamped-divergent | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | es-foreign-divergent | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | kibana-divergent | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-valid-direction | unreadable | unreadable | repair+upgrade+allow-downgrade | S-prior-valid-direction | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | absent:guarded-class | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | absent:pipeline-or-es-role | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | exact | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | es-stamped-divergent | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | es-foreign-divergent | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | kibana-divergent | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | unreadable | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | absent:guarded-class | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | absent:pipeline-or-es-role | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | exact | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | es-stamped-divergent | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | es-foreign-divergent | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | kibana-divergent | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | unreadable | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | absent:guarded-class | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | absent:pipeline-or-es-role | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | exact | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | es-stamped-divergent | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | es-foreign-divergent | upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | kibana-divergent | upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | unreadable | upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | absent:guarded-class | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | absent:pipeline-or-es-role | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | exact | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | es-stamped-divergent | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | es-foreign-divergent | allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | kibana-divergent | allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | unreadable | allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | absent:guarded-class | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | absent:pipeline-or-es-role | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | exact | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | es-stamped-divergent | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | es-foreign-divergent | repair+upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | kibana-divergent | repair+upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | unreadable | repair+upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | absent:guarded-class | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | absent:pipeline-or-es-role | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | exact | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | es-stamped-divergent | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | es-foreign-divergent | repair+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | kibana-divergent | repair+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | unreadable | repair+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | absent:guarded-class | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | absent:pipeline-or-es-role | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | exact | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | es-stamped-divergent | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | es-foreign-divergent | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | kibana-divergent | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | unreadable | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | absent:guarded-class | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | exact | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | es-stamped-divergent | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | es-foreign-divergent | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | kibana-divergent | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:guarded-class | unreadable | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | absent:guarded-class | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | absent:pipeline-or-es-role | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | exact | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | es-stamped-divergent | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | es-foreign-divergent | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | kibana-divergent | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | unreadable | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | absent:guarded-class | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | exact | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | es-stamped-divergent | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | es-foreign-divergent | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | kibana-divergent | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | unreadable | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | absent:guarded-class | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | absent:pipeline-or-es-role | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | exact | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | es-stamped-divergent | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | es-foreign-divergent | upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | kibana-divergent | upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | unreadable | upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | absent:guarded-class | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | absent:pipeline-or-es-role | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | exact | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | es-stamped-divergent | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | es-foreign-divergent | allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | kibana-divergent | allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | unreadable | allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | absent:guarded-class | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | exact | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | es-stamped-divergent | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | es-foreign-divergent | repair+upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | kibana-divergent | repair+upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | unreadable | repair+upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | absent:guarded-class | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | exact | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | es-stamped-divergent | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | es-foreign-divergent | repair+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | kibana-divergent | repair+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | unreadable | repair+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | absent:guarded-class | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | absent:pipeline-or-es-role | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | exact | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | es-stamped-divergent | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | es-foreign-divergent | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | kibana-divergent | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | unreadable | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | absent:guarded-class | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | exact | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | es-stamped-divergent | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | es-foreign-divergent | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | kibana-divergent | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | absent:pipeline-or-es-role | unreadable | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | absent:guarded-class | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | absent:pipeline-or-es-role | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | exact | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | es-stamped-divergent | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | es-foreign-divergent | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | kibana-divergent | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | unreadable | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | absent:guarded-class | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | absent:pipeline-or-es-role | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | exact | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | es-stamped-divergent | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | es-foreign-divergent | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | kibana-divergent | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | unreadable | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | absent:guarded-class | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | exact | absent:pipeline-or-es-role | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | exact | exact | upgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | S-prior-full-flow-installed | exact | es-stamped-divergent | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | exact | es-foreign-divergent | upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | kibana-divergent | upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | unreadable | upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | absent:guarded-class | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | exact | absent:pipeline-or-es-role | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | exact | exact | allow-downgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | S-prior-full-flow-installed | exact | es-stamped-divergent | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | exact | es-foreign-divergent | allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | kibana-divergent | allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | unreadable | allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | absent:guarded-class | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | exact | absent:pipeline-or-es-role | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | exact | exact | repair+upgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | S-prior-full-flow-installed | exact | es-stamped-divergent | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | exact | es-foreign-divergent | repair+upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | kibana-divergent | repair+upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | unreadable | repair+upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | absent:guarded-class | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | exact | absent:pipeline-or-es-role | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | exact | exact | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | S-prior-full-flow-installed | exact | es-stamped-divergent | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | exact | es-foreign-divergent | repair+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | kibana-divergent | repair+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | unreadable | repair+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | absent:guarded-class | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | exact | absent:pipeline-or-es-role | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | exact | exact | upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | S-prior-full-flow-installed | exact | es-stamped-divergent | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | es-foreign-divergent | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | kibana-divergent | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | unreadable | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | absent:guarded-class | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | exact | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | exact | exact | repair+upgrade+allow-downgrade | S[assets-66+full-flow-step-11] | 0 | 0 |
+| full-flow | S-prior-full-flow-installed | exact | es-stamped-divergent | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | es-foreign-divergent | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | kibana-divergent | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | exact | unreadable | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | absent:guarded-class | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | absent:pipeline-or-es-role | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | exact | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | es-stamped-divergent | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | es-foreign-divergent | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | kibana-divergent | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | unreadable | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | absent:guarded-class | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | absent:pipeline-or-es-role | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | exact | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | es-stamped-divergent | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | es-foreign-divergent | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | kibana-divergent | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | unreadable | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | absent:guarded-class | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | absent:pipeline-or-es-role | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | exact | upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | es-stamped-divergent | upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | es-foreign-divergent | upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | kibana-divergent | upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | unreadable | upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | absent:guarded-class | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | absent:pipeline-or-es-role | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | exact | allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | es-stamped-divergent | allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | es-foreign-divergent | allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | kibana-divergent | allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | unreadable | allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | absent:guarded-class | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | absent:pipeline-or-es-role | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | exact | repair+upgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | es-stamped-divergent | repair+upgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | es-foreign-divergent | repair+upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | kibana-divergent | repair+upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | unreadable | repair+upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | absent:guarded-class | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | exact | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 1 | 0 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | es-stamped-divergent | repair+allow-downgrade | S[assets-66+full-flow-step-11] | 2 | 0 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | es-foreign-divergent | repair+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | kibana-divergent | repair+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | unreadable | repair+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | exact | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | es-stamped-divergent | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | es-foreign-divergent | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | kibana-divergent | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | unreadable | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | exact | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | kibana-divergent | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-stamped-divergent | unreadable | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | absent:guarded-class | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | absent:pipeline-or-es-role | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | exact | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | es-stamped-divergent | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | es-foreign-divergent | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | kibana-divergent | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | unreadable | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | absent:guarded-class | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | absent:pipeline-or-es-role | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | exact | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | es-stamped-divergent | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | es-foreign-divergent | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | kibana-divergent | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | unreadable | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | exact | upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | es-foreign-divergent | upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | kibana-divergent | upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | unreadable | upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | exact | allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | es-foreign-divergent | allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | kibana-divergent | allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | unreadable | allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | exact | repair+upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | es-foreign-divergent | repair+upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | kibana-divergent | repair+upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | unreadable | repair+upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | exact | repair+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | es-foreign-divergent | repair+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | kibana-divergent | repair+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | unreadable | repair+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | exact | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | es-stamped-divergent | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | es-foreign-divergent | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | kibana-divergent | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | unreadable | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | exact | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | kibana-divergent | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | es-foreign-divergent | unreadable | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | absent:guarded-class | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | absent:pipeline-or-es-role | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | exact | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | es-stamped-divergent | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | es-foreign-divergent | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | kibana-divergent | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | unreadable | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | absent:guarded-class | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | absent:pipeline-or-es-role | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | exact | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | es-stamped-divergent | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | es-foreign-divergent | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | kibana-divergent | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | unreadable | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | exact | upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | es-foreign-divergent | upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | kibana-divergent | upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | unreadable | upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | exact | allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | es-foreign-divergent | allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | kibana-divergent | allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | unreadable | allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | exact | repair+upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | es-foreign-divergent | repair+upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | kibana-divergent | repair+upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | unreadable | repair+upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | exact | repair+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | es-foreign-divergent | repair+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | kibana-divergent | repair+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | unreadable | repair+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | exact | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | es-stamped-divergent | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | es-foreign-divergent | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | kibana-divergent | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | unreadable | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | exact | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | es-stamped-divergent | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | es-foreign-divergent | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | kibana-divergent | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | kibana-divergent | unreadable | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | absent:guarded-class | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | absent:pipeline-or-es-role | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | exact | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | es-stamped-divergent | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | es-foreign-divergent | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | kibana-divergent | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | unreadable | none | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | absent:guarded-class | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | absent:pipeline-or-es-role | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | exact | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | es-stamped-divergent | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | es-foreign-divergent | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | kibana-divergent | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | unreadable | repair | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | absent:guarded-class | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | unreadable | absent:pipeline-or-es-role | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | unreadable | exact | upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | es-stamped-divergent | upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | unreadable | es-foreign-divergent | upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | kibana-divergent | upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | unreadable | upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | absent:guarded-class | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | unreadable | absent:pipeline-or-es-role | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | unreadable | exact | allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | es-stamped-divergent | allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | unreadable | es-foreign-divergent | allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | kibana-divergent | allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | unreadable | allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | absent:guarded-class | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | unreadable | absent:pipeline-or-es-role | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | unreadable | exact | repair+upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | es-stamped-divergent | repair+upgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | unreadable | es-foreign-divergent | repair+upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | kibana-divergent | repair+upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | unreadable | repair+upgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | absent:guarded-class | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | unreadable | absent:pipeline-or-es-role | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | unreadable | exact | repair+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | es-stamped-divergent | repair+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | unreadable | es-foreign-divergent | repair+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | kibana-divergent | repair+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | unreadable | repair+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | absent:guarded-class | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | unreadable | absent:pipeline-or-es-role | upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | unreadable | exact | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | es-stamped-divergent | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | es-foreign-divergent | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | kibana-divergent | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | unreadable | upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | absent:guarded-class | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | unreadable | absent:pipeline-or-es-role | repair+upgrade+allow-downgrade | I[assets-66+full-flow-step-11;predecessor=valid;pm=1] | 1 | 4 |
+| full-flow | S-prior-full-flow-installed | unreadable | exact | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | es-stamped-divergent | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | es-foreign-divergent | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | kibana-divergent | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
+| full-flow | S-prior-full-flow-installed | unreadable | unreadable | repair+upgrade+allow-downgrade | S-prior-full-flow-installed | 0 | 3 |
 
-**Generated row count:** `896`.
+**Generated row count:** `5824`.  **Table data rows SHA-256:** `cb35643cd06e0c9438a37f1e84d8d28d6ebe2fc744bdfeec5a129d855b90197a`.
 <!-- END GENERATED FLAG-STATE TABLE -->
-
