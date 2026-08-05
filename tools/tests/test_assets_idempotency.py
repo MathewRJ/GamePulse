@@ -139,11 +139,36 @@ class RecordFixtures(unittest.TestCase):
     def test_t_rec_5_exact_target_accounting(self):
         self.assertEqual(len(self.targets), 66)
         self.assertEqual(self.targets, sorted(self.targets, key=lambda item: item["key"].encode()))
+        self.assertEqual(len(INSTALL._transaction_specs(self.bundle)), 66)
+        self.assertEqual(len(INSTALL._transaction_specs(self.bundle, True)), 67)
         value = self.installing()
         self.assertEqual(len(value["progress"]), 66)
         expanded = INSTALL.expand_full_flow_record(value)
         self.assertEqual(len(expanded["progress"]), 67)
         self.assertIn(INSTALL.BUNDLE_META_TARGET_KEY, expanded["progress"])
+
+    def test_t_rec_5_verified_set_digest_has_distinct_66_and_67_target_oracles(self):
+        """The full-flow completion hash includes M, independently of helpers."""
+        assets_only = self.installing()
+        for key in assets_only["progress"]:
+            assets_only["progress"][key] = "verified"
+        installed_assets = INSTALL.promote_transaction_record(assets_only, "2026-08-04T12:35:00Z")
+        expected_66 = hashlib.sha256(json.dumps(
+            self.targets, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+        self.assertEqual(installed_assets["verified_target_set_sha256"], expected_66)
+
+        full = INSTALL.expand_full_flow_record(self.installing())
+        for key in full["progress"]:
+            full["progress"][key] = "verified"
+        installed_full = INSTALL.promote_transaction_record(full, "2026-08-04T12:35:00Z")
+        meta = {"key": INSTALL.BUNDLE_META_TARGET_KEY,
+                "digest": hashlib.sha256(json.dumps(
+                    INSTALL.BUNDLE_META_TARGET_KEY, sort_keys=True, separators=(",", ":")).encode()).hexdigest()}
+        expected_67 = hashlib.sha256(json.dumps(
+            sorted(self.targets + [meta], key=lambda item: item["key"].encode()),
+            sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+        self.assertEqual(installed_full["verified_target_set_sha256"], expected_67)
+        self.assertNotEqual(expected_67, expected_66)
 
     def test_t_rec_6_independent_bundle_meta_jcs_golden(self):
         # Both files are independently checked-in literals.  Constructing and
@@ -177,8 +202,12 @@ install = importlib.util.module_from_spec(spec); spec.loader.exec_module(install
 directory = Path(os.environ["RIGSIGNAL_TEST_DIR"])
 if os.environ["RIGSIGNAL_TEST_OP"] == "atomic":
     install.atomic_write(directory, "state.json", b"new")
-else:
+elif os.environ["RIGSIGNAL_TEST_OP"] == "snapshot":
     install.snapshot_bundle(directory / "bundle.tar", directory, parse=False)
+elif os.environ["RIGSIGNAL_TEST_OP"] == "snapshot-parse":
+    install.snapshot_bundle(directory / "bundle.tar", directory, parse=True)
+else:
+    install.cleanup_snapshot_residues(directory)
 '''
 
     def _boundary_child(self, directory, operation, crash_at):
@@ -239,16 +268,26 @@ else:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw); root.chmod(0o700)
             (root / "bundle.tar").write_bytes(b"archive-bytes")
-            crashed = self._boundary_child(root, "snapshot", "snapshot-after-copy-fsync")
-            self.assertEqual(crashed.returncode, -9, crashed.stderr)
-            residues = [path for path in root.iterdir() if path.name.startswith(".rigsignal-archive-")]
-            self.assertEqual(len(residues), 1)
-            self.assertEqual(residues[0].stat().st_mode & 0o777, 0o600)
-            INSTALL.cleanup_snapshot_residues(root)
-            self.assertFalse(residues[0].exists())
+            for operation, point in (("snapshot", "snapshot-after-copy-fsync"),
+                                     ("snapshot-parse", "snapshot-before-parse")):
+                with self.subTest(point=point):
+                    crashed = self._boundary_child(root, operation, point)
+                    self.assertEqual(crashed.returncode, -9, crashed.stderr)
+                    residues = [path for path in root.iterdir() if path.name.startswith(".rigsignal-archive-")]
+                    self.assertEqual(len(residues), 1)
+                    self.assertEqual(residues[0].stat().st_mode & 0o777, 0o600)
+                    INSTALL.cleanup_snapshot_residues(root)
+                    self.assertFalse(residues[0].exists())
             fresh = INSTALL.snapshot_bundle(root / "bundle.tar", root, parse=False)
             self.assertEqual(fresh.path.read_bytes(), b"archive-bytes")
             fresh.close()
+            residue = root / ".rigsignal-archive-cleanup"
+            residue.write_bytes(b"owned"); residue.chmod(0o600)
+            crashed = self._boundary_child(root, "snapshot-cleanup", "snapshot-residue-before-cleanup")
+            self.assertEqual(crashed.returncode, -9, crashed.stderr)
+            self.assertTrue(residue.exists())
+            INSTALL.cleanup_snapshot_residues(root)
+            self.assertFalse(residue.exists())
             foreign = root / ".rigsignal-foreign"
             foreign.symlink_to("bundle.tar")
             with self.assertRaises(INSTALL.InputError):
@@ -519,6 +558,53 @@ sys.exit(module.main())
         # only a fully verified record shape.
         installed = INSTALL.promote_transaction_record(record, "2026-08-04T12:35:00Z")
         self.assertEqual(installed["state"], "installed")
+
+    def test_t_recon_7_step11_final_rereads_all_67_targets_before_promotion(self):
+        """A deferred Step-11 leg cannot promote after an ordinary replacement."""
+        record = INSTALL.expand_full_flow_record(self.installing())
+        for key in record["progress"]:
+            record["progress"][key] = "verified"
+        ordinary = self.targets[0]["key"]
+        observed = []
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / INSTALL.ASSETS_MARKER_FILE
+            path.parent.chmod(0o700)
+            INSTALL.write_transaction_record(path, record, self.binding, self.targets)
+
+            def observe(_es, _kb, _auth, spec, _bundle, _adapter, _record=None, **_kwargs):
+                observed.append(spec[0])
+                # The first observation is the dispatch M; an ordinary target
+                # changes only in the immediately-pre-promotion 67-target pass.
+                if spec[0] == ordinary and len(observed) > 1:
+                    return "divergent", None, None
+                return "exact", None, None
+
+            with mock.patch.object(INSTALL, "_transaction_observe", side_effect=observe), \
+                 mock.patch.object(INSTALL, "_transaction_put") as put, \
+                 mock.patch.object(INSTALL, "_transaction_now", return_value="2026-08-04T12:35:00Z"):
+                with self.assertRaises(INSTALL.AssetTransactionHalt):
+                    INSTALL.run_default_asset_transaction(
+                        self.bundle, "https://es", "https://kb", "auth", path, self.binding,
+                        full_flow=True, step_11_only=True, lock=mock.Mock())
+            put.assert_not_called()
+            self.assertEqual(observed[0], INSTALL.BUNDLE_META_TARGET_KEY)
+            retained = INSTALL.read_transaction_record_if_present(path, self.binding, self.targets)
+            self.assertEqual(retained["state"], "installing")
+
+            # A clean second Step-11 leg provides the complete observation
+            # oracle: dispatch M plus all 67 barrier members before promotion.
+            observed.clear()
+            with mock.patch.object(INSTALL, "_transaction_observe", side_effect=lambda *_args, **_kwargs:
+                                   (observed.append(_args[3][0]) or ("exact", None, None))), \
+                 mock.patch.object(INSTALL, "_transaction_put") as put, \
+                 mock.patch.object(INSTALL, "_transaction_now", return_value="2026-08-04T12:35:00Z"):
+                self.assertEqual(INSTALL.run_default_asset_transaction(
+                    self.bundle, "https://es", "https://kb", "auth", path, self.binding,
+                    full_flow=True, step_11_only=True, lock=mock.Mock()), "applied")
+            put.assert_not_called()
+            self.assertEqual(observed[0], INSTALL.BUNDLE_META_TARGET_KEY)
+            self.assertEqual(set(observed[1:]), {item[0] for item in INSTALL._transaction_specs(self.bundle, True)})
+            self.assertEqual(len(observed[1:]), 67)
 
     def test_t_sm_4_atomic_demotion_shape_has_no_partial_record(self):
         record = self.installing()
@@ -811,7 +897,10 @@ print(outcome)
                     initial["progress"][key] = "verified"
                 if missing:
                     initial["progress"][missing[0]] = "planned"
-                if mode.startswith("write-") or mode.startswith("map-"):
+                # The write-issued crash starts from durable planned/pm=false;
+                # the child itself must publish write-issued/pm=true before
+                # SIGKILL.  Mapping remains a post-write recovery edge.
+                if mode.startswith("map-"):
                     initial = INSTALL.mark_transaction_write_issued(initial, missing[0])
                 INSTALL.write_transaction_record(record, initial, binding, targets)
             elif mode.startswith("v1-"):
@@ -854,6 +943,7 @@ print(outcome)
         wire.update(live_state.get("states", live_state))
         operations = []
         attempts = {}
+        transport_calls = []
 
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw); root.chmod(0o700)
@@ -883,6 +973,10 @@ print(outcome)
             def put(_es, _kb, _auth, spec, _bundle, _record, _adapter):
                 operations.append(spec[0])
                 wire[spec[0]] = "exact"
+
+            def prerequisite_transport(*args, **kwargs):
+                transport_calls.append(args[1:3])
+                return self._prerequisite_transport(*args, **kwargs)
 
             argv = ["install_assets.py", "--bundle", str(root / "bundle.tar"),
                     "--endpoint", "https://es.example", "--ca-file", str(root / "es.pem"),
@@ -915,7 +1009,7 @@ print(outcome)
                  mock.patch.object(INSTALL, "cluster_uuid", return_value="0123456789ABCDEFGHIJKL"), \
                  mock.patch.object(INSTALL, "_prepare_assets_marker_path", return_value=path), \
                  mock.patch.object(INSTALL, "assets_only_install", side_effect=caller_route), \
-                 mock.patch.object(INSTALL, "request_response", side_effect=self._prerequisite_transport), \
+                mock.patch.object(INSTALL, "request_response", side_effect=prerequisite_transport), \
                  mock.patch.object(INSTALL, "_transaction_observe", side_effect=observe), \
                  mock.patch.object(INSTALL, "_transaction_put", side_effect=put), \
                  redirect_stdout(output), redirect_stderr(diagnostics):
@@ -924,7 +1018,8 @@ print(outcome)
             return {"exit_code": exit_code, "record": final, "operations": operations,
                     "diagnostics": diagnostics.getvalue(), "output": output.getvalue(),
                     "path_exists": path.exists(), "wire": wire, "targets": targets,
-                    "full_key": INSTALL.BUNDLE_META_TARGET_KEY}
+                    "full_key": INSTALL.BUNDLE_META_TARGET_KEY,
+                    "transport_calls": transport_calls, "observations": attempts}
 
     def _real_transaction(self, *, record_kind="N", full_flow=False, absent=(), divergent=(),
                           unreadable=(), repair=False, upgrade=False, allow_downgrade=False):
@@ -1237,13 +1332,17 @@ print(outcome)
 
     def test_t_exit_2_version_flags_are_local_preflight_with_no_transport(self):
         """The currently implemented T-EXIT-2 invalid-flag limb is real, not policy-only."""
-        for kwargs in ({"upgrade": True}, {"allow_downgrade": True},
-                       {"upgrade": True, "allow_downgrade": True}):
-            with self.subTest(**kwargs):
-                result = self._real_transaction(**kwargs)
-                self.assertEqual(result["status"], 2)
-                self.assertEqual(result["writes"], [])
+        for caller in ("assets-only", "full-flow"):
+            for kwargs in ({"upgrade": True}, {"allow_downgrade": True},
+                           {"upgrade": True, "allow_downgrade": True}):
+                with self.subTest(caller=caller, **kwargs):
+                    flags = tuple(key.replace("_", "-") for key, value in kwargs.items() if value)
+                    result = self._run_scenario(caller, "N", flags=flags)
+                self.assertEqual(result["exit_code"], 2)
+                self.assertEqual(result["operations"], [])
                 self.assertFalse(result["path_exists"])
+                self.assertEqual(result["transport_calls"], [])
+                self.assertEqual(result["observations"], {})
 
     def test_t_flag_3_resumed_stamped_es_requires_repair_through_main(self):
         """Corrected-table I-assets-pm0 stamped-ES rows use the real route."""
@@ -1277,6 +1376,11 @@ print(outcome)
                 self.assertEqual(result["exit_code"], 4)
                 self.assertEqual(result["operations"], [])
                 self.assertEqual(result["record"]["possible_mutation"], True)
+        for caller, record in (("assets-only", "I-assets-pm1"), ("full-flow", "I-full-pm1")):
+            with self.subTest(caller=caller, recovery="able"):
+                result = self._run_scenario(caller, record, flags=("upgrade",))
+                self.assertEqual(result["exit_code"], 0)
+                self.assertEqual(result["record"]["state"], "installed")
 
     def test_t_sm_1_through_12_every_durable_edge_has_a_guarded_crash_hook(self):
         source = (ROOT / "tools/install_assets.py").read_text()
@@ -1321,6 +1425,10 @@ print(outcome)
                              "map-after-destination-map-publication"}:
                     self.assertEqual(crashed.returncode, -9, crashed.stderr)
                     self.assertEqual(wire["writes"], 0 if point == "write-after-write-issued" else 1)
+                    if point == "write-after-write-issued":
+                        issued = json.loads(raw)
+                        self.assertTrue(issued["possible_mutation"])
+                        self.assertEqual(issued["progress"][target], "write-issued")
                     self.assertEqual(rerun.returncode, 0, rerun.stderr)
                     self.assertEqual(final["state"], "installed")
                     continue

@@ -1458,6 +1458,82 @@ def transaction_boundary_preflight(record_path: Path) -> int | None:
     return None
 
 
+def transaction_boundary_version_preflight(record_path: Path, bundle: Bundle, *,
+                                           upgrade: bool, allow_downgrade: bool) -> int | None:
+    """Classify the zero-transport same-version flag boundary.
+
+    This deliberately has *no* recovery authority.  It only reads an existing
+    protected leaf, proves that it is a canonical current v2 record using
+    locally available bundle facts, and rejects flags which cannot possibly
+    describe a transition.  In particular, a valid ``possible_mutation``
+    record is left for the executor to reconcile; returning 4 here would
+    preempt a recoverable transaction.
+    """
+    if not (upgrade or allow_downgrade):
+        return None
+    try:
+        record_path.lstat()
+    except FileNotFoundError:
+        return 2
+    except OSError as error:
+        return 2 if error.errno in {errno.ENOENT, errno.ENOTDIR} else 3
+    try:
+        raw = protected_regular_file(record_path)
+        value = parse_json(raw, "assets transaction record")
+    except (InputError, OSError):
+        return 3
+    legacy_shape = (isinstance(value, dict)
+                    and set(value) == {"schema_version", "bundle_version", "source_commit", "identities"}
+                    and value.get("schema_version") == ASSETS_MARKER_SCHEMA_VERSION)
+    if legacy_shape:
+        # Legacy migration/refusal owns its historic ordering and flag rules.
+        return None
+    if not isinstance(value, dict) or value.get("schema_version") != V2_SCHEMA_VERSION or jcs(value) != raw:
+        return 3
+    kibana_target = value.get("kibana_target")
+    try:
+        strict_remote_shape = (isinstance(value.get("cluster_uuid"), str)
+                               and _V2_CLUSTER_RE.fullmatch(value["cluster_uuid"]) is not None
+                               and isinstance(kibana_target, dict)
+                               and set(kibana_target) == {"origin", "spaces"}
+                               and kibana_target.get("spaces") == ["default", "rigsignal"]
+                               and isinstance(kibana_target.get("origin"), str)
+                               and canonical_https_origin(kibana_target["origin"], "--kibana-endpoint")
+                                   == kibana_target["origin"]
+                               and isinstance(value.get("bundle_sha256"), str)
+                               and _V2_SHA256_RE.fullmatch(value["bundle_sha256"]) is not None)
+    except InputError:
+        strict_remote_shape = False
+    if not strict_remote_shape:
+        return 3
+    # Remote cluster and Kibana origin cannot be re-authorized at this local
+    # boundary.  Reuse their recorded values solely to run the strict schema
+    # validator, while pinning every locally knowable current-bundle member.
+    targets = transaction_targets(bundle)
+    local_binding = {
+        "schema_version": V2_SCHEMA_VERSION,
+        "cluster_uuid": value.get("cluster_uuid"),
+        "kibana_target": value.get("kibana_target"),
+        "ownership_profile": "default",
+        "bundle_version": bundle.version,
+        "source_commit": bundle.source_commit,
+        "bundle_sha256": value.get("bundle_sha256"),
+        "asset_set_sha256": _target_digest(targets),
+    }
+    try:
+        record = validate_transaction_record(raw, local_binding, targets)
+    except InputError:
+        return 3
+    if record.get("possible_mutation") is True:
+        return None
+    # A validated predecessor is the only local shape in which direction
+    # flags may be meaningful.  The executor still validates its direction
+    # and all remote binding before it can mutate.
+    if record.get("state") == "installing" and record.get("predecessor") is not None:
+        return None
+    return 2
+
+
 def asset_executor_exit_code(outcome: str, record_path: Path | None = None) -> int:
     """Translate the complete asset-executor outcome domain at the CLI edge.
 
@@ -1584,6 +1660,16 @@ def _v2_targets_valid(targets: object, expected: list[dict[str, str]]) -> bool:
                and _V2_SHA256_RE.fullmatch(item["digest"]) for item in targets)
 
 
+def verified_target_set_digest(targets: list[dict[str, str]], obligations: object) -> str:
+    """Digest the completed physical set (66 assets, plus M for full flow)."""
+    verified = deepcopy(targets)
+    if obligations == [V2_ASSET_OBLIGATION, V2_FULL_FLOW_OBLIGATION]:
+        verified.append({"key": BUNDLE_META_TARGET_KEY,
+                         "digest": _target_digest(BUNDLE_META_TARGET_KEY)})
+        verified.sort(key=lambda item: item["key"].encode("utf-8"))
+    return _target_digest(verified)
+
+
 def _v2_destination_map_valid(value: object, targets: list[dict[str, str]]) -> bool:
     """Validate persisted submitted-to-destination saved-object identities.
 
@@ -1676,7 +1762,9 @@ def _v2_prior_installed_valid(value: object, binding: dict) -> bool:
                                                       [V2_ASSET_OBLIGATION, V2_FULL_FLOW_OBLIGATION])
             and _v2_destination_map_valid(value.get("destination_map"), targets)
             and isinstance(value.get("verified_target_set_sha256"), str)
-            and _V2_SHA256_RE.fullmatch(value["verified_target_set_sha256"]) is not None)
+            and _V2_SHA256_RE.fullmatch(value["verified_target_set_sha256"]) is not None
+            and value["verified_target_set_sha256"] == verified_target_set_digest(
+                targets, value.get("caller_obligations")))
 
 
 def _v2_installed_valid(value: object, binding: dict, targets: list[dict[str, str]], *, predecessor: bool = False) -> bool:
@@ -1699,7 +1787,8 @@ def _v2_installed_valid(value: object, binding: dict, targets: list[dict[str, st
             and _V2_TRANSACTION_RE.fullmatch(value["completed_transaction_id"]) is not None
             and isinstance(value.get("verified_target_set_sha256"), str)
             and _V2_SHA256_RE.fullmatch(value["verified_target_set_sha256"]) is not None
-            and value["verified_target_set_sha256"] == _target_digest(value["targets"]))
+            and value["verified_target_set_sha256"] == verified_target_set_digest(
+                value["targets"], value.get("caller_obligations")))
 
 
 def validate_transaction_record(raw: bytes, binding: dict, targets: list[dict[str, str]]) -> dict:
@@ -1853,7 +1942,8 @@ def promote_transaction_record(record: dict, completed_at: str) -> dict:
     completed = {**common, "state": "installed", "caller_obligations": deepcopy(record["caller_obligations"]),
                  "destination_map": deepcopy(record["destination_map"]),
                  "completed_transaction_id": record["transaction_id"], "completed_at": completed_at,
-                 "verified_target_set_sha256": _target_digest(record["targets"])}
+                 "verified_target_set_sha256": verified_target_set_digest(
+                     record["targets"], record["caller_obligations"])}
     return completed
 
 
@@ -2083,14 +2173,21 @@ def _transaction_key_for_asset(asset: Asset) -> str:
 
 def _transaction_specs(bundle: Bundle, include_meta: bool = False) -> list[tuple[str, Asset | None, dict | None]]:
     """Return the complete ordered physical target map used by the v2 engine."""
-    specs: list[tuple[str, Asset | None, dict | None]] = []
+    specs: dict[str, tuple[str, Asset | None, dict | None]] = {}
+
+    def add(spec: tuple[str, Asset | None, dict | None]) -> None:
+        # Source dashboard files may repeat an already-expanded saved-object
+        # identity.  It is one physical target (and one record-progress
+        # member), so every barrier and final reverify must retain one entry.
+        specs.setdefault(spec[0], spec)
+
     for asset in bundle.assets:
         if asset.kind in _ES_ASSET_KINDS:
-            specs.append((_transaction_key_for_asset(asset), asset, None))
+            add((_transaction_key_for_asset(asset), asset, None))
         elif asset.kind == "kibana_spaces":
-            specs.append(("kibana/rigsignal/space/" + _v2_quote(asset.name), asset, None))
+            add(("kibana/rigsignal/space/" + _v2_quote(asset.name), asset, None))
         elif asset.kind == "kibana_roles":
-            specs.append(("kibana/default/role/" + _v2_quote(asset.name), asset, None))
+            add(("kibana/default/role/" + _v2_quote(asset.name), asset, None))
         elif asset.kind == "dashboard":
             space = dashboard_target_space(asset)
             for line in asset.data.decode("utf-8").splitlines():
@@ -2099,10 +2196,10 @@ def _transaction_specs(bundle: Bundle, include_meta: bool = False) -> list[tuple
                 saved = parse_json(line.encode("utf-8"), asset.path)
                 if not isinstance(saved, dict) or not isinstance(saved.get("type"), str) or not isinstance(saved.get("id"), str):
                     raise InputError("dashboard object is invalid")
-                specs.append(("kibana/" + _v2_quote(space) + "/" + _v2_quote(saved["type"]) + "/" + _v2_quote(saved["id"]), asset, saved))
+                add(("kibana/" + _v2_quote(space) + "/" + _v2_quote(saved["type"]) + "/" + _v2_quote(saved["id"]), asset, saved))
     if include_meta:
-        specs.append((BUNDLE_META_TARGET_KEY, None, None))
-    return sorted(specs, key=lambda item: item[0].encode("utf-8"))
+        add((BUNDLE_META_TARGET_KEY, None, None))
+    return sorted(specs.values(), key=lambda item: item[0].encode("utf-8"))
 
 
 def _saved_object_projection(space: str, object_type: str, response: object) -> object:
@@ -2817,7 +2914,10 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
             return "deferred"
         # Promotion is preceded by a complete ordered reread, never progress
         # bookkeeping alone (T-SM-8/T-RECON-7).
-        for spec in specs:
+        # ``specs`` is deliberately narrowed to M for the Step-11 leg, but
+        # promotion is a transaction-wide assertion.  Keep the same lock and
+        # re-observe the complete barrier set immediately before promotion.
+        for spec in barrier_specs:
             state, _live, _destination = _transaction_observe(es_url, kb_url, authorization, spec, bundle, adapter, record)
             if state != "exact":
                 raise AssetTransactionHalt("partial-remote-possible")
@@ -6844,6 +6944,15 @@ def main() -> int:
 
     if getattr(args, "assets_only", False):
         try:
+            # ERRATA-6 is a local, non-authorizing boundary.  It intentionally
+            # precedes the version fence, snapshot, credential read, and the
+            # assets-only prerequisite/cluster reads.  Valid pm=true input is
+            # not terminal here and therefore still reaches reconciliation.
+            boundary_status = transaction_boundary_version_preflight(
+                boundary_marker_path, bundle, upgrade=getattr(args, "upgrade", False),
+                allow_downgrade=getattr(args, "allow_downgrade", False))
+            if boundary_status is not None:
+                return boundary_status
             # Slice 1's version/commit fence remains an invocation boundary,
             # while this path deliberately never resolves or creates an
             # enrollment root.
@@ -6914,6 +7023,16 @@ def main() -> int:
         adopt_requested = getattr(args, "adopt_existing_w1_stream", False)
         if adopt_requested and condition in {"committed", "incomplete"}:
             raise ProvisionError("install refused: adoption_flag_state_present")
+        # Keep incomplete enrollment's key-recovery ordering intact: that
+        # state can require a remote cleanup before an ordinary local refusal
+        # is allowed to terminate the invocation.  All other default full-flow
+        # calls get the same zero-transport flag boundary as assets-only.
+        if ownership_profile == "default" and bundle.assets and condition != "incomplete":
+            boundary_status = transaction_boundary_version_preflight(
+                boundary_marker_path, bundle, upgrade=getattr(args, "upgrade", False),
+                allow_downgrade=getattr(args, "allow_downgrade", False))
+            if boundary_status is not None:
+                return boundary_status
         check_version_fence(bundle, args.agent_binary)
         if args.bundle.is_file():
             snapshot_dir = transaction_snapshot_directory(getattr(args, "assets_marker", None))

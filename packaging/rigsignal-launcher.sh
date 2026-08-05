@@ -712,17 +712,78 @@ cmd_assets_install() {
     # this scoped helper separate from the launcher's global _die() because
     # other subcommands retain their existing exit protocol.
     # The engine cannot classify a local acquisition failure it never gets to
-    # see.  This intentionally narrow pre-engine check recognizes only the
-    # canonical active uncertainty shape and emits the same redacted contract
+    # see.  This narrow pre-engine check recognizes only a canonical,
+    # protected active uncertainty record and emits the same redacted contract
     # token; it grants no overwrite authority to the shell.
     _assets_boundary_uncertain() {
         _assets_state_root=${XDG_STATE_HOME:-"$HOME/.local/state"}
         _assets_record="$_assets_state_root/rigsignal/assets/assets-marker.json"
-        [ -f "$_assets_record" ] && [ -r "$_assets_record" ] || return 1
-        grep -q '"schema_version":2' "$_assets_record" 2>/dev/null || return 1
-        grep -q '"state":"installing"' "$_assets_record" 2>/dev/null || return 1
-        grep -q '"possible_mutation":true' "$_assets_record" 2>/dev/null || return 1
-        return 0
+        python3 - "$_assets_record" <<'PY'
+import json, os, re, stat, sys
+
+path = sys.argv[1]
+try:
+    lst = os.lstat(path)
+    if (not stat.S_ISREG(lst.st_mode) or lst.st_uid != os.geteuid()
+            or stat.S_IMODE(lst.st_mode) != 0o600):
+        raise ValueError()
+    parent = os.lstat(os.path.dirname(path))
+    if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.geteuid()
+            or stat.S_IMODE(parent.st_mode) != 0o700):
+        raise ValueError()
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        opened = os.fstat(fd)
+        if (opened.st_dev, opened.st_ino) != (lst.st_dev, lst.st_ino):
+            raise ValueError()
+        raw = b"".join(iter(lambda: os.read(fd, 65536), b""))
+    finally:
+        os.close(fd)
+    def pairs(items):
+        value = dict(items)
+        if len(value) != len(items):
+            raise ValueError()
+        return value
+    value = json.loads(raw.decode("utf-8"), object_pairs_hook=pairs,
+                       parse_constant=lambda _value: (_ for _ in ()).throw(ValueError()))
+    if json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"),
+                  allow_nan=False).encode("utf-8") != raw:
+        raise ValueError()
+    common = {"asset_set_sha256", "bundle_sha256", "bundle_version", "cluster_uuid", "kibana_target",
+              "ownership_profile", "schema_version", "source_commit", "state", "targets"}
+    required = common | {"caller_obligations", "created_at", "destination_map", "possible_mutation",
+                         "predecessor", "progress", "transaction_id"}
+    if set(value) != required or value["schema_version"] != 2 or value["state"] != "installing":
+        raise ValueError()
+    if value["possible_mutation"] is not True or not re.fullmatch(
+            r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}",
+            value["transaction_id"] if isinstance(value["transaction_id"], str) else ""):
+        raise ValueError()
+    if value["caller_obligations"] not in (["assets-66"], ["assets-66", "full-flow-step-11"]):
+        raise ValueError()
+    targets = value["targets"]
+    if not isinstance(targets, list) or len(targets) != 66 or targets != sorted(
+            targets, key=lambda item: item["key"].encode("utf-8")):
+        raise ValueError()
+    keys = []
+    for item in targets:
+        if (not isinstance(item, dict) or set(item) != {"digest", "key"}
+                or not isinstance(item["key"], str) or not isinstance(item["digest"], str)
+                or not re.fullmatch(r"[0-9a-f]{64}", item["digest"])):
+            raise ValueError()
+        keys.append(item["key"])
+    if len(set(keys)) != 66:
+        raise ValueError()
+    if value["caller_obligations"] == ["assets-66", "full-flow-step-11"]:
+        keys.append("es/bundle-meta/rigsignal-bundle-meta")
+    if not isinstance(value["progress"], dict) or set(value["progress"]) != set(keys):
+        raise ValueError()
+    if any(item not in {"planned", "write-issued", "verified"} for item in value["progress"].values()):
+        raise ValueError()
+except (OSError, UnicodeError, ValueError, TypeError, json.JSONDecodeError, KeyError):
+    raise SystemExit(1)
+raise SystemExit(0)
+PY
     }
     _assets_die() {
         if _assets_boundary_uncertain; then

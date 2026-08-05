@@ -353,6 +353,36 @@ done
 set +e; HOME="$home" XDG_CONFIG_HOME="$home/.config" TMPDIR="$tmp/runtime" "$bin/rigsignal" assets install --unknown-flag >"$tmp/assets-local-exit.out" 2>&1; RUN_STATUS=$?; set -e
 require_status 2 "$RUN_STATUS" "launcher-local assets usage exit"
 
+# A pre-engine acquisition/argument failure is redacted as uncertainty only
+# for a strict canonical protected record.  A substring spoof must remain the
+# ordinary local exit-2 path.
+uncertain_state="$tmp/uncertain-state"
+mkdir -p "$uncertain_state/rigsignal/assets"
+chmod 700 "$uncertain_state/rigsignal/assets"
+python3 - "$uncertain_state/rigsignal/assets/assets-marker.json" <<'PY'
+import json, sys
+targets = [{"key": f"es/component-template/t{i:02d}", "digest": "a" * 64} for i in range(66)]
+value = {
+  "asset_set_sha256": "b" * 64, "bundle_sha256": "c" * 64, "bundle_version": "1.2.3",
+  "caller_obligations": ["assets-66"], "cluster_uuid": "0123456789ABCDEFGHIJKL",
+  "created_at": "2026-08-04T12:34:56Z", "destination_map": [], "kibana_target": {"origin": "https://kb", "spaces": ["default", "rigsignal"]},
+  "ownership_profile": "default", "possible_mutation": True, "predecessor": None,
+  "progress": {item["key"]: "planned" for item in targets}, "schema_version": 2,
+  "source_commit": "d" * 40, "state": "installing", "targets": targets,
+  "transaction_id": "01234567-89ab-4cde-8fab-0123456789ab",
+}
+open(sys.argv[1], "wb").write(json.dumps(value, sort_keys=True, separators=(",", ":")).encode())
+PY
+chmod 600 "$uncertain_state/rigsignal/assets/assets-marker.json"
+set +e; HOME="$home" XDG_CONFIG_HOME="$home/.config" XDG_STATE_HOME="$uncertain_state" TMPDIR="$tmp/runtime" "$bin/rigsignal" assets install --unknown-flag >"$tmp/launcher-canonical-uncertain.out" 2>&1; RUN_STATUS=$?; set -e
+require_status 4 "$RUN_STATUS" "canonical uncertainty did not redact pre-engine failure"
+require_grep 'RIGSIGNAL_RECOVERY_STATE partial-remote-possible transaction=<redacted>' "$tmp/launcher-canonical-uncertain.out" "canonical uncertainty token missing"
+printf '%s' '{"note":"substring spoof \\"schema_version\\":2 \\"state\\":\\"installing\\" \\"possible_mutation\\":true"}' >"$uncertain_state/rigsignal/assets/assets-marker.json"
+chmod 600 "$uncertain_state/rigsignal/assets/assets-marker.json"
+set +e; HOME="$home" XDG_CONFIG_HOME="$home/.config" XDG_STATE_HOME="$uncertain_state" TMPDIR="$tmp/runtime" "$bin/rigsignal" assets install --unknown-flag >"$tmp/launcher-substring-spoof.out" 2>&1; RUN_STATUS=$?; set -e
+require_status 2 "$RUN_STATUS" "substring spoof was accepted as uncertainty"
+if grep -q 'RIGSIGNAL_RECOVERY_STATE' "$tmp/launcher-substring-spoof.out"; then fail "substring spoof emitted uncertainty token"; fi
+
 printf 'rigsignal-git\n' >"$engine/channel"; curl_log="$tmp/curl.log"; mkdir "$tmp/shim"
 printf '%s\n' '#!/bin/sh' 'printf request >> "$RIGSIGNAL_ASSETS_CURL_LOG"' 'exit 1' >"$tmp/shim/curl"; chmod 755 "$tmp/shim/curl"
 set +e; HOME="$home" XDG_CONFIG_HOME="$home/.config" TMPDIR="$tmp/runtime" PATH="$tmp/shim:$PATH" RIGSIGNAL_ASSETS_CURL_LOG="$curl_log" "$bin/rigsignal" assets install --ownership-profile fleet-coexist >"$tmp/fleet.out" 2>&1; RUN_STATUS=$?; set -e
