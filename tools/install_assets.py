@@ -1528,6 +1528,14 @@ def transaction_boundary_version_preflight(record_path: Path, bundle: Bundle, *,
     try:
         record = validate_transaction_record(raw, local_binding, targets)
     except InputError:
+        # A complete record from another release deliberately cannot validate
+        # against the requested bundle binding above.  It is nevertheless a
+        # valid input to the executor's explicit transition path: that path
+        # rechecks version direction and the remote binding before a write.
+        # Do not turn this locally recognizable predecessor into a malformed
+        # record merely because its commit/archive/target digest is prior.
+        if _v2_prior_installed_valid(value, local_binding):
+            return None
         return 3
     if record.get("possible_mutation") is True:
         return None

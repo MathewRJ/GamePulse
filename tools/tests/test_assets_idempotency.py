@@ -2,6 +2,7 @@
 """Stage-1 foundations for the v2 default-profile asset transaction."""
 
 import hashlib
+import importlib
 import importlib.util
 import io
 import json
@@ -17,14 +18,11 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
+from tools import install_assets as INSTALL
 from tools.tests.transaction_transport import HttpReply, ScriptedTransactionTransport, TargetScript
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SPEC = importlib.util.spec_from_file_location("install_assets", ROOT / "tools/install_assets.py")
-INSTALL = importlib.util.module_from_spec(SPEC)
-assert SPEC.loader is not None
-SPEC.loader.exec_module(INSTALL)
 TEST_RELEASE_COMMIT = "a" * 40
 
 
@@ -46,6 +44,14 @@ class RecordFixtures(unittest.TestCase):
         value = INSTALL.new_installing_record(self.binding, self.targets, "2026-08-04T12:34:56Z")
         value.update(changes)
         return value
+
+    def test_install_assets_uses_the_canonical_package_module(self):
+        """Keep test patches and the CLI runner on one installer module."""
+        canonical = importlib.import_module("tools.install_assets")
+        self.assertIs(INSTALL, canonical)
+        duplicate = sys.modules.get("install_assets")
+        self.assertTrue(duplicate is None or duplicate is canonical,
+                        "install_assets was loaded under a second module identity")
 
     @staticmethod
     def _rewrite_manifest(source: Path, destination: Path, mutate) -> None:
