@@ -84,6 +84,18 @@ def read_spec(es_url: str, kb_url: str, authorization: str, context: ssl.SSLCont
             desired = asset_adapters.get_projection(asset.kind, install.parse_json(install.stamped_asset(asset).data, asset.path))
         except (asset_adapters.AdapterError, install.InputError):
             return False, "ambiguous projection"
+        # Detect-and-halt classes carry the ratified per-target ownership nonce
+        # in _meta/metadata.  Validate its shape independently, then compare
+        # the remainder — the raw bundle body legitimately lacks it.
+        if asset.kind in {"pipelines", "security_roles"}:
+            meta_key = "metadata" if asset.kind == "security_roles" else "_meta"
+            for projection in (actual,):
+                meta = projection.get(meta_key)
+                if isinstance(meta, dict):
+                    nonce = meta.pop("controller_nonce", None)
+                    if nonce is not None and not (isinstance(nonce, str) and len(nonce) == 64
+                                                  and all(c in "0123456789abcdef" for c in nonce)):
+                        return False, "malformed controller nonce"
         return install.jcs(actual) == install.jcs(desired), "exact" if install.jcs(actual) == install.jcs(desired) else "different"
 
     base = kb_url
@@ -125,10 +137,13 @@ def no_unexpected_saved_objects(bundle: install.Bundle, kb_url: str, authorizati
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--bundle", required=True, type=Path)
-    parser.add_argument("--es-url", required=True)
-    parser.add_argument("--kb-url", required=True)
-    parser.add_argument("--ca-file", required=True, type=Path)
-    parser.add_argument("--password", required=True)
+    # Target selection is a local bundle-only operation used to configure the
+    # guarded engine hooks.  Keep its interface independent of live-stack
+    # credentials; the normal verification mode validates these below.
+    parser.add_argument("--es-url")
+    parser.add_argument("--kb-url")
+    parser.add_argument("--ca-file", type=Path)
+    parser.add_argument("--password")
     parser.add_argument("--record", type=Path)
     parser.add_argument("--record-state", choices=("installing", "installed"))
     parser.add_argument("--record-pm", choices=("true", "false"))
@@ -145,13 +160,26 @@ def main() -> int:
         for key, asset, saved in specs:
             if args.print_target == "saved-object" and saved is not None:
                 print(key); return 0
-            if args.print_target == "dashboard-member" and saved is not None and asset is not None and asset.kind == "dashboard":
+            # Select a member created by a dashboard import, rather than the
+            # dashboard root itself.  This makes the recovery leg cover a
+            # partial progress map within one multi-object NDJSON import.
+            if (args.print_target == "dashboard-member" and saved is not None and asset is not None
+                    and asset.kind == "dashboard" and saved.get("type") != "dashboard"):
                 print(key); return 0
             if args.print_target == "pipeline" and asset is not None and asset.kind == "pipelines":
                 print(key); return 0
             if args.print_target == "role" and asset is not None and asset.kind == "security_roles":
                 print(key); return 0
         raise SystemExit("requested target class is absent from bundle")
+
+    missing = [flag for flag, value in (
+        ("--es-url", args.es_url),
+        ("--kb-url", args.kb_url),
+        ("--ca-file", args.ca_file),
+        ("--password", args.password),
+    ) if value is None]
+    if missing:
+        parser.error("the following arguments are required: " + ", ".join(missing))
 
     context = ssl.create_default_context(cafile=str(args.ca_file))
     authorization = auth_header(args.password)

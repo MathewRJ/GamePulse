@@ -2342,7 +2342,9 @@ def _transaction_put(es_url: str, kb_url: str, authorization: str, spec: tuple[s
         mutation_request(es_url, es_path(asset) + suffix, "PUT", authorization, desired.data)
         return None
     if asset.kind == "transforms":
-        mutation_request(es_url, es_path(asset) + ("?create=true" if state == "absent" else ""), "PUT", authorization, desired.data)
+        # PUT /_transform/{id} is inherently create-only (409 on an existing
+        # id) and accepts no ?create parameter — live-caught on real 9.4.4.
+        mutation_request(es_url, es_path(asset), "PUT", authorization, desired.data)
         return None
     nonce = transaction_detector_nonce(record["transaction_id"], key)
     body = parse_json(desired.data, desired.path)

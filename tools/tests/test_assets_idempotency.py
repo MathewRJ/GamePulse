@@ -288,7 +288,12 @@ class V2GuardedPrimitiveTests(RecordFixtures):
             for kind in ("component_templates", "index_templates", "transforms"):
                 INSTALL._transaction_put("https://es", "https://kb", "auth", self._spec(kind),
                                          self.bundle, record, adapter)
-        self.assertTrue(all(path.endswith("?create=true") for path in seen))
+        # Templates use the ?create=true conditional; transforms are inherently
+        # create-only via bare PUT and accept no such parameter (live-caught on
+        # real 9.4.4 — the parameter is rejected outright).
+        self.assertTrue(all(path.endswith("?create=true") for path in seen[:2]))
+        self.assertFalse(seen[2].endswith("?create=true"))
+        self.assertTrue("/_transform/" in seen[2] and "?" not in seen[2])
 
     def test_t_recon_4_pipeline_and_role_have_detector_boundary(self):
         pipeline = self._spec("pipelines")

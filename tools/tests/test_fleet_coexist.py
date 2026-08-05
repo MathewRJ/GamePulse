@@ -1576,6 +1576,30 @@ class FleetCoexistenceTests(unittest.TestCase):
                 INSTALL.test_pause("point", True)
             self.assertEqual(output.getvalue(), "RIGSIGNAL_TEST_PAUSE_REACHED point\n")
 
+    def test_pause_uses_the_gate_target_grammar_at_a_loopback_endpoint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            sentinel = Path(directory) / "resume"; sentinel.touch()
+            target = "es/ingest-pipeline/logs-rigsignal.events-0.5.0"
+            output = io.StringIO()
+            with mock.patch.dict(INSTALL.os.environ, {
+                    "RIGSIGNAL_TEST_PAUSE_AT": "before-transaction-put:" + target,
+                    "RIGSIGNAL_TEST_PAUSE_SENTINEL": str(sentinel)}, clear=False), redirect_stdout(output):
+                INSTALL.test_pause("before-transaction-put", True, "https://localhost", target)
+                INSTALL.test_pause("before-transaction-put", True, "https://localhost", target + ".other")
+            self.assertEqual(output.getvalue(), "RIGSIGNAL_TEST_PAUSE_REACHED before-transaction-put\n")
+
+    def test_halt_requires_unsafe_loopback_and_an_exact_target(self):
+        env = {"RIGSIGNAL_TEST_HALT_AT": "point:asset/a"}
+        with mock.patch.dict(INSTALL.os.environ, env, clear=False):
+            # Production callers do not pass the hidden unsafe flag.
+            INSTALL.test_halt("point", False, "https://localhost", "asset/a")
+            # A target mismatch cannot accidentally halt a transaction.
+            INSTALL.test_halt("point", True, "https://localhost", "asset/b")
+            with self.assertRaises(INSTALL.AssetTransactionHalt):
+                INSTALL.test_halt("point", True, "https://localhost", "asset/a")
+            with self.assertRaisesRegex(INSTALL.InputError, "loopback"):
+                INSTALL.test_halt("point", True, "https://example.test", "asset/a")
+
     def test_dashboard_target_space_rejects_substring_name(self):
         self.assertEqual(INSTALL.dashboard_target_space(INSTALL.STREAMING_LAB_DASHBOARD), "default")
         with self.assertRaisesRegex(INSTALL.ProvisionError, "unrecognized dashboard"):

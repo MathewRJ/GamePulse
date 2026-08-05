@@ -82,14 +82,18 @@ assert_engine_exit() {
 }
 
 names_for_leg() {
-  local leg="$1" suffix
-  suffix="${BASHPID}-${RANDOM}-${RANDOM}"
+  local leg="$1" suffix slug
+  suffix="${BASHPID}-${RANDOM}"
+  # Container names become docker-network DNS aliases; a label above 63
+  # characters fails getaddrinfo inside Kibana (live-caught: the long
+  # saved-object leg name broke ES resolution).  Use a short leg slug.
+  slug="$(printf '%s' "$leg" | cksum | cut -d' ' -f1)"
   # Do not use cs_init_names here: all resources must advertise this gate's
   # fixed namespace rather than the generic clean-stack prefix.
   CS_SUFFIX="$suffix"
-  CS_NETWORK="${NAMESPACE}-${leg}-net-${suffix}"
-  CS_ES_CONTAINER="${NAMESPACE}-${leg}-es-${suffix}"
-  CS_KB_CONTAINER="${NAMESPACE}-${leg}-kb-${suffix}"
+  CS_NETWORK="${NAMESPACE}-${slug}-net-${suffix}"
+  CS_ES_CONTAINER="${NAMESPACE}-${slug}-es-${suffix}"
+  CS_KB_CONTAINER="${NAMESPACE}-${slug}-kb-${suffix}"
   CS_ES_DATA_VOLUME="${NAMESPACE}-${leg}-esdata-${suffix}"
   CS_KB_DATA_VOLUME="${NAMESPACE}-${leg}-kbdata-${suffix}"
   export CS_SUFFIX CS_NETWORK CS_ES_CONTAINER CS_KB_CONTAINER CS_ES_DATA_VOLUME CS_KB_DATA_VOLUME
@@ -169,6 +173,16 @@ verify_live() {
   python3 "$VERIFY" "${args[@]}"
 }
 
+target_for() {
+  local kind="$1" target
+  if ! target="$(python3 "$VERIFY" --bundle "$BUNDLE" --print-target "$kind")" \
+      || [[ -z "$target" || "$target" == *$'\n'* ]]; then
+    gate_fail "could not resolve one $kind hook target"
+    return 1
+  fi
+  printf '%s\n' "$target"
+}
+
 direct_foreign_create() {
   local dir="$1" kind="$2" target="$3" name body status endpoint encoded
   name="${target##*/}"
@@ -201,9 +215,9 @@ assert_detector_halt() {
     gate_fail "$kind detector evidence is not specific"
   # The detector's own guarded PUT is the final mutation.  Reads after it are
   # expected; any later mutating audit line is a release-blocking regression.
-  last_write="$(rg -n '^(POST|PUT|DELETE) ' "$audit" | tail -n 1 | cut -d: -f1 || true)"
+  last_write="$(grep -nE '^(POST|PUT|DELETE) ' "$audit" | tail -n 1 | cut -d: -f1 || true)"
   [[ -n "$last_write" ]] || gate_fail "$kind detector audit has no mutation"
-  if tail -n "+$((last_write + 1))" "$audit" | rg -q '^(POST|PUT|DELETE) '; then
+  if tail -n "+$((last_write + 1))" "$audit" | grep -qE '^(POST|PUT|DELETE) '; then
     gate_fail "$kind wrote after detector-positive boundary"
   fi
 }
@@ -223,7 +237,7 @@ leg_saved_object_recovery() {
   local dir marker target rc
   dir="$1"; marker="$dir/marker/assets-marker.json"
   mkdir -p "$dir/marker"; write_credentials "$dir/admin-credentials.toml"
-  target="$(python3 "$VERIFY" --bundle "$BUNDLE" --print-target saved-object)"
+  target="$(target_for saved-object)"
   if run_engine "$dir" "$marker" crash "RIGSIGNAL_TEST_HALT_AT=after-target-verification:$target"; then rc=0; else rc=$?; fi
   assert_engine_exit 4 "$rc" saved-object-injected-failure
   verify_live "$dir" "$marker" installing true partial
@@ -237,7 +251,7 @@ leg_dashboard_member_recovery() {
   local dir marker target rc
   dir="$1"; marker="$dir/marker/assets-marker.json"
   mkdir -p "$dir/marker"; write_credentials "$dir/admin-credentials.toml"
-  target="$(python3 "$VERIFY" --bundle "$BUNDLE" --print-target dashboard-member)"
+  target="$(target_for dashboard-member)"
   if run_engine "$dir" "$marker" dashboard-member "RIGSIGNAL_TEST_HALT_AT=after-target-verification:$target"; then rc=0; else rc=$?; fi
   assert_engine_exit 4 "$rc" dashboard-member-injected-failure
   verify_live "$dir" "$marker" installing true partial
@@ -251,7 +265,7 @@ leg_detector() {
   local dir kind detector marker target pid rc
   dir="$1"; kind="$2"; detector="$3"; marker="$dir/marker/assets-marker.json"
   mkdir -p "$dir/marker"; write_credentials "$dir/admin-credentials.toml"
-  target="$(python3 "$VERIFY" --bundle "$BUNDLE" --print-target "$kind")"
+  target="$(target_for "$kind")"
   env RIGSIGNAL_HTTP_AUDIT_LOG="$dir/detector.requests.log" \
       RIGSIGNAL_TEST_PAUSE_AT="before-transaction-put:$target" \
       RIGSIGNAL_TEST_PAUSE_SENTINEL="$dir/resume" \
@@ -288,6 +302,10 @@ run_leg() {
   dir="$RUN_ROOT/$name"; mkdir -p "$dir"
   set +e
   (
+    # The outer status capture must not turn off errexit for the leg itself:
+    # a failed target lookup or stack readiness check must prevent a malformed
+    # injection invocation against a partially ready stack.
+    set -e
     CS_KEEP="$KEEP"; CS_DRY_RUN=0; export CS_KEEP CS_DRY_RUN
     names_for_leg "$name"
     ELASTIC_PASSWORD="rgs033-${RANDOM}${RANDOM}-${RANDOM}${RANDOM}"
@@ -322,7 +340,7 @@ write_summary() {
   return "$overall"
 }
 
-cs_require_tools bash curl docker jq openssl python3 cargo sed rg
+cs_require_tools bash curl docker jq openssl python3 cargo sed
 [[ -x "$VERIFY" || -f "$VERIFY" ]] || { printf 'error: verifier missing\n' >&2; exit 1; }
 RUN_ROOT="$(mktemp -d "/tmp/${NAMESPACE}.XXXXXX")"
 chmod 700 "$RUN_ROOT"
