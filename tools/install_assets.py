@@ -1534,7 +1534,7 @@ def transaction_boundary_version_preflight(record_path: Path, bundle: Bundle, *,
         # rechecks version direction and the remote binding before a write.
         # Do not turn this locally recognizable predecessor into a malformed
         # record merely because its commit/archive/target digest is prior.
-        if _v2_prior_installed_valid(value, local_binding):
+        if _v2_installed_valid(value, local_binding, targets, predecessor=True):
             return None
         return 3
     if record.get("possible_mutation") is True:
@@ -1748,7 +1748,11 @@ def _v2_prior_installed_valid(value: object, binding: dict) -> bool:
     if set(value) != allowed:
         return False
     targets = value.get("targets")
-    if (not isinstance(targets, list) or not targets
+    # A prior release may have a different inventory, but it remains a full
+    # v2 installed record: exactly 66 distinct keys in their durable bytewise
+    # order.  Do not weaken that grammar merely because its digests cannot be
+    # compared with the current bundle.
+    if (not isinstance(targets, list) or len(targets) != 66
             or targets != sorted(targets, key=lambda item: item.get("key", "").encode()
                                 if isinstance(item, dict) else b"")):
         return False
@@ -1756,6 +1760,9 @@ def _v2_prior_installed_valid(value: object, binding: dict) -> bool:
            or not valid_target_key(item.get("key"))
            or not isinstance(item.get("digest"), str)
            or _V2_SHA256_RE.fullmatch(item["digest"]) is None for item in targets):
+        return False
+    keys = [item["key"] for item in targets]
+    if len(set(keys)) != len(keys):
         return False
     return (_v2_timestamp(value.get("completed_at"))
             and isinstance(value.get("completed_transaction_id"), str)
@@ -1898,7 +1905,10 @@ def demote_installed_transaction(record: dict, created_at: str) -> dict:
 def transition_from_prior_installed(record: dict, binding: dict, targets: list[dict[str, str]],
                                     created_at: str) -> dict:
     """Create the current release intent while retaining a validated prior S."""
-    if not _v2_prior_installed_valid(record, binding):
+    # Use the complete installed-record validator for the retained wire
+    # object.  Its predecessor mode permits a changed release inventory while
+    # preserving the frozen installed grammar and invariant remote binding.
+    if not _v2_installed_valid(record, binding, targets, predecessor=True):
         raise InputError("assets transaction predecessor is invalid")
     value = new_installing_record(binding, targets, created_at)
     value["predecessor"] = deepcopy(record)

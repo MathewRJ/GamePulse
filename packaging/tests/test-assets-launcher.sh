@@ -363,7 +363,7 @@ python3 - "$uncertain_state/rigsignal/assets/assets-marker.json" <<'PY'
 import json, sys
 targets = [{"key": f"es/component-template/t{i:02d}", "digest": "a" * 64} for i in range(66)]
 value = {
-  "asset_set_sha256": "b" * 64, "bundle_sha256": "c" * 64, "bundle_version": "1.2.3",
+  "asset_set_sha256": "b225e4afc1eee7df188a943b236f0422ed6e815299a8dc8933f569b13d8120e4", "bundle_sha256": "c" * 64, "bundle_version": "1.2.3",
   "caller_obligations": ["assets-66"], "cluster_uuid": "0123456789ABCDEFGHIJKL",
   "created_at": "2026-08-04T12:34:56Z", "destination_map": [], "kibana_target": {"origin": "https://kb", "spaces": ["default", "rigsignal"]},
   "ownership_profile": "default", "possible_mutation": True, "predecessor": None,
@@ -377,6 +377,29 @@ chmod 600 "$uncertain_state/rigsignal/assets/assets-marker.json"
 set +e; HOME="$home" XDG_CONFIG_HOME="$home/.config" XDG_STATE_HOME="$uncertain_state" TMPDIR="$tmp/runtime" "$bin/rigsignal" assets install --unknown-flag >"$tmp/launcher-canonical-uncertain.out" 2>&1; RUN_STATUS=$?; set -e
 require_status 4 "$RUN_STATUS" "canonical uncertainty did not redact pre-engine failure"
 require_grep 'RIGSIGNAL_RECOVERY_STATE partial-remote-possible transaction=<redacted>' "$tmp/launcher-canonical-uncertain.out" "canonical uncertainty token missing"
+cp "$uncertain_state/rigsignal/assets/assets-marker.json" "$tmp/valid-uncertainty.json"
+# Canonical bytes and protected ownership alone are not uncertainty authority:
+# each malformed binding below must remain on the normal pre-engine exit-2
+# path.  These cases mirror the engine's installing-record grammar.
+for malformed in target-digest source-commit target-key timestamp destination predecessor; do
+    cp "$tmp/valid-uncertainty.json" "$uncertain_state/rigsignal/assets/assets-marker.json"
+    python3 - "$uncertain_state/rigsignal/assets/assets-marker.json" "$malformed" <<'PY'
+import json, sys
+path, case = sys.argv[1:]
+value = json.load(open(path, encoding="utf-8"))
+if case == "target-digest": value["asset_set_sha256"] = "0" * 64
+elif case == "source-commit": value["source_commit"] = "not-a-commit"
+elif case == "target-key": value["targets"][0]["key"] = "es/component-template/bad/key"
+elif case == "timestamp": value["created_at"] = "2026-02-30T12:34:56Z"
+elif case == "destination": value["destination_map"] = [{"submitted_key": "bad", "destination_key": "kibana/default/dashboard/x"}]
+elif case == "predecessor": value["predecessor"] = {"state": "installed"}
+open(path, "w", encoding="utf-8").write(json.dumps(value, sort_keys=True, separators=(",", ":")))
+PY
+    chmod 600 "$uncertain_state/rigsignal/assets/assets-marker.json"
+    set +e; HOME="$home" XDG_CONFIG_HOME="$home/.config" XDG_STATE_HOME="$uncertain_state" TMPDIR="$tmp/runtime" "$bin/rigsignal" assets install --unknown-flag >"$tmp/launcher-$malformed.out" 2>&1; RUN_STATUS=$?; set -e
+    require_status 2 "$RUN_STATUS" "canonical malformed $malformed was accepted as uncertainty"
+    if grep -q 'RIGSIGNAL_RECOVERY_STATE' "$tmp/launcher-$malformed.out"; then fail "canonical malformed $malformed emitted uncertainty token"; fi
+done
 printf '%s' '{"note":"substring spoof \\"schema_version\\":2 \\"state\\":\\"installing\\" \\"possible_mutation\\":true"}' >"$uncertain_state/rigsignal/assets/assets-marker.json"
 chmod 600 "$uncertain_state/rigsignal/assets/assets-marker.json"
 set +e; HOME="$home" XDG_CONFIG_HOME="$home/.config" XDG_STATE_HOME="$uncertain_state" TMPDIR="$tmp/runtime" "$bin/rigsignal" assets install --unknown-flag >"$tmp/launcher-substring-spoof.out" 2>&1; RUN_STATUS=$?; set -e

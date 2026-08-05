@@ -719,7 +719,8 @@ cmd_assets_install() {
         _assets_state_root=${XDG_STATE_HOME:-"$HOME/.local/state"}
         _assets_record="$_assets_state_root/rigsignal/assets/assets-marker.json"
         python3 - "$_assets_record" <<'PY'
-import json, os, re, stat, sys
+import datetime, hashlib, ipaddress, json, os, re, stat, sys
+from urllib.parse import urlsplit
 
 path = sys.argv[1]
 try:
@@ -749,37 +750,124 @@ try:
     if json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"),
                   allow_nan=False).encode("utf-8") != raw:
         raise ValueError()
+    sha = re.compile(r"[0-9a-f]{64}\Z")
+    commit = re.compile(r"[0-9a-f]{40}\Z")
+    cluster = re.compile(r"[A-Za-z0-9_-]{22}\Z")
+    transaction = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\Z")
+    segment = re.compile(r"(?:[A-Za-z0-9._~-]|%[0-9A-F]{2})+\Z")
+    timestamp = re.compile(r"[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\.[0-9]{1,9})?Z\Z")
     common = {"asset_set_sha256", "bundle_sha256", "bundle_version", "cluster_uuid", "kibana_target",
               "ownership_profile", "schema_version", "source_commit", "state", "targets"}
-    required = common | {"caller_obligations", "created_at", "destination_map", "possible_mutation",
-                         "predecessor", "progress", "transaction_id"}
-    if set(value) != required or value["schema_version"] != 2 or value["state"] != "installing":
+    installing = common | {"caller_obligations", "created_at", "destination_map", "possible_mutation",
+                           "predecessor", "progress", "transaction_id"}
+    installed = common | {"caller_obligations", "completed_at", "completed_transaction_id", "destination_map",
+                          "verified_target_set_sha256"}
+    obligations = (["assets-66"], ["assets-66", "full-flow-step-11"])
+
+    def target_key(key):
+        if not isinstance(key, str): return False
+        parts = key.split("/")
+        return ((len(parts) == 3 and parts[0] == "es" and parts[1] in {
+                    "component-template", "index-template", "ingest-pipeline", "security-role", "transform", "bundle-meta"}
+                 and bool(segment.fullmatch(parts[2])))
+                or (len(parts) == 4 and parts[0] == "kibana" and all(segment.fullmatch(part) for part in parts[1:])))
+
+    def target_digest(items):
+        return hashlib.sha256(json.dumps(items, sort_keys=True, ensure_ascii=False, separators=(",", ":"),
+                                         allow_nan=False).encode("utf-8")).hexdigest()
+
+    def valid_timestamp(item):
+        if not isinstance(item, str) or not timestamp.fullmatch(item): return False
+        try: datetime.datetime.fromisoformat(item.removesuffix("Z") + "+00:00")
+        except ValueError: return False
+        return True
+
+    def canonical_origin(origin):
+        if not isinstance(origin, str): return False
+        try: parsed = urlsplit(origin); port = parsed.port
+        except ValueError: return False
+        if (parsed.scheme.lower() != "https" or not parsed.netloc or parsed.username is not None
+                or parsed.password is not None or parsed.query or parsed.fragment or parsed.path not in ("", "/")
+                or parsed.hostname is None or "%" in parsed.hostname or (port is not None and not 1 <= port <= 65535)):
+            return False
+        try:
+            address = ipaddress.ip_address(parsed.hostname)
+            host = "[" + str(address) + "]" if address.version == 6 else str(address)
+        except ValueError:
+            try: host = parsed.hostname.encode("idna").decode("ascii").lower()
+            except UnicodeError: return False
+        return origin == "https://" + host + ("" if port in (None, 443) else ":" + str(port))
+
+    def valid_targets(items):
+        if not isinstance(items, list) or len(items) != 66: return False
+        if any(not isinstance(item, dict) or set(item) != {"digest", "key"}
+               or not target_key(item.get("key")) or not isinstance(item.get("digest"), str)
+               or not sha.fullmatch(item["digest"]) for item in items): return False
+        keys = [item["key"] for item in items]
+        return len(set(keys)) == 66 and keys == sorted(keys, key=lambda key: key.encode("utf-8"))
+
+    def valid_destination_map(mapping, items):
+        if not isinstance(mapping, list): return False
+        target_keys = {item["key"] for item in items}; submitted = set(); previous = None
+        for item in mapping:
+            if not isinstance(item, dict) or set(item) != {"destination_key", "submitted_key"}: return False
+            source, destination = item.get("submitted_key"), item.get("destination_key")
+            if (not isinstance(source, str) or not isinstance(destination, str) or source not in target_keys
+                    or not source.startswith("kibana/") or not destination.startswith("kibana/")
+                    or not target_key(source) or not target_key(destination) or source in submitted): return False
+            source_parts, destination_parts = source.split("/"), destination.split("/")
+            if source_parts[:3] != destination_parts[:3]: return False
+            encoded = source.encode("utf-8")
+            if previous is not None and encoded <= previous: return False
+            previous = encoded; submitted.add(source)
+        return True
+
+    def valid_common(record):
+        return (isinstance(record, dict) and record.get("schema_version") == 2
+                and record.get("ownership_profile") == "default"
+                and isinstance(record.get("bundle_version"), str) and bool(record["bundle_version"])
+                and isinstance(record.get("source_commit"), str) and bool(commit.fullmatch(record["source_commit"]))
+                and isinstance(record.get("bundle_sha256"), str) and bool(sha.fullmatch(record["bundle_sha256"]))
+                and isinstance(record.get("asset_set_sha256"), str) and bool(sha.fullmatch(record["asset_set_sha256"]))
+                and isinstance(record.get("cluster_uuid"), str) and bool(cluster.fullmatch(record["cluster_uuid"]))
+                and isinstance(record.get("kibana_target"), dict) and set(record["kibana_target"]) == {"origin", "spaces"}
+                and record["kibana_target"].get("spaces") == ["default", "rigsignal"]
+                and canonical_origin(record["kibana_target"].get("origin")))
+
+    def verified_digest(items, caller_obligations):
+        physical = list(items)
+        if caller_obligations == ["assets-66", "full-flow-step-11"]:
+            physical.append({"key": "es/bundle-meta/rigsignal-bundle-meta",
+                             "digest": target_digest("es/bundle-meta/rigsignal-bundle-meta")})
+            physical.sort(key=lambda item: item["key"].encode("utf-8"))
+        return target_digest(physical)
+
+    def valid_installed(record, remote_binding=None):
+        if not isinstance(record, dict) or set(record) != installed or record.get("state") != "installed": return False
+        items = record.get("targets")
+        if not valid_common(record) or not valid_targets(items) or record.get("asset_set_sha256") != target_digest(items): return False
+        if remote_binding is not None and (record.get("cluster_uuid"), record.get("kibana_target")) != remote_binding: return False
+        return (record.get("caller_obligations") in obligations and valid_timestamp(record.get("completed_at"))
+                and isinstance(record.get("completed_transaction_id"), str) and bool(transaction.fullmatch(record["completed_transaction_id"]))
+                and valid_destination_map(record.get("destination_map"), items)
+                and isinstance(record.get("verified_target_set_sha256"), str) and bool(sha.fullmatch(record["verified_target_set_sha256"]))
+                and record["verified_target_set_sha256"] == verified_digest(items, record["caller_obligations"]))
+
+    if not isinstance(value, dict) or set(value) != installing or value.get("state") != "installing": raise ValueError()
+    targets = value.get("targets")
+    if (not valid_common(value) or not valid_targets(targets) or value.get("asset_set_sha256") != target_digest(targets)
+            or value.get("caller_obligations") not in obligations or not valid_timestamp(value.get("created_at"))
+            or not isinstance(value.get("possible_mutation"), bool)
+            or not isinstance(value.get("transaction_id"), str) or not transaction.fullmatch(value["transaction_id"])
+            or not valid_destination_map(value.get("destination_map"), targets)):
         raise ValueError()
-    if value["possible_mutation"] is not True or not re.fullmatch(
-            r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}",
-            value["transaction_id"] if isinstance(value["transaction_id"], str) else ""):
-        raise ValueError()
-    if value["caller_obligations"] not in (["assets-66"], ["assets-66", "full-flow-step-11"]):
-        raise ValueError()
-    targets = value["targets"]
-    if not isinstance(targets, list) or len(targets) != 66 or targets != sorted(
-            targets, key=lambda item: item["key"].encode("utf-8")):
-        raise ValueError()
-    keys = []
-    for item in targets:
-        if (not isinstance(item, dict) or set(item) != {"digest", "key"}
-                or not isinstance(item["key"], str) or not isinstance(item["digest"], str)
-                or not re.fullmatch(r"[0-9a-f]{64}", item["digest"])):
-            raise ValueError()
-        keys.append(item["key"])
-    if len(set(keys)) != 66:
-        raise ValueError()
-    if value["caller_obligations"] == ["assets-66", "full-flow-step-11"]:
-        keys.append("es/bundle-meta/rigsignal-bundle-meta")
-    if not isinstance(value["progress"], dict) or set(value["progress"]) != set(keys):
-        raise ValueError()
-    if any(item not in {"planned", "write-issued", "verified"} for item in value["progress"].values()):
-        raise ValueError()
+    keys = [item["key"] for item in targets] + (["es/bundle-meta/rigsignal-bundle-meta"]
+                                                   if value["caller_obligations"] == ["assets-66", "full-flow-step-11"] else [])
+    if (not isinstance(value.get("progress"), dict) or set(value["progress"]) != set(keys)
+            or any(status not in {"planned", "write-issued", "verified"} for status in value["progress"].values())): raise ValueError()
+    predecessor = value.get("predecessor")
+    if predecessor is not None and not valid_installed(predecessor, (value["cluster_uuid"], value["kibana_target"])): raise ValueError()
+    if value["possible_mutation"] is not True: raise ValueError()
 except (OSError, UnicodeError, ValueError, TypeError, json.JSONDecodeError, KeyError):
     raise SystemExit(1)
 raise SystemExit(0)
