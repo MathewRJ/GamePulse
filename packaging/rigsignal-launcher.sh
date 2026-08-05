@@ -711,7 +711,26 @@ cmd_assets_install() {
     # Assets setup/acquisition failures are local contract failures.  Keep
     # this scoped helper separate from the launcher's global _die() because
     # other subcommands retain their existing exit protocol.
-    _assets_die() { _err "$*"; exit 2; }
+    # The engine cannot classify a local acquisition failure it never gets to
+    # see.  This intentionally narrow pre-engine check recognizes only the
+    # canonical active uncertainty shape and emits the same redacted contract
+    # token; it grants no overwrite authority to the shell.
+    _assets_boundary_uncertain() {
+        _assets_state_root=${XDG_STATE_HOME:-"$HOME/.local/state"}
+        _assets_record="$_assets_state_root/rigsignal/assets/assets-marker.json"
+        [ -f "$_assets_record" ] && [ -r "$_assets_record" ] || return 1
+        grep -q '"schema_version":2' "$_assets_record" 2>/dev/null || return 1
+        grep -q '"state":"installing"' "$_assets_record" 2>/dev/null || return 1
+        grep -q '"possible_mutation":true' "$_assets_record" 2>/dev/null || return 1
+        return 0
+    }
+    _assets_die() {
+        if _assets_boundary_uncertain; then
+            _err "RIGSIGNAL_RECOVERY_STATE partial-remote-possible transaction=<redacted>"
+            exit 4
+        fi
+        _err "$*"; exit 2
+    }
     _assets_refuse() { _err "$*"; exit 3; }
     while [ "$#" -gt 0 ]; do
         case "$1" in

@@ -94,6 +94,33 @@ class RecordFixtures(unittest.TestCase):
         with self.assertRaises(INSTALL.InputError):
             INSTALL.validate_transaction_record(INSTALL.jcs(value), self.binding, self.targets)
 
+    def test_v2_rejects_unknown_fields_in_current_and_nested_shapes(self):
+        cases = []
+        installing = self.installing(); installing["migrated_from_v1"] = True; cases.append(installing)
+        installed_source = self.installing()
+        for key in installed_source["progress"]:
+            installed_source["progress"][key] = "verified"
+        installed = INSTALL.promote_transaction_record(installed_source, "2026-08-04T12:35:00Z")
+        installed["migrated_from_v1"] = True; cases.append(installed)
+        predecessor_source = INSTALL.new_installing_record(self.binding, self.targets, "2026-08-04T12:34:56Z")
+        for key in predecessor_source["progress"]:
+            predecessor_source["progress"][key] = "verified"
+        nested = self.installing(predecessor=INSTALL.promote_transaction_record(
+            predecessor_source, "2026-08-04T12:35:00Z"))
+        nested["predecessor"]["unknown"] = True; cases.append(nested)
+        for value in cases:
+            with self.subTest(state=value["state"]):
+                with self.assertRaises(INSTALL.InputError):
+                    INSTALL.validate_transaction_record(INSTALL.jcs(value), self.binding, self.targets)
+
+    def test_destination_map_cannot_cross_space_or_type(self):
+        submitted = next(item["key"] for item in self.targets if item["key"].startswith("kibana/"))
+        _, object_type, object_id = INSTALL._v2_kibana_key_parts(submitted)
+        bad_space = "kibana/other/" + INSTALL._v2_quote(object_type) + "/" + INSTALL._v2_quote(object_id)
+        value = self.installing(destination_map=[{"submitted_key": submitted, "destination_key": bad_space}])
+        with self.assertRaises(INSTALL.InputError):
+            INSTALL.validate_transaction_record(INSTALL.jcs(value), self.binding, self.targets)
+
     def test_t_rec_4_installed_retains_completed_obligations(self):
         value = self.installing()
         value = INSTALL.expand_full_flow_record(value)
@@ -874,14 +901,15 @@ print(outcome)
                 with self.assertRaises(INSTALL.InputError):
                     INSTALL.asset_executor_exit_code("unknown", path)
 
-        # The real main()-routed scenario touches the same mapper for a
-        # success and an uncertainty limb; static source guards the full-flow
-        # caller's matching catch boundary without duplicating enrollment.
+        # The real main()-routed uncertainty now terminates in the one early
+        # boundary classifier before the engine begins; a normal success still
+        # crosses the mapper.  The mapper remains the authority for all
+        # in-engine catches, as guarded below.
         with mock.patch.object(INSTALL, "asset_executor_exit_code", wraps=INSTALL.asset_executor_exit_code) as mapped:
             self._run_scenario("assets-only")
             key = INSTALL.transaction_targets(bundle)[0]["key"]
             self._run_scenario("assets-only", "I-assets-pm1", {"states": {key: "unreadable"}})
-        self.assertEqual([call.args[0] for call in mapped.call_args_list], ["success", "halt"])
+        self.assertEqual([call.args[0] for call in mapped.call_args_list], ["success"])
         source = (ROOT / "tools/install_assets.py").read_text(encoding="utf-8")
         self.assertGreaterEqual(source.count('asset_executor_exit_code("halt",'), 2)
 
@@ -1071,7 +1099,8 @@ print(outcome)
                 # promote once every uncertain target verifies.
                 if point in {"write-after-write-issued", "verify-after-target-verification",
                              "map-after-destination-map-publication"}:
-                    self.assertIn(crashed.returncode, (-9, 1), crashed.stderr)
+                    self.assertEqual(crashed.returncode, -9, crashed.stderr)
+                    self.assertEqual(wire["writes"], 0 if point == "write-after-write-issued" else 1)
                     self.assertEqual(rerun.returncode, 0, rerun.stderr)
                     self.assertEqual(final["state"], "installed")
                     continue
@@ -1085,7 +1114,7 @@ print(outcome)
                 self.assertNotIn("migrated_from_v1", final)
                 # The crash legs publish no remote write until the tested
                 # post-dispatch edges; the fresh process owns any recovery.
-                self.assertGreaterEqual(wire["writes"], 0)
+                self.assertEqual(wire["writes"], 0)
 
     def test_t_cross_1_through_3_and_t_legacy_1_through_3_are_fail_closed(self):
         bundle = INSTALL.load_source()

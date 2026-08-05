@@ -2,6 +2,7 @@
 """Install a RigSignal asset bundle, with post-install presence verification."""
 
 import argparse
+import errno
 import base64
 import ctypes
 import contextvars
@@ -1415,6 +1416,17 @@ def transaction_boundary_preflight(record_path: Path) -> int | None:
     bypass that recovery path for both callers.
     """
     try:
+        # Do not turn a first-run absent state directory into a malformed
+        # record.  Once a leaf exists, however, every malformed/protection
+        # failure is a terminal boundary error rather than local input.
+        record_path.lstat()
+    except FileNotFoundError:
+        return None
+    except OSError as error:
+        if error.errno in {errno.ENOENT, errno.ENOTDIR}:
+            return None
+        return 3
+    try:
         raw = protected_regular_file(record_path)
     except FileNotFoundError:
         return None
@@ -1424,12 +1436,25 @@ def transaction_boundary_preflight(record_path: Path) -> int | None:
         value = parse_json(raw, "assets transaction record")
     except InputError:
         return 3
-    if jcs(value) != raw or not isinstance(value, dict):
+    # Legacy private markers are not v2 transaction records and must continue
+    # to reach their dedicated migration/refusal path.  A v2-shaped record is
+    # different: malformed bytes are an A6 terminal error.
+    legacy_shape = (isinstance(value, dict)
+                    and set(value) == {"schema_version", "bundle_version", "source_commit", "identities"}
+                    and value.get("schema_version") == ASSETS_MARKER_SCHEMA_VERSION)
+    if not isinstance(value, dict) or value.get("schema_version") != V2_SCHEMA_VERSION:
+        return None if legacy_shape else 3
+    if jcs(value) != raw:
         return 3
     # A present record must at least be a recognizable v2 envelope.  Binding
     # validation follows after snapshot/remote binding is available.
-    if value.get("schema_version") != V2_SCHEMA_VERSION:
-        return 3
+    # This deliberately validates only the *exit* authority.  It does not
+    # bind a record to the newly requested archive and consequently cannot
+    # authorize a write; the executor performs that binding before recovery.
+    possible, _token = transaction_possible_mutation(record_path)
+    if possible:
+        print("RIGSIGNAL_RECOVERY_STATE partial-remote-possible transaction=<redacted>", file=sys.stderr)
+        return 4
     return None
 
 
@@ -1447,6 +1472,30 @@ def asset_executor_exit_code(outcome: str, record_path: Path | None = None) -> i
     if outcome in {"refusal", "halt"}:
         return transaction_failure_status(record_path) if record_path is not None else 3
     raise InputError("asset executor outcome is invalid")
+
+
+def transaction_boundary_failure(record_path: Path | None, fallback: int) -> int:
+    """Make the protected record, not an incidental later exception, decide 3/4."""
+    if record_path is None:
+        return fallback
+    status = transaction_boundary_preflight(record_path)
+    return fallback if status is None else status
+
+
+def transaction_same_version_flag_preflight(record_path: Path, bundle: Bundle,
+                                             upgrade: bool, allow_downgrade: bool) -> int | None:
+    """Reject same-release transition switches before any remote setup/read."""
+    if not (upgrade or allow_downgrade):
+        return None
+    try:
+        raw = protected_regular_file(record_path)
+        value = parse_json(raw, "assets transaction record")
+    except (InputError, OSError):
+        return None
+    if (isinstance(value, dict) and jcs(value) == raw and value.get("schema_version") == V2_SCHEMA_VERSION
+            and value.get("bundle_version") == bundle.version):
+        return 2
+    return None
 
 
 def transaction_flag_policy(caller: str, record: str, possible_mutation: bool,
@@ -1540,8 +1589,7 @@ def _v2_common_is_valid(value: object, binding: dict, targets: list[dict[str, st
         return False
     expected = {**binding, "targets": targets}
     return (all(value.get(key) == item for key, item in expected.items())
-            and value.get("schema_version") == 2
-            and ("migrated_from_v1" not in value or isinstance(value.get("migrated_from_v1"), bool)))
+            and value.get("schema_version") == 2)
 
 
 def _v2_targets_valid(targets: object, expected: list[dict[str, str]]) -> bool:
@@ -1574,12 +1622,29 @@ def _v2_destination_map_valid(value: object, targets: list[dict[str, str]]) -> b
                 or not valid_target_key(source) or not valid_target_key(destination)
                 or source in submitted):
             return False
+        try:
+            same_identity_class = _v2_kibana_key_parts(source)[:2] == _v2_kibana_key_parts(destination)[:2]
+        except InputError:
+            return False
+        if not same_identity_class:
+            return False
         encoded = source.encode("utf-8")
         if previous is not None and encoded <= previous:
             return False
         previous = encoded
         submitted.add(source)
     return True
+
+
+def _v2_kibana_key_parts(key: str) -> tuple[str, str, str]:
+    """Return the validated (space, type, id) tuple for a v2 Kibana key."""
+    parts = key.split("/")
+    if len(parts) != 4 or parts[0] != "kibana":
+        raise InputError("Kibana transaction key is invalid")
+    decoded = tuple(urllib.parse.unquote(part) for part in parts[1:])
+    if any(not item or _v2_quote(item) != encoded for item, encoded in zip(decoded, parts[1:])):
+        raise InputError("Kibana transaction key is invalid")
+    return decoded
 
 
 def _v2_prior_installed_valid(value: object, binding: dict) -> bool:
@@ -1593,8 +1658,14 @@ def _v2_prior_installed_valid(value: object, binding: dict) -> bool:
     """
     if not isinstance(value, dict):
         return False
+    allowed = {"asset_set_sha256", "bundle_sha256", "bundle_version", "cluster_uuid", "kibana_target",
+               "ownership_profile", "schema_version", "source_commit", "state", "targets",
+               "caller_obligations", "completed_at", "completed_transaction_id", "destination_map",
+               "verified_target_set_sha256"}
+    if set(value) != allowed:
+        return False
     targets = value.get("targets")
-    if (not isinstance(targets, list) or len(targets) != 66
+    if (not isinstance(targets, list) or not targets
             or targets != sorted(targets, key=lambda item: item.get("key", "").encode()
                                 if isinstance(item, dict) else b"")):
         return False
@@ -1632,14 +1703,14 @@ def _v2_installed_valid(value: object, binding: dict, targets: list[dict[str, st
     # T-REC-4 is the controlling erratum: installed records retain the
     # completed caller obligations even though the earlier prose omitted it.
     allowed = common | {"caller_obligations", "completed_at", "completed_transaction_id", "destination_map", "verified_target_set_sha256"}
-    if set(value) not in (allowed, allowed | {"migrated_from_v1"}):
+    if set(value) != allowed:
         return False
     current_binding = (_v2_common_is_valid(value, binding, targets)
                        and _v2_targets_valid(value.get("targets"), targets))
     binding_is_valid = (_v2_prior_installed_valid(value, binding) if predecessor else current_binding)
     return (value.get("state") == "installed" and binding_is_valid and _v2_timestamp(value.get("completed_at"))
             and value.get("caller_obligations") in ([V2_ASSET_OBLIGATION], [V2_ASSET_OBLIGATION, V2_FULL_FLOW_OBLIGATION])
-            and _v2_destination_map_valid(value.get("destination_map"), targets)
+            and _v2_destination_map_valid(value.get("destination_map"), value.get("targets") if predecessor else targets)
             and isinstance(value.get("completed_transaction_id"), str)
             and _V2_TRANSACTION_RE.fullmatch(value["completed_transaction_id"]) is not None
             and isinstance(value.get("verified_target_set_sha256"), str)
@@ -1657,7 +1728,7 @@ def validate_transaction_record(raw: bytes, binding: dict, targets: list[dict[st
     common = {"asset_set_sha256", "bundle_sha256", "bundle_version", "cluster_uuid", "kibana_target",
               "ownership_profile", "schema_version", "source_commit", "state", "targets"}
     required = common | {"caller_obligations", "created_at", "destination_map", "possible_mutation", "predecessor", "progress", "transaction_id"}
-    if (not isinstance(value, dict) or set(value) not in (required, required | {"migrated_from_v1"})
+    if (not isinstance(value, dict) or set(value) != required
             or value.get("state") != "installing" or not _v2_common_is_valid(value, binding, targets)):
         raise InputError("assets transaction record is invalid")
     obligations = value.get("caller_obligations")
@@ -1823,20 +1894,31 @@ class BundleSnapshot:
 def snapshot_bundle(bundle_path: Path, directory: Path, *, parse: bool = True) -> BundleSnapshot:
     """Copy a single no-follow opened archive to a private fsynced snapshot."""
     flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    source_fd: int | None = None
+    fd: int | None = None
+    temporary: str | None = None
     try:
         source_fd = os.open(bundle_path, flags)
         source_stat = os.fstat(source_fd)
         if not stat.S_ISREG(source_stat.st_mode):
             raise InputError("bundle is not a regular file")
         fd, temporary = tempfile.mkstemp(prefix=".rigsignal-archive-", dir=directory)
-    except OSError as error:
+    except (OSError, InputError) as error:
+        for descriptor in (source_fd, fd):
+            if descriptor is not None:
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
         raise InputError("cannot snapshot bundle") from error
     try:
         os.fchmod(fd, 0o600)
         with os.fdopen(source_fd, "rb", closefd=True) as source, os.fdopen(fd, "wb", closefd=True) as output:
+            source_fd = fd = None
             while chunk := source.read(1024 * 1024):
                 output.write(chunk)
             output.flush(); os.fsync(output.fileno())
+        fault("snapshot-after-copy-fsync")
         # ERRATA-1: bind the exact protected, fsynced snapshot bytes, rather
         # than the mutable source stream we happened to copy from.
         with open(temporary, "rb") as snapshot_handle:
@@ -1845,11 +1927,19 @@ def snapshot_bundle(bundle_path: Path, directory: Path, *, parse: bool = True) -
                 digest.update(chunk)
         snapshot = BundleSnapshot(Path(temporary), digest.hexdigest())
         if parse:
+            fault("snapshot-before-parse")
             load_bundle(snapshot.path)
         return snapshot
     except Exception:
+        fault("snapshot-before-cleanup")
+        for descriptor in (source_fd, fd):
+            if descriptor is not None:
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
         try: os.unlink(temporary)
-        except OSError: pass
+        except (OSError, TypeError): pass
         raise
 
 
@@ -1861,6 +1951,7 @@ def cleanup_snapshot_residue(directory: Path, name: str) -> None:
     except FileNotFoundError: return
     if (not stat.S_ISREG(st.st_mode) or stat.S_ISLNK(st.st_mode) or st.st_uid != os.geteuid() or st.st_mode & 0o077):
         raise InputError("snapshot residue is unsafe")
+    fault("snapshot-residue-before-cleanup", name)
     path.unlink()
 
 
@@ -2219,7 +2310,7 @@ def _transaction_kibana_observe(adapter: SavedObjectAdapter, asset: Asset, saved
     submitted_key = "kibana/" + _v2_quote(space) + "/" + _v2_quote(typ) + "/" + _v2_quote(ident)
     mapped = next((item["destination_key"] for item in (record or {}).get("destination_map", [])
                    if item["submitted_key"] == submitted_key), None)
-    destination_id = urllib.parse.unquote(mapped.rsplit("/", 1)[1]) if mapped else None
+    destination_id = _v2_kibana_key_parts(mapped)[2] if mapped else None
     state, live, destination = adapter.observe(space, typ, ident, destination_id)
     if state == "absent":
         return state, None, destination
@@ -2233,7 +2324,7 @@ def _transaction_kibana_observe(adapter: SavedObjectAdapter, asset: Asset, saved
         if isinstance(ref_type, str) and isinstance(ref_id, str):
             ref_key = "kibana/" + _v2_quote(space) + "/" + _v2_quote(ref_type) + "/" + _v2_quote(ref_id)
             if ref_key in remaps:
-                item["id"] = urllib.parse.unquote(remaps[ref_key].rsplit("/", 1)[1])
+                item["id"] = _v2_kibana_key_parts(remaps[ref_key])[2]
         references.append(item)
     desired = {"space": space, "type": typ, "attributes": saved.get("attributes", {}),
                "references": references}
@@ -2334,7 +2425,7 @@ def _transaction_put(es_url: str, kb_url: str, authorization: str, spec: tuple[s
             if isinstance(item, dict) and isinstance(item.get("type"), str) and isinstance(item.get("id"), str):
                 ref_key = "kibana/" + _v2_quote(space) + "/" + _v2_quote(item["type"]) + "/" + _v2_quote(item["id"])
                 if ref_key in remaps:
-                    item["id"] = urllib.parse.unquote(remaps[ref_key].rsplit("/", 1)[1])
+                    item["id"] = _v2_kibana_key_parts(remaps[ref_key])[2]
             references.append(item)
         adapter.create(space, saved["type"], saved["id"],
                        {"attributes": saved.get("attributes", {}), "references": references})
@@ -2397,6 +2488,43 @@ def _transaction_put(es_url: str, kb_url: str, authorization: str, spec: tuple[s
                                     nonce=nonce, detector="created<modified", observed={"created": created, "modified": modified})
             raise AssetTransactionHalt("partial-remote-possible")
     return effective
+
+
+def _transaction_create_conflict(spec: tuple[str, Asset | None, dict | None], error: RequestFailure,
+                                 state: str) -> bool:
+    """Recognize only the documented create-race statuses for v2 targets."""
+    if state != "absent":
+        return False
+    key, asset, _saved = spec
+    if key == BUNDLE_META_TARGET_KEY:
+        return error.status == 400
+    if asset is None:
+        return False
+    if asset.kind in {"component_templates", "index_templates"}:
+        return error.status == 400
+    if asset.kind == "transforms":
+        return error.status == 409
+    if asset.kind in {"kibana_spaces", "kibana_roles"}:
+        return error.status == 409
+    return False
+
+
+def _persist_destination_mapping(record: dict, key: str, destination: str) -> bool:
+    """Store a resolved physical identity before claiming the target exact."""
+    space, object_type, submitted_id = _v2_kibana_key_parts(key)
+    if destination == submitted_id:
+        return False
+    destination_key = "kibana/" + _v2_quote(space) + "/" + _v2_quote(object_type) + "/" + _v2_quote(destination)
+    # Validate before retaining any response-derived identifier.  This also
+    # guards the reference rewrite path from a malformed resolver response.
+    _v2_kibana_key_parts(destination_key)
+    mapping = {"submitted_key": key, "destination_key": destination_key}
+    updated = [item for item in record["destination_map"] if item["submitted_key"] != key] + [mapping]
+    updated.sort(key=lambda item: item["submitted_key"].encode())
+    if updated == record["destination_map"]:
+        return False
+    record["destination_map"] = updated
+    return True
 
 
 def transaction_detector_nonce(transaction_id: str, target_key: str) -> str:
@@ -2515,7 +2643,10 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
             # The fresh full-flow barrier includes M before publishing I.
             # Thus neither an ordinary nor Step-11 refusal can establish a
             # durable partial intent, let alone precede a remote write.
-            for barrier_spec in _transaction_specs(bundle, full_flow and not defer_step_11):
+            # Dispatch may defer M to Step 11, but the full-flow observation
+            # barrier never does: a marker refusal must precede every ordinary
+            # asset and enrollment mutation.
+            for barrier_spec in _transaction_specs(bundle, full_flow):
                 barrier_state, _barrier_live, _barrier_destination = _transaction_observe(
                     es_url, kb_url, authorization, barrier_spec, bundle, adapter, record)
                 if barrier_state == "divergent":
@@ -2554,7 +2685,9 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
             # obligation while it revalidates the ordinary current targets.
             record = mark_transaction_verified(record, BUNDLE_META_TARGET_KEY)
 
-        specs = _transaction_specs(bundle, full_flow and not defer_step_11)
+        barrier_specs = _transaction_specs(bundle, full_flow)
+        dispatch_specs = _transaction_specs(bundle, full_flow and not defer_step_11)
+        specs = dispatch_specs
         if step_11_only:
             specs = [spec for spec in _transaction_specs(bundle, True) if spec[0] == BUNDLE_META_TARGET_KEY]
         # A resumed full-flow transaction must not let the lexically first
@@ -2564,7 +2697,7 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
         # allowing absent targets to take their normal create paths below.
         barrier_states: dict[str, str] = {}
         if full_flow and record is not None and not step_11_only:
-            for barrier_spec in specs:
+            for barrier_spec in barrier_specs:
                 barrier_state, _barrier_live, _barrier_destination = _transaction_observe(
                     es_url, kb_url, authorization, barrier_spec, bundle, adapter, record)
                 barrier_states[barrier_spec[0]] = barrier_state
@@ -2614,6 +2747,12 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
             if state == "exact":
                 verified_this_pass.add(key)
                 if record["state"] == "installing":
+                    # A resolver can recover a nonliteral destination after a
+                    # response-loss crash.  It is durable authority for later
+                    # reference rewrites, so publish it before verified.
+                    if key.startswith("kibana/") and destination is not None and _persist_destination_mapping(record, key, destination):
+                        write_transaction_record(record_path, record, binding, targets)
+                        fault("after-destination-map-publication", key)
                     record = mark_transaction_verified(record, key)
                     if not transition_pending:
                         write_transaction_record(record_path, record, binding, targets)
@@ -2663,16 +2802,20 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
                 # --unsafe-test-injection, an exact env point, and a loopback
                 # endpoint are all present.
                 test_pause("before-transaction-put", unsafe_test_injection, es_url, key)
-                desired_override = _transaction_put(es_url, kb_url, authorization, spec, bundle, runtime, adapter)
+                try:
+                    desired_override = _transaction_put(es_url, kb_url, authorization, spec, bundle, runtime, adapter)
+                except RequestFailure as error:
+                    # A conditional create can race an already-existing
+                    # target.  Do not classify generic 4xx errors as races;
+                    # the proven class-specific statuses get one immediate
+                    # observation below, which either verifies or halts.
+                    if not _transaction_create_conflict(spec, error, state):
+                        raise
             state, _live, verified_destination = _transaction_observe(es_url, kb_url, authorization, spec, bundle, adapter, record,
                                                                        desired_override=desired_override)
             if state != "exact":
                 raise AssetTransactionHalt("partial-remote-possible")
-            if spec[0].startswith("kibana/") and verified_destination is not None and verified_destination != spec[0].rsplit("/", 1)[1]:
-                mapping = {"submitted_key": key, "destination_key": key.rsplit("/", 1)[0] + "/" + _v2_quote(verified_destination)}
-                record["destination_map"] = sorted([item for item in record["destination_map"]
-                                                     if item["submitted_key"] != key] + [mapping],
-                                                   key=lambda item: item["submitted_key"].encode())
+            if spec[0].startswith("kibana/") and verified_destination is not None and _persist_destination_mapping(record, key, verified_destination):
                 # Mapping is its own durable edge.  A response-loss crash may
                 # leave write-issued progress, but never loses the physical
                 # saved-object identity learned from a successful create.
@@ -3384,6 +3527,7 @@ def atomic_write(root: Path, name: str, data: bytes, *, expected_prior: bytes | 
             handle.write(data)
             handle.flush()
             os.fsync(handle.fileno())
+        fault("atomic-write-after-temp-fsync", name)
         # Repeat all leaf checks at the last possible point.  This is also
         # used by record and diagnostic replacement, whose caller supplied
         # the expected authoritative bytes.
@@ -3392,6 +3536,7 @@ def atomic_write(root: Path, name: str, data: bytes, *, expected_prior: bytes | 
         if expected_prior is not ... and actual_prior != expected_prior:
             raise InputError("enrollment output changed before replacement")
         os.replace(temporary, target)
+        fault("atomic-write-after-replace", name)
         st = target.lstat()
         if not stat.S_ISREG(st.st_mode) or stat.S_ISLNK(st.st_mode) or st.st_mode & 0o077:
             raise InputError("enrollment output is not protected")
@@ -3400,11 +3545,13 @@ def atomic_write(root: Path, name: str, data: bytes, *, expected_prior: bytes | 
             os.fsync(directory_fd)
         finally:
             os.close(directory_fd)
-    except OSError as error:
+    except Exception as error:
         try:
             os.unlink(temporary)
         except OSError:
             pass
+        if isinstance(error, InputError):
+            raise
         raise InputError("cannot publish enrollment output") from error
 
 
@@ -6588,6 +6735,15 @@ def main() -> int:
     ownership_profile = raw_ownership_profile or "default"
     bundle_archive_sha256: str | None = None
     default_asset_lock: AssetTransactionLock | None = None
+    # This is the one process boundary classifier.  It runs before endpoint
+    # parsing, bundle opening, snapshot setup, credentials, or any remote
+    # operation, and therefore a durable uncertainty cannot be hidden by an
+    # unrelated local prerequisite failure.
+    boundary_marker_path = args.assets_marker or _asset_marker_default_path()
+    if args.rollback is None:
+        boundary_status = transaction_boundary_preflight(boundary_marker_path)
+        if boundary_status is not None:
+            return boundary_status
     try:
         if args.profile != "user":
             raise InputError("profile system is unsupported/broker-required")
@@ -6652,13 +6808,23 @@ def main() -> int:
         if args.bundle is None:
             raise InputError("--bundle is required unless --rollback is used")
         bundle = load_bundle(args.bundle)  # Step 1: no HTTP before this line succeeds.
+        same_version_status = transaction_same_version_flag_preflight(
+            boundary_marker_path, bundle, args.upgrade, args.allow_downgrade)
+        if same_version_status is not None:
+            return same_version_status
         predecessor_manifest = load_predecessor_manifest(getattr(args, "predecessor_manifest", None))
         role = role_body(bundle)
         ownership = ownership_for_assets(bundle, ownership_profile)
     except ProvisionError as error:
+        boundary_status = transaction_boundary_failure(boundary_marker_path, -1)
+        if boundary_status != -1:
+            return boundary_status
         return finalize_failure(error.prefix, failure_tracker, mutation_tracker,
                                 local=is_local_failure_message(error.prefix))
     except (InputError, RequestFailure, OSError) as error:
+        boundary_status = transaction_boundary_failure(boundary_marker_path, -1)
+        if boundary_status != -1:
+            return boundary_status
         if isinstance(error, OwnershipTableError):
             return finalize_failure("install refused: " + str(error), failure_tracker,
                                     mutation_tracker, local=True)
@@ -6734,6 +6900,9 @@ def main() -> int:
             return status if status == 4 else finalize_failure(
                 "install refused: assets_transaction_invalid", failure_tracker, mutation_tracker)
         except ProvisionError as error:
+            boundary_status = transaction_boundary_failure(boundary_marker_path, -1)
+            if boundary_status != -1:
+                return boundary_status
             status = (asset_executor_exit_code("refusal", marker_path)
                       if "marker_path" in locals() else 3)
             return 4 if status == 4 else finalize_failure(error.prefix, failure_tracker, mutation_tracker,
@@ -6750,6 +6919,9 @@ def main() -> int:
             if ("marker_path" in locals() and isinstance(error, InputError)
                     and ("version flags" in str(error) or "version direction" in str(error))):
                 return asset_executor_exit_code("local-input", marker_path)
+            boundary_status = transaction_boundary_failure(boundary_marker_path, -1)
+            if boundary_status != -1:
+                return boundary_status
             return finalize_failure(message, failure_tracker,
                                     mutation_tracker,
                                     local=(not mutation_tracker.mutation_issued
@@ -6947,6 +7119,9 @@ def main() -> int:
             except InputError:
                 # Version-flag direction/same-version errors are local at the
                 # actual full-flow boundary (ERRATA-6/T-EXIT-2).
+                boundary_status = transaction_boundary_failure(default_marker_path, -1)
+                if boundary_status != -1:
+                    return boundary_status
                 return asset_executor_exit_code("local-input", default_marker_path)
             default_transaction_done = True
         if ownership_profile == "fleet-coexist":
@@ -7252,15 +7427,24 @@ def main() -> int:
             print(f"installed {total}/{total} assets")
         return 0
     except ProvisionError as error:
+        boundary_status = transaction_boundary_failure(boundary_marker_path, -1)
+        if boundary_status != -1:
+            return boundary_status
         return finalize_failure(error.prefix, failure_tracker, mutation_tracker,
                                 local=is_local_failure_message(error.prefix))
     except (InputError, RequestFailure, OSError):
         # The public contract deliberately avoids exposing response bodies and
         # exception text, which could contain credentials or cluster data.
+        boundary_status = transaction_boundary_failure(boundary_marker_path, -1)
+        if boundary_status != -1:
+            return boundary_status
         if "default_marker_path" in locals() and default_marker_path is not None and mutation_tracker.mutation_issued:
             return transaction_failure_status(default_marker_path)
         return finalize_failure("install failed: enrollment output:", failure_tracker,
                                 mutation_tracker, local=False)
+    finally:
+        if default_asset_lock is not None:
+            default_asset_lock.close()
 
 
 if __name__ == "__main__":
