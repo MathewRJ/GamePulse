@@ -19,6 +19,6 @@ api_key = "YOUR_API_KEY_HERE"
 # spool_dir = "~/.local/state/rigsignal/spool"
 # max_file_bytes = 10485760
 # max_file_age_secs = 300
-# Delete delivered and quarantined spool files older than this many hours.
-# The default (72 hours) leaves ample time for Fleet to consume each batch.
+# Deprecated compatibility option. It no longer deletes finals; it still bounds
+# quarantine debris age, and 0 disables quarantine cleanup.
 # spool_retention_hours = 72

@@ -570,11 +570,14 @@ make_release_fixture() {
     cp "$LAUNCHER" "$package_dir/rigsignal"
     cp "$UNINSTALLER" "$package_dir/rigsignal-uninstall"
     printf '[Unit]\nDescription=fixture\n' >"$package_dir/rigsignal-agent.service"
+    printf '#!/bin/sh\nexit 0\n' >"$package_dir/rigsignal-spool-retention"
+    printf '[Unit]\nDescription=fixture\n' >"$package_dir/rigsignal-spool-retention.service"
+    printf '[Timer]\nOnCalendar=hourly\n' >"$package_dir/rigsignal-spool-retention.timer"
     mkdir -p "$package_dir/engine"
     printf '#!/usr/bin/env python3\n' >"$package_dir/engine/install_assets.py"
     printf '# fixture adapter\n' >"$package_dir/engine/asset_adapters.py"
     printf 'ENGINE_VERSION = "%s"\nSOURCE_COMMIT = "fixture"\n' "$version" >"$package_dir/engine/_version.py"
-    chmod +x "$package_dir/rigsignal-agent" "$package_dir/rigsignal" "$package_dir/rigsignal-uninstall"
+    chmod +x "$package_dir/rigsignal-agent" "$package_dir/rigsignal" "$package_dir/rigsignal-uninstall" "$package_dir/rigsignal-spool-retention"
     (cd "$release_dir" && tar -czf "$tarball" "$(basename "$package_dir")")
     if [[ "$checksum_mode" == "valid" ]]; then
         (cd "$release_dir" && sha256sum "$tarball" >"${tarball}.sha256")
@@ -772,7 +775,8 @@ test_package_paths_write_channel_markers() {
         printf 'fixture\n' >"$fixture/dist/engine/$file" || return 1
     done
     install -Dm755 "$REPO_ROOT/packaging/rigsignal-launcher.sh" "$fixture/packaging/rigsignal-launcher.sh" || return 1
-    for file in rigsignal-agent.service rigsignal-ebpf.service; do
+    install -Dm755 "$REPO_ROOT/packaging/rigsignal-spool-retention.py" "$fixture/packaging/rigsignal-spool-retention.py" || return 1
+    for file in rigsignal-agent.service rigsignal-ebpf.service rigsignal-spool-retention.service rigsignal-spool-retention.timer; do
         install -Dm644 "$REPO_ROOT/packaging/systemd/$file" "$fixture/packaging/systemd/$file" || return 1
     done
     install -Dm644 "$REPO_ROOT/packaging/config/rigsignal.toml.example" "$fixture/packaging/config/rigsignal.toml.example" || return 1
@@ -821,7 +825,10 @@ test_uninstall_removes_staged_install() {
     [[ ! -e "$stage$home/.local/bin/rigsignal-agent" ]] \
         && [[ ! -e "$stage$home/.local/bin/rigsignal" ]] \
         && [[ ! -e "$stage$home/.local/bin/rigsignal-uninstall" ]] \
+        && [[ ! -e "$stage$home/.local/bin/rigsignal-spool-retention" ]] \
         && [[ ! -e "$stage$home/.config/systemd/user/rigsignal-agent.service" ]] \
+        && [[ ! -e "$stage$home/.config/systemd/user/rigsignal-spool-retention.service" ]] \
+        && [[ ! -e "$stage$home/.config/systemd/user/rigsignal-spool-retention.timer" ]] \
         && [[ ! -e "$stage$home/.local/lib/rigsignal/engine/install_assets.py" ]] \
         && [[ ! -e "$stage$home/.local/lib/rigsignal/engine/asset_adapters.py" ]] \
         && [[ ! -e "$stage$home/.local/lib/rigsignal/engine/_version.py" ]] || return 1
@@ -830,7 +837,10 @@ test_uninstall_removes_staged_install() {
     [[ -e "$stage$home/.local/bin/rigsignal-agent" ]] \
         && [[ -e "$stage$home/.local/bin/rigsignal" ]] \
         && [[ -e "$stage$home/.local/bin/rigsignal-uninstall" ]] \
+        && [[ -e "$stage$home/.local/bin/rigsignal-spool-retention" ]] \
         && [[ -e "$stage$home/.config/systemd/user/rigsignal-agent.service" ]] \
+        && [[ -e "$stage$home/.config/systemd/user/rigsignal-spool-retention.service" ]] \
+        && [[ -e "$stage$home/.config/systemd/user/rigsignal-spool-retention.timer" ]] \
         && [[ -e "$stage$home/.local/lib/rigsignal/engine/install_assets.py" ]]
 }
 

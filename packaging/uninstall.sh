@@ -224,13 +224,17 @@ printf '\n  Removing user-space files...\n'
 if [ -z "$DESTDIR" ] && command -v systemctl >/dev/null 2>&1; then
     systemctl --user stop rigsignal-agent 2>/dev/null || true
     systemctl --user disable rigsignal-agent 2>/dev/null || true
+    systemctl --user disable --now rigsignal-spool-retention.timer 2>/dev/null || true
     systemctl --user daemon-reload 2>/dev/null || true
 fi
 
 remove_file "$USER_BIN/rigsignal-agent" "$USER_BIN_LOGICAL/rigsignal-agent"
 remove_file "$USER_BIN/rigsignal" "$USER_BIN_LOGICAL/rigsignal"
 remove_file "$USER_BIN/rigsignal-uninstall" "$USER_BIN_LOGICAL/rigsignal-uninstall"
+remove_file "$USER_BIN/rigsignal-spool-retention" "$USER_BIN_LOGICAL/rigsignal-spool-retention"
 remove_file "$USER_SERVICE/rigsignal-agent.service" "$USER_SERVICE_LOGICAL/rigsignal-agent.service"
+remove_file "$USER_SERVICE/rigsignal-spool-retention.service" "$USER_SERVICE_LOGICAL/rigsignal-spool-retention.service"
+remove_file "$USER_SERVICE/rigsignal-spool-retention.timer" "$USER_SERVICE_LOGICAL/rigsignal-spool-retention.timer"
 remove_file "$USER_ENGINE/install_assets.py" "$USER_ENGINE_LOGICAL/install_assets.py"
 remove_file "$USER_ENGINE/asset_adapters.py" "$USER_ENGINE_LOGICAL/asset_adapters.py"
 remove_file "$USER_ENGINE/_version.py" "$USER_ENGINE_LOGICAL/_version.py"

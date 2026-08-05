@@ -171,9 +171,11 @@ mkdir -p "$INSTALL_BIN_PATH"
 install -m 755 "$TMP/rigsignal-agent"  "$INSTALL_BIN_PATH/rigsignal-agent"
 install -m 755 "$TMP/rigsignal"        "$INSTALL_BIN_PATH/rigsignal"
 install -m 755 "$TMP/rigsignal-uninstall" "$INSTALL_BIN_PATH/rigsignal-uninstall"
+install -m 755 "$TMP/rigsignal-spool-retention" "$INSTALL_BIN_PATH/rigsignal-spool-retention"
 add_installed "$INSTALL_BIN/rigsignal-agent  (collector)"
 add_installed "$INSTALL_BIN/rigsignal  (launcher CLI)"
 add_installed "$INSTALL_BIN/rigsignal-uninstall  (uninstaller)"
+add_installed "$INSTALL_BIN/rigsignal-spool-retention  (delivery-proof-gated spool retention)"
 
 # The assets launcher executes only this co-packaged, immutable engine.  Keep
 # these files separate from the executable directory so a stale system engine
@@ -189,20 +191,30 @@ printf 'rigsignal-release\n' > "$INSTALL_ENGINE_PATH/channel"
 chmod 644 "$INSTALL_ENGINE_PATH/channel"
 add_installed "$INSTALL_ENGINE/  (assets engine)"
 
-# ── Install user systemd service ──────────────────────────────────────────────
+# ── Install user systemd units ────────────────────────────────────────────────
 
+mkdir -p "$INSTALL_SERVICE_PATH"
+install -m 644 "$TMP/rigsignal-agent.service" "$INSTALL_SERVICE_PATH/rigsignal-agent.service"
+install -m 644 "$TMP/rigsignal-spool-retention.service" "$INSTALL_SERVICE_PATH/rigsignal-spool-retention.service"
+install -m 644 "$TMP/rigsignal-spool-retention.timer" "$INSTALL_SERVICE_PATH/rigsignal-spool-retention.timer"
 if [ -n "$DESTDIR" ]; then
-    mkdir -p "$INSTALL_SERVICE_PATH"
-    install -m 644 "$TMP/rigsignal-agent.service" "$INSTALL_SERVICE_PATH/rigsignal-agent.service"
     add_installed "$INSTALL_SERVICE/rigsignal-agent.service  (user systemd service; staged)"
+    add_installed "$INSTALL_SERVICE/rigsignal-spool-retention.service  (user systemd service; staged)"
+    add_installed "$INSTALL_SERVICE/rigsignal-spool-retention.timer  (hourly user timer; staged)"
 elif command -v systemctl >/dev/null 2>&1; then
-    mkdir -p "$INSTALL_SERVICE_PATH"
-    install -m 644 "$TMP/rigsignal-agent.service" "$INSTALL_SERVICE_PATH/rigsignal-agent.service"
     systemctl --user daemon-reload 2>/dev/null || true
     add_installed "$INSTALL_SERVICE/rigsignal-agent.service  (user systemd service)"
+    add_installed "$INSTALL_SERVICE/rigsignal-spool-retention.service  (user systemd service)"
+    if systemctl --user enable --now rigsignal-spool-retention.timer 2>/dev/null; then
+        add_installed "rigsignal-spool-retention.timer  (enabled hourly user timer)"
+    else
+        add_skipped "enabling rigsignal-spool-retention.timer (systemctl failed)"
+    fi
 else
-    info "systemctl not found — skipping service install (non-systemd system)"
-    add_skipped "systemd user service (systemctl not found)"
+    add_installed "$INSTALL_SERVICE/rigsignal-agent.service  (user systemd service)"
+    add_installed "$INSTALL_SERVICE/rigsignal-spool-retention.service  (user systemd service)"
+    add_installed "$INSTALL_SERVICE/rigsignal-spool-retention.timer  (hourly user timer)"
+    add_skipped "enabling rigsignal-spool-retention.timer (systemctl not found)"
 fi
 
 # ── Install eBPF daemon (optional, requires sudo) ─────────────────────────────

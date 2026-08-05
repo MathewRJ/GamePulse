@@ -36,6 +36,8 @@ _reporoot="$(realpath "${REPOROOT:-../..}")"
 package() {
     install -Dm755 "${_reporoot}/target/release/rigsignal-agent" \
         "${pkgdir}/usr/bin/rigsignal-agent"
+    install -Dm755 "${_reporoot}/packaging/rigsignal-spool-retention.py" \
+        "${pkgdir}/usr/bin/rigsignal-spool-retention"
 
     install -Dm755 "${_reporoot}/dist/engine/install_assets.py" \
         "${pkgdir}/usr/lib/rigsignal/engine/install_assets.py"
@@ -51,6 +53,10 @@ package() {
 
     install -Dm644 "${_reporoot}/packaging/systemd/rigsignal-agent.service" \
         "${pkgdir}/usr/lib/systemd/user/rigsignal-agent.service"
+    install -Dm644 "${_reporoot}/packaging/systemd/rigsignal-spool-retention.service" \
+        "${pkgdir}/usr/lib/systemd/user/rigsignal-spool-retention.service"
+    install -Dm644 "${_reporoot}/packaging/systemd/rigsignal-spool-retention.timer" \
+        "${pkgdir}/usr/lib/systemd/user/rigsignal-spool-retention.timer"
 
     install -Dm644 "${_reporoot}/packaging/config/rigsignal.toml.example" \
         "${pkgdir}/usr/share/rigsignal/examples/rigsignal.toml.example"

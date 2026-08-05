@@ -191,11 +191,14 @@ jobs:
           DIR="rigsignal-${VERSION}-linux-x86_64"
           mkdir -p "dist-tar/${DIR}"
 
-          # Agent + launcher + uninstaller + user service
+          # Agent + launcher + uninstaller + delivery-proof-gated retention units
           cp target/release/rigsignal-agent                            "dist-tar/${DIR}/rigsignal-agent"
           cp packaging/rigsignal-launcher.sh                           "dist-tar/${DIR}/rigsignal"
           cp packaging/uninstall.sh                                    "dist-tar/${DIR}/rigsignal-uninstall"
           cp packaging/systemd/rigsignal-agent.user-install.service    "dist-tar/${DIR}/rigsignal-agent.service"
+          cp packaging/rigsignal-spool-retention.py                    "dist-tar/${DIR}/rigsignal-spool-retention"
+          cp packaging/systemd/rigsignal-spool-retention.user-install.service "dist-tar/${DIR}/rigsignal-spool-retention.service"
+          cp packaging/systemd/rigsignal-spool-retention.timer         "dist-tar/${DIR}/rigsignal-spool-retention.timer"
 
           # eBPF daemon + probes + system service (installed by install.sh with sudo)
           cp target/ebpf/rigsignal-ebpf                                "dist-tar/${DIR}/rigsignal-ebpf"
@@ -210,6 +213,7 @@ jobs:
           chmod +x "dist-tar/${DIR}/rigsignal-agent" \
                    "dist-tar/${DIR}/rigsignal" \
                    "dist-tar/${DIR}/rigsignal-uninstall" \
+                   "dist-tar/${DIR}/rigsignal-spool-retention" \
                    "dist-tar/${DIR}/rigsignal-ebpf"
           cd dist-tar
           tar -czf "${DIR}.tar.gz" "${DIR}/"

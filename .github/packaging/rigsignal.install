@@ -1,4 +1,32 @@
+_enable_spool_retention_timer() {
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl --global enable rigsignal-spool-retention.timer >/dev/null 2>&1 || true
+    fi
+}
+
+_warn_stale_spool_retention_unit() {
+    local username password uid gid gecos home shell unit
+    while IFS=: read -r username password uid gid gecos home shell; do
+        case "$home" in
+            /*) ;;
+            *) continue ;;
+        esac
+        for unit in "$home"/.config/systemd/user/rigsignal-spool-retention.*; do
+            [ -e "$unit" ] || [ -L "$unit" ] || continue
+            echo "==> WARNING: $unit shadows the packaged global RigSignal spool-retention unit and may run an old $home/.local/bin helper; remove the user unit and run systemctl --user daemon-reload."
+            return
+        done
+    done </etc/passwd
+}
+
+post_install() {
+    _enable_spool_retention_timer
+    _warn_stale_spool_retention_unit
+}
+
 post_upgrade() {
+    _enable_spool_retention_timer
+    _warn_stale_spool_retention_unit
     local legacy_config=/etc/rigsignal/rigsignal.toml
     local pacsave_config=${legacy_config}.pacsave
     local actual_hash

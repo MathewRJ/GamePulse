@@ -1,0 +1,6 @@
+[Unit]
+Description=Prune harvested RigSignal spool files older than 48h
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/rigsignal-spool-retention

@@ -5,6 +5,10 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use tracing::warn;
+
+static SPOOL_RETENTION_DEPRECATION_WARNED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
@@ -37,6 +41,9 @@ pub struct OutputConfig {
     pub max_file_bytes: u64,
     #[serde(default = "default_max_file_age_secs")]
     pub max_file_age_secs: u64,
+    /// Deprecated for final spool retention. The separately installed helper owns
+    /// delivery-proof-gated final cleanup; the producer uses this only for recovery
+    /// quarantine debris.
     #[serde(default = "default_spool_retention_hours")]
     pub spool_retention_hours: u64,
 }
@@ -326,8 +333,28 @@ impl Config {
     fn load_from(path: &PathBuf) -> Result<Self> {
         let text = std::fs::read_to_string(path)
             .with_context(|| format!("reading config file: {}", path.display()))?;
-        toml::from_str(&text).with_context(|| format!("parsing config file: {}", path.display()))
+        let value: toml::Value = toml::from_str(&text)
+            .with_context(|| format!("parsing config file: {}", path.display()))?;
+        let spool_retention_hours_set = value
+            .get("output")
+            .and_then(toml::Value::as_table)
+            .is_some_and(|output| output.contains_key("spool_retention_hours"));
+        let config: Self = value
+            .try_into()
+            .with_context(|| format!("parsing config file: {}", path.display()))?;
+        if spool_retention_hours_set {
+            warn_spool_retention_deprecation();
+        }
+        Ok(config)
     }
+}
+
+fn warn_spool_retention_deprecation() -> bool {
+    if SPOOL_RETENTION_DEPRECATION_WARNED.swap(true, Ordering::Relaxed) {
+        return false;
+    }
+    warn!("output.spool_retention_hours is deprecated for final spool retention; rigsignal-spool-retention handles delivery-proof-gated final cleanup");
+    true
 }
 
 #[cfg(not(windows))]
@@ -358,11 +385,27 @@ fn home_dir() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::Arc;
     #[cfg(not(windows))]
     use std::sync::Mutex;
+    use tracing::{Event, Level, Subscriber};
+    use tracing_subscriber::{layer::Context, prelude::*, Layer};
 
     #[cfg(not(windows))]
     static ENV_LOCK: Mutex<()> = Mutex::new(());
+    static SPOOL_RETENTION_WARN_LOCK: Mutex<()> = Mutex::new(());
+
+    #[derive(Clone)]
+    struct WarnCounter(Arc<AtomicUsize>);
+
+    impl<S: Subscriber> Layer<S> for WarnCounter {
+        fn on_event(&self, event: &Event<'_>, _context: Context<'_, S>) {
+            if *event.metadata().level() == Level::WARN {
+                self.0.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+    }
 
     #[test]
     fn config_defaults_output_when_absent() {
@@ -406,6 +449,38 @@ mod tests {
         assert_eq!(cfg.output.max_file_bytes, 1024);
         assert_eq!(cfg.output.max_file_age_secs, 30);
         assert_eq!(cfg.output.spool_retention_hours, 24);
+    }
+
+    #[test]
+    fn spool_retention_hours_deprecation_warns_once_when_explicitly_configured() -> Result<()> {
+        let _lock = SPOOL_RETENTION_WARN_LOCK.lock().unwrap();
+        SPOOL_RETENTION_DEPRECATION_WARNED.store(false, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "rigsignal-spool-retention-deprecation-{}.toml",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::write(
+            &path,
+            r#"
+            [elasticsearch]
+            endpoint = "http://localhost:9200"
+
+            [output]
+            spool_retention_hours = 24
+            "#,
+        )?;
+        let warnings = Arc::new(AtomicUsize::new(0));
+        let subscriber = tracing_subscriber::registry().with(WarnCounter(warnings.clone()));
+        tracing::subscriber::with_default(subscriber, || -> Result<()> {
+            let config = Config::load_from(&path)?;
+            assert_eq!(config.output.spool_retention_hours, 24);
+            Config::load_from(&path)?;
+            Ok(())
+        })?;
+        std::fs::remove_file(&path)?;
+        assert_eq!(warnings.load(Ordering::Relaxed), 1);
+        SPOOL_RETENTION_DEPRECATION_WARNED.store(false, Ordering::Relaxed);
+        Ok(())
     }
 
     #[cfg(not(windows))]

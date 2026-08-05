@@ -155,7 +155,7 @@ impl SpoolWriter {
     }
 
     pub fn rotate_stale_files(&mut self) -> Result<()> {
-        self.prune_retained_files()?;
+        self.prune_retained_quarantines()?;
         if self.max_file_age.as_secs() == 0 {
             return Ok(());
         }
@@ -333,14 +333,13 @@ impl SpoolWriter {
         }
     }
 
-    /// Incrementally prune finals and quarantines by mtime. Deep-review finding 2 permits
-    /// directory-order deletion instead of a global oldest-first sort: every full scan
-    /// cycle sees each entry once, while each synchronous rotation does bounded work.
-    fn prune_retained_files(&mut self) -> Result<()> {
-        self.prune_retained_files_with_limits(RETENTION_SCAN_BATCH, RETENTION_PRUNE_BATCH)
+    /// Incrementally prune quarantined recovery debris by mtime. Final NDJSON
+    /// files are delivery-owned and must never be deleted by the producer.
+    fn prune_retained_quarantines(&mut self) -> Result<()> {
+        self.prune_retained_quarantines_with_limits(RETENTION_SCAN_BATCH, RETENTION_PRUNE_BATCH)
     }
 
-    fn prune_retained_files_with_limits(
+    fn prune_retained_quarantines_with_limits(
         &mut self,
         scan_batch: usize,
         prune_batch: usize,
@@ -378,11 +377,11 @@ impl SpoolWriter {
             }
             let path = entry.path();
             if deletions < prune_batch
-                && is_retained_spool_file(&path)
+                && is_retained_quarantine_file(&path)
                 && entry.metadata()?.modified().unwrap_or(SystemTime::now()) < cutoff
             {
                 remove_file_if_exists(&path)
-                    .with_context(|| format!("pruning retained spool file: {}", path.display()))?;
+                    .with_context(|| format!("pruning retained quarantine file: {}", path.display()))?;
                 deletions += 1;
             }
         }
@@ -472,8 +471,8 @@ where
 /// Related (hardening review note, 2026-07-18): a crash between the quarantine name
 /// reservation and the source rename orphans a zero-byte `.quarantine` placeholder.
 /// It never matches the Fleet glob, the source is still reprocessed next startup, and
-/// retention prunes the debris within `spool_retention_hours` — accepted as
-/// self-healing.
+/// mtime cleanup removes the debris within `spool_retention_hours`; it never
+/// matches the Fleet glob, and source recovery remains safe on the next startup.
 fn recover_stranded_file<F>(
     dir: &Path,
     source: &Path,
@@ -750,12 +749,12 @@ fn is_recovery_staging_file(path: &Path) -> bool {
         .is_some_and(|name| name.ends_with(".staging"))
 }
 
-fn is_retained_spool_file(path: &Path) -> bool {
+fn is_retained_quarantine_file(path: &Path) -> bool {
     let name = path
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("");
-    name.starts_with("rigsignal-") && (name.ends_with(".ndjson") || name.ends_with(".quarantine"))
+    name.starts_with("rigsignal-") && name.ends_with(".quarantine")
 }
 
 fn remove_file_if_exists(path: &Path) -> std::io::Result<()> {
@@ -1578,53 +1577,25 @@ mod tests {
     }
 
     #[test]
-    fn retention_scan_and_deletions_are_bounded_per_call() -> Result<()> {
-        let dir = temp_spool_dir("retention-bounded");
+    fn retention_prunes_aged_quarantines_but_never_finals() -> Result<()> {
+        let dir = temp_spool_dir("quarantines-pruned-finals-retained");
         let mut writer = SpoolWriter::new(&dir, 0, 0, 1)?;
-        let retained: Vec<PathBuf> = (0..4)
-            .map(|index| dir.join(format!("rigsignal-frame-{index}.ndjson")))
-            .collect();
-        for path in &retained {
-            fs::write(path, "old")?;
-            set_file_age(path, Duration::from_secs(2 * 60 * 60))?;
-        }
+        let final_path = dir.join("rigsignal-frame-ancient.ndjson");
+        let quarantine_path = dir.join("rigsignal-frame-ancient.quarantine");
+        fs::write(&final_path, "old but delivered only by Fleet")?;
+        fs::write(&quarantine_path, "old recovery debris")?;
+        set_file_age(&final_path, Duration::from_secs(365 * 24 * 60 * 60))?;
+        set_file_age(&quarantine_path, Duration::from_secs(365 * 24 * 60 * 60))?;
 
-        let scanned_before = writer.retention_entries_scanned();
-        writer.prune_retained_files_with_limits(2, 1)?;
-        assert!(writer.retention_entries_scanned() - scanned_before <= 2);
-
-        writer.prune_retained_files_with_limits(100, 1)?;
-        assert!(retained.iter().filter(|path| path.exists()).count() >= 2);
-
-        drop(writer);
-        fs::remove_dir_all(&dir)?;
-        Ok(())
-    }
-
-    #[test]
-    fn retention_rechecks_newly_eligible_files_on_the_next_cycle() -> Result<()> {
-        let dir = temp_spool_dir("retention-next-cycle");
-        let mut writer = SpoolWriter::new(&dir, 0, 0, 1)?;
-        let candidate = dir.join("rigsignal-frame-new.ndjson");
-        fs::write(&candidate, "new")?;
-
-        for _ in 0..10 {
-            writer.prune_retained_files_with_limits(1, 1)?;
-            if writer.retention_scan.is_none() {
-                break;
-            }
-        }
-        assert!(candidate.exists());
-        assert!(writer.retention_scan.is_none());
-
-        set_file_age(&candidate, Duration::from_secs(2 * 60 * 60))?;
-        for _ in 0..10 {
-            writer.prune_retained_files_with_limits(1, 1)?;
-            if !candidate.exists() {
-                break;
-            }
-        }
-        assert!(!candidate.exists());
+        writer.rotate_stale_files()?;
+        assert!(
+            final_path.exists(),
+            "producer must never delete final spool files"
+        );
+        assert!(
+            !quarantine_path.exists(),
+            "producer must clean aged quarantine files"
+        );
 
         drop(writer);
         fs::remove_dir_all(&dir)?;

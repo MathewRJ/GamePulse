@@ -423,6 +423,12 @@ release tarball or `packaging/systemd/`.
 > the packaged unit in `/usr/lib/systemd/user/`. Remove the leftover user unit
 > after switching to a distro package, then run `systemctl --user daemon-reload`.
 
+> Likewise, remove any tarball-installed
+> `~/.config/systemd/user/rigsignal-spool-retention.*` units after switching to
+> a distro package. They shadow the packaged global retention units and may
+> still invoke an old helper from `~/.local/bin/`. Then run
+> `systemctl --user daemon-reload`.
+
 > **Dev installs (build from source):** The unit's `ExecStart` defaults to `/usr/bin/rigsignal-agent`, but a source build installs to `/usr/local/bin/`. Create a drop-in to override:
 > ```bash
 > mkdir -p ~/.config/systemd/user/rigsignal-agent.service.d

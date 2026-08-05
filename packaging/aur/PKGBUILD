@@ -80,6 +80,8 @@ package() {
 
     install -Dm755 "${_repodir}/target/release/rigsignal-agent" \
         "${pkgdir}/usr/bin/rigsignal-agent"
+    install -Dm755 "${_repodir}/packaging/rigsignal-spool-retention.py" \
+        "${pkgdir}/usr/bin/rigsignal-spool-retention"
     install -Dm755 "${_repodir}/ebpf/target/release/rigsignal-ebpf" \
         "${pkgdir}/usr/bin/rigsignal-ebpf"
 
@@ -88,6 +90,10 @@ package() {
 
     install -Dm644 "${_repodir}/packaging/systemd/rigsignal-agent.service" \
         "${pkgdir}/usr/lib/systemd/user/rigsignal-agent.service"
+    install -Dm644 "${_repodir}/packaging/systemd/rigsignal-spool-retention.service" \
+        "${pkgdir}/usr/lib/systemd/user/rigsignal-spool-retention.service"
+    install -Dm644 "${_repodir}/packaging/systemd/rigsignal-spool-retention.timer" \
+        "${pkgdir}/usr/lib/systemd/user/rigsignal-spool-retention.timer"
 
     install -Dm644 "${_repodir}/packaging/systemd/rigsignal-ebpf.service" \
         "${pkgdir}/usr/lib/systemd/system/rigsignal-ebpf.service"
