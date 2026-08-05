@@ -30,11 +30,14 @@ usage() {
   cat >&2 <<'EOF'
 Usage: assets-recovery-gate.sh [--bundle PATH] [--keep]
 
-Runs the T-GATE-2/T-GATE-3 live recovery legs against isolated Elasticsearch
-and Kibana 9.4.4 containers.  Credentials are generated per leg.  Evidence is
-retained below /tmp/rigsignal-recovery-033.* even when Docker resources are
-removed.  --keep preserves only this gate's namespaced containers, network,
-and volumes for diagnosis.
+Runs the T-GATE-3 live recovery legs (fresh install, crash-after-Kibana-write
+recovery, dashboard-member recovery, pipeline/role detector races) against
+isolated Elasticsearch and Kibana 9.4.4 containers ONLY.  T-GATE-2's 9.4.3
+saved-object matrix and 9.4.3->9.4.4 upgrade legs are NOT run here; that
+cross-version matrix remains a separate release-gate obligation.  Credentials
+are generated per leg.  Evidence is retained below /tmp/rigsignal-recovery-033.*
+even when Docker resources are removed.  --keep preserves only this gate's
+namespaced containers, network, and volumes for diagnosis.
 EOF
 }
 
