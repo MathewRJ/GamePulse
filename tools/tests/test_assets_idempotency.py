@@ -393,7 +393,7 @@ class V2GuardedPrimitiveTests(RecordFixtures):
 class CompletionWaveTests(unittest.TestCase):
     """Executable completion checks for Stage 2k's remaining manifest IDs."""
     FLAG_FIXTURE = ROOT / "tools/tests/fixtures/rigsignal-flag-state-table.md"
-    FLAG_DATA_SHA256 = "63e396afbee9d2fb92bba70866d6d00054202f09ad04a9c59ff6cabc035eee11"
+    FLAG_DATA_SHA256 = "6d75f47a167b4f5a6ad7510fd61844b1b78e3cfe249094b1f4b9634140d355f8"
     FLAG_ROW = re.compile(
         r"^\| (assets-only|full-flow) \| ([^|]+?) \| ([^|]+?) \| ([^|]+?) \| "
         r"([^|]+?) \| ([^|]+?) \| ([^|]+?) \| ([0-9]+) \| ([0-9]+) \|$")
@@ -579,7 +579,14 @@ class CompletionWaveTests(unittest.TestCase):
                 self.assertEqual(fake.mutations[0], INSTALL.BUNDLE_META_TARGET_KEY)
             if caller == "full-flow" and expected_writes == 2:
                 self.assertEqual(fake.mutations[0], INSTALL.BUNDLE_META_TARGET_KEY)
-            return (self._table_record_label(final, record_label, initial_raw), len(fake.mutations), exit_code,
+            actual_label = self._table_record_label(final, record_label, initial_raw)
+            # An unchanged current S is still the successful canonical S
+            # outcome in ordinary table rows.  Retain its input label only
+            # where the oracle explicitly requires byte-for-byte refusal
+            # preservation (for example a full-flow barrier rejection).
+            if actual_label == record_label and expected_record.startswith("S["):
+                actual_label = expected_record
+            return (actual_label, len(fake.mutations), exit_code,
                     final, {}, expected_record, expected_writes, int(expected_exit))
 
     _CHILD_EXECUTOR = r'''

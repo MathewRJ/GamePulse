@@ -2474,42 +2474,38 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
             raise InputError("assets transaction version flags require a validated predecessor")
         if has_valid_predecessor and not version_flags:
             raise AssetTransactionRefusal("assets transaction transition requires a direction flag")
+        # Do not turn a complete assets-only record into a new installing
+        # record until the full-flow observation barrier has passed.
         defer_full_flow_extension = False
+        defer_installed_full_flow_extension = False
         if record is None:
             # A new transaction has no pre-existing remote authority.  Finish
             # the complete no-write observation barrier before publishing
             # intent or creating anything: a foreign/divergent target anywhere
             # in the release must not leave an earlier target newly created.
-            # This includes the T-RECON-2 Kibana barrier and extends the same
-            # fail-closed rule to ES ownership observations.
-            for spec in _transaction_specs(bundle):
-                if spec[0].startswith("kibana/"):
-                    state, _live, _destination = _transaction_observe(es_url, kb_url, authorization, spec, bundle, adapter)
-                    if state == "divergent":
-                        raise AssetTransactionRefusal("Kibana target differs")
-            for spec in _transaction_specs(bundle):
-                if spec[0].startswith("es/"):
-                    state, _live, _destination = _transaction_observe(es_url, kb_url, authorization, spec, bundle, adapter)
-                    # A first-run stamped ES object is the one qualified
-                    # reconciliation case: once the complete no-write
-                    # barrier has excluded foreign/Kibana divergence, the
-                    # normal guarded write path records and verifies it.
-                    if state == "divergent":
-                        raise AssetTransactionRefusal("asset target differs")
             record = new_installing_record(binding, targets, _transaction_now())
             if full_flow:
                 # §3.4: the fresh full-flow intent contains M before the
                 # first ordinary asset mutation; its PUT itself is deferred to
                 # the real Step 11 site by the full-flow caller.
                 record = expand_full_flow_record(record)
+            # The fresh full-flow barrier includes M before publishing I.
+            # Thus neither an ordinary nor Step-11 refusal can establish a
+            # durable partial intent, let alone precede a remote write.
+            for barrier_spec in _transaction_specs(bundle, full_flow and not defer_step_11):
+                barrier_state, _barrier_live, _barrier_destination = _transaction_observe(
+                    es_url, kb_url, authorization, barrier_spec, bundle, adapter, record)
+                if barrier_state == "divergent":
+                    if barrier_spec[0].startswith("kibana/"):
+                        raise AssetTransactionRefusal("Kibana target differs")
+                    raise AssetTransactionRefusal("asset target differs")
+                if barrier_state == "owned-divergent" and barrier_spec[0].startswith("kibana/"):
+                    raise AssetTransactionRefusal("Kibana target differs")
             write_transaction_record(record_path, record, binding, targets)
             fault("after-v2-intent-publication")
         elif record["state"] == "installed":
             if full_flow and record["caller_obligations"] == [V2_ASSET_OBLIGATION]:
-                fault("before-full-flow-extension")
-                record = extend_installed_for_full_flow(record, _transaction_now())
-                write_transaction_record(record_path, record, binding, targets)
-                fault("after-full-flow-extension")
+                defer_installed_full_flow_extension = True
             elif not full_flow and record["caller_obligations"] == [V2_ASSET_OBLIGATION, V2_FULL_FLOW_OBLIGATION]:
                 # Assets-only may validate but must never complete the missing
                 # Step-11 obligation.
@@ -2543,14 +2539,41 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
         # the complete dispatch set before *any* guarded write; this preserves
         # the same zero-write barrier used for a fresh transaction while still
         # allowing absent targets to take their normal create paths below.
+        barrier_states: dict[str, str] = {}
         if full_flow and record is not None and not step_11_only:
             for barrier_spec in specs:
                 barrier_state, _barrier_live, _barrier_destination = _transaction_observe(
                     es_url, kb_url, authorization, barrier_spec, bundle, adapter, record)
+                barrier_states[barrier_spec[0]] = barrier_state
                 if barrier_state == "divergent":
+                    if barrier_spec[0].startswith("kibana/"):
+                        raise AssetTransactionRefusal("Kibana target differs")
                     raise AssetTransactionRefusal("asset target differs")
                 if barrier_state == "owned-divergent" and barrier_spec[0].startswith("kibana/"):
                     raise AssetTransactionRefusal("Kibana target differs")
+                # Stamped ES divergence is writable only under the same
+                # authority checked in the execution leg below.  Applying
+                # that decision here prevents M (the first dispatch target)
+                # from being written before a later static refusal.
+                transition_es_authorized = (has_valid_predecessor and version_flags
+                                            and (upgrade ^ allow_downgrade))
+                repair_es_authorized = repair and not has_valid_predecessor
+                if (barrier_state == "owned-divergent"
+                        and not (started_without_record or transition_es_authorized
+                                 or repair_es_authorized)):
+                    raise AssetTransactionRefusal("stamped ES reconciliation requires --repair")
+        if defer_installed_full_flow_extension:
+            fault("before-full-flow-extension")
+            record = extend_installed_for_full_flow(record, _transaction_now())
+            # ``extend_installed_for_full_flow`` begins from an all-verified
+            # installed predecessor.  The just-completed barrier may instead
+            # have observed a creatable target; retain that fact as planned so
+            # its guarded write is legal, without claiming it was verified.
+            for key, state in barrier_states.items():
+                if state != "exact":
+                    record["progress"][key] = "planned"
+            write_transaction_record(record_path, record, binding, targets)
+            fault("after-full-flow-extension")
         if defer_full_flow_extension:
             fault("before-full-flow-extension")
             record = expand_full_flow_record(record)
