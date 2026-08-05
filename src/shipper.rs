@@ -12,7 +12,7 @@ use reqwest::Client;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions, ReadDir};
-use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Write};
+use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tracing::{debug, info, warn};
@@ -26,6 +26,8 @@ const RETENTION_SCAN_BATCH: usize = 1_000;
 /// Recovery retains at most this many bytes for the JSON parser at a time. Larger
 /// complete lines are malformed; an unterminated final chunk is partial regardless of size.
 const RECOVERY_MAX_LINE_BYTES: usize = 1024 * 1024;
+/// Elastic Agent filestream ignores files smaller than this fingerprint window.
+const MIN_PUBLISHED_SPOOL_BYTES: u64 = 1024;
 
 pub struct ShipResult {
     pub attempted: usize,
@@ -247,13 +249,27 @@ impl SpoolWriter {
 
         if current_file_bytes == 0 {
             remove_file_if_exists(&active_path)?;
-        } else if let Err(error) = self.publish_closed_file(&active_path, slug, "ndjson") {
-            // The file is closed but still present. Re-open it for append so a
-            // failed rotation never turns a later write into a truncation.
-            let restored =
-                DatasetSpool::reopen(active_path, current_file_bytes, current_file_started)?;
-            self.spools.insert(slug.to_string(), restored);
-            return Err(error);
+        } else {
+            let published_file_bytes = match pad_spool_final(&active_path) {
+                Ok(bytes) => bytes,
+                Err(error) => {
+                    let restored = DatasetSpool::reopen(
+                        active_path,
+                        current_file_bytes,
+                        current_file_started,
+                    )?;
+                    self.spools.insert(slug.to_string(), restored);
+                    return Err(error).context("padding spool file before publication");
+                }
+            };
+            if let Err(error) = self.publish_closed_file(&active_path, slug, "ndjson") {
+                // The file is closed but still present. Re-open it for append so a
+                // failed rotation never turns a later write into a truncation.
+                let restored =
+                    DatasetSpool::reopen(active_path, published_file_bytes, current_file_started)?;
+                self.spools.insert(slug.to_string(), restored);
+                return Err(error);
+            }
         }
 
         if replace_active {
@@ -517,6 +533,9 @@ where
             .context("flushing recovery staging file before publication")?;
         drop(writer);
     }
+    if let Some(stage) = final_stage.as_deref() {
+        pad_spool_final(stage).context("padding recovered spool file before publication")?;
+    }
     let quarantine_needed = malformed || partial;
     let mut publisher = RecoveryPublisher { dir, next_seq };
     // Reserve the target before publishing valid data so malformed input can still be
@@ -745,6 +764,39 @@ fn remove_file_if_exists(path: &Path) -> std::io::Result<()> {
         Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
         Err(error) => Err(error),
     }
+}
+
+/// Pad a closed newline-terminated NDJSON spool final to Elastic Agent's
+/// inclusive 1024-byte fingerprint floor. Padding is whitespace in the final
+/// JSON line, so every non-empty line remains valid JSON.
+fn pad_spool_final(path: &Path) -> Result<u64> {
+    let size = std::fs::metadata(path)
+        .with_context(|| format!("reading spool file size: {}", path.display()))?
+        .len();
+    if size >= MIN_PUBLISHED_SPOOL_BYTES {
+        return Ok(size);
+    }
+    if size == 0 {
+        anyhow::bail!("cannot pad empty spool file: {}", path.display());
+    }
+
+    let mut file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path)
+        .with_context(|| format!("opening spool file for padding: {}", path.display()))?;
+    file.seek(SeekFrom::Start(size - 1))?;
+    let mut trailing = [0u8; 1];
+    file.read_exact(&mut trailing)?;
+    if trailing != [b'\n'] {
+        anyhow::bail!("spool file does not end in a newline: {}", path.display());
+    }
+
+    file.set_len(size - 1)?;
+    file.seek(SeekFrom::End(0))?;
+    file.write_all(&vec![b' '; (MIN_PUBLISHED_SPOOL_BYTES - size) as usize])?;
+    file.write_all(b"\n")?;
+    Ok(MIN_PUBLISHED_SPOOL_BYTES)
 }
 
 fn dataset_slug(dataset: &str) -> String {
@@ -1417,6 +1469,115 @@ mod tests {
     }
 
     #[test]
+    fn pads_677_and_912_byte_session_fixtures_on_the_final_line() -> Result<()> {
+        for size in [677, 912] {
+            let dir = temp_spool_dir(&format!("padding-session-{size}"));
+            fs::create_dir_all(&dir)?;
+            let original = session_fixture(size);
+
+            let padded = publish_normal_final(&dir, &original)?;
+            assert_padded_final(&original, &padded);
+            assert_eq!(padded.iter().filter(|byte| **byte == b'\n').count(), 1);
+
+            fs::remove_dir_all(&dir)?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn padding_respects_1023_1024_and_1025_byte_boundaries() -> Result<()> {
+        for size in [1023, 1024, 1025] {
+            let dir = temp_spool_dir(&format!("padding-boundary-{size}"));
+            fs::create_dir_all(&dir)?;
+            let original = session_fixture(size);
+
+            let actual = publish_normal_final(&dir, &original)?;
+            if size < MIN_PUBLISHED_SPOOL_BYTES as usize {
+                assert_padded_final(&original, &actual);
+            } else {
+                assert_eq!(actual, original);
+            }
+
+            fs::remove_dir_all(&dir)?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn graceful_finalization_publishes_a_padded_final() -> Result<()> {
+        let dir = temp_spool_dir("padding-graceful-finalize");
+        let mut writer = SpoolWriter::new(&dir, 0, 0, 72)?;
+        writer.write_docs(&[test_doc("rigsignal.session", "sigterm-style-flush")])?;
+        let active = dir.join("rigsignal-session.ndjson.tmp");
+        let original = fs::read(&active)?;
+
+        writer.finalize_all()?;
+        let finals = published_spool_files(&dir)?;
+        assert_eq!(finals.len(), 1);
+        assert_padded_final(&original, &fs::read(&finals[0])?);
+
+        drop(writer);
+        fs::remove_dir_all(&dir)?;
+        Ok(())
+    }
+
+    #[test]
+    fn startup_recovery_publishes_a_padded_final() -> Result<()> {
+        let dir = temp_spool_dir("padding-recovery-finalize");
+        fs::create_dir_all(&dir)?;
+        let source = dir.join("rigsignal-session.ndjson.tmp");
+        let original = session_fixture(912);
+        fs::write(&source, &original)?;
+
+        let writer = SpoolWriter::new(&dir, 0, 0, 72)?;
+        let finals = published_spool_files(&dir)?;
+        assert_eq!(finals.len(), 1);
+        assert_padded_final(&original, &fs::read(&finals[0])?);
+
+        drop(writer);
+        fs::remove_dir_all(&dir)?;
+        Ok(())
+    }
+
+    #[test]
+    fn padding_same_content_twice_is_byte_identical() -> Result<()> {
+        let dir = temp_spool_dir("padding-determinism");
+        fs::create_dir_all(&dir)?;
+        let original = session_fixture(677);
+        let first = dir.join("first.ndjson");
+        let second = dir.join("second.ndjson");
+        fs::write(&first, &original)?;
+        fs::write(&second, &original)?;
+
+        pad_spool_final(&first)?;
+        pad_spool_final(&second)?;
+        assert_eq!(fs::read(&first)?, fs::read(&second)?);
+
+        fs::remove_dir_all(&dir)?;
+        Ok(())
+    }
+
+    #[test]
+    fn padding_a_multiline_final_keeps_padding_on_its_last_line() -> Result<()> {
+        let dir = temp_spool_dir("padding-multiline");
+        fs::create_dir_all(&dir)?;
+        let path = dir.join("fixture.ndjson");
+        let original = b"{\"marker\":\"one\"}\n{\"marker\":\"two\"}\n";
+        fs::write(&path, original)?;
+
+        pad_spool_final(&path)?;
+        let padded = fs::read(&path)?;
+        assert_padded_final(original, &padded);
+        assert_eq!(
+            &padded[..original.iter().position(|byte| *byte == b'\n').unwrap() + 1],
+            &original[..original.iter().position(|byte| *byte == b'\n').unwrap() + 1]
+        );
+
+        fs::remove_dir_all(&dir)?;
+        Ok(())
+    }
+
+    #[test]
     fn retention_scan_and_deletions_are_bounded_per_call() -> Result<()> {
         let dir = temp_spool_dir("retention-bounded");
         let mut writer = SpoolWriter::new(&dir, 0, 0, 1)?;
@@ -1490,6 +1651,50 @@ mod tests {
             "data_stream": { "dataset": dataset },
             "marker": marker,
         })
+    }
+
+    fn session_fixture(size: usize) -> Vec<u8> {
+        let prefix = b"{\"data_stream\":{\"dataset\":\"rigsignal.session\"},\"marker\":\"fixture\",\"payload\":\"";
+        let suffix = b"\"}\n";
+        assert!(size >= prefix.len() + suffix.len());
+        let mut fixture = Vec::with_capacity(size);
+        fixture.extend_from_slice(prefix);
+        fixture.extend(std::iter::repeat_n(
+            b'x',
+            size - prefix.len() - suffix.len(),
+        ));
+        fixture.extend_from_slice(suffix);
+        assert_eq!(fixture.len(), size);
+        fixture
+    }
+
+    fn assert_padded_final(original: &[u8], padded: &[u8]) {
+        assert!(original.len() < MIN_PUBLISHED_SPOOL_BYTES as usize);
+        assert_eq!(padded.len(), MIN_PUBLISHED_SPOOL_BYTES as usize);
+        assert_eq!(padded.last(), Some(&b'\n'));
+        assert_eq!(
+            &padded[..original.len() - 1],
+            &original[..original.len() - 1]
+        );
+        for line in padded
+            .split(|byte| *byte == b'\n')
+            .filter(|line| !line.is_empty())
+        {
+            serde_json::from_slice::<Value>(line).expect("padded NDJSON line should remain JSON");
+        }
+    }
+
+    fn publish_normal_final(dir: &Path, contents: &[u8]) -> Result<Vec<u8>> {
+        let mut writer = SpoolWriter::new(dir, 0, 0, 72)?;
+        let active_path = dir.join("rigsignal-session.ndjson.tmp");
+        fs::write(&active_path, contents)?;
+        let spool = DatasetSpool::reopen(active_path, contents.len() as u64, Instant::now())?;
+        writer.close_publish_and_replace("session", spool, false)?;
+        let finals = published_spool_files(dir)?;
+        assert_eq!(finals.len(), 1);
+        let published = fs::read(&finals[0])?;
+        drop(writer);
+        Ok(published)
     }
 
     fn set_file_age(path: &Path, age: Duration) -> Result<()> {
