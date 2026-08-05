@@ -1482,22 +1482,6 @@ def transaction_boundary_failure(record_path: Path | None, fallback: int) -> int
     return fallback if status is None else status
 
 
-def transaction_same_version_flag_preflight(record_path: Path, bundle: Bundle,
-                                             upgrade: bool, allow_downgrade: bool) -> int | None:
-    """Reject same-release transition switches before any remote setup/read."""
-    if not (upgrade or allow_downgrade):
-        return None
-    try:
-        raw = protected_regular_file(record_path)
-        value = parse_json(raw, "assets transaction record")
-    except (InputError, OSError):
-        return None
-    if (isinstance(value, dict) and jcs(value) == raw and value.get("schema_version") == V2_SCHEMA_VERSION
-            and value.get("bundle_version") == bundle.version):
-        return 2
-    return None
-
-
 def transaction_flag_policy(caller: str, record: str, possible_mutation: bool,
                             obligations: str, live: str, flags: str,
                             bundle_meta_live: str = "not-applicable", *,
@@ -6735,15 +6719,13 @@ def main() -> int:
     ownership_profile = raw_ownership_profile or "default"
     bundle_archive_sha256: str | None = None
     default_asset_lock: AssetTransactionLock | None = None
-    # This is the one process boundary classifier.  It runs before endpoint
-    # parsing, bundle opening, snapshot setup, credentials, or any remote
-    # operation, and therefore a durable uncertainty cannot be hidden by an
-    # unrelated local prerequisite failure.
-    boundary_marker_path = args.assets_marker or _asset_marker_default_path()
-    if args.rollback is None:
-        boundary_status = transaction_boundary_preflight(boundary_marker_path)
-        if boundary_status is not None:
-            return boundary_status
+    # Keep the boundary classifier available to the failure exits below, but
+    # do not invoke it as a second process-entry preflight.  Existing callers
+    # have ordered local refusal/recovery work (including copied-state and W2
+    # checks) before the transaction executor.  Most importantly, a valid
+    # possible-mutation record is a recovery input: only an executor refusal
+    # or an earlier failure that prevents recovery may turn it into exit 4.
+    boundary_marker_path = getattr(args, "assets_marker", None) or _asset_marker_default_path()
     try:
         if args.profile != "user":
             raise InputError("profile system is unsupported/broker-required")
@@ -6808,10 +6790,6 @@ def main() -> int:
         if args.bundle is None:
             raise InputError("--bundle is required unless --rollback is used")
         bundle = load_bundle(args.bundle)  # Step 1: no HTTP before this line succeeds.
-        same_version_status = transaction_same_version_flag_preflight(
-            boundary_marker_path, bundle, args.upgrade, args.allow_downgrade)
-        if same_version_status is not None:
-            return same_version_status
         predecessor_manifest = load_predecessor_manifest(getattr(args, "predecessor_manifest", None))
         role = role_body(bundle)
         ownership = ownership_for_assets(bundle, ownership_profile)

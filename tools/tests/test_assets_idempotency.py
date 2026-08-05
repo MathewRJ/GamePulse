@@ -1122,15 +1122,14 @@ print(outcome)
                 with self.assertRaises(INSTALL.InputError):
                     INSTALL.asset_executor_exit_code("unknown", path)
 
-        # The real main()-routed uncertainty now terminates in the one early
-        # boundary classifier before the engine begins; a normal success still
-        # crosses the mapper.  The mapper remains the authority for all
-        # in-engine catches, as guarded below.
+        # A possible-mutation record is classified at the failure boundary;
+        # it must first reach the executor so an able rerun can reconcile and
+        # promote.  The mapper remains the authority for that halt.
         with mock.patch.object(INSTALL, "asset_executor_exit_code", wraps=INSTALL.asset_executor_exit_code) as mapped:
             self._run_scenario("assets-only")
             key = INSTALL.transaction_targets(bundle)[0]["key"]
             self._run_scenario("assets-only", "I-assets-pm1", {"states": {key: "unreadable"}})
-        self.assertEqual([call.args[0] for call in mapped.call_args_list], ["success"])
+        self.assertEqual([call.args[0] for call in mapped.call_args_list], ["success", "halt"])
         source = (ROOT / "tools/install_assets.py").read_text(encoding="utf-8")
         self.assertGreaterEqual(source.count('asset_executor_exit_code("halt",'), 2)
 
