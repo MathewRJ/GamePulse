@@ -260,7 +260,7 @@ cs_wait_for_elasticsearch() {
   while (( SECONDS - started_at < CS_TIMEOUT_SECONDS )); do
     if body="$(curl --silent --show-error --connect-timeout 3 \
       --max-time "$CS_CURL_TIMEOUT_SECONDS" \
-      --user "${username}:${password}" \
+      --config <(printf 'user = "%s:%s"\n' "$username" "$password") \
       "${base_url}/_cluster/health?wait_for_status=yellow&timeout=5s" 2>/dev/null)" \
       && jq -e '(.status == "green") or (.status == "yellow")' <<<"$body" >/dev/null 2>&1; then
       printf '%s\n' "$body" >"$response_file"
@@ -283,7 +283,7 @@ cs_wait_for_kibana() {
   while (( SECONDS - started_at < CS_TIMEOUT_SECONDS )); do
     if body="$(curl --silent --show-error --connect-timeout 3 \
       --max-time "$CS_CURL_TIMEOUT_SECONDS" \
-      --user "${username}:${password}" \
+      --config <(printf 'user = "%s:%s"\n' "$username" "$password") \
       --header 'kbn-xsrf: clean-stack-spike' \
       "${base_url}/api/status" 2>/dev/null)" \
       && jq -e '.status.overall.level == "available"' <<<"$body" >/dev/null 2>&1; then

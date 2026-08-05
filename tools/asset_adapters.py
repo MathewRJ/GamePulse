@@ -56,7 +56,12 @@ def sha256(value: object) -> str:
     return hashlib.sha256(canonical_json(value)).hexdigest()
 
 
-def _body_from_envelope(kind: str, live_body: object) -> object:
+def body_from_envelope(kind: str, live_body: object) -> object:
+    """Unwrap one endpoint-specific GET envelope without normalising it.
+
+    Callers which need response-only fields (such as an optimistic-concurrency
+    version) use this before ``get_projection`` removes server metadata.
+    """
     if kind == "dashboard" and live_body is None:
         return ABSENT
     if not isinstance(live_body, dict):
@@ -222,7 +227,7 @@ def _normalise_settings(body: object) -> object:
 
 def get_projection(kind: str, live_body: object) -> object:
     """Return a canonical request-shaped body from a class-specific GET body."""
-    body = _body_from_envelope(kind, live_body)
+    body = body_from_envelope(kind, live_body)
     if body is ABSENT:
         return ABSENT
     return _normalise_settings(_normalise_kind(kind, _strip_server_metadata(body)))

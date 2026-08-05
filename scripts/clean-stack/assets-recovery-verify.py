@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import os
 import ssl
 import sys
 import urllib.error
@@ -143,7 +144,6 @@ def main() -> int:
     parser.add_argument("--es-url")
     parser.add_argument("--kb-url")
     parser.add_argument("--ca-file", type=Path)
-    parser.add_argument("--password")
     parser.add_argument("--record", type=Path)
     parser.add_argument("--record-state", choices=("installing", "installed"))
     parser.add_argument("--record-pm", choices=("true", "false"))
@@ -153,6 +153,7 @@ def main() -> int:
     parser.add_argument("--no-unexpected-ids", action="store_true")
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
+    password = os.environ.get("RIGSIGNAL_ASSETS_RECOVERY_PASSWORD")
 
     bundle = install.load_bundle(args.bundle)
     specs = expected_specs(bundle)
@@ -176,13 +177,13 @@ def main() -> int:
         ("--es-url", args.es_url),
         ("--kb-url", args.kb_url),
         ("--ca-file", args.ca_file),
-        ("--password", args.password),
+        ("RIGSIGNAL_ASSETS_RECOVERY_PASSWORD", password),
     ) if value is None]
     if missing:
         parser.error("the following arguments are required: " + ", ".join(missing))
 
     context = ssl.create_default_context(cafile=str(args.ca_file))
-    authorization = auth_header(args.password)
+    authorization = auth_header(password)
     results: dict[str, str] = {}
     present = 0
     for key, asset, saved in specs:

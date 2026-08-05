@@ -1564,16 +1564,18 @@ class FleetCoexistenceTests(unittest.TestCase):
                                                     mock.call(1234, INSTALL.signal.SIGKILL)])
 
     def test_pause_requires_both_gates_and_flushes_ready_marker(self):
+        with self.assertRaises(TypeError):
+            INSTALL.test_pause("point", False)
         with tempfile.TemporaryDirectory() as directory:
             sentinel = Path(directory) / "resume"
             with mock.patch.dict(INSTALL.os.environ, {"RIGSIGNAL_TEST_PAUSE_AT": "point"}, clear=False):
-                INSTALL.test_pause("point", False)
+                INSTALL.test_pause("point", False, "https://localhost")
             sentinel.touch()
             output = io.StringIO()
             with mock.patch.dict(INSTALL.os.environ, {
                     "RIGSIGNAL_TEST_PAUSE_AT": "point",
                     "RIGSIGNAL_TEST_PAUSE_SENTINEL": str(sentinel)}, clear=False), redirect_stdout(output):
-                INSTALL.test_pause("point", True)
+                INSTALL.test_pause("point", True, "https://localhost")
             self.assertEqual(output.getvalue(), "RIGSIGNAL_TEST_PAUSE_REACHED point\n")
 
     def test_pause_uses_the_gate_target_grammar_at_a_loopback_endpoint(self):

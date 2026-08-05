@@ -22,6 +22,8 @@ BUNDLE_INPUT=''
 RUN_ROOT=''
 BUNDLE=''
 AGENT_BINARY=''
+CREDENTIAL_ROOT=''
+ADMIN_CREDENTIALS_FILE=''
 declare -a SUMMARY_ROWS=()
 
 usage() {
@@ -50,7 +52,7 @@ done
 sanitize_text() {
   # The generated passwords contain this stable prefix.  Keep stdout/stderr
   # useful without ever carrying a usable credential into the evidence tree.
-  sed -E 's/rgs033-[[:alnum:]]+-[[:alnum:]]+/<redacted-password>/g'
+  sed -E 's/rgs033-[[:xdigit:]]{32}/<redacted-password>/g'
 }
 
 write_leg_summary() {
@@ -100,12 +102,20 @@ names_for_leg() {
 }
 
 curl_status() {
-  local output="$1" method="$2" url="$3" data="${4:-}"
+  local output="$1" method="$2" url="$3" data="${4:-}" config status
+  config="$(mktemp "$CREDENTIAL_ROOT/curl.XXXXXX")"
+  chmod 600 "$config"
+  printf 'user = "elastic:%s"\n' "$ELASTIC_PASSWORD" >"$config"
   local args=(--silent --show-error --max-redirs 0 --cacert "$CS_CA_FILE"
-              --user "elastic:$ELASTIC_PASSWORD" --header 'Content-Type: application/json'
+              --config "$config" --header 'Content-Type: application/json'
               --request "$method" --output "$output" --write-out '%{http_code}')
   [[ -z "$data" ]] || args+=(--data-binary "@$data")
+  set +e
   curl "${args[@]}" "$url"
+  status=$?
+  set -e
+  rm -f -- "$config"
+  return "$status"
 }
 
 start_stack() {
@@ -131,12 +141,13 @@ start_stack() {
 }
 
 write_credentials() {
-  local path="$1" password="$ELASTIC_PASSWORD"
+  local password="$ELASTIC_PASSWORD"
+  ADMIN_CREDENTIALS_FILE="$(mktemp "$CREDENTIAL_ROOT/admin-credentials.XXXXXX.toml")"
   password="${password//\\/\\\\}"
   password="${password//\"/\\\"}"
   umask 077
-  printf '[elasticsearch]\nusername = "elastic"\npassword = "%s"\n' "$password" >"$path"
-  chmod 600 "$path"
+  printf '[elasticsearch]\nusername = "elastic"\npassword = "%s"\n' "$password" >"$ADMIN_CREDENTIALS_FILE"
+  chmod 600 "$ADMIN_CREDENTIALS_FILE"
 }
 
 run_engine() {
@@ -149,7 +160,7 @@ run_engine() {
       --assets-only --unsafe-test-injection \
       --bundle "$BUNDLE" --endpoint "$ES_URL" --ca-file "$CS_CA_FILE" \
       --kibana-endpoint "$KB_URL" --kibana-ca-file "$CS_CA_FILE" \
-      --admin-credentials-file "$dir/admin-credentials.toml" \
+      --admin-credentials-file "$ADMIN_CREDENTIALS_FILE" \
       --agent-binary "$AGENT_BINARY" --profile user --assets-marker "$marker" \
       >"$output" 2>&1
   rc=$?
@@ -163,14 +174,14 @@ run_engine() {
 verify_live() {
   local dir="$1" marker="$2" state="$3" pm="$4" mode="${5:-full}"
   local args=(--bundle "$BUNDLE" --es-url "$ES_URL" --kb-url "$KB_URL" --ca-file "$CS_CA_FILE"
-              --password "$ELASTIC_PASSWORD" --record "$marker" --record-state "$state"
+              --record "$marker" --record-state "$state"
               --record-pm "$pm" --out "$dir/verification.json")
   if [[ "$mode" == partial ]]; then
     args+=(--allow-absent --minimum-present 1)
   else
     args+=(--no-unexpected-ids)
   fi
-  python3 "$VERIFY" "${args[@]}"
+  RIGSIGNAL_ASSETS_RECOVERY_PASSWORD="$ELASTIC_PASSWORD" python3 "$VERIFY" "${args[@]}"
 }
 
 target_for() {
@@ -226,7 +237,7 @@ leg_fresh() {
   local dir marker rc
   dir="$1"; marker="$dir/marker/assets-marker.json"
   mkdir -p "$dir/marker"
-  write_credentials "$dir/admin-credentials.toml"
+  write_credentials
   if run_engine "$dir" "$marker" fresh; then rc=0; else rc=$?; fi
   assert_engine_exit 0 "$rc" fresh
   verify_live "$dir" "$marker" installed false
@@ -236,7 +247,7 @@ leg_fresh() {
 leg_saved_object_recovery() {
   local dir marker target rc
   dir="$1"; marker="$dir/marker/assets-marker.json"
-  mkdir -p "$dir/marker"; write_credentials "$dir/admin-credentials.toml"
+  mkdir -p "$dir/marker"; write_credentials
   target="$(target_for saved-object)"
   if run_engine "$dir" "$marker" crash "RIGSIGNAL_TEST_HALT_AT=after-target-verification:$target"; then rc=0; else rc=$?; fi
   assert_engine_exit 4 "$rc" saved-object-injected-failure
@@ -250,7 +261,7 @@ leg_saved_object_recovery() {
 leg_dashboard_member_recovery() {
   local dir marker target rc
   dir="$1"; marker="$dir/marker/assets-marker.json"
-  mkdir -p "$dir/marker"; write_credentials "$dir/admin-credentials.toml"
+  mkdir -p "$dir/marker"; write_credentials
   target="$(target_for dashboard-member)"
   if run_engine "$dir" "$marker" dashboard-member "RIGSIGNAL_TEST_HALT_AT=after-target-verification:$target"; then rc=0; else rc=$?; fi
   assert_engine_exit 4 "$rc" dashboard-member-injected-failure
@@ -264,7 +275,7 @@ leg_dashboard_member_recovery() {
 leg_detector() {
   local dir kind detector marker target pid rc
   dir="$1"; kind="$2"; detector="$3"; marker="$dir/marker/assets-marker.json"
-  mkdir -p "$dir/marker"; write_credentials "$dir/admin-credentials.toml"
+  mkdir -p "$dir/marker"; write_credentials
   target="$(target_for "$kind")"
   env RIGSIGNAL_HTTP_AUDIT_LOG="$dir/detector.requests.log" \
       RIGSIGNAL_TEST_PAUSE_AT="before-transaction-put:$target" \
@@ -272,7 +283,7 @@ leg_detector() {
       python3 "$REPO_ROOT/tools/install_assets.py" \
         --assets-only --unsafe-test-injection --bundle "$BUNDLE" --endpoint "$ES_URL" --ca-file "$CS_CA_FILE" \
         --kibana-endpoint "$KB_URL" --kibana-ca-file "$CS_CA_FILE" \
-        --admin-credentials-file "$dir/admin-credentials.toml" --agent-binary "$AGENT_BINARY" \
+        --admin-credentials-file "$ADMIN_CREDENTIALS_FILE" --agent-binary "$AGENT_BINARY" \
         --profile user --assets-marker "$marker" >"$dir/detector.out" 2>&1 &
   pid=$!
   for _ in $(seq 1 200); do
@@ -308,8 +319,8 @@ run_leg() {
     set -e
     CS_KEEP="$KEEP"; CS_DRY_RUN=0; export CS_KEEP CS_DRY_RUN
     names_for_leg "$name"
-    ELASTIC_PASSWORD="rgs033-${RANDOM}${RANDOM}-${RANDOM}${RANDOM}"
-    ELASTICSEARCH_PASSWORD="rgs033-${RANDOM}${RANDOM}-${RANDOM}${RANDOM}"
+    ELASTIC_PASSWORD="rgs033-$(openssl rand -hex 16)"
+    ELASTICSEARCH_PASSWORD="rgs033-$(openssl rand -hex 16)"
     export ELASTIC_PASSWORD ELASTICSEARCH_PASSWORD
     trap cs_cleanup EXIT
     start_stack "$dir"
@@ -344,6 +355,9 @@ cs_require_tools bash curl docker jq openssl python3 cargo sed
 [[ -x "$VERIFY" || -f "$VERIFY" ]] || { printf 'error: verifier missing\n' >&2; exit 1; }
 RUN_ROOT="$(mktemp -d "/tmp/${NAMESPACE}.XXXXXX")"
 chmod 700 "$RUN_ROOT"
+CREDENTIAL_ROOT="$(mktemp -d "/tmp/${NAMESPACE}-credentials.XXXXXX")"
+chmod 700 "$CREDENTIAL_ROOT"
+trap 'rm -rf -- "$CREDENTIAL_ROOT"' EXIT
 if [[ -n "$BUNDLE_INPUT" ]]; then
   BUNDLE="$BUNDLE_INPUT"
 else

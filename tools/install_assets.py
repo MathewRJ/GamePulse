@@ -873,7 +873,18 @@ def request_response(base: str, path: str, method: str, authorization: str, data
         # Test/gate recording only: normal invocations never open an audit
         # file.  Store method+path before dispatch so a rejected write is
         # still visible to the audit leg.
-        with open(audit_log, "a", encoding="utf-8") as handle:
+        flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW
+        descriptor = os.open(audit_log, flags, 0o600)
+        try:
+            st = os.fstat(descriptor)
+            if not stat.S_ISREG(st.st_mode):
+                raise InputError("HTTP audit log is not a regular file")
+            os.fchmod(descriptor, 0o600)
+            handle = os.fdopen(descriptor, "a", encoding="utf-8")
+        except BaseException:
+            os.close(descriptor)
+            raise
+        with handle:
             handle.write(method + " " + path + "\n")
     request_headers = {"Authorization": authorization, **(headers or {})}
     if data is not None and "Content-Type" not in request_headers:
@@ -2139,6 +2150,11 @@ def _transaction_diagnostic(record_path: Path, record: dict, *, target: str, non
         raise InputError("assets transaction diagnostic is invalid")
     safe = {"transaction": "<redacted>", "target": target, "nonce": nonce,
             "detector": detector, "observed": safe_scalar(observed)}
+    if detector == "created<modified" and isinstance(observed, dict):
+        # Keep timestamp evidence useful without admitting an arbitrary remote
+        # response object into the local protected diagnostic.
+        safe["observed_created_millis"] = safe_scalar(observed.get("created"))
+        safe["observed_modified_millis"] = safe_scalar(observed.get("modified"))
     diagnostic = record_path.parent / (record_path.name + ".diagnostic.json")
     expected_prior: bytes | None = protected_regular_file(diagnostic) if diagnostic.exists() else None
     atomic_write(record_path.parent, diagnostic.name, jcs(safe), expected_prior=expected_prior)
@@ -2350,11 +2366,15 @@ def _transaction_put(es_url: str, kb_url: str, authorization: str, spec: tuple[s
     body = parse_json(desired.data, desired.path)
     metadata = "metadata" if asset.kind == "security_roles" else "_meta"
     body[metadata] = {**body.get(metadata, {}), "controller_nonce": nonce}
-    version = live.get("version") if isinstance(live, dict) else None
+    try:
+        raw_live = asset_adapters.body_from_envelope(asset.kind, live) if live is not None else {}
+    except asset_adapters.AdapterError as error:
+        raise AssetTransactionRefusal("ES target response is ambiguous") from error
+    version = raw_live.get("version") if isinstance(raw_live, dict) else None
     suffix = "?if_version=" + urllib.parse.quote(str(version), safe="") if version is not None else ""
     effective = Asset(asset.kind, asset.name, asset.path, jcs(body))
     response = mutation_request(es_url, es_path(asset) + suffix, "PUT", authorization, effective.data)
-    if asset.kind == "security_roles":
+    if state == "absent" and asset.kind == "security_roles":
         try:
             parsed = json_response(response)
             created = parsed.get("role", {}).get("created") if isinstance(parsed, dict) else None
@@ -2364,12 +2384,12 @@ def _transaction_put(es_url: str, kb_url: str, authorization: str, spec: tuple[s
             _transaction_diagnostic(record_path=Path(record["_record_path"]), record=record, target=key,
                                     nonce=nonce, detector="created:false", observed=created)
             raise AssetTransactionHalt("partial-remote-possible")
-    else:  # pipeline: timestamp detector is checked only after the response.
+    elif state == "absent":  # pipeline detector is checked only after the response.
         state, live = _transaction_es_observe(es_url, authorization, asset, Asset(asset.kind, asset.name, asset.path, jcs(body)))
         # The normal semantic projection intentionally drops timestamps.  The
         # detector is the narrowly-scoped exception and must inspect the raw
         # single-pipeline GET body before that projection removes them.
-        raw_live = asset_adapters._body_from_envelope(asset.kind, live) if live is not None else {}
+        raw_live = asset_adapters.body_from_envelope(asset.kind, live) if live is not None else {}
         created = raw_live.get("created_date_millis") if isinstance(raw_live, dict) else None
         modified = raw_live.get("modified_date_millis") if isinstance(raw_live, dict) else None
         if created is None or modified is None or created != modified:
@@ -4417,7 +4437,7 @@ def test_halt(point: str, unsafe_test_injection: bool, endpoint: str, argument: 
     raise AssetTransactionHalt("partial-remote-possible")
 
 
-def test_pause(point: str, unsafe_test_injection: bool, endpoint: str | None = None,
+def test_pause(point: str, unsafe_test_injection: bool, endpoint: str,
                argument: str | None = None) -> None:
     """Pause a gate subprocess only behind explicit, loopback-scoped controls.
 
@@ -4430,10 +4450,9 @@ def test_pause(point: str, unsafe_test_injection: bool, endpoint: str | None = N
     if (trigger != point or (colon and requested != argument)
             or not unsafe_test_injection):
         return
-    if endpoint is not None:
-        parsed = urllib.parse.urlsplit(endpoint)
-        if parsed.hostname not in {"127.0.0.1", "::1", "localhost"}:
-            raise InputError("test pause requires a loopback endpoint")
+    parsed = urllib.parse.urlsplit(endpoint)
+    if parsed.hostname not in {"127.0.0.1", "::1", "localhost"}:
+        raise InputError("test pause requires a loopback endpoint")
     sentinel = os.environ.get("RIGSIGNAL_TEST_PAUSE_SENTINEL")
     if not sentinel:
         raise InputError("test pause requested without a sentinel path")
@@ -6556,6 +6575,13 @@ def main() -> int:
         return 0 if error.code == 0 else 2
     active_test_hooks = sorted(key for key, value in os.environ.items()
                                if key.startswith("RIGSIGNAL_TEST_") and value)
+    if active_test_hooks and not args.unsafe_test_injection:
+        # Test controls are opt-in at the process boundary.  Individual helper
+        # tests can exercise their gates directly, but a normal CLI invocation
+        # must not acquire behavior from an inherited test environment.
+        for key in active_test_hooks:
+            os.environ.pop(key, None)
+        active_test_hooks = []
     if active_test_hooks:
         print("test hooks active: " + ",".join(active_test_hooks), file=sys.stderr)
     raw_ownership_profile = args.ownership_profile

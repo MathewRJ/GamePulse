@@ -47,6 +47,7 @@ class TargetScript:
     role_created: bool | None = None
     pipeline_created_millis: int | None = None
     pipeline_modified_millis: int | None = None
+    version: int | None = None
     destination_id: str | None = None
     response_loss: bool = False
 
@@ -282,6 +283,13 @@ class ScriptedTransactionTransport:
                         body["index_templates"] = [item]
                     else:
                         body["_scripted_divergence"] = True
+                elif key in self._assets and self._assets[key].kind == "security_roles":
+                    asset = self._assets[key]
+                    inner = body.get(asset.name)
+                    if isinstance(inner, dict):
+                        body[asset.name] = {**inner, "_scripted_divergence": True}
+                    else:
+                        body["_scripted_divergence"] = True
                 else:
                     body["_scripted_divergence"] = True
         asset = self._assets.get(key)
@@ -289,6 +297,17 @@ class ScriptedTransactionTransport:
             body = dict(body)
             body["created_date_millis"] = 1 if script.pipeline_created_millis is None else script.pipeline_created_millis
             body["modified_date_millis"] = body["created_date_millis"] if script.pipeline_modified_millis is None else script.pipeline_modified_millis
+            if script.version is not None:
+                body["version"] = script.version
+            # The ES GET API returns an object keyed by pipeline ID.
+            body = {asset.name: body}
+        elif asset is not None and asset.kind == "security_roles" and isinstance(body, dict):
+            # ``_desired_body`` already models the role GET envelope.  Apply
+            # response-only metadata to its single inner role body.
+            body = dict(body)
+            inner = body.get(asset.name)
+            if isinstance(inner, dict) and script.version is not None:
+                body[asset.name] = {**inner, "version": script.version}
         return HttpReply(200, body)
 
     def _default_put(self, key: str, script: TargetScript, query: Mapping[str, tuple[str, ...]]) -> HttpReply:
@@ -321,7 +340,11 @@ class ScriptedTransactionTransport:
                     body.setdefault("modified_date_millis", 1)
                 self._stored[key] = body
         prior = self._scripts.get(key, TargetScript())
-        self._scripts[key] = TargetScript(live_state="exact", destination_id=prior.destination_id)
+        self._scripts[key] = TargetScript(
+            live_state="exact", role_created=prior.role_created,
+            pipeline_created_millis=prior.pipeline_created_millis,
+            pipeline_modified_millis=prior.pipeline_modified_millis,
+            version=prior.version, destination_id=prior.destination_id)
         self.mutations.append(key)
         if self._on_mutation is not None:
             self._on_mutation(key)

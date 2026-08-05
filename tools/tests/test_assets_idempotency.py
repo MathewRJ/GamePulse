@@ -315,6 +315,78 @@ class V2GuardedPrimitiveTests(RecordFixtures):
             self.assertEqual(evidence["detector"], "created:false")
             self.assertEqual(evidence["target"], role[0])
 
+    def test_t_recon_5_pipeline_diagnostic_retains_only_timestamp_scalars(self):
+        record = self.installing()
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw); root.chmod(0o700)
+            path = root / INSTALL.ASSETS_MARKER_FILE
+            INSTALL._transaction_diagnostic(path, record, target=record["targets"][0]["key"],
+                                            nonce="nonce", detector="created<modified",
+                                            observed={"created": 10, "modified": 11, "secret": "no"})
+            evidence = json.loads((root / (INSTALL.ASSETS_MARKER_FILE + ".diagnostic.json")).read_text())
+            self.assertEqual(evidence["observed"], "<redacted>")
+            self.assertEqual(evidence["observed_created_millis"], 10)
+            self.assertEqual(evidence["observed_modified_millis"], 11)
+
+    def test_http_audit_log_is_private_regular_file(self):
+        with tempfile.TemporaryDirectory() as raw:
+            audit = Path(raw) / "audit.log"
+            response = mock.MagicMock(); response.status = 200; response.read.return_value = b"{}"
+            with mock.patch.dict(os.environ, {"RIGSIGNAL_HTTP_AUDIT_LOG": str(audit)}, clear=False), \
+                 mock.patch.object(INSTALL.urllib.request, "urlopen", return_value=response):
+                INSTALL.request_response("https://es", "/_cluster/health", "GET", "auth")
+            self.assertEqual(audit.read_text(), "GET /_cluster/health\n")
+            self.assertEqual(audit.stat().st_mode & 0o777, 0o600)
+
+    def test_http_audit_log_refuses_a_symlink(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            audit = root / "audit.log"
+            audit.symlink_to(root / "target.log")
+            with mock.patch.dict(os.environ, {"RIGSIGNAL_HTTP_AUDIT_LOG": str(audit)}, clear=False):
+                with self.assertRaises(OSError):
+                    INSTALL.request_response("https://es", "/_cluster/health", "GET", "auth")
+
+    def test_all_test_environment_controls_are_inert_without_unsafe_cli_flag(self):
+        program = """
+import importlib.util, os, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+spec = importlib.util.spec_from_file_location('install_assets', root / 'tools/install_assets.py')
+module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+bundle = module.load_source()
+module.load_bundle = lambda _path: bundle
+module.check_version_fence = lambda *_args: None
+module.configure_https = lambda *_args: None
+module.admin_authorization = lambda *_args: 'auth'
+module._prepare_assets_marker_path = lambda *_args: Path('/tmp/marker')
+module.asset_executor_exit_code = lambda *_args: 0
+module.assets_only_install = lambda *_args, **_kwargs: print(
+    'hooks=' + repr(sorted(key for key in os.environ if key.startswith('RIGSIGNAL_TEST_')))) or 'applied'
+sys.argv = ['install_assets.py', '--bundle', 'fixture.tar', '--endpoint', 'https://localhost',
+            '--ca-file', 'fixture.pem', '--kibana-endpoint', 'https://localhost',
+            '--kibana-ca-file', 'fixture.pem', '--admin-credentials-file', 'admin.toml',
+            '--agent-binary', 'agent', '--profile', 'user', '--assets-only']
+sys.exit(module.main())
+"""
+        hooks = {
+            "RIGSIGNAL_TEST_UNRESOLVED_ASSET": "1",
+            "RIGSIGNAL_TEST_ILM_DELETE_PHASE": "1",
+            "RIGSIGNAL_TEST_CLUSTER_HEALTH": "red",
+            "RIGSIGNAL_TEST_TRANSFORM_META_RESTORE_REJECT": "1",
+            "RIGSIGNAL_TEST_CRASH_AT": "point",
+            "RIGSIGNAL_TEST_ROLLOVER_AT": "point",
+            "RIGSIGNAL_TEST_EXTERNAL_WRITE": "1",
+            "RIGSIGNAL_TEST_HALT_AT": "point",
+            "RIGSIGNAL_TEST_PAUSE_AT": "point",
+            "RIGSIGNAL_TEST_PAUSE_SENTINEL": "/tmp/unused",
+        }
+        result = subprocess.run([sys.executable, "-c", textwrap.dedent(program), str(ROOT)],
+                                env=os.environ | hooks, text=True, capture_output=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("hooks=[]", result.stdout)
+        self.assertNotIn("test hooks active:", result.stderr)
+
     def test_ambiguity_4_and_6_detector_nonce_is_deterministic_and_schema_free(self):
         """R-A6: nonce is transaction/target-derived; observations stay sibling-only."""
         record = self.installing()

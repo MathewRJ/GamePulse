@@ -83,6 +83,60 @@ class ScriptedTransactionTransportTests(unittest.TestCase):
             self.assertEqual(evidence["detector"], "created:false")
             self.assertEqual(evidence["target"], key)
 
+    def test_pre_race_pipeline_script_reaches_real_detector_halt(self):
+        asset = next(item for item in self.bundle.assets if item.kind == "pipelines")
+        key = INSTALL._transaction_key_for_asset(asset)
+        fake = ScriptedTransactionTransport(INSTALL, self.bundle, {
+            key: TargetScript(live_state="absent", pipeline_created_millis=100,
+                              pipeline_modified_millis=101)})
+        spec = (key, asset, None)
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw); root.chmod(0o700)
+            path = root / INSTALL.ASSETS_MARKER_FILE
+            record = self._record()
+            INSTALL.write_transaction_record(path, record, self.binding, self.targets)
+            runtime = dict(record, _record_path=str(path))
+            with mock.patch.object(INSTALL.urllib.request, "urlopen", side_effect=fake.urlopen):
+                state, live, _destination = INSTALL._transaction_observe(
+                    "https://es", "https://kb", "auth", spec, self.bundle, mock.Mock(), runtime)
+                self.assertEqual(state, "absent")
+                with self.assertRaisesRegex(INSTALL.AssetTransactionHalt, "partial-remote-possible"):
+                    INSTALL._transaction_put("https://es", "https://kb", "auth", spec, self.bundle,
+                                             runtime, mock.Mock(), live=live, state=state)
+            evidence = json.loads((root / (INSTALL.ASSETS_MARKER_FILE + ".diagnostic.json")).read_text())
+            self.assertEqual(evidence["detector"], "created<modified")
+            self.assertEqual(evidence["observed_created_millis"], 100)
+            self.assertEqual(evidence["observed_modified_millis"], 101)
+
+    def test_owned_updates_ignore_create_detectors_and_keep_pipeline_version_guard(self):
+        for kind, response in (("security_roles", {"role_created": False}),
+                               ("pipelines", {"pipeline_created_millis": 100,
+                                              "pipeline_modified_millis": 101, "version": 7})):
+            with self.subTest(kind=kind):
+                asset = next(item for item in self.bundle.assets if item.kind == kind)
+                key = INSTALL._transaction_key_for_asset(asset)
+                fake = ScriptedTransactionTransport(
+                    INSTALL, self.bundle, {key: TargetScript(live_state="owned-divergent", **response)})
+                spec = (key, asset, None)
+                with tempfile.TemporaryDirectory() as raw:
+                    root = Path(raw); root.chmod(0o700)
+                    path = root / INSTALL.ASSETS_MARKER_FILE
+                    record = self._record()
+                    INSTALL.write_transaction_record(path, record, self.binding, self.targets)
+                    runtime = dict(record, _record_path=str(path))
+                    with mock.patch.object(INSTALL.urllib.request, "urlopen", side_effect=fake.urlopen):
+                        state, live, _destination = INSTALL._transaction_observe(
+                            "https://es", "https://kb", "auth", spec, self.bundle, mock.Mock(), runtime)
+                        self.assertEqual(state, "owned-divergent")
+                        INSTALL._transaction_put("https://es", "https://kb", "auth", spec, self.bundle,
+                                                 runtime, mock.Mock(), live=live, state=state)
+                    self.assertFalse((root / (INSTALL.ASSETS_MARKER_FILE + ".diagnostic.json")).exists())
+                put = next(call for call in fake.calls if call.method == "PUT")
+                if kind == "pipelines":
+                    self.assertEqual(put.query, {"if_version": ("7",)})
+                else:
+                    self.assertEqual(put.query, {})
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
