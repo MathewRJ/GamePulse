@@ -2399,6 +2399,7 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
                                   repair: bool = False, upgrade: bool = False,
                                   allow_downgrade: bool = False, defer_step_11: bool = False,
                                   step_11_only: bool = False,
+                                  unsafe_test_injection: bool = False,
                                   lock: "AssetTransactionLock | None" = None) -> str:
     """Execute the v2 default-profile asset transaction under its global lock.
 
@@ -2632,6 +2633,14 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
             else:
                 runtime = deepcopy(record); runtime["_record_path"] = str(record_path)
                 runtime["_observed_live"] = live; runtime["_observed_state"] = state
+                # This is deliberately after the final transaction GET and
+                # durable write-issued edge, but immediately before the
+                # class-specific PUT/POST.  Clean-stack detector gates use it
+                # to create a foreign pipeline/role in the otherwise
+                # untimeable GET→PUT window.  ``test_pause`` is inert unless
+                # --unsafe-test-injection, an exact env point, and a loopback
+                # endpoint are all present.
+                test_pause("before-transaction-put", unsafe_test_injection, es_url, key)
                 desired_override = _transaction_put(es_url, kb_url, authorization, spec, bundle, runtime, adapter)
             state, _live, verified_destination = _transaction_observe(es_url, kb_url, authorization, spec, bundle, adapter, record,
                                                                        desired_override=desired_override)
@@ -2650,6 +2659,7 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
             record = mark_transaction_verified(record, key)
             write_transaction_record(record_path, record, binding, targets)
             fault("after-target-verification", key)
+            test_halt("after-target-verification", unsafe_test_injection, es_url, key)
 
         if defer_step_11:
             # The executor's pre-Step-11 leg deliberately leaves M planned
@@ -4387,10 +4397,41 @@ def external_write_test_allowed(es_url: str, unsafe_test_injection: bool) -> boo
             and parsed.hostname in {"127.0.0.1", "::1", "localhost"})
 
 
-def test_pause(point: str, unsafe_test_injection: bool) -> None:
-    """Deterministically pause only when both explicit test gates are set."""
-    if os.environ.get("RIGSIGNAL_TEST_PAUSE_AT") != point or not unsafe_test_injection:
+def test_halt(point: str, unsafe_test_injection: bool, endpoint: str, argument: str | None = None) -> None:
+    """Raise a caught recovery failure at an exact local-gate boundary.
+
+    Unlike ``fault`` (which models a real SIGKILL), this hook exercises the
+    documented direct-engine exit-4 path after a durable possible-mutation
+    edge.  It is intentionally unusable without the hidden unsafe flag and a
+    loopback endpoint; normal installations leave it entirely inert.
+    """
+    trigger, colon, requested = os.environ.get("RIGSIGNAL_TEST_HALT_AT", "").partition(":")
+    if (trigger != point or (colon and requested != argument)
+            or not unsafe_test_injection):
         return
+    parsed = urllib.parse.urlsplit(endpoint)
+    if parsed.hostname not in {"127.0.0.1", "::1", "localhost"}:
+        raise InputError("test halt requires a loopback endpoint")
+    raise AssetTransactionHalt("partial-remote-possible")
+
+
+def test_pause(point: str, unsafe_test_injection: bool, endpoint: str | None = None,
+               argument: str | None = None) -> None:
+    """Pause a gate subprocess only behind explicit, loopback-scoped controls.
+
+    ``RIGSIGNAL_TEST_PAUSE_AT`` uses the same ``point[:target]`` grammar as
+    ``fault``.  Production callers never pass ``unsafe_test_injection`` and
+    the only production-path call sites provide the parsed endpoint, so an
+    active pause cannot be used against a non-loopback deployment.
+    """
+    trigger, colon, requested = os.environ.get("RIGSIGNAL_TEST_PAUSE_AT", "").partition(":")
+    if (trigger != point or (colon and requested != argument)
+            or not unsafe_test_injection):
+        return
+    if endpoint is not None:
+        parsed = urllib.parse.urlsplit(endpoint)
+        if parsed.hostname not in {"127.0.0.1", "::1", "localhost"}:
+            raise InputError("test pause requires a loopback endpoint")
     sentinel = os.environ.get("RIGSIGNAL_TEST_PAUSE_SENTINEL")
     if not sentinel:
         raise InputError("test pause requested without a sentinel path")
@@ -4901,7 +4942,8 @@ def assets_ownership_plan(bundle: Bundle, es_url: str, kb_url: str, authorizatio
 def assets_only_install(bundle: Bundle, es_url: str, kb_url: str, authorization: str,
                         marker_path: Path | None = None, *, repair: bool = False,
                         upgrade: bool = False, allow_downgrade: bool = False,
-                        archive_sha256: str | None = None) -> str:
+                        archive_sha256: str | None = None,
+                        unsafe_test_injection: bool = False) -> str:
     """Run the shared v2 default asset transaction for the assets-only caller."""
     marker_path = marker_path or _prepare_assets_marker_path(None, bundle)
     # All default-profile callers, including in-memory test callers, enter
@@ -4913,7 +4955,8 @@ def assets_only_install(bundle: Bundle, es_url: str, kb_url: str, authorization:
                                   archive_sha256 or bundle_snapshot_digest(bundle))
     return run_default_asset_transaction(bundle, es_url, kb_url, authorization, marker_path,
                                          binding, full_flow=False, repair=repair,
-                                         upgrade=upgrade, allow_downgrade=allow_downgrade)
+                                         upgrade=upgrade, allow_downgrade=allow_downgrade,
+                                         unsafe_test_injection=unsafe_test_injection)
 
 
 def install_asset(es_url: str, kb_url: str, authorization: str, asset: Asset, *, managed: bool = False) -> object:
@@ -6652,7 +6695,8 @@ def main() -> int:
                                           repair=getattr(args, "repair", False),
                                           upgrade=getattr(args, "upgrade", False),
                                           allow_downgrade=getattr(args, "allow_downgrade", False),
-                                          archive_sha256=(bundle_archive_sha256 if args.bundle.is_file() else None))
+                                          archive_sha256=(bundle_archive_sha256 if args.bundle.is_file() else None),
+                                          unsafe_test_injection=args.unsafe_test_injection)
             print("assets-only " + outcome)
             return asset_executor_exit_code("success", marker_path)
         except (AssetTransactionHalt, AssetTransactionRefusal):
@@ -6745,7 +6789,7 @@ def main() -> int:
             run_topology_preflight(bundle, es_url, kb_url, authorization, ownership_profile)
         # Default profile has one transaction engine for every caller.  The
         # Fleet-coexist journal remains the only legacy transaction path.
-        test_pause("after-topology-preflight", args.unsafe_test_injection)
+        test_pause("after-topology-preflight", args.unsafe_test_injection, es_url)
         failure_tracker.mark(FailureSite.ROOT_PREPARE)
         root = prepare_install_root(requested_root)
         try:
@@ -6864,7 +6908,9 @@ def main() -> int:
                                               repair=getattr(args, "repair", False),
                                               upgrade=getattr(args, "upgrade", False),
                                               allow_downgrade=getattr(args, "allow_downgrade", False),
-                                              defer_step_11=True, lock=default_asset_lock)
+                                              defer_step_11=True,
+                                              unsafe_test_injection=args.unsafe_test_injection,
+                                              lock=default_asset_lock)
             except (AssetTransactionHalt, AssetTransactionRefusal):
                 status = asset_executor_exit_code("halt", default_marker_path)
                 if status == 4:
@@ -7154,7 +7200,9 @@ def main() -> int:
                                               repair=getattr(args, "repair", False),
                                               upgrade=getattr(args, "upgrade", False),
                                               allow_downgrade=getattr(args, "allow_downgrade", False),
-                                              step_11_only=True, lock=default_asset_lock)
+                                              step_11_only=True,
+                                              unsafe_test_injection=args.unsafe_test_injection,
+                                              lock=default_asset_lock)
             else:
                 if journal is not None:
                     marker_records = journal_owned_asset(journal, es_url, kb_url, authorization, marker, "create")
