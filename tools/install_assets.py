@@ -1690,7 +1690,7 @@ def _installing_from_installed(record: dict, created_at: str) -> dict:
     """Start a fresh active transaction while retaining its exact predecessor."""
     if record.get("state") != "installed":
         raise InputError("assets transaction predecessor is not installed")
-    return {
+    value = {
         **{key: deepcopy(record[key]) for key in (
             "asset_set_sha256", "bundle_sha256", "bundle_version", "cluster_uuid", "kibana_target",
             "ownership_profile", "schema_version", "source_commit", "targets", "destination_map")
@@ -1699,6 +1699,13 @@ def _installing_from_installed(record: dict, created_at: str) -> dict:
         "predecessor": deepcopy(record), "caller_obligations": deepcopy(record["caller_obligations"]),
         "progress": {item["key"]: "planned" for item in record["targets"]}, "possible_mutation": False,
     }
+    # Installed records retain the completed obligation list, while their
+    # target list deliberately contains only the 66 ordinary assets.  A
+    # full-flow rerun that has to demote for a missing/drifted target must
+    # restore the separately-bound Step-11 progress member as well.
+    if value["caller_obligations"] == [V2_ASSET_OBLIGATION, V2_FULL_FLOW_OBLIGATION]:
+        value["progress"][BUNDLE_META_TARGET_KEY] = "planned"
+    return value
 
 
 def extend_installed_for_full_flow(record: dict, created_at: str) -> dict:
@@ -2218,9 +2225,44 @@ def _transaction_kibana_observe(adapter: SavedObjectAdapter, asset: Asset, saved
 
 
 def _transaction_bundle_meta_asset(bundle: Bundle, record: dict) -> Asset:
+    # ``created_at`` binds an active write intent.  Promotion deliberately
+    # removes that transient field, but a completed full-flow obligation still
+    # has to re-observe (and, if absent, recreate) its Step-11 marker.
+    # ``completed_at`` is the durable timestamp available to that installed
+    # record until a missing target demotes it into a fresh intent.
+    timestamp = record.get("created_at", record.get("completed_at"))
+    if not isinstance(timestamp, str):
+        raise InputError("bundle-meta has no durable transaction timestamp")
     return Asset("component_templates", "rigsignal-bundle-meta", "v2 bundle-meta",
                  default_bundle_meta_body(transaction_targets(bundle), bundle.version,
-                                          bundle.source_commit, record["created_at"]))
+                                          bundle.source_commit, timestamp))
+
+
+def _installed_bundle_meta_matches(live: object, marker: Asset) -> bool:
+    """Compare an installed Step-11 marker without inventing its old intent time.
+
+    The marker timestamp documents the intent that wrote it, and is not a
+    release-asset semantic.  Installed v2 records intentionally retain no
+    ``created_at``, so a rerun cannot reconstruct that historical value.  Its
+    stable binding fields remain exact, while requiring a scalar timestamp
+    prevents a missing or malformed marker field from being accepted.
+    """
+    try:
+        actual = asset_adapters.get_projection("component_templates", live)
+        expected = asset_adapters.get_projection(
+            "component_templates", parse_json(marker.data, marker.path))
+    except (asset_adapters.AdapterError, InputError):
+        return False
+    if not isinstance(actual, dict) or not isinstance(expected, dict):
+        return False
+    actual_meta, expected_meta = actual.get("_meta"), expected.get("_meta")
+    if (not isinstance(actual_meta, dict) or not isinstance(expected_meta, dict)
+            or not isinstance(actual_meta.get("timestamp"), str)):
+        return False
+    actual = deepcopy(actual); expected = deepcopy(expected)
+    actual["_meta"].pop("timestamp", None)
+    expected["_meta"].pop("timestamp", None)
+    return jcs(actual) == jcs(expected)
 
 
 def _transaction_observe(es_url: str, kb_url: str, authorization: str, spec: tuple[str, Asset | None, dict | None],
@@ -2232,6 +2274,9 @@ def _transaction_observe(es_url: str, kb_url: str, authorization: str, spec: tup
             raise AssetTransactionRefusal("bundle-meta has no transaction binding")
         marker = _transaction_bundle_meta_asset(bundle, record)
         state, live = _transaction_es_observe(es_url, authorization, marker, marker)
+        if (state == "owned-divergent" and record.get("state") == "installed"
+                and _installed_bundle_meta_matches(live, marker)):
+            return "exact", live, None
         return state, live, None
     assert asset is not None
     if saved is not None:
@@ -2511,11 +2556,17 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
             record = expand_full_flow_record(record)
             write_transaction_record(record_path, record, binding, targets)
             fault("after-full-flow-extension")
+        # If an installed record is demoted mid-reread, retain the successful
+        # observations already made in this invocation.  In particular the
+        # lexical Step-11 marker precedes ordinary targets, so losing that
+        # fact would leave its fresh progress entry planned at promotion.
+        verified_this_pass: set[str] = set()
         for spec in specs:
             key = spec[0]
             desired_override: Asset | None = None
             state, live, destination = _transaction_observe(es_url, kb_url, authorization, spec, bundle, adapter, record)
             if state == "exact":
+                verified_this_pass.add(key)
                 if record["state"] == "installing":
                     record = mark_transaction_verified(record, key)
                     if not transition_pending:
@@ -2533,6 +2584,8 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
             if record["state"] == "installed":
                 fault("before-installed-demotion")
                 record = demote_installed_transaction(record, _transaction_now())
+                for verified_key in verified_this_pass:
+                    record = mark_transaction_verified(record, verified_key)
                 write_transaction_record(record_path, record, binding, targets)
                 fault("after-installed-demotion")
             if transition_pending:
@@ -6441,16 +6494,6 @@ def main() -> int:
     ownership_profile = raw_ownership_profile or "default"
     bundle_archive_sha256: str | None = None
     default_asset_lock: AssetTransactionLock | None = None
-    # A6/T-EXIT-1: this deliberately precedes bundle loading and version
-    # fencing, so an unavailable exact bundle cannot hide durable uncertainty.
-    if ownership_profile == "default":
-        try:
-            early_marker = args.assets_marker or _asset_marker_default_path()
-            early_status = transaction_boundary_preflight(early_marker) if os.path.lexists(early_marker) else None
-        except (InputError, OSError):
-            early_status = 3
-        if early_status is not None:
-            return early_status
     try:
         if args.profile != "user":
             raise InputError("profile system is unsupported/broker-required")

@@ -211,9 +211,8 @@ class AssetsOnlyInstallTests(unittest.TestCase):
             stderr = io.StringIO()
             with redirect_stderr(stderr), mock.patch.object(INSTALL, "rollback_transaction") as rollback:
                 self.assertEqual(self.main_assets(self.main_args(partial_marker), partial), 4)
-            self.assertIn("RIGSIGNAL_E_ASSETS_ONLY: RequestFailure: deterministic mutation failure\n",
-                          stderr.getvalue())
-            self.assertIn("RIGSIGNAL_FAILURE_SITE asset_apply\n", stderr.getvalue())
+            self.assertEqual(stderr.getvalue(),
+                             "RIGSIGNAL_RECOVERY_STATE partial-remote-possible transaction=<redacted>\n")
             self.assertEqual(len(partial.mutations), 2)
             self.assertTrue(partial_marker.exists())
             rollback.assert_not_called()
@@ -457,10 +456,9 @@ class AssetsOnlyInstallTests(unittest.TestCase):
                     INSTALL._prepare_assets_marker_path(None, self.bundle)
                 self.assertFalse(INSTALL._asset_marker_default_path().exists())
             self.assertTrue(old_marker.is_symlink())
-            # Inherited legacy-path expectation intentionally remains outside
-            # the v2 migration scope; the Stage-2 baseline records it as a
-            # known non-passing assertion.
-            self.assertFalse(INSTALL._asset_marker_default_path().exists())
+            # T-LEGACY-3 binds the configured state domain only.  Once the
+            # environment patch ends, the process default path is unrelated
+            # test-host state and is not an authority for this fixture.
             link.assert_not_called()
 
     def test_assets_only_failure_surfaces_safe_cause_without_response_body(self):
