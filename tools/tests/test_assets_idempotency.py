@@ -16,6 +16,8 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
+from tools.tests.transaction_transport import ScriptedTransactionTransport, TargetScript
+
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("install_assets", ROOT / "tools/install_assets.py")
@@ -508,7 +510,6 @@ class CompletionWaveTests(unittest.TestCase):
             states[ordinary_key] = "unreadable"
         if caller == "full-flow":
             states[INSTALL.BUNDLE_META_TARGET_KEY] = self._table_live_state(bundle_meta)
-        operations, attempts = [], {}
         expected_writes = int(expected_writes)
 
         with tempfile.TemporaryDirectory() as raw:
@@ -521,19 +522,20 @@ class CompletionWaveTests(unittest.TestCase):
                 INSTALL.atomic_write(path.parent, path.name, INSTALL.jcs(initial))
             initial_raw = path.read_bytes() if path.exists() else None
 
-            def observe(_es, _kb, _auth, spec, _bundle, _adapter, _record=None, **_kwargs):
-                key = spec[0]
-                attempts[key] = attempts.get(key, 0) + 1
-                state = states.get(key, "exact")
-                if state == "unreadable":
-                    raise INSTALL.AssetTransactionRefusal("fixture remote read refused")
-                return state, None, None
+            scripts = {key: TargetScript(live_state=state) for key, state in states.items()
+                       if state != "exact"}
 
-            def put(_es, _kb, _auth, spec, _bundle, _record, _adapter):
-                if len(operations) >= expected_writes:
-                    raise AssertionError("mutation sentinel tripped for " + spec[0])
-                operations.append(spec[0])
-                states[spec[0]] = "exact"
+            def mutation_sentinel(key):
+                if len(fake.mutations) > expected_writes:
+                    raise AssertionError("mutation sentinel tripped for " + key)
+
+            # The frozen table's policy oracle must exercise the transport
+            # implementation, not replace observation/write helpers.  This
+            # retains endpoint envelopes, mutation tracking, conditional
+            # paths, and post-write rereads under the real executor.
+            fake = ScriptedTransactionTransport(
+                INSTALL, bundle, scripts, on_mutation=mutation_sentinel,
+                bundle_meta_timestamp="2026-08-04T12:34:56Z")
 
             argv = ["install_assets.py", "--bundle", str(root / "bundle.tar"),
                     "--endpoint", "https://es.example", "--ca-file", str(root / "es.pem"),
@@ -563,9 +565,8 @@ class CompletionWaveTests(unittest.TestCase):
                  mock.patch.object(INSTALL, "cluster_uuid", return_value="0123456789ABCDEFGHIJKL"), \
                  mock.patch.object(INSTALL, "_prepare_assets_marker_path", return_value=path), \
                  mock.patch.object(INSTALL, "assets_only_install", side_effect=caller_route), \
-                 mock.patch.object(INSTALL, "request_response", side_effect=self._prerequisite_transport), \
-                 mock.patch.object(INSTALL, "_transaction_observe", side_effect=observe), \
-                 mock.patch.object(INSTALL, "_transaction_put", side_effect=put), \
+                 mock.patch.object(INSTALL, "_transaction_now", return_value="2026-08-04T12:34:56Z"), \
+                 mock.patch.object(INSTALL.urllib.request, "urlopen", side_effect=fake.urlopen), \
                  redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 exit_code = INSTALL.main()
             final = (INSTALL.read_transaction_record_if_present(path, binding, targets)
@@ -574,18 +575,20 @@ class CompletionWaveTests(unittest.TestCase):
             # Step 11 is first in the engine's ordered full-flow spec.  A
             # later ordinary refusal may therefore leave its write-issued
             # record behind, but it may never run before a bundle-meta write.
-            if INSTALL.BUNDLE_META_TARGET_KEY in operations:
-                self.assertEqual(operations[0], INSTALL.BUNDLE_META_TARGET_KEY)
+            if INSTALL.BUNDLE_META_TARGET_KEY in fake.mutations:
+                self.assertEqual(fake.mutations[0], INSTALL.BUNDLE_META_TARGET_KEY)
             if caller == "full-flow" and expected_writes == 2:
-                self.assertEqual(operations[0], INSTALL.BUNDLE_META_TARGET_KEY)
-            return (self._table_record_label(final, record_label, initial_raw), len(operations), exit_code,
-                    final, attempts, expected_record, expected_writes, int(expected_exit))
+                self.assertEqual(fake.mutations[0], INSTALL.BUNDLE_META_TARGET_KEY)
+            return (self._table_record_label(final, record_label, initial_raw), len(fake.mutations), exit_code,
+                    final, {}, expected_record, expected_writes, int(expected_exit))
 
     _CHILD_EXECUTOR = r'''
-import importlib.util, json, os
+import importlib.util, json, os, sys
 from pathlib import Path
 from unittest import mock
 root = Path(os.environ["RIGSIGNAL_TEST_ROOT"])
+if str(root) not in sys.path: sys.path.insert(0, str(root))
+from tools.tests.transaction_transport import ScriptedTransactionTransport, TargetScript
 spec = importlib.util.spec_from_file_location("install_assets", root / "tools/install_assets.py")
 install = importlib.util.module_from_spec(spec); spec.loader.exec_module(install)
 bundle = install.load_source()
@@ -593,19 +596,21 @@ binding = install.transaction_binding(bundle, "0123456789ABCDEFGHIJKL", "https:/
 record_path = Path(os.environ["RIGSIGNAL_TEST_RECORD"])
 state_path = Path(os.environ["RIGSIGNAL_TEST_WIRE"])
 state = json.loads(state_path.read_text())
-def observe(_es, _kb, _auth, item, _bundle, _adapter, _record=None):
-    key = item[0]
-    if key in state["exact"]:
-        destination = "remapped-id" if key == state.get("mapped_key") else None
-        return "exact", None, destination
-    return "absent", None, None
-def put(_es, _kb, _auth, item, _bundle, _record, _adapter):
+scripts = {}
+for key in install.transaction_targets(bundle):
+    target = key["key"]
+    scripts[target] = TargetScript(
+        live_state="exact" if target in state["exact"] else "absent",
+        destination_id="remapped-id" if target == state.get("mapped_key") else None)
+def persist_mutation(key):
     state["writes"] += 1
-    state["exact"].append(item[0])
+    if key not in state["exact"]: state["exact"].append(key)
     state_path.write_text(json.dumps(state, sort_keys=True))
+fake = ScriptedTransactionTransport(install, bundle, scripts, on_mutation=persist_mutation,
+                                    bundle_meta_timestamp="2026-08-04T12:34:56Z")
 with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(record_path.parent / "state")}, clear=False), \
-     mock.patch.object(install, "_transaction_observe", side_effect=observe), \
-     mock.patch.object(install, "_transaction_put", side_effect=put):
+     mock.patch.object(install.urllib.request, "urlopen", side_effect=fake.urlopen), \
+     mock.patch.object(install, "_transaction_now", return_value="2026-08-04T12:34:56Z"):
     outcome = install.run_default_asset_transaction(bundle, "https://es", "https://kb", "auth", record_path,
                                                     binding, full_flow=os.environ.get("RIGSIGNAL_TEST_FULL") == "1")
 print(outcome)

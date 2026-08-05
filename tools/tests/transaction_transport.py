@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 from urllib.error import HTTPError
 from urllib.parse import parse_qs, unquote, urlsplit
 
@@ -111,13 +111,21 @@ class ScriptedTransactionTransport:
 
     def __init__(self, install: Any, bundle: Any,
                  scripts: Mapping[str, TargetScript | Mapping[str, object]] | None = None,
-                 *, row: TransactionRow | None = None):
+                 *, row: TransactionRow | None = None,
+                 on_mutation: Callable[[str], None] | None = None,
+                 bundle_meta_timestamp: str | None = None):
         self.install, self.bundle, self.row = install, bundle, row
         self.calls: list[HttpCall] = []
+        self.mutations: list[str] = []
+        self._on_mutation = on_mutation
+        self._bundle_meta_timestamp = bundle_meta_timestamp
         self._positions: dict[tuple[str, str], int] = {}
         self._scripts = {key: self._coerce(value) for key, value in (scripts or {}).items()}
         self._assets = {install._transaction_key_for_asset(asset): asset
                         for asset in bundle.assets if asset.kind in install._ES_ASSET_KINDS}
+        self._specs = {key: (asset, saved) for key, asset, saved in install._transaction_specs(bundle)}
+        self._specs[install.BUNDLE_META_TARGET_KEY] = (None, None)
+        self._stored: dict[str, object] = {}
         self._routes = self._build_routes()
 
     @classmethod
@@ -157,7 +165,9 @@ class ScriptedTransactionTransport:
         for asset in self.bundle.assets:
             if asset.kind in {"kibana_spaces", "kibana_roles"}:
                 kind = "space" if asset.kind == "kibana_spaces" else "role"
-                routes[self.install.kibana_path(asset)] = "kibana/default/" + kind + "/" + asset.name
+                space = "rigsignal" if kind == "space" else "default"
+                routes[self.install.kibana_path(asset)] = "kibana/" + space + "/" + kind + "/" + asset.name
+        routes["/_component_template/rigsignal-bundle-meta"] = self.install.BUNDLE_META_TARGET_KEY
         return routes
 
     @staticmethod
@@ -182,6 +192,20 @@ class ScriptedTransactionTransport:
         raise AssertionError("invalid scripted HTTP reply")
 
     def _desired_body(self, key: str) -> object:
+        if key in self._stored:
+            return self._stored[key]
+        if key == self.install.BUNDLE_META_TARGET_KEY:
+            timestamp = self._bundle_meta_timestamp or "2026-08-04T12:34:56Z"
+            return json.loads(self.install.default_bundle_meta_body(
+                self.install.transaction_targets(self.bundle), self.bundle.version,
+                self.bundle.source_commit, timestamp))
+        spec = self._specs.get(key)
+        if spec is not None and spec[1] is not None:
+            _asset, saved = spec
+            return {"attributes": saved.get("attributes", {}),
+                    "references": saved.get("references", [])}
+        if spec is not None and spec[0] is not None and spec[0].kind in {"kibana_spaces", "kibana_roles"}:
+            return json.loads(spec[0].data)
         asset = self._assets.get(key)
         if asset is None:
             return {"attributes": {}, "references": []}
@@ -202,9 +226,19 @@ class ScriptedTransactionTransport:
         except (ValueError, IndexError):
             return None
         space = parts[1] if len(parts) > 2 and parts[0] == "s" else "default"
-        return "kibana/" + self.install._v2_quote(space) + "/" + self.install._v2_quote(object_type) + "/" + self.install._v2_quote(object_id)
+        key = "kibana/" + self.install._v2_quote(space) + "/" + self.install._v2_quote(object_type) + "/" + self.install._v2_quote(object_id)
+        if key in self._specs or key in self._scripts:
+            return key
+        prefix = key.rsplit("/", 1)[0] + "/"
+        for submitted, script in self._scripts.items():
+            if (submitted.startswith(prefix) and script.destination_id is not None
+                    and script.destination_id == object_id):
+                return submitted
+        return key
 
     def _route(self, path: str) -> tuple[str | None, str]:
+        if path == "/api/spaces/space":
+            return "kibana/rigsignal/space/rigsignal", "target"
         if "/api/saved_objects/_import" in path:
             return "dashboard-import", "import"
         if "/api/saved_objects/resolve/" in path:
@@ -219,6 +253,37 @@ class ScriptedTransactionTransport:
         if script.live_state == "unreadable":
             return HttpReply(503, {"error": "unreadable"})
         body = self._desired_body(key) if script.live_state == "exact" else {"_fake": "divergent"}
+        if script.live_state == "divergent" and key.startswith("kibana/"):
+            body = self._desired_body(key)
+            if isinstance(body, dict):
+                body = dict(body)
+                attributes = body.get("attributes")
+                if isinstance(attributes, dict):
+                    body["attributes"] = {**attributes, "_scripted_divergence": True}
+                else:
+                    body["_scripted_divergence"] = True
+        if script.live_state == "owned-divergent":
+            body = self._desired_body(key)
+            if isinstance(body, dict):
+                body = dict(body)
+                if isinstance(body.get("component_templates"), list) and body["component_templates"]:
+                    item = dict(body["component_templates"][0])
+                    embedded = item.get("component_template")
+                    if isinstance(embedded, dict):
+                        item["component_template"] = {**embedded, "_scripted_divergence": True}
+                        body["component_templates"] = [item]
+                    else:
+                        body["_scripted_divergence"] = True
+                elif isinstance(body.get("index_templates"), list) and body["index_templates"]:
+                    item = dict(body["index_templates"][0])
+                    embedded = item.get("index_template")
+                    if isinstance(embedded, dict):
+                        item["index_template"] = {**embedded, "_scripted_divergence": True}
+                        body["index_templates"] = [item]
+                    else:
+                        body["_scripted_divergence"] = True
+                else:
+                    body["_scripted_divergence"] = True
         asset = self._assets.get(key)
         if asset is not None and asset.kind == "pipelines" and isinstance(body, dict):
             body = dict(body)
@@ -241,6 +306,26 @@ class ScriptedTransactionTransport:
             return HttpReply(200, {"id": script.destination_id, "destinationId": script.destination_id}, script.response_loss)
         return HttpReply(200, {}, script.response_loss)
 
+    def _remember_mutation(self, key: str | None, data: bytes | None) -> None:
+        if key is None:
+            return
+        if data is not None:
+            try:
+                body = json.loads(data)
+            except (TypeError, json.JSONDecodeError):
+                body = None
+            if body is not None:
+                if key in self._assets and self._assets[key].kind == "pipelines" and isinstance(body, dict):
+                    body = dict(body)
+                    body.setdefault("created_date_millis", 1)
+                    body.setdefault("modified_date_millis", 1)
+                self._stored[key] = body
+        prior = self._scripts.get(key, TargetScript())
+        self._scripts[key] = TargetScript(live_state="exact", destination_id=prior.destination_id)
+        self.mutations.append(key)
+        if self._on_mutation is not None:
+            self._on_mutation(key)
+
     def urlopen(self, request: Any) -> _Response:
         parsed = urlsplit(request.full_url)
         query = {name: tuple(values) for name, values in parse_qs(parsed.query, keep_blank_values=True).items()}
@@ -248,10 +333,17 @@ class ScriptedTransactionTransport:
         self.calls.append(HttpCall(method, path, query, request.data))
         key, route = self._route(path)
         script = self._scripts.get(key or "", TargetScript())
-        if route == "import":
+        if path == "/":
+            reply = HttpReply(200, {"cluster_uuid": "0123456789ABCDEFGHIJKL", "version": {"number": "9.4.4"}})
+        elif path == "/api/status":
+            reply = HttpReply(200, {"version": {"number": "9.4.4"}})
+        elif route == "import":
             reply = self._reply(script.import_, HttpReply(200, {"success": True, "successCount": 0, "successResults": []}), key or route, "import")
         elif route == "resolve":
-            reply = self._reply(script.resolve, HttpReply(404, {"error": "not an alias"}), key or route, "resolve")
+            fallback = (HttpReply(200, {"destinationId": script.destination_id})
+                        if script.destination_id is not None and script.live_state != "absent"
+                        else HttpReply(404, {"error": "not an alias"}))
+            reply = self._reply(script.resolve, fallback, key or route, "resolve")
         elif method == "GET":
             reply = self._reply(script.get, self._default_get(key or "", script), key or route, "get")
         else:
@@ -261,4 +353,6 @@ class ScriptedTransactionTransport:
             raise HTTPError(request.full_url, 599, "response lost", {}, None)
         if reply.status >= 400:
             raise _HttpError(request.full_url, reply.status, body)
+        if method != "GET":
+            self._remember_mutation(key, request.data)
         return _Response(reply.status, body)
