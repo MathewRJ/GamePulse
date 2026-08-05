@@ -841,6 +841,7 @@ class CompletionWaveTests(unittest.TestCase):
     _CHILD_EXECUTOR = r'''
 import importlib.util, json, os, sys
 from pathlib import Path
+from urllib.parse import urlsplit
 from unittest import mock
 root = Path(os.environ["RIGSIGNAL_TEST_ROOT"])
 if str(root) not in sys.path: sys.path.insert(0, str(root))
@@ -856,7 +857,8 @@ scripts = {}
 for key in install.transaction_targets(bundle):
     target = key["key"]
     scripts[target] = TargetScript(
-        live_state="exact" if target in state["exact"] else "absent",
+        live_state=("divergent" if target in state.get("divergent", [])
+                    else "exact" if target in state["exact"] else "absent"),
         destination_id="remapped-id" if target == state.get("mapped_key") else None)
 def persist_mutation(key):
     state["writes"] += 1
@@ -864,6 +866,17 @@ def persist_mutation(key):
     state_path.write_text(json.dumps(state, sort_keys=True))
 fake = ScriptedTransactionTransport(install, bundle, scripts, on_mutation=persist_mutation,
                                     bundle_meta_timestamp="2026-08-04T12:34:56Z")
+real_urlopen = fake.urlopen
+def tracked_urlopen(request):
+    try:
+        return real_urlopen(request)
+    finally:
+        # Persist each completed HTTP observation before a subsequent crash
+        # hook can kill this interpreter.  The parent decodes the target from
+        # the request path using the same fixture route table.
+        state.setdefault("calls", []).append([request.get_method(), urlsplit(request.full_url).path])
+        state_path.write_text(json.dumps(state, sort_keys=True))
+fake.urlopen = tracked_urlopen
 with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(record_path.parent / "state")}, clear=False), \
      mock.patch.object(install.urllib.request, "urlopen", side_effect=fake.urlopen), \
      mock.patch.object(install, "_transaction_now", return_value="2026-08-04T12:34:56Z"):
@@ -872,7 +885,8 @@ with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(record_path.parent / "st
 print(outcome)
 '''
 
-    def _subprocess_record(self, mode, *, full_flow=False, missing=None, mapped=False):
+    def _subprocess_record(self, mode, *, full_flow=False, missing=None, mapped=False,
+                           recovery_replace=False):
         """Run the real engine in a fresh interpreter with a durable fake wire."""
         bundle = INSTALL.load_source()
         targets = INSTALL.transaction_targets(bundle)
@@ -906,7 +920,8 @@ print(outcome)
             elif mode.startswith("v1-"):
                 INSTALL._write_assets_marker(record, bundle)
             wire = root / "wire.json"
-            wire.write_text(json.dumps({"exact": exact, "mapped_key": missing[0] if mapped else None, "writes": 0}, sort_keys=True))
+            wire.write_text(json.dumps({"exact": exact, "mapped_key": missing[0] if mapped else None,
+                                        "writes": 0, "calls": []}, sort_keys=True))
             env = os.environ | {"RIGSIGNAL_TEST_ROOT": str(ROOT), "RIGSIGNAL_TEST_RECORD": str(record),
                                 "RIGSIGNAL_TEST_WIRE": str(wire), "RIGSIGNAL_TEST_FULL": "1" if full_flow else "0",
                                 "RIGSIGNAL_TEST_CRASH_AT": mode.split("-", 1)[1]}
@@ -914,6 +929,12 @@ print(outcome)
                                      text=True, capture_output=True, check=False)
             raw_after = record.read_bytes()
             state_after = json.loads(wire.read_text())
+            if recovery_replace:
+                # A replacement after the crash must be re-observed by the
+                # fresh promotion attempt; it is not covered by the crashed
+                # process's stale exact reads.
+                state_after["divergent"] = [all_keys[0]]
+                wire.write_text(json.dumps(state_after, sort_keys=True))
             rerun_env = env | {"RIGSIGNAL_TEST_CRASH_AT": ""}
             rerun = subprocess.run([sys.executable, "-c", textwrap.dedent(self._CHILD_EXECUTOR)], env=rerun_env,
                                    text=True, capture_output=True, check=False)
@@ -1033,6 +1054,182 @@ print(outcome)
                                     {"states": states}, flags)
         result.update(status=result["exit_code"], writes=result["operations"], error=None, outcome=None)
         return result
+
+    def _full_main_two_leg(self, *, replace_between_legs=False):
+        """Run the default-profile ``main()`` path through both transaction legs.
+
+        Enrollment is deliberately reduced to its local, already-proven
+        plumbing here.  The asset transaction itself is not replaced: its
+        GET/resolve/PUT surface remains the scripted urllib transport used by
+        the production executor.  This makes the wrapper a useful guard
+        against the two ``run_default_asset_transaction`` call sites drifting
+        apart without turning the test into a second planner.
+        """
+        bundle = INSTALL.load_source()
+        targets = INSTALL.transaction_targets(bundle)
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw); root.chmod(0o700)
+            marker = root / INSTALL.ASSETS_MARKER_FILE
+            enrollment = root / "enrollment"
+            enrollment.mkdir(mode=0o700)
+            ordinary = targets[0]["key"]
+            fake = ScriptedTransactionTransport(
+                INSTALL, bundle,
+                {INSTALL.BUNDLE_META_TARGET_KEY: TargetScript(live_state="absent")},
+                bundle_meta_timestamp="2026-08-04T12:34:56Z")
+            args = type("Args", (), {
+                "bundle": root / "bundle.tar", "endpoint": "https://es.example",
+                "ca_file": root / "es.pem", "kibana_endpoint": "https://kb.example",
+                "kibana_ca_file": root / "kb.pem", "admin_credentials_file": root / "admin.toml",
+                "agent_binary": root / "agent", "profile": "user", "assets_only": False,
+                "assets_marker": marker, "repair": False, "upgrade": False,
+                "allow_downgrade": False, "enrollment_root": enrollment,
+                "adopt_existing_w1_stream": False, "ownership_profile": None,
+                "rollback": None, "predecessor_manifest": None, "dry_run": False,
+                "unsafe_test_injection": False,
+            })()
+            original_transaction = INSTALL.run_default_asset_transaction
+            original_observe = INSTALL._transaction_observe
+            original_promote = INSTALL.promote_transaction_record
+            observations = []
+            final_observations = []
+
+            def transaction_leg(*call_args, **kwargs):
+                result = original_transaction(*call_args, **kwargs)
+                if kwargs.get("defer_step_11") and replace_between_legs:
+                    # This is an ordinary remote replacement after the first
+                    # real leg has returned, before main() reaches Step 11.
+                    fake._scripts[ordinary] = TargetScript(live_state="divergent")
+                return result
+
+            def observe(*call_args, **kwargs):
+                observations.append(call_args[3][0])
+                return original_observe(*call_args, **kwargs)
+
+            def promote(*call_args, **kwargs):
+                # Promotion immediately follows the complete final reread;
+                # retain precisely that production observation window.
+                final_observations[:] = observations[-67:]
+                return original_promote(*call_args, **kwargs)
+
+            patches = (
+                mock.patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args),
+                mock.patch.object(INSTALL, "load_bundle", return_value=bundle),
+                mock.patch.object(INSTALL, "load_predecessor_manifest", return_value=None),
+                mock.patch.object(INSTALL, "role_body", return_value={}),
+                mock.patch.object(INSTALL, "ownership_for_assets", return_value={
+                    (asset.kind, asset.name): "managed" for asset in bundle.assets}),
+                mock.patch.object(INSTALL, "check_version_fence"),
+                mock.patch.object(INSTALL, "enrollment_condition", return_value="clean"),
+                mock.patch.object(INSTALL, "check_install_root_ancestors"),
+                mock.patch.object(INSTALL, "check_outbox_root"),
+                mock.patch.object(INSTALL, "check_install_preflight", return_value=(args.ca_file, args.agent_binary)),
+                mock.patch.object(INSTALL, "configure_https"),
+                mock.patch.object(INSTALL, "admin_authorization", return_value="auth"),
+                mock.patch.object(INSTALL, "admin_credential_kind", return_value="native_user"),
+                mock.patch.object(INSTALL, "dispatch_clean_root", return_value=False),
+                mock.patch.object(INSTALL, "fence_remote_ownership_profile"),
+                mock.patch.object(INSTALL, "run_topology_preflight"),
+                mock.patch.object(INSTALL, "prepare_install_root", return_value=enrollment),
+                mock.patch.object(INSTALL, "load_state", return_value=None),
+                mock.patch.object(INSTALL, "bind_ownership_profile"),
+                mock.patch.object(INSTALL, "cluster_uuid", return_value="0123456789ABCDEFGHIJKL"),
+                mock.patch.object(INSTALL, "remove_stale_publication_stage"),
+                mock.patch.object(INSTALL, "prerequisites"),
+                mock.patch.object(INSTALL, "cluster_health_gate"),
+                mock.patch.object(INSTALL, "fence"),
+                mock.patch.object(INSTALL, "remote_stream_condition", side_effect=[
+                    ("absent", None), ("compatible", {"generation": "initial"}),
+                    ("compatible", {"generation": "initial"})]),
+                mock.patch.object(INSTALL, "ensure_stream"),
+                mock.patch.object(INSTALL, "simulate"),
+                mock.patch.object(INSTALL, "recompute_target_generation", return_value="generation"),
+                mock.patch.object(INSTALL, "mint_key", return_value=("key-id", "secret")),
+                mock.patch.object(INSTALL, "enrollment_files", return_value={}),
+                mock.patch.object(INSTALL, "verify_stream_behavior"),
+                mock.patch.object(INSTALL, "verify_role_matrix"),
+                mock.patch.object(INSTALL, "atomic_publication"),
+                mock.patch.object(INSTALL, "run_handshake"),
+                mock.patch.object(INSTALL, "remove_candidate_root"),
+                mock.patch.object(INSTALL, "run_default_asset_transaction", side_effect=transaction_leg),
+                mock.patch.object(INSTALL, "_transaction_observe", side_effect=observe),
+                mock.patch.object(INSTALL, "promote_transaction_record", side_effect=promote),
+                mock.patch.object(INSTALL.urllib.request, "urlopen", side_effect=fake.urlopen),
+                mock.patch.object(INSTALL, "_transaction_now", return_value="2026-08-04T12:34:56Z"),
+            )
+            with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(root / "state")}, clear=False), \
+                 redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                # ExitStack keeps the orchestration fixture's broad local
+                # setup isolated while the transaction remains unpatched.
+                from contextlib import ExitStack
+                with ExitStack() as stack:
+                    for patcher in patches:
+                        stack.enter_context(patcher)
+                    exit_code = INSTALL.main()
+            binding = INSTALL.transaction_binding(
+                bundle, "0123456789ABCDEFGHIJKL", "https://kb.example", INSTALL.bundle_snapshot_digest(bundle))
+            record = INSTALL.read_transaction_record_if_present(marker, binding, targets)
+            get_keys = []
+            for call in fake.calls:
+                if call.method != "GET":
+                    continue
+                key, _route = fake._route(call.path)
+                if key in {spec[0] for spec in INSTALL._transaction_specs(bundle, True)}:
+                    get_keys.append(key)
+            return exit_code, record, fake, ordinary, get_keys, final_observations
+
+    def test_r2_main_two_leg_step11_replacement_halts_and_clean_variant_observes_67(self):
+        """R2FIX: the actual full main() Step-11 call retains the I record."""
+        exit_code, record, fake, ordinary, get_keys, final_observations = self._full_main_two_leg(replace_between_legs=True)
+        self.assertEqual(exit_code, 4)
+        self.assertEqual(record["state"], "installing")
+        self.assertTrue(record["possible_mutation"])
+        self.assertEqual(fake.mutations, [])
+        self.assertIn(ordinary, get_keys)
+        self.assertEqual(final_observations, [])
+
+        exit_code, record, fake, _ordinary, get_keys, final_observations = self._full_main_two_leg()
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(record["state"], "installed")
+        self.assertEqual(fake.mutations, [INSTALL.BUNDLE_META_TARGET_KEY])
+        self.assertEqual(len(final_observations), 67)
+        self.assertEqual(set(final_observations), {spec[0] for spec in INSTALL._transaction_specs(INSTALL.load_source(), True)})
+
+    def test_r2_invalid_flags_current_records_are_zero_transport_for_both_main_callers(self):
+        """R2FIX: invalid direction flags cannot reach either caller's wire."""
+        records = (("assets-only", "I-assets-pm0"), ("assets-only", "S-current-assets"),
+                   ("full-flow", "I-full-pm0"), ("full-flow", "S-current-full"))
+        invalid = (("upgrade",), ("allow-downgrade",), ("upgrade", "allow-downgrade"))
+        for caller, record in records:
+            for flags in invalid:
+                with self.subTest(caller=caller, record=record, flags=flags):
+                    result = self._run_scenario(caller, record, flags=flags)
+                    self.assertEqual(result["exit_code"], 2)
+                    self.assertEqual(result["operations"], [])
+                    self.assertEqual(result["transport_calls"], [])
+                    self.assertEqual(result["observations"], {})
+
+    def test_r2_setup_failure_with_durable_possible_mutation_is_exit_4_without_transport(self):
+        """R2FIX: setup may fail, but it must not erase a durable recovery exit."""
+        bundle = INSTALL.load_source()
+        targets = INSTALL.transaction_targets(bundle)
+        binding = INSTALL.transaction_binding(bundle, "0123456789ABCDEFGHIJKL", "https://kb.example",
+                                              INSTALL.bundle_snapshot_digest(bundle))
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw); root.chmod(0o700)
+            marker = root / INSTALL.ASSETS_MARKER_FILE
+            record = INSTALL.new_installing_record(binding, targets, "2026-08-04T12:34:56Z")
+            record["possible_mutation"] = True
+            INSTALL.write_transaction_record(marker, record, binding, targets)
+            argv = ["install_assets.py", "--bundle", str(root / "bundle.tar"), "--endpoint", "https://es.example",
+                    "--ca-file", str(root / "es.pem"), "--kibana-endpoint", "https://kb.example",
+                    "--kibana-ca-file", str(root / "kb.pem"), "--admin-credentials-file", str(root / "admin.toml"),
+                    "--agent-binary", str(root / "agent"), "--profile", "user", "--assets-only", "--assets-marker", str(marker)]
+            with mock.patch.object(sys, "argv", argv), \
+                 mock.patch.object(INSTALL, "load_bundle", side_effect=INSTALL.InputError("setup prevented")), \
+                 mock.patch.object(INSTALL.urllib.request, "urlopen", side_effect=AssertionError("TRANSPORT")), \
+                 redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(INSTALL.main(), 4)
 
     def test_f4_recovered_remap_persists_before_dependent_reference_create(self):
         """F4: 404/resolve recovery is durable authority for a later reference."""
@@ -1443,6 +1640,33 @@ print(outcome)
                 # The crash legs publish no remote write until the tested
                 # post-dispatch edges; the fresh process owns any recovery.
                 self.assertEqual(wire["writes"], 0)
+
+    def test_r2_crash_promotion_oracle_counts_target_gets_and_rereads_replacement(self):
+        """R2FIX: SIGKILL cannot turn a stale final reread into promotion."""
+        for full_flow, expected_targets, expected_passes in ((False, 66, 2), (True, 67, 3)):
+            with self.subTest(full_flow=full_flow):
+                crashed, raw, wire, rerun, final = self._subprocess_record(
+                    "promote-before-promotion", full_flow=full_flow)
+                self.assertEqual(crashed.returncode, -9, crashed.stderr)
+                # Saved objects issue their documented resolve GET in addition
+                # to the target GET.  Count both independently: the direct
+                # observation set is exactly 66/67 per pass, while resolve is
+                # an explicit sibling observation rather than a hidden write.
+                direct_gets = [path for method, path in wire["calls"]
+                               if method == "GET" and "/resolve/" not in path]
+                resolves = [path for method, path in wire["calls"]
+                            if method == "GET" and "/resolve/" in path]
+                self.assertEqual(len(direct_gets), expected_targets * expected_passes)
+                self.assertEqual(len(resolves), 18 * expected_passes)
+                self.assertEqual(rerun.returncode, 0, rerun.stderr)
+                self.assertEqual(final["state"], "installed")
+
+        crashed, raw, wire, rerun, final = self._subprocess_record(
+            "promote-before-promotion", recovery_replace=True)
+        self.assertEqual(crashed.returncode, -9, crashed.stderr)
+        self.assertNotEqual(rerun.returncode, 0, rerun.stderr)
+        self.assertEqual(final["state"], "installing")
+        self.assertEqual(wire["writes"], 0)
 
     def test_t_cross_1_through_3_and_t_legacy_1_through_3_are_fail_closed(self):
         bundle = INSTALL.load_source()

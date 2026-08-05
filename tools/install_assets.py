@@ -2771,6 +2771,23 @@ def run_default_asset_transaction(bundle: Bundle, es_url: str, kb_url: str, auth
         specs = dispatch_specs
         if step_11_only:
             specs = [spec for spec in _transaction_specs(bundle, True) if spec[0] == BUNDLE_META_TARGET_KEY]
+            # The full main() caller deliberately leaves M for Step 11 while
+            # retaining its lock across enrollment publication.  It must not,
+            # however, trust observations from the pre-Step-11 leg: an
+            # ordinary target may have been replaced in that interval.  Fence
+            # all 66 ordinary targets before M can issue a write.  This is a
+            # recovery halt rather than an ordinary refusal because the
+            # durable two-leg transaction can no longer assert a coherent
+            # complete observation; publish that fact before returning the
+            # public exit-4 boundary (R2FIX main orchestration oracle).
+            for ordinary_spec in _transaction_specs(bundle):
+                ordinary_state, _ordinary_live, _ordinary_destination = _transaction_observe(
+                    es_url, kb_url, authorization, ordinary_spec, bundle, adapter, record)
+                if ordinary_state != "exact":
+                    if not record.get("possible_mutation"):
+                        record["possible_mutation"] = True
+                        write_transaction_record(record_path, record, binding, targets)
+                    raise AssetTransactionHalt("partial-remote-possible")
         # A resumed full-flow transaction must not let the lexically first
         # Step-11 target escape ahead of a later ordinary refusal.  Re-observe
         # the complete dispatch set before *any* guarded write; this preserves
