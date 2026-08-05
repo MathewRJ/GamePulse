@@ -623,8 +623,9 @@ sys.exit(module.main())
 
             def observe(_es, _kb, _auth, spec, _bundle, _adapter, _record=None, **_kwargs):
                 observed.append(spec[0])
-                # The first observation is the dispatch M; an ordinary target
-                # changes only in the immediately-pre-promotion 67-target pass.
+                # Step 11 first fences all 66 ordinary targets, then dispatches
+                # M.  An ordinary target changes only in the immediately-
+                # pre-promotion 67-target pass.
                 if spec[0] == ordinary and len(observed) > 1:
                     return "divergent", None, None
                 return "exact", None, None
@@ -637,12 +638,16 @@ sys.exit(module.main())
                         self.bundle, "https://es", "https://kb", "auth", path, self.binding,
                         full_flow=True, step_11_only=True, lock=mock.Mock())
             put.assert_not_called()
-            self.assertEqual(observed[0], INSTALL.BUNDLE_META_TARGET_KEY)
+            self.assertEqual(set(observed[:66]), {item[0] for item in INSTALL._transaction_specs(self.bundle)})
+            self.assertEqual(observed[66], INSTALL.BUNDLE_META_TARGET_KEY)
+            self.assertEqual(observed[67], INSTALL.BUNDLE_META_TARGET_KEY)
+            self.assertEqual(observed[68], ordinary)
             retained = INSTALL.read_transaction_record_if_present(path, self.binding, self.targets)
             self.assertEqual(retained["state"], "installing")
 
             # A clean second Step-11 leg provides the complete observation
-            # oracle: dispatch M plus all 67 barrier members before promotion.
+            # oracle: an ordinary 66-target fence, dispatch M, then all 67
+            # barrier members immediately before promotion.
             observed.clear()
             with mock.patch.object(INSTALL, "_transaction_observe", side_effect=lambda *_args, **_kwargs:
                                    (observed.append(_args[3][0]) or ("exact", None, None))), \
@@ -652,9 +657,10 @@ sys.exit(module.main())
                     self.bundle, "https://es", "https://kb", "auth", path, self.binding,
                     full_flow=True, step_11_only=True, lock=mock.Mock()), "applied")
             put.assert_not_called()
-            self.assertEqual(observed[0], INSTALL.BUNDLE_META_TARGET_KEY)
-            self.assertEqual(set(observed[1:]), {item[0] for item in INSTALL._transaction_specs(self.bundle, True)})
-            self.assertEqual(len(observed[1:]), 67)
+            self.assertEqual(set(observed[:66]), {item[0] for item in INSTALL._transaction_specs(self.bundle)})
+            self.assertEqual(observed[66], INSTALL.BUNDLE_META_TARGET_KEY)
+            self.assertEqual(observed[67:], [item[0] for item in INSTALL._transaction_specs(self.bundle, True)])
+            self.assertEqual(len(observed[67:]), 67)
 
     def test_t_sm_4_atomic_demotion_shape_has_no_partial_record(self):
         record = self.installing()
