@@ -9,6 +9,7 @@ import os
 import re
 import subprocess
 import sys
+import tarfile
 import tempfile
 import textwrap
 import unittest
@@ -24,12 +25,19 @@ SPEC = importlib.util.spec_from_file_location("install_assets", ROOT / "tools/in
 INSTALL = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
 SPEC.loader.exec_module(INSTALL)
+TEST_RELEASE_COMMIT = "a" * 40
+
+
+def release_bundle():
+    """Return source fixtures with the manifest pin used by release callers."""
+    source = INSTALL.load_source()
+    return INSTALL.Bundle(source.version, TEST_RELEASE_COMMIT, source.assets, source.files)
 
 
 class RecordFixtures(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.bundle = INSTALL.load_source()
+        cls.bundle = release_bundle()
         cls.targets = INSTALL.transaction_targets(cls.bundle)
         cls.binding = INSTALL.transaction_binding(
             cls.bundle, "0123456789ABCDEFGHIJKL", "https://KIBANA.EXAMPLE:443", "a" * 64)
@@ -39,18 +47,47 @@ class RecordFixtures(unittest.TestCase):
         value.update(changes)
         return value
 
-    def test_t_rec_source_commit_must_be_valid_before_record_publication(self):
-        """A failed source probe cannot create a record invalid as a predecessor."""
+    @staticmethod
+    def _rewrite_manifest(source: Path, destination: Path, mutate) -> None:
+        with tarfile.open(source, "r:gz") as archive:
+            contents = {member.name: archive.extractfile(member).read()
+                        for member in archive.getmembers()}
+        manifest = json.loads(contents["manifest.json"])
+        mutate(manifest)
+        contents["manifest.json"] = json.dumps(manifest, sort_keys=True).encode()
+        with tarfile.open(destination, "w:gz") as archive:
+            for name, data in contents.items():
+                member = tarfile.TarInfo(name)
+                member.size = len(data)
+                archive.addfile(member, io.BytesIO(data))
+
+    def test_t_rec_source_commit_comes_from_release_bundle_manifest(self):
+        """N1: only a valid release-manifest pin can enter a transaction record."""
         with tempfile.TemporaryDirectory() as raw:
-            missing_git_dir = Path(raw) / "not-a-git-directory"
+            root = Path(raw)
+            valid_archive = root / "valid.tar.gz"
+            result = subprocess.run([
+                sys.executable, str(ROOT / "tools/build_asset_bundle.py"), "--source-commit", "a" * 40,
+                "--output", str(valid_archive),
+            ], cwd=ROOT, text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            valid_bundle = INSTALL.load_bundle(valid_archive)
+            missing_git_dir = root / "not-a-git-directory"
             with mock.patch.dict(os.environ, {"GIT_DIR": str(missing_git_dir)}, clear=False):
-                unpinned_bundle = INSTALL.load_source()
-        self.assertEqual(unpinned_bundle.source_commit, "unknown")
-        unpinned_targets = INSTALL.transaction_targets(unpinned_bundle)
-        unpinned_binding = INSTALL.transaction_binding(
-            unpinned_bundle, "0123456789ABCDEFGHIJKL", "https://KIBANA.EXAMPLE:443", "a" * 64)
-        with self.assertRaises(INSTALL.InputError):
-            INSTALL.new_installing_record(unpinned_binding, unpinned_targets, "2026-08-04T12:34:56Z")
+                self.assertEqual(INSTALL.source_commit(), "unknown")
+                targets = INSTALL.transaction_targets(valid_bundle)
+                binding = INSTALL.transaction_binding(
+                    valid_bundle, "0123456789ABCDEFGHIJKL", "https://KIBANA.EXAMPLE:443", "a" * 64)
+                record = INSTALL.new_installing_record(binding, targets, "2026-08-04T12:34:56Z")
+            self.assertEqual(record["source_commit"], "a" * 40)
+            for label, mutate in (
+                    ("malformed", lambda manifest: manifest.__setitem__("source_commit", "not-a-commit")),
+                    ("missing", lambda manifest: manifest.pop("source_commit"))):
+                with self.subTest(label=label):
+                    invalid_archive = root / f"{label}.tar.gz"
+                    self._rewrite_manifest(valid_archive, invalid_archive, mutate)
+                    with self.assertRaises(INSTALL.InputError):
+                        INSTALL.load_bundle(invalid_archive)
 
     def test_t_rec_1_rejects_noncanonical_shape(self):
         cases = []
@@ -753,7 +790,7 @@ class CompletionWaveTests(unittest.TestCase):
         """Main-routed, one-row durable fixture with a transport write sentinel."""
         (caller, record_label, ordinary, bundle_meta, flags, reconciliation,
          expected_record, expected_writes, expected_exit) = row
-        bundle = INSTALL.load_source()
+        bundle = release_bundle()
         targets = INSTALL.transaction_targets(bundle)
         binding = INSTALL.transaction_binding(
             bundle, "0123456789ABCDEFGHIJKL", "https://kb.example", INSTALL.bundle_snapshot_digest(bundle))
@@ -861,7 +898,7 @@ if str(root) not in sys.path: sys.path.insert(0, str(root))
 from tools.tests.transaction_transport import ScriptedTransactionTransport, TargetScript
 spec = importlib.util.spec_from_file_location("install_assets", root / "tools/install_assets.py")
 install = importlib.util.module_from_spec(spec); spec.loader.exec_module(install)
-bundle = install.load_source()
+bundle = install.load_bundle(Path(os.environ["RIGSIGNAL_TEST_BUNDLE"]))
 binding = install.transaction_binding(bundle, "0123456789ABCDEFGHIJKL", "https://kb.example", "a" * 64)
 record_path = Path(os.environ["RIGSIGNAL_TEST_RECORD"])
 state_path = Path(os.environ["RIGSIGNAL_TEST_WIRE"])
@@ -901,11 +938,18 @@ print(outcome)
     def _subprocess_record(self, mode, *, full_flow=False, missing=None, mapped=False,
                            recovery_replace=False):
         """Run the real engine in a fresh interpreter with a durable fake wire."""
-        bundle = INSTALL.load_source()
-        targets = INSTALL.transaction_targets(bundle)
-        binding = INSTALL.transaction_binding(bundle, "0123456789ABCDEFGHIJKL", "https://kb.example", "a" * 64)
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw); root.chmod(0o700)
+            archive = root / "assets.tar.gz"
+            build = subprocess.run([
+                sys.executable, str(ROOT / "tools/build_asset_bundle.py"), "--source-commit", "a" * 40,
+                "--output", str(archive),
+            ], cwd=ROOT, text=True, capture_output=True, check=False)
+            self.assertEqual(build.returncode, 0, build.stderr)
+            bundle = INSTALL.load_bundle(archive)
+            targets = INSTALL.transaction_targets(bundle)
+            binding = INSTALL.transaction_binding(
+                bundle, "0123456789ABCDEFGHIJKL", "https://kb.example", "a" * 64)
             record = root / INSTALL.ASSETS_MARKER_FILE
             all_keys = [item["key"] for item in targets]
             if full_flow:
@@ -936,7 +980,8 @@ print(outcome)
             wire.write_text(json.dumps({"exact": exact, "mapped_key": missing[0] if mapped else None,
                                         "writes": 0, "calls": []}, sort_keys=True))
             env = os.environ | {"RIGSIGNAL_TEST_ROOT": str(ROOT), "RIGSIGNAL_TEST_RECORD": str(record),
-                                "RIGSIGNAL_TEST_WIRE": str(wire), "RIGSIGNAL_TEST_FULL": "1" if full_flow else "0",
+                                "RIGSIGNAL_TEST_WIRE": str(wire), "RIGSIGNAL_TEST_BUNDLE": str(archive),
+                                "RIGSIGNAL_TEST_FULL": "1" if full_flow else "0",
                                 "RIGSIGNAL_TEST_CRASH_AT": mode.split("-", 1)[1]}
             crashed = subprocess.run([sys.executable, "-c", textwrap.dedent(self._CHILD_EXECUTOR)], env=env,
                                      text=True, capture_output=True, check=False)
@@ -968,7 +1013,7 @@ print(outcome)
         """
         self.assertIn(caller, {"assets-only", "full-flow"})
         self.assertIsNone(crash_point, "crash scenarios use _subprocess_record")
-        bundle = INSTALL.load_source()
+        bundle = release_bundle()
         targets = INSTALL.transaction_targets(bundle)
         binding = INSTALL.transaction_binding(
             bundle, "0123456789ABCDEFGHIJKL", "https://kb.example", INSTALL.bundle_snapshot_digest(bundle))
@@ -1078,7 +1123,7 @@ print(outcome)
         against the two ``run_default_asset_transaction`` call sites drifting
         apart without turning the test into a second planner.
         """
-        bundle = INSTALL.load_source()
+        bundle = release_bundle()
         targets = INSTALL.transaction_targets(bundle)
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw); root.chmod(0o700)
@@ -1206,7 +1251,7 @@ print(outcome)
         self.assertEqual(record["state"], "installed")
         self.assertEqual(fake.mutations, [INSTALL.BUNDLE_META_TARGET_KEY])
         self.assertEqual(len(final_observations), 67)
-        self.assertEqual(set(final_observations), {spec[0] for spec in INSTALL._transaction_specs(INSTALL.load_source(), True)})
+        self.assertEqual(set(final_observations), {spec[0] for spec in INSTALL._transaction_specs(release_bundle(), True)})
 
     def test_r2_invalid_flags_current_records_are_zero_transport_for_both_main_callers(self):
         """R2FIX: invalid direction flags cannot reach either caller's wire."""
@@ -1224,7 +1269,7 @@ print(outcome)
 
     def test_r2_setup_failure_with_durable_possible_mutation_is_exit_4_without_transport(self):
         """R2FIX: setup may fail, but it must not erase a durable recovery exit."""
-        bundle = INSTALL.load_source()
+        bundle = release_bundle()
         targets = INSTALL.transaction_targets(bundle)
         binding = INSTALL.transaction_binding(bundle, "0123456789ABCDEFGHIJKL", "https://kb.example",
                                               INSTALL.bundle_snapshot_digest(bundle))
@@ -1246,7 +1291,7 @@ print(outcome)
 
     def test_f4_recovered_remap_persists_before_dependent_reference_create(self):
         """F4: 404/resolve recovery is durable authority for a later reference."""
-        bundle = INSTALL.load_source()
+        bundle = release_bundle()
         specs = INSTALL._transaction_specs(bundle)
         by_key = {key: (key, asset, saved) for key, asset, saved in specs}
         source = dependent = None
@@ -1305,7 +1350,7 @@ print(outcome)
 
     def test_f5_create_conflicts_reread_exact_or_halt_per_class(self):
         """F5: only documented create conflicts receive one immediate reread."""
-        bundle = INSTALL.load_source()
+        bundle = release_bundle()
         choices = {
             "template": next(spec for spec in INSTALL._transaction_specs(bundle)
                              if spec[1] is not None and spec[1].kind == "component_templates"),
@@ -1364,7 +1409,7 @@ print(outcome)
         saved-object destination map.  This catches the tempting but invalid
         comparison of a predecessor against the current inventory/remap.
         """
-        bundle = INSTALL.load_source()
+        bundle = release_bundle()
         targets = INSTALL.transaction_targets(bundle)
         saved = next(item["key"] for item in targets if item["key"].startswith("kibana/"))
         old_saved = saved
@@ -1408,7 +1453,7 @@ print(outcome)
 
     def test_ambiguity_6_exit_mapping_is_exhaustive_and_main_routed(self):
         """A6: one mapping owns every executor result; main() invokes it."""
-        bundle = INSTALL.load_source()
+        bundle = release_bundle()
         targets = INSTALL.transaction_targets(bundle)
         binding = INSTALL.transaction_binding(
             bundle, "0123456789ABCDEFGHIJKL", "https://kb.example", INSTALL.bundle_snapshot_digest(bundle))
@@ -1486,7 +1531,7 @@ print(outcome)
 
     def test_t_dash_1_partial_dashboard_refuses_before_any_mutation_for_both_callers(self):
         """T-DASH-1: the real executor's N-state barrier is object-complete."""
-        bundle = INSTALL.load_source()
+        bundle = release_bundle()
         root = next(item["key"] for item in INSTALL.transaction_targets(bundle)
                     if item["key"].startswith("kibana/") and "/dashboard/" in item["key"])
         for full_flow in (False, True):
@@ -1499,7 +1544,7 @@ print(outcome)
 
     def test_t_dash_2_duplicate_expansion_has_eighteen_real_saved_object_writes(self):
         """T-DASH-2: 29 source entries collapse to the 18 persisted SO identities."""
-        targets = INSTALL.transaction_targets(INSTALL.load_source())
+        targets = INSTALL.transaction_targets(release_bundle())
         saved = [item["key"] for item in targets
                  if item["key"].startswith("kibana/")
                  and "/space/" not in item["key"] and "/role/" not in item["key"]]
@@ -1534,7 +1579,7 @@ print(outcome)
 
     def test_t_exit_3_installed_reverify_refuses_without_write(self):
         """T-EXIT-3: installed has no uncertainty, so a foreign reread is exit 3."""
-        key = INSTALL.transaction_targets(INSTALL.load_source())[0]["key"]
+        key = INSTALL.transaction_targets(release_bundle())[0]["key"]
         result = self._real_transaction(record_kind="S-current-assets", divergent=(key,))
         self.assertEqual(result["status"], 3)
         self.assertEqual(result["writes"], [])
@@ -1556,7 +1601,7 @@ print(outcome)
 
     def test_t_flag_3_resumed_stamped_es_requires_repair_through_main(self):
         """Corrected-table I-assets-pm0 stamped-ES rows use the real route."""
-        key = INSTALL.transaction_targets(INSTALL.load_source())[0]["key"]
+        key = INSTALL.transaction_targets(release_bundle())[0]["key"]
         for flags, expected_status, expected_writes in (((), 3, 0), (("repair",), 0, 1)):
             with self.subTest(flags=flags):
                 result = self._run_scenario(
@@ -1578,7 +1623,7 @@ print(outcome)
 
     def test_r_a1_persisted_possible_mutation_precedes_invalid_version_flags(self):
         """Ratification 2: durable uncertainty wins before flag preflight."""
-        key = INSTALL.transaction_targets(INSTALL.load_source())[0]["key"]
+        key = INSTALL.transaction_targets(release_bundle())[0]["key"]
         for flags in (("upgrade",), ("allow-downgrade",), ("upgrade", "allow-downgrade")):
             with self.subTest(flags=flags):
                 result = self._run_scenario(
@@ -1606,7 +1651,7 @@ print(outcome)
 
     def test_t_sm_crash_edges_are_real_subprocess_recovery_oracles(self):
         """Every publication edge kills a child; a fresh child validates recovery."""
-        bundle = INSTALL.load_source()
+        bundle = release_bundle()
         target = INSTALL.transaction_targets(bundle)[0]["key"]
         saved = next(item["key"] for item in INSTALL.transaction_targets(bundle) if item["key"].startswith("kibana/"))
         cases = (
@@ -1682,7 +1727,7 @@ print(outcome)
         self.assertEqual(wire["writes"], 0)
 
     def test_t_cross_1_through_3_and_t_legacy_1_through_3_are_fail_closed(self):
-        bundle = INSTALL.load_source()
+        bundle = release_bundle()
         targets = INSTALL.transaction_targets(bundle)
         binding = INSTALL.transaction_binding(bundle, "0123456789ABCDEFGHIJKL", "https://kb.example", "a" * 64)
         with tempfile.TemporaryDirectory() as raw:
@@ -1707,10 +1752,10 @@ print(outcome)
         # actual executor asks its transport to mutate.
         for record, possible in (("N", False), ("I-assets-pm0", False), ("I-assets-pm1", True), ("S-current-assets", False)):
             for live in ("es-foreign-divergent", "kibana-divergent", "unreadable"):
-                key = INSTALL.transaction_targets(INSTALL.load_source())[0]["key"]
+                key = INSTALL.transaction_targets(release_bundle())[0]["key"]
                 state = "divergent" if live == "es-foreign-divergent" else live
                 if live == "kibana-divergent":
-                    key = next(item["key"] for item in INSTALL.transaction_targets(INSTALL.load_source())
+                    key = next(item["key"] for item in INSTALL.transaction_targets(release_bundle())
                                if item["key"].startswith("kibana/"))
                     state = "divergent"
                 result = self._run_scenario("assets-only", record, {"states": {key: state}})

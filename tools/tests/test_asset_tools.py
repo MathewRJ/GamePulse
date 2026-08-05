@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
+TEST_SOURCE_COMMIT = "a" * 40
 
 
 def load(name):
@@ -551,7 +552,7 @@ i.atomic_publication(r, {n: ('new-' + n).encode() for n in ('credentials.toml','
         with tempfile.TemporaryDirectory() as raw:
             bundle = Path(raw) / "assets.tar.gz"
             result = subprocess.run([
-                sys.executable, str(ROOT / "tools/build_asset_bundle.py"), "--source-commit", "test", "--output",
+                sys.executable, str(ROOT / "tools/build_asset_bundle.py"), "--source-commit", TEST_SOURCE_COMMIT, "--output",
                 str(bundle),
             ], cwd=ROOT, text=True, capture_output=True, check=False)
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -782,7 +783,7 @@ i.atomic_publication(r, {n: ('new-' + n).encode() for n in ('credentials.toml','
             bundle, engine = root / "assets.tar.gz", root / "engine"
             result = subprocess.run([
                 sys.executable, str(ROOT / "tools/build_asset_bundle.py"), "--version", "0.3.0",
-                "--source-commit", "test-commit", "--output", str(bundle), "--engine-output", str(engine),
+                "--source-commit", TEST_SOURCE_COMMIT, "--output", str(bundle), "--engine-output", str(engine),
             ], cwd=ROOT, text=True, capture_output=True, check=False)
             self.assertEqual(result.returncode, 0, result.stderr)
             program = """import importlib.util, json, sys
@@ -816,7 +817,7 @@ print('bundle-resources-ok')
             bundle, engine, agent = root / "assets.tar.gz", root / "engine", root / "agent"
             result = subprocess.run([
                 sys.executable, str(ROOT / "tools/build_asset_bundle.py"), "--version", "0.3.0",
-                "--source-commit", "test-commit", "--output", str(bundle), "--engine-output", str(engine),
+                "--source-commit", TEST_SOURCE_COMMIT, "--output", str(bundle), "--engine-output", str(engine),
             ], cwd=ROOT, text=True, capture_output=True, check=False)
             self.assertEqual(result.returncode, 0, result.stderr)
             agent.write_text("#!/bin/sh\nprintf 'rigsignal-agent 9.9.9\\n'\n")
@@ -856,7 +857,7 @@ sys.exit(module.main())
             _bundle, engine, agent = root / "assets.tar.gz", root / "engine", root / "agent"
             result = subprocess.run([
                 sys.executable, str(ROOT / "tools/build_asset_bundle.py"), "--version", "0.3.0",
-                "--source-commit", "test-commit", "--output", str(_bundle), "--engine-output", str(engine),
+                "--source-commit", TEST_SOURCE_COMMIT, "--output", str(_bundle), "--engine-output", str(engine),
             ], cwd=ROOT, text=True, capture_output=True, check=False)
             self.assertEqual(result.returncode, 0, result.stderr)
             agent.write_text("#!/bin/sh\nprintf 'rigsignal-agent 9.9.9\\n'\n")
@@ -898,11 +899,11 @@ sys.exit(module.main())
                                                   root / "engine", root / "agent")
             result = subprocess.run([
                 sys.executable, str(ROOT / "tools/build_asset_bundle.py"), "--version", "0.3.0",
-                "--source-commit", "engine-commit", "--output", str(bundle), "--engine-output", str(engine),
+                "--source-commit", "a" * 40, "--output", str(bundle), "--engine-output", str(engine),
             ], cwd=ROOT, text=True, capture_output=True, check=False)
             self.assertEqual(result.returncode, 0, result.stderr)
             rewrite_bundle(bundle, mismatched,
-                           lambda manifest: manifest.__setitem__("source_commit", "bundle-commit"))
+                           lambda manifest: manifest.__setitem__("source_commit", "b" * 40))
             agent.write_text("#!/bin/sh\nprintf 'rigsignal-agent 0.3.0\\n'\n")
             agent.chmod(0o755)
             sentinel = root / "unexpected-http-mutation"
@@ -929,7 +930,7 @@ sys.exit(module.main())
                                     cwd=root, text=True, capture_output=True, check=False)
             self.assertEqual(result.returncode, 2)
             self.assertEqual(result.stderr, "install refused: version_skew; engine=0.3.0; agent=0.3.0; "
-                             "bundle=0.3.0; engine_commit=engine-commit; bundle_commit=bundle-commit\n"
+                             "bundle=0.3.0; engine_commit=" + "a" * 40 + "; bundle_commit=" + "b" * 40 + "\n"
                              "RIGSIGNAL_FAILURE_SITE preflight\n")
             self.assertFalse(sentinel.exists(), "source-commit fence allowed an HTTP mutation")
 
@@ -939,7 +940,7 @@ sys.exit(module.main())
             bundle = root / "assets.tar.gz"
             result = subprocess.run([
                 sys.executable, str(ROOT / "tools/build_asset_bundle.py"), "--version", "0.3.0",
-                "--source-commit", "test-commit", "--output", str(bundle), "--engine-output", str(engine),
+                "--source-commit", TEST_SOURCE_COMMIT, "--output", str(bundle), "--engine-output", str(engine),
             ], cwd=ROOT, text=True, capture_output=True, check=False)
             self.assertEqual(result.returncode, 0, result.stderr)
             sentinel = root / "unexpected-http-mutation"

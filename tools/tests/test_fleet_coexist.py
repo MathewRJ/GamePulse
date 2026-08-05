@@ -1228,7 +1228,7 @@ class FleetCoexistenceTests(unittest.TestCase):
             bundle_path = Path(directory) / "assets.tar.gz"
             result = subprocess.run([
                 sys.executable, str(ROOT / "tools/build_asset_bundle.py"), "--source-commit",
-                INSTALL.source_commit(), "--output", str(bundle_path),
+                "a" * 40, "--output", str(bundle_path),
             ], cwd=ROOT, text=True, capture_output=True, check=False)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(INSTALL.asset_set_sha256(INSTALL.load_source()),

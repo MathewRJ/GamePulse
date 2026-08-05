@@ -26,6 +26,7 @@ ASSET_TYPES = {
     "kibana-roles": "kibana_roles",
 }
 ASSET_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._@-]*\.json\Z")
+SOURCE_COMMIT_RE = re.compile(r"[0-9a-f]{40}\Z")
 W1_ASSET_PATHS = (
     "elastic/component-templates/logs-rigsignal.diagnosis-mappings.json",
     "elastic/index-templates/logs-rigsignal.diagnosis.json",
@@ -228,6 +229,11 @@ def main() -> int:
                         help="directory in which to stage install_assets.py and its version stamp")
     args = parser.parse_args()
     try:
+        # The archive manifest is later persisted as the durable transaction
+        # source binding.  Do not emit a release-format bundle whose binding
+        # cannot satisfy that record grammar.
+        if SOURCE_COMMIT_RE.fullmatch(args.source_commit) is None:
+            raise BundleError("source commit must be a 40-hex git commit")
         version = args.version or package_version()
         assets = read_assets()
         validate_dependencies(assets)
