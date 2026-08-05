@@ -16,7 +16,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from tools.tests.transaction_transport import ScriptedTransactionTransport, TargetScript
+from tools.tests.transaction_transport import HttpReply, ScriptedTransactionTransport, TargetScript
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -168,6 +168,25 @@ class RecordFixtures(unittest.TestCase):
 
 
 class SnapshotTests(unittest.TestCase):
+    _BOUNDARY_CHILD = r'''
+import importlib.util, os, sys
+from pathlib import Path
+root = Path(os.environ["RIGSIGNAL_TEST_ROOT"])
+spec = importlib.util.spec_from_file_location("install_assets", root / "tools/install_assets.py")
+install = importlib.util.module_from_spec(spec); spec.loader.exec_module(install)
+directory = Path(os.environ["RIGSIGNAL_TEST_DIR"])
+if os.environ["RIGSIGNAL_TEST_OP"] == "atomic":
+    install.atomic_write(directory, "state.json", b"new")
+else:
+    install.snapshot_bundle(directory / "bundle.tar", directory, parse=False)
+'''
+
+    def _boundary_child(self, directory, operation, crash_at):
+        env = os.environ | {"RIGSIGNAL_TEST_ROOT": str(ROOT), "RIGSIGNAL_TEST_DIR": str(directory),
+                            "RIGSIGNAL_TEST_OP": operation, "RIGSIGNAL_TEST_CRASH_AT": crash_at}
+        return subprocess.run([sys.executable, "-c", textwrap.dedent(self._BOUNDARY_CHILD)], env=env,
+                              text=True, capture_output=True, check=False)
+
     def test_t_hash_1_through_3_snapshot_binds_open_descriptor_bytes(self):
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw); source = root / "bundle.tgz"
@@ -194,6 +213,46 @@ class SnapshotTests(unittest.TestCase):
             root = Path(raw); temp = root / ".rigsignal-leftover"; temp.write_bytes(b"partial"); temp.chmod(0o600)
             self.assertIsNone(INSTALL.read_transaction_record_if_present(root / "assets-marker.json", None, None))
             self.assertTrue(temp.exists())
+
+    def test_f8_atomic_write_crashes_leave_only_complete_old_or_new_bytes(self):
+        """F8: each atomic-write crash point is SIGKILL, never torn bytes."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw); root.chmod(0o700)
+            target = root / "state.json"
+            target.write_bytes(b"old"); target.chmod(0o600)
+            before_replace = self._boundary_child(root, "atomic", "atomic-write-after-temp-fsync:state.json")
+            self.assertEqual(before_replace.returncode, -9, before_replace.stderr)
+            self.assertEqual(target.read_bytes(), b"old")
+            self.assertTrue(any(path.name.startswith(".rigsignal-") for path in root.iterdir()))
+            # A fresh writer recovers from the interrupted publication and
+            # overwrites only the selected protected leaf.
+            INSTALL.atomic_write(root, "state.json", b"new")
+            self.assertEqual(target.read_bytes(), b"new")
+
+            target.write_bytes(b"old")
+            after_replace = self._boundary_child(root, "atomic", "atomic-write-after-replace:state.json")
+            self.assertEqual(after_replace.returncode, -9, after_replace.stderr)
+            self.assertEqual(target.read_bytes(), b"new")
+
+    def test_f8_snapshot_crash_residue_is_owned_cleanup_or_foreign_refusal(self):
+        """F8: archive residue is recoverable only when it is private and owned."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw); root.chmod(0o700)
+            (root / "bundle.tar").write_bytes(b"archive-bytes")
+            crashed = self._boundary_child(root, "snapshot", "snapshot-after-copy-fsync")
+            self.assertEqual(crashed.returncode, -9, crashed.stderr)
+            residues = [path for path in root.iterdir() if path.name.startswith(".rigsignal-archive-")]
+            self.assertEqual(len(residues), 1)
+            self.assertEqual(residues[0].stat().st_mode & 0o777, 0o600)
+            INSTALL.cleanup_snapshot_residues(root)
+            self.assertFalse(residues[0].exists())
+            fresh = INSTALL.snapshot_bundle(root / "bundle.tar", root, parse=False)
+            self.assertEqual(fresh.path.read_bytes(), b"archive-bytes")
+            fresh.close()
+            foreign = root / ".rigsignal-foreign"
+            foreign.symlink_to("bundle.tar")
+            with self.assertRaises(INSTALL.InputError):
+                INSTALL.cleanup_snapshot_residues(root)
 
 
 class TransactionStateTests(RecordFixtures):
@@ -879,6 +938,168 @@ print(outcome)
                                     {"states": states}, flags)
         result.update(status=result["exit_code"], writes=result["operations"], error=None, outcome=None)
         return result
+
+    def test_f4_recovered_remap_persists_before_dependent_reference_create(self):
+        """F4: 404/resolve recovery is durable authority for a later reference."""
+        bundle = INSTALL.load_source()
+        specs = INSTALL._transaction_specs(bundle)
+        by_key = {key: (key, asset, saved) for key, asset, saved in specs}
+        source = dependent = None
+        for key, asset, saved in specs:
+            if saved is None:
+                continue
+            space = INSTALL.dashboard_target_space(asset)
+            for ref in saved.get("references", []):
+                ref_key = ("kibana/" + INSTALL._v2_quote(space) + "/" + INSTALL._v2_quote(ref["type"]) +
+                           "/" + INSTALL._v2_quote(ref["id"]))
+                if ref_key in by_key and ref_key.encode() < key.encode():
+                    source, dependent = ref_key, key
+                    break
+            if source is not None:
+                break
+        self.assertIsNotNone(source, "fixture needs an ordered saved-object dependency")
+        targets = INSTALL.transaction_targets(bundle)
+        binding = INSTALL.transaction_binding(bundle, "0123456789ABCDEFGHIJKL", "https://kb.example",
+                                              INSTALL.bundle_snapshot_digest(bundle))
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw); root.chmod(0o700)
+            record_path = root / INSTALL.ASSETS_MARKER_FILE
+            record = INSTALL.new_installing_record(binding, targets, "2026-08-04T12:34:56Z")
+            INSTALL.write_transaction_record(record_path, record, binding, targets)
+            fake = ScriptedTransactionTransport(INSTALL, bundle)
+            remapped = "recovered-remap"
+            fake._scripts[source] = TargetScript(
+                get=[HttpReply(404, {"error": "submitted missing"}),
+                     HttpReply(200, fake._desired_body(source))],
+                resolve=HttpReply(200, {"destinationId": remapped}), destination_id=remapped)
+            # Every later dependent must be recreated with the resolved
+            # identity.  Leaving a second dependent "exact" under the
+            # submitted ID would correctly fail the final full-set reread.
+            for key, asset, saved in specs:
+                if saved is None or key.encode() <= source.encode():
+                    continue
+                space = INSTALL.dashboard_target_space(asset)
+                if any(("kibana/" + INSTALL._v2_quote(space) + "/" +
+                        INSTALL._v2_quote(ref["type"]) + "/" + INSTALL._v2_quote(ref["id"])) == source
+                       for ref in saved.get("references", [])):
+                    fake._scripts[key] = TargetScript(live_state="absent")
+            with mock.patch.object(INSTALL.urllib.request, "urlopen", side_effect=fake.urlopen), \
+                 mock.patch.object(INSTALL, "_transaction_now", return_value="2026-08-04T12:34:56Z"):
+                self.assertEqual(INSTALL.run_default_asset_transaction(
+                    bundle, "https://es", "https://kb", "auth", record_path, binding,
+                    defer_step_11=True, lock=mock.Mock()), "deferred")
+            final = INSTALL.read_transaction_record_if_present(record_path, binding, targets)
+            mapped_key = source.rsplit("/", 1)[0] + "/" + INSTALL._v2_quote(remapped)
+            self.assertIn({"submitted_key": source, "destination_key": mapped_key}, final["destination_map"])
+            self.assertNotIn(source, fake.mutations, "resolve-exact must not create the submitted id")
+            request = next(call for call in fake.calls if call.path.endswith("/" + dependent.rsplit("/", 1)[1])
+                           and call.method == "POST")
+            references = json.loads(request.data)["references"]
+            source_type = INSTALL._v2_kibana_key_parts(source)[1]
+            self.assertTrue(any(item["type"] == source_type and item["id"] == remapped for item in references))
+
+    def test_f5_create_conflicts_reread_exact_or_halt_per_class(self):
+        """F5: only documented create conflicts receive one immediate reread."""
+        bundle = INSTALL.load_source()
+        choices = {
+            "template": next(spec for spec in INSTALL._transaction_specs(bundle)
+                             if spec[1] is not None and spec[1].kind == "component_templates"),
+            "transform": next(spec for spec in INSTALL._transaction_specs(bundle)
+                              if spec[1] is not None and spec[1].kind == "transforms"),
+            "space": next(spec for spec in INSTALL._transaction_specs(bundle)
+                          if spec[1] is not None and spec[1].kind == "kibana_spaces"),
+            "kibana-role": next(spec for spec in INSTALL._transaction_specs(bundle)
+                                if spec[1] is not None and spec[1].kind == "kibana_roles"),
+        }
+        targets = INSTALL.transaction_targets(bundle)
+        binding = INSTALL.transaction_binding(bundle, "0123456789ABCDEFGHIJKL", "https://kb.example",
+                                              INSTALL.bundle_snapshot_digest(bundle))
+        for label, spec in choices.items():
+            for exact_after_race in (True, False):
+                with self.subTest(kind=label, exact=exact_after_race), tempfile.TemporaryDirectory() as raw:
+                    root = Path(raw); root.chmod(0o700)
+                    path = root / INSTALL.ASSETS_MARKER_FILE
+                    record = INSTALL.new_installing_record(binding, targets, "2026-08-04T12:34:56Z")
+                    INSTALL.write_transaction_record(path, record, binding, targets)
+                    fake = ScriptedTransactionTransport(INSTALL, bundle)
+                    key = spec[0]
+                    desired = fake._desired_body(key)
+                    rerun_body = desired if exact_after_race else {"_raced": "divergent"}
+                    kwargs = {"get": [HttpReply(404, {"error": "absent"}), HttpReply(200, rerun_body)]}
+                    if label == "template":
+                        kwargs["conditional"] = {"create": HttpReply(400, {"error": "exists"})}
+                    elif label == "transform":
+                        kwargs["put"] = HttpReply(409, {"error": "exists"})
+                    elif label == "space":
+                        kwargs["put"] = HttpReply(409, {"error": "exists"})
+                    else:
+                        kwargs["conditional"] = {"createOnly": HttpReply(409, {"error": "exists"})}
+                    fake._scripts[key] = TargetScript(**kwargs)
+                    with mock.patch.object(INSTALL.urllib.request, "urlopen", side_effect=fake.urlopen), \
+                         mock.patch.object(INSTALL, "_transaction_now", return_value="2026-08-04T12:34:56Z"):
+                        if exact_after_race:
+                            self.assertEqual(INSTALL.run_default_asset_transaction(
+                                bundle, "https://es", "https://kb", "auth", path, binding, lock=mock.Mock()), "applied")
+                        else:
+                            with self.assertRaises(INSTALL.AssetTransactionHalt):
+                                INSTALL.run_default_asset_transaction(bundle, "https://es", "https://kb", "auth", path, binding,
+                                                                      lock=mock.Mock())
+                    final = INSTALL.read_transaction_record_if_present(path, binding, targets)
+                    self.assertEqual(final["state"], "installed" if exact_after_race else "installing")
+                    if exact_after_race:
+                        self.assertNotIn("possible_mutation", final)
+                    else:
+                        self.assertTrue(final["possible_mutation"])
+                    self.assertEqual(fake.mutations, [], "a rejected raced create is not a remote write")
+
+    def test_f6_upgrade_and_downgrade_accept_valid_predecessors_with_changed_inventory_and_remap(self):
+        """F6: transition authority is the predecessor's own target binding.
+
+        The fixtures intentionally remove one old target and use a different
+        saved-object destination map.  This catches the tempting but invalid
+        comparison of a predecessor against the current inventory/remap.
+        """
+        bundle = INSTALL.load_source()
+        targets = INSTALL.transaction_targets(bundle)
+        saved = next(item["key"] for item in targets if item["key"].startswith("kibana/"))
+        old_saved = saved
+        for flag, old_version in (("upgrade", "0.3.1"), ("allow_downgrade", "0.3.3")):
+            with self.subTest(direction=flag), tempfile.TemporaryDirectory() as raw:
+                root = Path(raw); root.chmod(0o700)
+                path = root / INSTALL.ASSETS_MARKER_FILE
+                current = INSTALL.transaction_binding(bundle, "0123456789ABCDEFGHIJKL", "https://kb.example",
+                                                      INSTALL.bundle_snapshot_digest(bundle))
+                prior_binding = {**current, "bundle_version": old_version, "source_commit": "b" * 40,
+                                 "bundle_sha256": "c" * 64}
+                predecessor = INSTALL.new_installing_record(prior_binding, targets, "2026-08-04T12:34:56Z")
+                predecessor["destination_map"] = [{"submitted_key": old_saved,
+                    "destination_key": old_saved.rsplit("/", 1)[0] + "/old-remap"}]
+                for key in predecessor["progress"]:
+                    predecessor["progress"][key] = "verified"
+                predecessor = INSTALL.promote_transaction_record(predecessor, "2026-08-04T12:35:00Z")
+                # A prior release has the same fixed cardinality but a
+                # different physical inventory.  It is deliberately not
+                # compared to the current target list by predecessor parsing.
+                predecessor["targets"][-1] = {"key": "es/component-template/old-only", "digest": "d" * 64}
+                predecessor["targets"].sort(key=lambda item: item["key"].encode())
+                predecessor["asset_set_sha256"] = INSTALL._target_digest(predecessor["targets"])
+                predecessor["verified_target_set_sha256"] = INSTALL._target_digest(predecessor["targets"])
+                active = INSTALL.new_installing_record(current, targets, "2026-08-04T12:36:00Z")
+                active["predecessor"] = predecessor
+                active["destination_map"] = [{"submitted_key": saved,
+                    "destination_key": saved.rsplit("/", 1)[0] + "/new-remap"}]
+                INSTALL.write_transaction_record(path, active, current, targets)
+                fake = ScriptedTransactionTransport(INSTALL, bundle)
+                fake._scripts[saved] = TargetScript(live_state="exact", destination_id="new-remap")
+                with mock.patch.object(INSTALL.urllib.request, "urlopen", side_effect=fake.urlopen), \
+                     mock.patch.object(INSTALL, "_transaction_now", return_value="2026-08-04T12:36:00Z"):
+                    self.assertEqual(INSTALL.run_default_asset_transaction(
+                        bundle, "https://es", "https://kb", "auth", path, current,
+                        lock=mock.Mock(), **{flag: True}), "applied")
+                final = INSTALL.read_transaction_record_if_present(path, current, targets)
+                self.assertEqual(final["state"], "installed")
+                self.assertEqual(final["destination_map"], active["destination_map"])
+                self.assertEqual(fake.mutations, [])
 
     def test_ambiguity_6_exit_mapping_is_exhaustive_and_main_routed(self):
         """A6: one mapping owns every executor result; main() invokes it."""

@@ -667,6 +667,74 @@ class AssetsOnlyInstallTests(unittest.TestCase):
             prepare_root.assert_called_once_with(root)
             self.assertEqual(transport.mutations, [])
 
+    def test_full_main_bundle_meta_barrier_permutations_have_no_asset_enrollment_or_step11_writes(self):
+        """F2: the real full ``main()`` route observes M before every write leg."""
+        for position in (0, 33, 66):
+            with self.subTest(position=position), tempfile.TemporaryDirectory() as raw:
+                root = Path(raw) / "enrollment"
+                marker = Path(raw) / INSTALL.ASSETS_MARKER_FILE
+                Path(raw).chmod(0o700)
+                args = self.main_args(marker)
+                args.assets_only = False
+                args.enrollment_root = root
+                ordinary_writes = mock.Mock(side_effect=AssertionError("ordinary asset write escaped barrier"))
+                enrollment_write = mock.Mock(side_effect=AssertionError("enrollment write escaped barrier"))
+                step_11_write = mock.Mock(side_effect=AssertionError("Step 11 write escaped barrier"))
+                original_specs = INSTALL._transaction_specs
+
+                def ordered_specs(bundle, include_meta=False):
+                    specs = original_specs(bundle, include_meta)
+                    if include_meta:
+                        meta = next(spec for spec in specs if spec[0] == INSTALL.BUNDLE_META_TARGET_KEY)
+                        specs.remove(meta); specs.insert(position, meta)
+                    return specs
+
+                def observe(_es, _kb, _auth, spec, _bundle, _adapter, _record=None, **_kwargs):
+                    if spec[0] == INSTALL.BUNDLE_META_TARGET_KEY:
+                        return "divergent", None, None
+                    return "exact", None, None
+
+                patches = (
+                    mock.patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args),
+                    mock.patch.object(INSTALL, "load_bundle", return_value=self.bundle),
+                    mock.patch.object(INSTALL, "role_body", return_value={}),
+                    mock.patch.object(INSTALL, "ownership_for_assets", return_value={}),
+                    mock.patch.object(INSTALL, "enrollment_condition", return_value="clean"),
+                    mock.patch.object(INSTALL, "check_version_fence"),
+                    mock.patch.object(INSTALL, "check_install_root_ancestors"),
+                    mock.patch.object(INSTALL, "check_outbox_root"),
+                    mock.patch.object(INSTALL, "check_install_preflight", return_value=(Path("/ca"), Path("/agent"))),
+                    mock.patch.object(INSTALL, "configure_https"),
+                    mock.patch.object(INSTALL, "admin_authorization", return_value="admin"),
+                    mock.patch.object(INSTALL, "admin_credential_kind", return_value="native_user"),
+                    mock.patch.object(INSTALL, "dispatch_clean_root", return_value=False),
+                    mock.patch.object(INSTALL, "fence_remote_ownership_profile"),
+                    mock.patch.object(INSTALL, "run_topology_preflight"),
+                    mock.patch.object(INSTALL, "prepare_install_root", return_value=root),
+                    mock.patch.object(INSTALL, "load_state", return_value=None),
+                    mock.patch.object(INSTALL, "bind_ownership_profile"),
+                    mock.patch.object(INSTALL, "cluster_uuid", return_value="0123456789ABCDEFGHIJKL"),
+                    mock.patch.object(INSTALL, "remove_stale_publication_stage"),
+                    mock.patch.object(INSTALL, "prerequisites"),
+                    mock.patch.object(INSTALL, "cluster_health_gate"),
+                    mock.patch.object(INSTALL, "fence"),
+                    mock.patch.object(INSTALL, "remote_stream_condition", return_value=("absent", None)),
+                    mock.patch.object(INSTALL.AssetTransactionLock, "acquire", return_value=mock.Mock()),
+                    mock.patch.object(INSTALL, "_transaction_specs", side_effect=ordered_specs),
+                    mock.patch.object(INSTALL, "_transaction_observe", side_effect=observe),
+                    mock.patch.object(INSTALL, "_transaction_put", ordinary_writes),
+                    mock.patch.object(INSTALL, "atomic_publication", enrollment_write),
+                    mock.patch.object(INSTALL, "mutation_request", step_11_write),
+                )
+                with ExitStack() as stack, redirect_stderr(io.StringIO()):
+                    for patcher in patches:
+                        stack.enter_context(patcher)
+                    self.assertEqual(INSTALL.main(), 3)
+                ordinary_writes.assert_not_called()
+                enrollment_write.assert_not_called()
+                step_11_write.assert_not_called()
+                self.assertFalse(marker.exists())
+
     def test_full_default_flow_marker_preflight_refuses_before_remote_or_root_mutation(self):
         with tempfile.TemporaryDirectory() as raw:
             state_home = Path(raw) / "state"
