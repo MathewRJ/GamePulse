@@ -39,6 +39,19 @@ class RecordFixtures(unittest.TestCase):
         value.update(changes)
         return value
 
+    def test_t_rec_source_commit_must_be_valid_before_record_publication(self):
+        """A failed source probe cannot create a record invalid as a predecessor."""
+        with tempfile.TemporaryDirectory() as raw:
+            missing_git_dir = Path(raw) / "not-a-git-directory"
+            with mock.patch.dict(os.environ, {"GIT_DIR": str(missing_git_dir)}, clear=False):
+                unpinned_bundle = INSTALL.load_source()
+        self.assertEqual(unpinned_bundle.source_commit, "unknown")
+        unpinned_targets = INSTALL.transaction_targets(unpinned_bundle)
+        unpinned_binding = INSTALL.transaction_binding(
+            unpinned_bundle, "0123456789ABCDEFGHIJKL", "https://KIBANA.EXAMPLE:443", "a" * 64)
+        with self.assertRaises(INSTALL.InputError):
+            INSTALL.new_installing_record(unpinned_binding, unpinned_targets, "2026-08-04T12:34:56Z")
+
     def test_t_rec_1_rejects_noncanonical_shape(self):
         cases = []
         value = self.installing(); value["extra"] = 1; cases.append(value)

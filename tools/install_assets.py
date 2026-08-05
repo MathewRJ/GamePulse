@@ -1649,7 +1649,15 @@ def _v2_common_is_valid(value: object, binding: dict, targets: list[dict[str, st
         return False
     expected = {**binding, "targets": targets}
     return (all(value.get(key) == item for key, item in expected.items())
-            and value.get("schema_version") == 2)
+            and value.get("schema_version") == 2
+            # A current record can later become a predecessor during a
+            # full-flow extension.  Keep its source binding at least as
+            # strict as the predecessor grammar now, rather than publishing
+            # a top-level record (for example source_commit="unknown" after
+            # a failed git probe) which its own later nested validation
+            # rejects.
+            and isinstance(value.get("source_commit"), str)
+            and _V2_COMMIT_RE.fullmatch(value["source_commit"]) is not None)
 
 
 def _v2_targets_valid(targets: object, expected: list[dict[str, str]]) -> bool:
