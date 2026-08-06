@@ -101,7 +101,9 @@ class SpoolRetentionTests(unittest.TestCase):
         self.assertTrue(final.exists())
 
     def test_behind_cursor_final_survives(self):
-        final = self.final("behind.ndjson")
+        # This glob-matching sentinel meets every deletion condition except a
+        # complete harvested cursor; removing that guard deletes it.
+        final = self.final("rigsignal-behind-cursor-sentinel.ndjson")
         self.write_registry([self.cursor_entry(final, final.stat().st_size - 1)])
 
         self.run_helper()
@@ -109,7 +111,9 @@ class SpoolRetentionTests(unittest.TestCase):
         self.assertTrue(final.exists())
 
     def test_missing_registry_is_a_successful_skip(self):
-        final = self.final("missing-registry.ndjson")
+        # This old, glob-matching deletion sentinel must survive a missing
+        # registry; a fail-open implementation would remove it.
+        final = self.final("rigsignal-missing-registry-sentinel.ndjson")
 
         output = self.run_helper()
 
@@ -117,7 +121,9 @@ class SpoolRetentionTests(unittest.TestCase):
         self.assertEqual(output, "skip: no filestream registry\n")
 
     def test_malformed_registry_causes_zero_deletions(self):
-        final = self.final("malformed.ndjson")
+        # This old, glob-matching deletion sentinel must survive malformed
+        # registry input; a fail-open implementation would remove it.
+        final = self.final("rigsignal-malformed-registry-sentinel.ndjson")
         self.registry.write_text("not json\n")
 
         output = self.run_helper()
@@ -136,7 +142,9 @@ class SpoolRetentionTests(unittest.TestCase):
         self.assertFalse(final.exists())
 
     def test_unreadable_registry_causes_zero_deletions(self):
-        final = self.final("unreadable.ndjson")
+        # This glob-matching sentinel has a complete cursor and would be
+        # deleted if unreadable registry input were not fail-closed.
+        final = self.final("rigsignal-unreadable-registry-sentinel.ndjson")
         self.write_registry([self.cursor_entry(final)])
 
         with patch.object(RETENTION, "registry_sources", side_effect=PermissionError("denied")):
@@ -146,7 +154,9 @@ class SpoolRetentionTests(unittest.TestCase):
         self.assertIn("skip: retention inputs unavailable: denied", output)
 
     def test_unhealthy_agent_causes_zero_deletions(self):
-        final = self.final("unhealthy.ndjson")
+        # This glob-matching sentinel has a complete cursor and would be
+        # deleted if the HEALTHY agent requirement were bypassed.
+        final = self.final("rigsignal-unhealthy-agent-sentinel.ndjson")
         self.write_registry([self.cursor_entry(final)])
         self.agent.write_text("#!/bin/sh\nprintf 'status: (FAILED)\\n'\nexit 1\n")
 
@@ -156,7 +166,9 @@ class SpoolRetentionTests(unittest.TestCase):
         self.assertEqual(output, "skip: elastic-agent is not healthy\n")
 
     def test_failed_agent_status_causes_zero_deletions(self):
-        final = self.final("failed-agent.ndjson")
+        # This glob-matching sentinel has a complete cursor and would be
+        # deleted if an agent-status execution failure were ignored.
+        final = self.final("rigsignal-failed-agent-sentinel.ndjson")
         self.write_registry([self.cursor_entry(final)])
 
         with patch.object(RETENTION, "discover_agent", return_value=self.root / "missing-elastic-agent"):
@@ -166,7 +178,9 @@ class SpoolRetentionTests(unittest.TestCase):
         self.assertIn("skip: elastic-agent status failed:", output)
 
     def test_final_at_or_under_48h_survives(self):
-        final = self.final("young.ndjson", 48 * 3600 - 1)
+        # This glob-matching sentinel has a complete cursor and would be
+        # deleted if the strict age-over-48-hours guard were removed.
+        final = self.final("rigsignal-age-boundary-sentinel.ndjson", 48 * 3600 - 1)
         self.write_registry([self.cursor_entry(final)])
 
         self.run_helper()

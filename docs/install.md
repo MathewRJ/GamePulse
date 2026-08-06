@@ -79,7 +79,7 @@ rerun. Successful same-bundle reruns are marker-driven; however, 0.3.2 does not
 make every interrupted remote apply CLI-recoverable. If an exit 4 occurs after
 a RigSignal Kibana object is created, remove the affected dashboards/saved
 objects, `rigsignal` space, or RigSignal role in Kibana → Stack Management,
-then rerun. Full partial-apply recovery is planned for 0.3.3. Use `--repair`,
+then rerun. Full partial-apply recovery is merged on main for 0.3.3. Use `--repair`,
 `--upgrade`, or `--allow-downgrade` only for their corresponding explicit
 transitions.
 
