@@ -89,10 +89,12 @@ finals.  **0.3.3 remains pending its release gate** (documentation, residual
 register, cross-version gate or waiver, fingerprint-pin merge, and owner-gated
 publish window).
 
-**Retention caveat (R1).** Until R1 merges, finals are retained indefinitely
-except where the helper finds the elastic-agent.  The current helper's agent
-path and registry discovery are not portable enough to promise pruning on every
-host.
+**Retention caveat (R1).** Finals are retained indefinitely except where the
+helper finds the elastic-agent.  R1 is merged (`4ff058c`): agent discovery is
+`RIGSIGNAL_ELASTIC_AGENT` → `PATH` → `/opt/Elastic/Agent` →
+`~/elastic/elastic-agent-*/`, with the registry glob overridable via
+`RIGSIGNAL_FILESTREAM_REGISTRY_GLOB`.  Where no agent is discovered the helper
+skips fail-closed; pruning is a per-host outcome, not a portable guarantee.
 
 **0.2.4 released 2026-07-18.** It delivers the legacy `gpu_sched` port, fleet TSDS fix, client stream telemetry, and PipeWire re-source.
 

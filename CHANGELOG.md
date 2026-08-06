@@ -72,9 +72,12 @@ The eight-entry residual register is retained here for release sign-off:
 
 #### Retention caveat
 
-Until R1 merges, finals are retained indefinitely except where the helper finds
-the elastic-agent.  Do not treat the current helper as a portable pruning
-guarantee.
+Finals are retained indefinitely except where the helper finds the
+elastic-agent.  Since R1 (`4ff058c`), discovery is `RIGSIGNAL_ELASTIC_AGENT` →
+`PATH` → `/opt/Elastic/Agent` → `~/elastic/elastic-agent-*/`, and the registry
+glob is overridable via `RIGSIGNAL_FILESTREAM_REGISTRY_GLOB`; on hosts where no
+agent is discovered the helper skips fail-closed and the spool grows unbounded
+until the operator sets the override or installs the agent.
 
 ## [0.3.2] — 2026-08-04
 
