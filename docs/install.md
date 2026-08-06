@@ -75,13 +75,15 @@ missing value into an actionable failure. A CA pin is valid only with an
 explicit CA file. A resolved Kibana endpoint is atomically persisted and any
 installed eBPF system configuration is synchronized; the administrator password
 is not persisted. A pre-mutation local refusal (exit 2) is safe to correct and
-rerun. Successful same-bundle reruns are marker-driven; however, 0.3.2 does not
-make every interrupted remote apply CLI-recoverable. If an exit 4 occurs after
-a RigSignal Kibana object is created, remove the affected dashboards/saved
-objects, `rigsignal` space, or RigSignal role in Kibana → Stack Management,
-then rerun. Full partial-apply recovery is merged on main for 0.3.3. Use `--repair`,
-`--upgrade`, or `--allow-downgrade` only for their corresponding explicit
-transitions.
+rerun. Successful same-bundle reruns are marker-driven. 0.3.3 adds
+partial-apply recovery: after an exit 4 (remote state may be partial),
+follow `docs/RECOVERY.md` — preserve the installer output and transaction
+record, inspect the named remote object and coordinate with its owner,
+restore manually where required, then rerun the same command. `--repair`
+reconciles only a proven RigSignal-owned Elasticsearch object; it cannot
+rewrite a present divergent Kibana saved object, space, or role — delete it
+in Kibana, then rerun. Use `--repair`, `--upgrade`, or `--allow-downgrade`
+only for their corresponding explicit transitions.
 
 `rigsignal-git` intentionally has no guessed GitHub release mapping. Use an
 offline bundle and its exact adjacent sidecar instead:
@@ -101,7 +103,7 @@ Download the tarball and its adjacent checksum file from the same release, then
 verify before unpacking:
 
 ```bash
-VERSION=0.3.2
+VERSION=0.3.3
 ARCH=x86_64
 BASE="https://github.com/MathewRJ/RigSignal/releases/download/v${VERSION}"
 curl -fLO "$BASE/rigsignal-${VERSION}-linux-${ARCH}.tar.gz"
@@ -282,7 +284,7 @@ with a distro package, also run the one-line installer (above), or use AUR
 Pre-built package from the release (agent only):
 
 ```bash
-sudo pacman -U rigsignal-0.3.2-1-x86_64.pkg.tar.zst
+sudo pacman -U rigsignal-0.3.3-1-x86_64.pkg.tar.zst
 ```
 
 Or AUR, which builds from source and includes eBPF:
@@ -317,7 +319,7 @@ config—run `rigsignal setup` for that.
 Download the latest `.deb` from the [GitHub releases page](https://github.com/MathewRJ/RigSignal/releases):
 
 ```bash
-sudo dpkg -i rigsignal_0.3.2-1_amd64.deb
+sudo dpkg -i rigsignal_0.3.3-1_amd64.deb
 ```
 
 The package installs `rigsignal-agent` and `rigsignal` (launcher) to `/usr/bin/`, the systemd user unit, and an example config to `/usr/share/rigsignal/examples/rigsignal.toml.example`. Run `rigsignal setup` to create the credential-bearing config in `${XDG_CONFIG_HOME:-~/.config}/rigsignal/rigsignal.toml`.
@@ -327,7 +329,7 @@ The package installs `rigsignal-agent` and `rigsignal` (launcher) to `/usr/bin/`
 Download the latest `.rpm` from the [GitHub releases page](https://github.com/MathewRJ/RigSignal/releases):
 
 ```bash
-sudo rpm -i rigsignal-0.3.2-1.x86_64.rpm
+sudo rpm -i rigsignal-0.3.3-1.x86_64.rpm
 ```
 
 ### Building from source
@@ -360,12 +362,12 @@ sudo install -m 644 target/bpfel-unknown-none/release/rigsignal-ebpf-probes \
 
 Windows is agent-only: assets are installed from a Linux administrator host.
 
-Download `rigsignal-0.3.2-x86_64.msi` from the
+Download `rigsignal-0.3.3-x86_64.msi` from the
 [GitHub Releases page](https://github.com/MathewRJ/RigSignal/releases) and run it,
 or install silently from an admin PowerShell:
 
 ```powershell
-msiexec /i rigsignal-0.3.2-x86_64.msi /qb!
+msiexec /i rigsignal-0.3.3-x86_64.msi /qb!
 ```
 
 This installs `rigsignal-agent.exe` to `C:\Program Files\RigSignal\bin\` (added
@@ -381,7 +383,7 @@ terminal (foreground), or wrap it in a Steam launch option. eBPF is not
 available on Windows; all other metric streams are supported, with some gaps
 documented in [`RELEASE_NOTES.md`](../.github/RELEASE_NOTES.md#windows-caveats).
 
-To uninstall: `msiexec /x rigsignal-0.3.2-x86_64.msi /qb!` or *Settings → Apps
+To uninstall: `msiexec /x rigsignal-0.3.3-x86_64.msi /qb!` or *Settings → Apps
 → Installed apps → RigSignal → Uninstall*.
 
 ---

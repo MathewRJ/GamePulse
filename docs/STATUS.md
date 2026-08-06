@@ -1,6 +1,6 @@
 # RigSignal — Project Status
 
-Last updated: 2026-08-06 (0.3.3 release gate)
+Last updated: 2026-08-06 (0.3.3 release)
 Active streams: main (local ElasticHome deployment) + offline (air-gapped, not yet forked)
 
 ## Decision record — supported stack range (TK-4, 2026-07-22)
@@ -41,7 +41,7 @@ turnkey bar (bundled local stack pins inside this range).
 | 0.2.4 release | 🟢 Released 2026-07-18 | ▓▓▓▓▓▓▓▓▓▓ |
 | 0.2.5 release | 🟢 Released + deployed 2026-07-19 (both hosts) | ▓▓▓▓▓▓▓▓▓▓ |
 | 0.3.2 release — packaging and asset-install hardening | 🟢 Published 2026-08-04 | ▓▓▓▓▓▓▓▓▓▓ |
-| 0.3.3 release — idempotency and DL2 recovery carries | 🟡 Release gate pending | ▓▓▓▓▓▓▓▓▓░ |
+| 0.3.3 release — idempotency and DL2 recovery carries | 🟢 Published 2026-08-06 | ▓▓▓▓▓▓▓▓▓▓ |
 
 ## At a glance — offline branch (not yet forked)
 
@@ -82,11 +82,9 @@ turnkey bar (bundled local stack pins inside this range).
 
 ## Active work package
 
-**0.3.2 is published** (tag `v0.3.2`, 2026-08-04).  Main also carries the
-merged assets-install idempotency engine and DL2 fixes: final spool files are
-padded to the filestream fingerprint floor and the shipper no longer deletes
-finals.  **0.3.3 remains pending its final release gate:** P2 deploy
-attestation, owner GO, and the version-bump-last release window.
+**0.3.3 is published** (tag `v0.3.3`, 2026-08-06). It includes the
+assets-install idempotency engine and DL2 fixes: final spool files are padded
+to the filestream fingerprint floor and the shipper no longer deletes finals.
 
 **Retention caveat (R1).** A final is pruned only when the discovered
 elastic-agent is HEALTHY, its registry is readable, the matching

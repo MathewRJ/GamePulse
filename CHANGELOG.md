@@ -4,13 +4,7 @@ All notable changes to RigSignal will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
-
-### 0.3.3 draft — release gate pending
-
-This is draft release content only: 0.3.3 is not published. The remaining
-release gate is P2 deploy attestation, owner GO, and the version-bump-last
-release window.
+## [0.3.3] — 2026-08-06
 
 #### Added
 
