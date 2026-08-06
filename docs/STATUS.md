@@ -1,6 +1,6 @@
 # RigSignal — Project Status
 
-Last updated: 2026-07-22 (turnkey-readiness slice: TK-1..TK-4 complete — supported ES/Kibana range published)
+Last updated: 2026-08-06 (0.3.3 release gate)
 Active streams: main (local ElasticHome deployment) + offline (air-gapped, not yet forked)
 
 ## Decision record — supported stack range (TK-4, 2026-07-22)
@@ -40,7 +40,8 @@ turnkey bar (bundled local stack pins inside this range).
 | G  elastic/integrations PR (M4) | 🟡 Deferred (maintainer architecture rework + `fields.yml` gating) | ▓░░░░░░░░░ |
 | 0.2.4 release | 🟢 Released 2026-07-18 | ▓▓▓▓▓▓▓▓▓▓ |
 | 0.2.5 release | 🟢 Released + deployed 2026-07-19 (both hosts) | ▓▓▓▓▓▓▓▓▓▓ |
-| 0.3.2 release — packaging and asset-install hardening | 🟡 Release preparation 2026-08-01 | ▓▓▓▓▓▓▓▓▓▓ |
+| 0.3.2 release — packaging and asset-install hardening | 🟢 Published 2026-08-04 | ▓▓▓▓▓▓▓▓▓▓ |
+| 0.3.3 release — idempotency and DL2 recovery carries | 🟡 Release gate pending | ▓▓▓▓▓▓▓▓▓░ |
 
 ## At a glance — offline branch (not yet forked)
 
@@ -80,6 +81,18 @@ turnkey bar (bundled local stack pins inside this range).
 [^windows-session-parity]: Expected absent on Windows: `rigsignal.compatibility.proton_version` and `rigsignal.compatibility.dxvk_version` are Wine concepts; `rigsignal.hardware.*` remains pending Windows support in `host.rs`. Launcher detection (Steam/Epic/GOG), manual attach, and PresentMon bundling landed 2026-06-10.
 
 ## Active work package
+
+**0.3.2 is published** (tag `v0.3.2`, 2026-08-04).  Main also carries the
+merged assets-install idempotency engine and DL2 fixes: final spool files are
+padded to the filestream fingerprint floor and the shipper no longer deletes
+finals.  **0.3.3 remains pending its release gate** (documentation, residual
+register, cross-version gate or waiver, fingerprint-pin merge, and owner-gated
+publish window).
+
+**Retention caveat (R1).** Until R1 merges, finals are retained indefinitely
+except where the helper finds the elastic-agent.  The current helper's agent
+path and registry discovery are not portable enough to promise pruning on every
+host.
 
 **0.2.4 released 2026-07-18.** It delivers the legacy `gpu_sched` port, fleet TSDS fix, client stream telemetry, and PipeWire re-source.
 

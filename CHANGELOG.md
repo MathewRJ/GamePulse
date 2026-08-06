@@ -6,6 +6,70 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### 0.3.3 draft — release gate pending
+
+This is draft release content only: 0.3.3 is not published.  The release gate
+still requires its cross-version result or an explicit waiver, the fingerprint
+pin merge, and the owner-gated publish window.
+
+#### Added
+
+- Assets installation now keeps a protected transaction record and re-observes
+  uncertain work.  A durable `possible_mutation` record can produce exit 4 in a
+  later zero-write invocation; detected pipeline/role overwrites halt with
+  evidence and no automatic restoration.  See
+  [asset installation recovery](docs/RECOVERY.md).
+- DL2 final publication pads undersized NDJSON finals to the 1024-byte
+  filestream fingerprint floor, and the shipper no longer deletes finals.
+
+#### Residual risks accepted for this release
+
+The eight-entry residual register is retained here for release sign-off:
+
+1. A same-UID or root actor can create a schema-valid transaction record; the
+   record does not thereby authorize divergent targets, but provenance is not
+   detected.
+2. **Owner-ratified:** friendly invocations using different canonical
+   `XDG_STATE_HOME` domains are not serialized by the narrowed lock.
+3. **Owner-ratified:** after an absent GET, pipeline/role APIs retain an
+   approximately-millisecond foreign-create/PUT overwrite window.  The control
+   is detect-and-halt with durable evidence, exit 4, no further writes, and no
+   auto-restore—not a conditional-write claim.
+4. **Owner-ratified:** the pipeline timestamp detector is ambiguous when the
+   foreign create and installer PUT occur in the same millisecond.
+5. **Owner-ratified:** a foreign write followed by restoration of the identical
+   canonical descriptor before the verifier GET is unobservable.
+6. **Owner-ratified:** a remote replacement between ownership GET and qualified
+   Elasticsearch reconciliation update can still be overwritten; pipeline
+   updates use `if_version` when present and are post-update reverified.
+7. With no local record, a remote Elasticsearch ownership stamp can enable
+   no-flag reconciliation; deleting or selecting a different state domain is
+   not an authority-preserving no-op.
+8. **Owner-ratified support scope:** the mechanisms are evidenced only on
+   Elasticsearch/Kibana 9.4.3 and 9.4.4.  Other versions must fail the
+   capability/version gate or be separately probed.
+
+#### DL2 roadmap and contract pair
+
+- In 9.5+, the growing-fingerprint roadmap (`beats#50566`) removes the
+  `<1kB` filestream stranding condition.  It is a roadmap residual, not a
+  substitute for the current producer-side floor.
+- Padding and the integration fingerprint pin are a **contract pair**.  Pin
+  `df8371d` makes the 1024-byte floor explicit; a future producer that stops
+  padding while the pin remains in place would silently strand small finals
+  again.
+- **F-D, document-only residual:** canonical origin encoding currently uses
+  Python's legacy IDNA-2003 codec rather than UTS-46.  For example, `faß.de`
+  canonicalizes to `fass.de` instead of `xn--fa-hia.de`; distinct origins can
+  therefore merge in transaction record bindings.  This is not changed by the
+  0.3.3 release work.
+
+#### Retention caveat
+
+Until R1 merges, finals are retained indefinitely except where the helper finds
+the elastic-agent.  Do not treat the current helper as a portable pruning
+guarantee.
+
 ## [0.3.2] — 2026-08-04
 
 ### Fixed
