@@ -11,6 +11,8 @@ use fs2::FileExt;
 use reqwest::Client;
 use serde_json::Value;
 use std::collections::HashMap;
+#[cfg(test)]
+use std::collections::HashSet;
 use std::fs::{File, OpenOptions, ReadDir};
 use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
@@ -53,6 +55,8 @@ pub struct SpoolWriter {
     retention_scan: Option<ReadDir>,
     #[cfg(test)]
     retention_entries_scanned: usize,
+    #[cfg(test)]
+    retention_distinct_entries_scanned: HashSet<PathBuf>,
 }
 
 struct DatasetSpool {
@@ -104,6 +108,8 @@ impl SpoolWriter {
             retention_scan: None,
             #[cfg(test)]
             retention_entries_scanned: 0,
+            #[cfg(test)]
+            retention_distinct_entries_scanned: HashSet::new(),
         })
     }
 
@@ -374,14 +380,16 @@ impl SpoolWriter {
             #[cfg(test)]
             {
                 self.retention_entries_scanned += 1;
+                self.retention_distinct_entries_scanned.insert(entry.path());
             }
             let path = entry.path();
             if deletions < prune_batch
                 && is_retained_quarantine_file(&path)
                 && entry.metadata()?.modified().unwrap_or(SystemTime::now()) < cutoff
             {
-                remove_file_if_exists(&path)
-                    .with_context(|| format!("pruning retained quarantine file: {}", path.display()))?;
+                remove_file_if_exists(&path).with_context(|| {
+                    format!("pruning retained quarantine file: {}", path.display())
+                })?;
                 deletions += 1;
             }
         }
@@ -394,6 +402,11 @@ impl SpoolWriter {
     #[cfg(test)]
     fn retention_entries_scanned(&self) -> usize {
         self.retention_entries_scanned
+    }
+
+    #[cfg(test)]
+    fn retention_distinct_entries_scanned(&self) -> usize {
+        self.retention_distinct_entries_scanned.len()
     }
 }
 
@@ -1615,11 +1628,32 @@ mod tests {
         }
 
         let scanned_before = writer.retention_entries_scanned();
-        writer.prune_retained_quarantines_with_limits(2, 1)?;
-        assert!(writer.retention_entries_scanned() - scanned_before <= 2);
-
-        writer.prune_retained_quarantines_with_limits(100, 1)?;
-        assert!(quarantines.iter().filter(|path| path.exists()).count() >= 2);
+        let distinct_before = writer.retention_distinct_entries_scanned();
+        for call in 1..=3 {
+            let scanned_at_start = writer.retention_entries_scanned();
+            let distinct_at_start = writer.retention_distinct_entries_scanned();
+            writer.prune_retained_quarantines_with_limits(1, 0)?;
+            assert_eq!(
+                writer.retention_entries_scanned() - scanned_at_start,
+                1,
+                "call {call} must inspect at most its one-entry scan budget"
+            );
+            assert_eq!(
+                writer.retention_distinct_entries_scanned() - distinct_at_start,
+                1,
+                "call {call} must resume at an unscanned directory entry"
+            );
+        }
+        assert_eq!(writer.retention_entries_scanned() - scanned_before, 3);
+        assert_eq!(
+            writer.retention_distinct_entries_scanned() - distinct_before,
+            3
+        );
+        assert_eq!(
+            quarantines.iter().filter(|path| path.exists()).count(),
+            quarantines.len(),
+            "a zero deletion budget must not prune quarantines while exercising the cursor"
+        );
 
         drop(writer);
         fs::remove_dir_all(&dir)?;

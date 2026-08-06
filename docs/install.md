@@ -299,6 +299,13 @@ cd rigsignal-git
 makepkg -si
 ```
 
+Both package paths install the spool-retention timer as a global systemd user
+unit. Enable it once after installing:
+
+```bash
+sudo systemctl --global enable rigsignal-spool-retention.timer
+```
+
 When upgrading from the legacy package, its post-upgrade hook hashes the former
 `/etc/rigsignal/rigsignal.toml` example. It removes only known pristine
 examples; a modified file (including a pacman's `.pacsave`) is left in place

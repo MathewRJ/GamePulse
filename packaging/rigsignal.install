@@ -15,6 +15,7 @@ _warn_stale_spool_retention_unit() {
 
 post_install() {
     _warn_stale_spool_retention_unit
+    echo "==> Enable hourly spool retention for all users: systemctl --global enable rigsignal-spool-retention.timer"
 }
 
 post_upgrade() {
