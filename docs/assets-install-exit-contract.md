@@ -14,9 +14,12 @@ for the exit-4 operator procedure.
 | 3 | Safe pre-mutation refusal. |
 | 4 | A current PUT, mutating POST, or DELETE was issued, or a protected active record retains `possible_mutation=true`; remote/recovery state can be partial. |
 
-Exit 4 is selected when either the current invocation has issued a mutating
-request (`mutation_issued`) **or** the protected active transaction record says
-`possible_mutation=true`.  The latter is durable: a later invocation can return
+On engine and recovery failure paths, exit 4 is selected when either the
+current invocation has issued a mutating request (`mutation_issued`) **or** the
+protected active transaction record says `possible_mutation=true`.  This rule
+applies only after a valid operation begins: argparse/usage errors return 2
+before any record is read, and `--dry-run` returns 0 before recovery is
+consulted.  The durable signal means a later invocation can return
 4 without issuing a request, until complete re-observation and reconciliation
 clear the uncertainty.  Exit 3 is available only when neither condition applies.
 `FailureSite` and exception type are diagnostic; they do not override those two

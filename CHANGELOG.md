@@ -36,7 +36,9 @@ The eight-entry residual register is retained here for release sign-off:
    is detect-and-halt with durable evidence, exit 4, no further writes, and no
    auto-restore—not a conditional-write claim.
 4. **Owner-ratified:** the pipeline timestamp detector is ambiguous when the
-   foreign create and installer PUT occur in the same millisecond.
+   foreign create and installer PUT occur in the same millisecond; the
+   ambiguity is surfaced as such and is not silently reclassified as clean
+   evidence.
 5. **Owner-ratified:** a foreign write followed by restoration of the identical
    canonical descriptor before the verifier GET is unobservable.
 6. **Owner-ratified:** a remote replacement between ownership GET and qualified
@@ -57,7 +59,11 @@ The eight-entry residual register is retained here for release sign-off:
 - Padding and the integration fingerprint pin are a **contract pair**.  Pin
   `df8371d` makes the 1024-byte floor explicit; a future producer that stops
   padding while the pin remains in place would silently strand small finals
-  again.
+  again.  Conversely, if the Integration pin regresses (removed, or its
+  offset/length changed) while producers still pad to 1024, a future Beats
+  default change could alter file-identity semantics — re-fingerprinting
+  already-harvested finals or re-ingesting them as new files.  Neither side
+  may change without the other.
 - **F-D, document-only residual:** canonical origin encoding currently uses
   Python's legacy IDNA-2003 codec rather than UTS-46.  For example, `faß.de`
   canonicalizes to `fass.de` instead of `xn--fa-hia.de`; distinct origins can
