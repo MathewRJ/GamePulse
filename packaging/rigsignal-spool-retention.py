@@ -5,6 +5,7 @@ import glob
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import time
@@ -12,12 +13,11 @@ import tomllib
 
 
 DEFAULT_SPOOL = pathlib.Path.home() / ".local/state/rigsignal/spool"
-AGENT = pathlib.Path.home() / "elastic/elastic-agent-9.4.3-linux-x86_64/elastic-agent"
 REGISTRY_GLOB = os.environ.get(
     "RIGSIGNAL_FILESTREAM_REGISTRY_GLOB",
     str(
         pathlib.Path.home()
-        / "elastic/elastic-agent-9.4.3-linux-x86_64/data/elastic-agent-*/run/filestream-default/registry/filebeat/log.json"
+        / "elastic/elastic-agent-*/data/elastic-agent-*/run/filestream-default/registry/filebeat/log.json"
     ),
 )
 MAX_AGE_SECONDS = 48 * 3600
@@ -44,9 +44,27 @@ def configured_spool():
     return pathlib.Path(spool)
 
 
+def discover_agent():
+    override = os.environ.get("RIGSIGNAL_ELASTIC_AGENT")
+    if override:
+        return pathlib.Path(override)
+    path_agent = shutil.which("elastic-agent")
+    if path_agent:
+        return pathlib.Path(path_agent)
+    system_agent = pathlib.Path("/opt/Elastic/Agent/elastic-agent")
+    if system_agent.exists():
+        return system_agent
+    home_agents = sorted(pathlib.Path.home().glob("elastic/elastic-agent-*/elastic-agent"))
+    return home_agents[0] if home_agents else None
+
+
 def agent_healthy():
+    agent = discover_agent()
+    if agent is None:
+        print("skip: elastic-agent not found")
+        return False
     try:
-        proc = subprocess.run([str(AGENT), "status"], text=True, capture_output=True, timeout=30)
+        proc = subprocess.run([str(agent), "status"], text=True, capture_output=True, timeout=30)
     except Exception as exc:
         print(f"skip: elastic-agent status failed: {exc}")
         return False
@@ -67,6 +85,8 @@ def registry_sources(registry, spool):
     state = {}
     with registry.open() as fh:
         for line_number, line in enumerate(fh, start=1):
+            if not line.strip():
+                continue
             try:
                 obj = json.loads(line)
             except Exception as exc:
@@ -110,7 +130,7 @@ def main():
     deleted = 0
     skipped = 0
     bytes_deleted = 0
-    for path in spool.glob("*.ndjson"):
+    for path in spool.glob("rigsignal-*.ndjson"):
         try:
             stat = path.stat()
         except FileNotFoundError:

@@ -1603,6 +1603,30 @@ mod tests {
     }
 
     #[test]
+    fn quarantine_retention_scan_and_deletions_are_bounded_per_call() -> Result<()> {
+        let dir = temp_spool_dir("quarantine-retention-bounded");
+        let mut writer = SpoolWriter::new(&dir, 0, 0, 1)?;
+        let quarantines: Vec<PathBuf> = (0..4)
+            .map(|index| dir.join(format!("rigsignal-frame-{index}.quarantine")))
+            .collect();
+        for path in &quarantines {
+            fs::write(path, "old recovery debris")?;
+            set_file_age(path, Duration::from_secs(2 * 60 * 60))?;
+        }
+
+        let scanned_before = writer.retention_entries_scanned();
+        writer.prune_retained_quarantines_with_limits(2, 1)?;
+        assert!(writer.retention_entries_scanned() - scanned_before <= 2);
+
+        writer.prune_retained_quarantines_with_limits(100, 1)?;
+        assert!(quarantines.iter().filter(|path| path.exists()).count() >= 2);
+
+        drop(writer);
+        fs::remove_dir_all(&dir)?;
+        Ok(())
+    }
+
+    #[test]
     fn second_writer_for_a_spool_directory_fails_fast() -> Result<()> {
         let dir = temp_spool_dir("single-writer-lock");
         let writer = SpoolWriter::new(&dir, 0, 0, 72)?;

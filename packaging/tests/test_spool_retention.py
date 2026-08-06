@@ -34,7 +34,7 @@ class SpoolRetentionTests(unittest.TestCase):
         self.patches = [
             patch.object(RETENTION, "configured_spool", return_value=self.spool),
             patch.object(RETENTION, "REGISTRY_GLOB", str(self.registry)),
-            patch.object(RETENTION, "AGENT", self.agent),
+            patch.dict(os.environ, {"RIGSIGNAL_ELASTIC_AGENT": str(self.agent)}),
         ]
         for active_patch in self.patches:
             active_patch.start()
@@ -68,8 +68,8 @@ class SpoolRetentionTests(unittest.TestCase):
             self.assertEqual(RETENTION.main(), 0)
         return output.getvalue()
 
-    def test_harvested_final_older_than_48h_is_deleted_and_logged(self):
-        final = self.final("harvested.ndjson")
+    def test_env_discovered_healthy_agent_deletes_harvested_final(self):
+        final = self.final("rigsignal-harvested.ndjson")
         self.write_registry([self.cursor_entry(final)])
 
         output = self.run_helper()
@@ -79,8 +79,8 @@ class SpoolRetentionTests(unittest.TestCase):
         self.assertIn(f"registry={self.registry}", output)
 
     def test_stranded_files_without_a_registry_entry_survive(self):
-        harvested = self.final("unrelated-harvested.ndjson")
-        finals = [self.final(f"stranded-{index}.ndjson") for index in range(12)]
+        harvested = self.final("rigsignal-harvested.ndjson")
+        finals = [self.final(f"rigsignal-stranded-{index}.ndjson") for index in range(12)]
         self.write_registry([self.cursor_entry(harvested)])
 
         output = self.run_helper()
@@ -91,6 +91,14 @@ class SpoolRetentionTests(unittest.TestCase):
         self.assertEqual(counts.group(3), "12")
         self.assertFalse(harvested.exists())
         self.assertTrue(all(path.exists() for path in finals))
+
+    def test_non_rigsignal_ndjson_survives_even_when_harvested(self):
+        final = self.final("unrelated-harvested.ndjson")
+        self.write_registry([self.cursor_entry(final)])
+
+        self.run_helper()
+
+        self.assertTrue(final.exists())
 
     def test_behind_cursor_final_survives(self):
         final = self.final("behind.ndjson")
@@ -117,6 +125,16 @@ class SpoolRetentionTests(unittest.TestCase):
         self.assertTrue(final.exists())
         self.assertIn("skip: retention inputs unavailable:", output)
 
+    def test_blank_registry_lines_do_not_block_harvested_final_deletion(self):
+        final = self.final("rigsignal-blank-lines.ndjson")
+        self.registry.write_text(
+            "\n  \t\n" + json.dumps(self.cursor_entry(final)) + "\n\n"
+        )
+
+        self.run_helper()
+
+        self.assertFalse(final.exists())
+
     def test_unreadable_registry_causes_zero_deletions(self):
         final = self.final("unreadable.ndjson")
         self.write_registry([self.cursor_entry(final)])
@@ -141,7 +159,7 @@ class SpoolRetentionTests(unittest.TestCase):
         final = self.final("failed-agent.ndjson")
         self.write_registry([self.cursor_entry(final)])
 
-        with patch.object(RETENTION, "AGENT", self.root / "missing-elastic-agent"):
+        with patch.object(RETENTION, "discover_agent", return_value=self.root / "missing-elastic-agent"):
             output = self.run_helper()
 
         self.assertTrue(final.exists())
