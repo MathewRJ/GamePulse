@@ -3272,6 +3272,10 @@ def check_outbox_root(outbox_root: Path) -> None:
     else:
         if not _enrollment_parent_safe(terminal):
             raise ProvisionError("install refused: outbox preflight:")
+    # This delegated check is unreachable-failing while each call site checks the
+    # same enrollment-root chain one line earlier; retain it as defence-in-depth.
+    # test_main_outbox_preflight_order_is_pinned_at_both_call_sites pins that ordering;
+    # see docs/outbox-ancestor-policy.md.
     check_install_root_ancestors(outbox_root)
 
 

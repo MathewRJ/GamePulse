@@ -9,13 +9,13 @@ source "$SCRIPT_DIR/lib.sh"
 
 ES_VERSION='' KB_VERSION='' BUNDLE='' PREDECESSOR_MANIFEST='' KEEP=0
 declare -a LEGS=()
-usage() { printf '%s\n' 'Usage: fleet-coexist-gate.sh --es-version 9.4.3|9.4.4 [--kb-version VERSION] --leg a..y [--bundle PATH] [--predecessor-manifest PATH] [--all]' 'Solo-screen subset: fleet legs a/b/i/n/o/p/q/r/s plus adoption leg 1.' >&2; }
+usage() { printf '%s\n' 'Usage: fleet-coexist-gate.sh --es-version 9.4.3|9.4.4 [--kb-version VERSION] --leg a..z [--bundle PATH] [--predecessor-manifest PATH] [--all]' 'Solo-screen subset: fleet legs a/b/i/n/o/p/q/r/s plus adoption leg 1.' >&2; }
 version() { [[ "$1" =~ ^9\.4\.[34]$ ]]; }
 fail() { printf 'ASSERT FAIL %s\n' "$*" >&2; return 1; }
 while (($#)); do case "$1" in
   --es-version) ES_VERSION="${2:-}"; shift 2 ;; --kb-version) KB_VERSION="${2:-}"; shift 2 ;;
   --bundle) BUNDLE="${2:-}"; shift 2 ;; --predecessor-manifest) PREDECESSOR_MANIFEST="${2:-}"; shift 2 ;; --leg) LEGS+=("${2:-}"); shift 2 ;;
-  --all) LEGS=(a b c d e f g h i j k l m n o p q r s t u v w x y); shift ;; --keep) KEEP=1; shift ;;
+  --all) LEGS=(a b c d e f g h i j k l m n o p q r s t u v w x y z); shift ;; --keep) KEEP=1; shift ;;
   -h|--help) usage; exit 0 ;; *) usage; exit 2 ;; esac; done
 [[ -n "$ES_VERSION" ]] || { usage; exit 2; }; KB_VERSION="${KB_VERSION:-$ES_VERSION}"
 version "$ES_VERSION" && version "$KB_VERSION" && [[ "$ES_VERSION" == "$KB_VERSION" ]] || { usage; exit 2; }
@@ -681,6 +681,68 @@ leg_x() {
 
 # M: pause-created collisions, lost responses, and per-delete resume cover both
 # space_prefix branches.  The assertions consume the captured request log.
+# Z: foreign-owned outbox terminal must refuse — REAL syscall coverage without root
+# (F6 foreign-uid leg, owner ruling 2026-08-25). Inside `unshare -Ur` (single-uid
+# map; no newuidmap required) any object owned by an UNMAPPED real uid observes as
+# the kernel overflow uid (65534) while geteuid()==0 — a genuine foreign-uid
+# os.lstat observation. The full ancestor walk cannot run in-namespace (every chain
+# ends at "/", which also observes foreign), but check_outbox_root raises on the
+# TERMINAL ownership branch BEFORE its ancestor call, so the negative case is
+# end-to-end. The full-path positive control runs OUTSIDE the namespace; an in-ns
+# predicate control binds the refusal to foreignness rather than the environment.
+# Cluster-free: does not call setup. NOTE: the shared preamble still validates
+# the cluster env vars/tools; for a standalone `--leg z` run, dummy values for
+# ELASTIC_PASSWORD / ELASTICSEARCH_PASSWORD / CLEAN_STACK_AGENT_BINARY suffice —
+# this leg never uses them.
+leg_z() {
+  local target=''
+  if ! unshare -Ur true 2>/dev/null; then
+    printf 'LEG-Z SKIP: unprivileged user namespaces unavailable on this host — foreign-uid coverage NOT exercised here\n' >&2
+    return 0
+  fi
+  for target in /root /var/lib /etc; do [[ -d "$target" ]] && break; done
+  # The refusal must bind to OWNERSHIP: the target must be mode-safe root-owned.
+  python3 -c 'import os,sys; st=os.lstat(sys.argv[1]); sys.exit(0 if (st.st_mode & 0o022)==0 and st.st_uid==0 else 1)' "$target" \
+    || fail "Leg-Z target $target is not a mode-safe root-owned directory"
+  cat >"$RUN_DIR/leg-z-check.py" <<'PY'
+import importlib.util, os, pathlib, sys, tempfile
+repo, target, mode = sys.argv[1], sys.argv[2], sys.argv[3]
+spec = importlib.util.spec_from_file_location(
+    "install_assets_leg_z", pathlib.Path(repo) / "tools" / "install_assets.py")
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+if mode == "positive":
+    # Outside the namespace: full check passes on an euid-owned 0700 outbox.
+    mod.check_outbox_root(pathlib.Path(target))
+    print("leg-z positive control: owned outbox accepted")
+    sys.exit(0)
+# mode == "foreign": inside unshare -Ur.
+st = os.lstat(target)
+print(f"leg-z observation: st_uid={st.st_uid} geteuid={os.geteuid()}")
+assert st.st_uid not in (os.geteuid(), 0), "target does not observe foreign here"
+own = tempfile.mkdtemp()
+os.chmod(own, 0o700)
+assert mod._enrollment_parent_safe(os.lstat(own)), \
+    "in-ns predicate control failed: euid-owned dir rejected"
+try:
+    mod.check_outbox_root(pathlib.Path(target))
+except mod.ProvisionError as err:
+    assert str(err).startswith("install refused: outbox preflight:"), \
+        f"wrong refusal: {err}"
+    print(f"leg-z foreign-uid refusal fired: {err}")
+    sys.exit(0)
+print("leg-z FAIL: foreign-owned outbox did not refuse")
+sys.exit(1)
+PY
+  mkdir -m 0700 "$RUN_DIR/leg-z-owned"
+  python3 "$RUN_DIR/leg-z-check.py" "$REPO_ROOT" "$RUN_DIR/leg-z-owned" positive >"$RUN_DIR/leg-z-positive.log" 2>&1 \
+    || { cat "$RUN_DIR/leg-z-positive.log" >&2; fail 'Leg-Z positive control: owned outbox refused outside the namespace'; }
+  unshare -Ur python3 "$RUN_DIR/leg-z-check.py" "$REPO_ROOT" "$target" foreign >"$RUN_DIR/leg-z-foreign.log" 2>&1 \
+    || { cat "$RUN_DIR/leg-z-foreign.log" >&2; fail 'Leg-Z foreign-uid refusal did not fire as expected'; }
+  grep -F 'leg-z foreign-uid refusal fired: install refused: outbox preflight:' "$RUN_DIR/leg-z-foreign.log" >/dev/null \
+    || { cat "$RUN_DIR/leg-z-foreign.log" >&2; fail 'Leg-Z foreign log missing the bound refusal line'; }
+}
+
 leg_m() {
   setup
   # Pre-create the (empty) target space: on a fresh stack the preflight's
@@ -917,4 +979,4 @@ leg_p() {
   PREDECESSOR_MANIFEST="$RUN_DIR/predecessor-good.json" installer || fail 'Leg-P post-retained-pipeline retry did not pass predecessor barrier'
 }
 
-for leg in "${LEGS[@]}"; do case "$leg" in a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y) "leg_$leg" ;; *) fail "unknown leg: $leg"; exit 2 ;; esac; done
+for leg in "${LEGS[@]}"; do case "$leg" in a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z) "leg_$leg" ;; *) fail "unknown leg: $leg"; exit 2 ;; esac; done

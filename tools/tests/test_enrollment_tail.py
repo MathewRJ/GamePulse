@@ -116,6 +116,12 @@ class OutboxPreflightTests(unittest.TestCase):
             with self.assertRaisesRegex(INSTALL.ProvisionError, "install refused: outbox preflight:"):
                 INSTALL.check_outbox_root(outbox)
 
+    def test_fake_stat_foreign_owned_outbox_refuses_without_root(self):
+        foreign_directory = synthetic_stat(stat.S_IFDIR | 0o700, os.geteuid() + 1)
+        with patch.object(INSTALL.os, "lstat", return_value=foreign_directory):
+            with self.assertRaisesRegex(INSTALL.ProvisionError, "install refused: outbox preflight:"):
+                INSTALL.check_outbox_root(Path("/synthetic/outbox"))
+
 
 class HandshakeDiagnosisTests(unittest.TestCase):
     def test_failed_handshake_records_full_diagnosis_and_reports_whitelist(self):
@@ -607,6 +613,71 @@ class MainPreflightRecoveryTests(unittest.TestCase):
             preflight.assert_not_called()
             configure.assert_not_called()
             transport.assert_not_called()
+
+    def test_main_outbox_preflight_order_is_pinned_at_both_call_sites(self):
+        refusal = INSTALL.ProvisionError("install refused: outbox preflight:")
+
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "default-enrollment"
+            calls = []
+
+            def ancestor(path):
+                calls.append(("ancestor", path))
+
+            def outbox(path):
+                calls.append(("outbox", path))
+                raise refusal
+
+            with patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=self.args(root)), \
+                 patch.object(INSTALL, "load_bundle", return_value=INSTALL.Bundle("test", "test", [])), \
+                 patch.object(INSTALL, "role_body", return_value={}), \
+                 patch.object(INSTALL, "enrollment_condition", return_value="clean"), \
+                 patch.object(INSTALL, "check_install_root_ancestors", side_effect=ancestor), \
+                 patch.object(INSTALL, "check_outbox_root", side_effect=outbox):
+                with redirect_stderr(io.StringIO()):
+                    self.assertEqual(INSTALL.main(), 2)
+            self.assertEqual(calls, [("ancestor", root), ("outbox", root.parent / "outbox")])
+
+        with tempfile.TemporaryDirectory() as raw:
+            root = INSTALL.secure_root(Path(raw) / "incomplete-enrollment")
+            state = INSTALL.state_template("KUrXRgwRRQu-RikmIJhm0Q", INSTALL.TARGET_GENERATION_KAT,
+                                           None, str(root))
+            state.update(phase="mint_intent", pending_mint_name="unfinished")
+            INSTALL.atomic_write(root, "state.json", INSTALL.jcs(state) + b"\n")
+            calls = []
+
+            def ancestor(path):
+                calls.append(("ancestor", path))
+
+            def outbox(path):
+                calls.append(("outbox", path))
+                raise refusal
+
+            def recover_unfinished(_base, path, method, _authorization, data=None, headers=None):
+                if path == "/_security/api_key?name=unfinished&active_only=true" and method == "GET":
+                    return INSTALL.jcs({"api_keys": [{"name": "unfinished", "id": "orphan"}]})
+                if path == "/_security/api_key" and method == "DELETE":
+                    return INSTALL.jcs({"invalidated_api_keys": ["orphan"],
+                                        "previously_invalidated_api_keys": [], "error_count": 0,
+                                        "error_details": []})
+                self.fail("unexpected recovery request " + method + " " + path)
+
+            with patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=self.args(root)), \
+                 patch.object(INSTALL, "load_bundle", return_value=INSTALL.Bundle("test", "test", [])), \
+                 patch.object(INSTALL, "role_body", return_value={}), \
+                 patch.object(INSTALL, "check_install_root_ancestors", side_effect=ancestor), \
+                 patch.object(INSTALL, "check_outbox_root", side_effect=outbox), \
+                 patch.object(INSTALL, "configure_https"), \
+                 patch.object(INSTALL, "admin_authorization", return_value="admin"), \
+                 patch.object(INSTALL, "admin_credential_kind", return_value="native_user"), \
+                 patch.object(INSTALL, "fence_remote_ownership_profile"), \
+                 patch.object(INSTALL, "run_topology_preflight"), \
+                 patch.object(INSTALL, "cluster_uuid", return_value=state["expected_cluster_uuid"]), \
+                 patch.object(INSTALL, "request", side_effect=recover_unfinished), \
+                 patch.object(INSTALL, "dispatch_clean_root", return_value=False):
+                with redirect_stderr(io.StringIO()):
+                    self.assertEqual(INSTALL.main(), 4)
+            self.assertEqual(calls, [("ancestor", root), ("outbox", root.parent / "outbox")])
 
     def test_incomplete_recovery_precedes_preflight_refusal(self):
         with tempfile.TemporaryDirectory() as raw:
