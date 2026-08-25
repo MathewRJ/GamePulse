@@ -1084,6 +1084,7 @@ class FleetCoexistenceTests(unittest.TestCase):
         })()
         output = io.StringIO()
         with mock.patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args), \
+             mock.patch.object(INSTALL, "check_version_fence"), \
              mock.patch.object(INSTALL, "configure_https"), \
              mock.patch.object(INSTALL, "admin_authorization", return_value="auth"), \
              mock.patch.object(INSTALL, "fence_remote_ownership_profile"), \
@@ -1180,6 +1181,7 @@ class FleetCoexistenceTests(unittest.TestCase):
             })()
             output = io.StringIO()
             with mock.patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args), \
+                 mock.patch.object(INSTALL, "check_version_fence"), \
                  mock.patch.object(INSTALL, "configure_https"), \
                  mock.patch.object(INSTALL, "admin_authorization", return_value="auth"), \
                  mock.patch.object(INSTALL, "fence_remote_ownership_profile"), \
@@ -1211,6 +1213,7 @@ class FleetCoexistenceTests(unittest.TestCase):
             })()
             output = io.StringIO()
             with mock.patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args), \
+                 mock.patch.object(INSTALL, "check_version_fence"), \
                  mock.patch.object(INSTALL, "configure_https"), \
                  mock.patch.object(INSTALL, "admin_authorization", return_value="auth"), \
                  mock.patch.object(INSTALL, "fence_remote_ownership_profile"), \
@@ -1244,6 +1247,8 @@ class FleetCoexistenceTests(unittest.TestCase):
         })()
         errors = io.StringIO()
         with mock.patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args), \
+             mock.patch.object(INSTALL, "check_version_fence"), \
+             mock.patch.object(INSTALL, "transaction_boundary_failure", return_value=-1), \
              mock.patch.object(INSTALL, "configure_https"), \
              mock.patch.object(INSTALL, "admin_authorization", return_value="auth"), \
              mock.patch.object(INSTALL, "fence_remote_ownership_profile"), \
@@ -1251,8 +1256,9 @@ class FleetCoexistenceTests(unittest.TestCase):
                                side_effect=INSTALL.ProvisionError(
                                    "install refused: transaction_already_rolled_back")), \
              redirect_stderr(errors):
-            self.assertEqual(INSTALL.main(), 1)
-        self.assertEqual(errors.getvalue(), "install refused: transaction_already_rolled_back\n")
+            self.assertEqual(INSTALL.main(), 3)
+        self.assertEqual(errors.getvalue(), "install refused: transaction_already_rolled_back\n"
+                         "RIGSIGNAL_FAILURE_SITE preflight\n")
 
     def test_second_rollback_is_refused_before_any_external_or_restore_call(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -1384,7 +1390,7 @@ class FleetCoexistenceTests(unittest.TestCase):
                 for (kind, name), value in ownership.items() if value == "external"
             ]
             journal.value["bundle_pin"] = {"sha256": "applied-bundle-sha",
-                                           "source_commit": "applied-commit",
+                                           "source_commit": bundle.source_commit,
                                            "asset_set_sha256": INSTALL.asset_set_sha256(bundle)}
             with mock.patch.object(INSTALL, "bundle_sha256", return_value="applied-bundle-sha"), \
                  mock.patch.object(INSTALL, "load_bundle", return_value=bundle), \
@@ -1432,9 +1438,10 @@ class FleetCoexistenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = INSTALL.secure_root(Path(directory) / "transaction")
             journal = INSTALL.TransactionJournal(root, "fleet-coexist")
+            applied = INSTALL.load_source()
             journal.value["bundle_pin"] = {
-                "sha256": "applied-bundle-sha", "source_commit": "applied-commit",
-                "asset_set_sha256": INSTALL.asset_set_sha256(INSTALL.load_source())}
+                "sha256": "applied-bundle-sha", "source_commit": applied.source_commit,
+                "asset_set_sha256": INSTALL.asset_set_sha256(applied)}
             with mock.patch.object(INSTALL, "verify_external_asset") as verify:
                 INSTALL.verify_rollback_external_baselines("https://es", "auth", journal)
             verify.assert_not_called()
@@ -1689,6 +1696,7 @@ class FleetCoexistenceTests(unittest.TestCase):
         })()
         output = io.StringIO()
         with mock.patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args), \
+             mock.patch.object(INSTALL, "check_version_fence"), \
              mock.patch.object(INSTALL, "configure_https"), \
              mock.patch.object(INSTALL, "admin_authorization", return_value="auth"), \
              mock.patch.object(INSTALL, "fence_remote_ownership_profile"), \
@@ -1709,6 +1717,7 @@ class FleetCoexistenceTests(unittest.TestCase):
         })()
         output = io.StringIO()
         with mock.patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args), \
+             mock.patch.object(INSTALL, "check_version_fence"), \
              mock.patch.object(INSTALL, "configure_https"), \
              mock.patch.object(INSTALL, "admin_authorization", return_value="auth"), \
              mock.patch.object(INSTALL, "fence_remote_ownership_profile"), \

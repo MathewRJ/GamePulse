@@ -8,11 +8,13 @@ import io
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 import tarfile
 import tempfile
 import textwrap
+import time
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -24,6 +26,60 @@ from tools.tests.transaction_transport import HttpReply, ScriptedTransactionTran
 
 ROOT = Path(__file__).resolve().parents[2]
 TEST_RELEASE_COMMIT = "a" * 40
+_WORKER_TERM_REAP_SECONDS = 5
+_WORKER_KILL_REAP_SECONDS = 5
+_FLAG_WORKER_TIMEOUT_SECONDS = 600
+
+
+def _signal_worker_group(child, signum):
+    """Signal a sharded-oracle worker and every process it started."""
+    try:
+        os.killpg(child.pid, signum)
+    except ProcessLookupError:
+        # The worker won the race and has already been reaped.
+        pass
+
+
+def _close_worker_pipes(child):
+    """Stop reading pipes which a surviving descendant may still hold open."""
+    for stream in (child.stdout, child.stderr):
+        if stream is not None:
+            stream.close()
+
+
+def _communicate_worker(child, timeout):
+    """Return worker output, or a bounded diagnostic after a worker timeout.
+
+    A worker is a session leader, so terminating its process group covers a
+    grandchild which inherited its stdout/stderr pipe.  Every post-timeout
+    communicate and wait is bounded: a rogue descendant cannot leave this
+    test process in ``anon_pipe_read`` indefinitely.
+    """
+    try:
+        stdout, stderr = child.communicate(timeout=timeout)
+        return stdout, stderr, None
+    except subprocess.TimeoutExpired:
+        _signal_worker_group(child, signal.SIGTERM)
+
+    try:
+        stdout, stderr = child.communicate(timeout=_WORKER_TERM_REAP_SECONDS)
+        return stdout, stderr, "timed out"
+    except subprocess.TimeoutExpired:
+        _signal_worker_group(child, signal.SIGKILL)
+
+    try:
+        stdout, stderr = child.communicate(timeout=_WORKER_KILL_REAP_SECONDS)
+        return stdout, stderr, "timed out (SIGKILL escalation)"
+    except subprocess.TimeoutExpired:
+        # Do not issue another communicate here: it would again wait for EOF
+        # from a descendant that inherited either write end.  Closing our read
+        # ends makes the final, bounded wait independent of those descendants.
+        _close_worker_pipes(child)
+        try:
+            child.wait(timeout=_WORKER_KILL_REAP_SECONDS)
+        except subprocess.TimeoutExpired:
+            return "", "", "timed out; worker process group survived SIGKILL"
+        return "", "", "timed out; descendant kept worker output pipes open"
 
 
 def release_bundle():
@@ -78,7 +134,7 @@ class RecordFixtures(unittest.TestCase):
             result = subprocess.run([
                 sys.executable, str(ROOT / "tools/build_asset_bundle.py"), "--source-commit", "a" * 40,
                 "--output", str(valid_archive),
-            ], cwd=ROOT, text=True, capture_output=True, check=False)
+            ], cwd=ROOT, text=True, capture_output=True, check=False, timeout=600)
             self.assertEqual(result.returncode, 0, result.stderr)
             valid_bundle = INSTALL.load_bundle(valid_archive)
             missing_git_dir = root / "not-a-git-directory"
@@ -273,7 +329,7 @@ else:
         env = os.environ | {"RIGSIGNAL_TEST_ROOT": str(ROOT), "RIGSIGNAL_TEST_DIR": str(directory),
                             "RIGSIGNAL_TEST_OP": operation, "RIGSIGNAL_TEST_CRASH_AT": crash_at}
         return subprocess.run([sys.executable, "-c", textwrap.dedent(self._BOUNDARY_CHILD)], env=env,
-                              text=True, capture_output=True, check=False)
+                              text=True, capture_output=True, check=False, timeout=600)
 
     def test_t_hash_1_through_3_snapshot_binds_open_descriptor_bytes(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -566,7 +622,7 @@ sys.exit(module.main())
             "RIGSIGNAL_TEST_PAUSE_SENTINEL": "/tmp/unused",
         }
         result = subprocess.run([sys.executable, "-c", textwrap.dedent(program), str(ROOT)],
-                                env=os.environ | hooks, text=True, capture_output=True, check=False)
+                                env=os.environ | hooks, text=True, capture_output=True, check=False, timeout=600)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("hooks=[]", result.stdout)
         self.assertNotIn("test hooks active:", result.stderr)
@@ -772,7 +828,7 @@ class CompletionWaveTests(unittest.TestCase):
         # Direction is an input to the table row, not a shadow-policy
         # decision: provide a genuinely older predecessor for --upgrade and
         # a genuinely newer one for --allow-downgrade.
-        prior_version = "0.3.3" if "allow-downgrade" in flags and "upgrade" not in flags else "0.3.1"
+        prior_version = "0.3.4" if "allow-downgrade" in flags and "upgrade" not in flags else "0.3.1"
         prior_binding = {**binding, "bundle_version": prior_version, "source_commit": "b" * 40}
         predecessor = self._table_installed(prior_binding, targets, full=full) if prior else None
         if label.startswith("S-"):
@@ -809,6 +865,7 @@ class CompletionWaveTests(unittest.TestCase):
         targets = INSTALL.transaction_targets(bundle)
         binding = INSTALL.transaction_binding(
             bundle, "0123456789ABCDEFGHIJKL", "https://kb.example", INSTALL.bundle_snapshot_digest(bundle))
+        bundle_digest = INSTALL.bundle_snapshot_digest(bundle)
         ordinary_key = (next(item["key"] for item in targets if item["key"].startswith("kibana/"))
                         if ordinary == "kibana-divergent" else
                         next(item["key"] for item in targets if ("ingest-pipeline" in item["key"]
@@ -878,6 +935,9 @@ class CompletionWaveTests(unittest.TestCase):
                  mock.patch.object(INSTALL, "admin_authorization", return_value="auth"), \
                  mock.patch.object(INSTALL, "cluster_uuid", return_value="0123456789ABCDEFGHIJKL"), \
                  mock.patch.object(INSTALL, "_prepare_assets_marker_path", return_value=path), \
+                 mock.patch.object(INSTALL, "transaction_targets", return_value=targets), \
+                 mock.patch.object(INSTALL, "transaction_binding", return_value=binding), \
+                 mock.patch.object(INSTALL, "bundle_snapshot_digest", return_value=bundle_digest), \
                  mock.patch.object(INSTALL, "assets_only_install", side_effect=caller_route), \
                  mock.patch.object(INSTALL, "_transaction_now", return_value="2026-08-04T12:34:56Z"), \
                  mock.patch.object(INSTALL.urllib.request, "urlopen", side_effect=fake.urlopen), \
@@ -959,7 +1019,7 @@ print(outcome)
             build = subprocess.run([
                 sys.executable, str(ROOT / "tools/build_asset_bundle.py"), "--source-commit", "a" * 40,
                 "--output", str(archive),
-            ], cwd=ROOT, text=True, capture_output=True, check=False)
+            ], cwd=ROOT, text=True, capture_output=True, check=False, timeout=600)
             self.assertEqual(build.returncode, 0, build.stderr)
             bundle = INSTALL.load_bundle(archive)
             targets = INSTALL.transaction_targets(bundle)
@@ -1005,7 +1065,7 @@ print(outcome)
                                 "RIGSIGNAL_TEST_FULL": "1" if full_flow else "0",
                                 "RIGSIGNAL_TEST_CRASH_AT": mode.split("-", 1)[1]}
             crashed = subprocess.run([sys.executable, "-c", textwrap.dedent(self._CHILD_EXECUTOR)], env=env,
-                                     text=True, capture_output=True, check=False)
+                                     text=True, capture_output=True, check=False, timeout=600)
             raw_after = record.read_bytes()
             state_after = json.loads(wire.read_text())
             if recovery_replace:
@@ -1016,7 +1076,7 @@ print(outcome)
                 wire.write_text(json.dumps(state_after, sort_keys=True))
             rerun_env = env | {"RIGSIGNAL_TEST_CRASH_AT": ""}
             rerun = subprocess.run([sys.executable, "-c", textwrap.dedent(self._CHILD_EXECUTOR)], env=rerun_env,
-                                   text=True, capture_output=True, check=False)
+                                   text=True, capture_output=True, check=False, timeout=600)
             final = INSTALL.read_transaction_record_if_present(record, binding, targets)
             # Return the durable wire after the *fresh* child, so assertions
             # bind its recovery mutations rather than only the killed child's
@@ -1523,7 +1583,7 @@ print(outcome)
         targets = INSTALL.transaction_targets(bundle)
         saved = next(item["key"] for item in targets if item["key"].startswith("kibana/"))
         old_saved = saved
-        for flag, old_version in (("upgrade", "0.3.1"), ("allow_downgrade", "0.3.3")):
+        for flag, old_version in (("upgrade", "0.3.1"), ("allow_downgrade", "0.3.4")):
             with self.subTest(direction=flag), tempfile.TemporaryDirectory() as raw:
                 root = Path(raw); root.chmod(0o700)
                 path = root / INSTALL.ASSETS_MARKER_FILE
@@ -1641,12 +1701,42 @@ print(outcome)
         source = (ROOT / "tools/install_assets.py").read_text(encoding="utf-8")
         self.assertGreaterEqual(source.count('asset_executor_exit_code("halt",'), 2)
 
+    def test_sharded_oracle_timeout_kills_pipe_holding_grandchild(self):
+        """A timed-out worker cannot be held by a descendant's inherited pipe."""
+        program = """
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+Path(os.environ["RIGSIGNAL_READY_FILE"]).write_text("ready")
+time.sleep(60)
+"""
+        with tempfile.TemporaryDirectory() as raw:
+            ready = Path(raw) / "grandchild-ready"
+            child = subprocess.Popen(
+                [sys.executable, "-c", textwrap.dedent(program)],
+                env=os.environ | {"RIGSIGNAL_READY_FILE": str(ready)}, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+            deadline = time.monotonic() + 2
+            while not ready.exists() and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertTrue(ready.exists(), "worker did not start its pipe-holding grandchild")
+            started = time.monotonic()
+            stdout, stderr, timeout_message = _communicate_worker(child, timeout=0.01)
+        self.assertEqual(timeout_message, "timed out")
+        self.assertLess(time.monotonic() - started, 2)
+        self.assertEqual((stdout, stderr), ("", ""))
+        self.assertIsNotNone(child.returncode)
+
     def test_t_flag_1_through_4_generated_5992_row_oracle(self):
         """T-FLAG-1..4: the checked-in corrected table is byte-pinned."""
         raw = self.FLAG_FIXTURE.read_bytes()
         generated = subprocess.run(
             ["python3", "/home/dev/coding/Workflow/projects/RigSignal/tasks/idempotency-2026-08-04/gen_flag_table.py"],
-            text=True, capture_output=True, check=True).stdout
+            text=True, capture_output=True, check=True, timeout=600).stdout
         self.assertEqual(raw.decode("utf-8").strip(), generated.strip())
         rows = []
         for line in raw.decode("utf-8").splitlines():
@@ -1663,10 +1753,54 @@ print(outcome)
     def test_t_flag_1_through_4_all_rows_main_routed_sharded(self):
         """Execute every pinned policy row through main(), not a shadow planner.
 
-        The default shard is the complete 5,824-row set.  CI can split it
-        deterministically with ``RIGSIGNAL_FLAG_SHARDS`` and
+        A direct unittest run fans the exhaustive oracle out to bounded child
+        interpreters.  That keeps the parent from looking wedged while it
+        spends several minutes in thousands of real ``main()`` routes, and
+        gives every worker a definite reap path.  CI can still request one
+        deterministic shard with ``RIGSIGNAL_FLAG_SHARDS`` and
         ``RIGSIGNAL_FLAG_SHARD``; each row has exactly one SHA-256 shard.
         """
+        # The historical default ran all 5,992 rows in one process.  On a
+        # current interpreter that exceeds the watchdog window and was
+        # misdiagnosed as a SIGKILL-child pipe leak.  These children run the
+        # exact same test method, with disjoint SHA-256 partitions.  Their
+        # stdout/stderr pipes are always drained and every child is killed and
+        # reaped on timeout, so a genuinely wedged worker cannot strand the
+        # discovery process either.
+        if (os.environ.get("RIGSIGNAL_FLAG_WORKER") != "1"
+                and "RIGSIGNAL_FLAG_SHARDS" not in os.environ):
+            workers = int(os.environ.get("RIGSIGNAL_FLAG_WORKERS", "8"))
+            self.assertGreater(workers, 0)
+            # Discovery imports this file both as ``tools.tests...`` and as a
+            # bare test module.  Rediscovering this one filename keeps the
+            # worker import identity valid in either parent mode.
+            command = [sys.executable, "-m", "unittest", "discover",
+                       "-s", str(Path(__file__).parent), "-p", Path(__file__).name]
+            children = []
+            for shard in range(workers):
+                environment = os.environ | {
+                    "RIGSIGNAL_FLAG_WORKER": "1",
+                    "RIGSIGNAL_FLAG_SHARDS": str(workers),
+                    "RIGSIGNAL_FLAG_SHARD": str(shard),
+                }
+                children.append((shard, subprocess.Popen(
+                    command, cwd=ROOT, env=environment, text=True,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    start_new_session=True)))
+            failures = []
+            for shard, child in children:
+                stdout, stderr, timeout_message = _communicate_worker(
+                    child, timeout=_FLAG_WORKER_TIMEOUT_SECONDS)
+                if timeout_message:
+                    failures.append("shard " + str(shard) + " " + timeout_message
+                                    + "\n" + stdout + stderr)
+                    continue
+                if child.returncode:
+                    failures.append("shard " + str(shard) + " exited " + str(child.returncode)
+                                    + "\n" + stdout + stderr)
+            self.assertFalse(failures, "\n".join(failures))
+            return
+
         rows = self._flag_rows()
         self.assertEqual(len(rows), 5992)
         shard_count = int(os.environ.get("RIGSIGNAL_FLAG_SHARDS", "1"))
@@ -1771,11 +1905,11 @@ print(outcome)
     def test_t_exit_4_real_cli_and_launcher_wait_status_anchor(self):
         """The packaged launcher subprocess preserves all engine contract codes."""
         cli = subprocess.run([sys.executable, str(ROOT / "tools/install_assets.py"), "--unknown-flag"],
-                             text=True, capture_output=True, check=False)
+                             text=True, capture_output=True, check=False, timeout=600)
         self.assertEqual(cli.returncode, 2)
         self.assertIn("usage: install_assets.py", cli.stderr)
         launcher = subprocess.run(["bash", str(ROOT / "packaging/tests/test-assets-launcher.sh")],
-                                  cwd=ROOT, text=True, capture_output=True, check=False)
+                                  cwd=ROOT, text=True, capture_output=True, check=False, timeout=600)
         self.assertEqual(launcher.returncode, 0, launcher.stdout + launcher.stderr)
         self.assertIn("rigsignal assets launcher: PASS", launcher.stdout)
 
