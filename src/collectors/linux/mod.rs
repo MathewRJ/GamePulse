@@ -11,9 +11,8 @@ pub mod stream_client;
 
 pub use audio::AudioCollector;
 pub use cpu::CpuCollector;
-pub use gamescope::GamescopeFrameCollector;
+pub use gamescope::FrameCollector;
 pub use gpu_amd::GpuAmdCollector as GpuCollector;
-pub use mangohud::MangoHudCollector;
 pub use memory::MemoryCollector;
 pub use network::NetworkCollector;
 pub use power::PowerCollector;

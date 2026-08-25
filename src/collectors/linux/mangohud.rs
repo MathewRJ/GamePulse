@@ -19,7 +19,9 @@
 use crate::collectors::Collector;
 use anyhow::Result;
 use serde_json::Value;
+use std::fs::OpenOptions;
 use std::io::{Read, Seek, SeekFrom};
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 use std::time::{Instant, SystemTime};
 
@@ -48,7 +50,15 @@ fn latest_log(dir: &PathBuf) -> Option<PathBuf> {
     entries
         .filter_map(|e| e.ok())
         .map(|e| e.path())
-        .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("csv"))
+        // Never select a special file as a MangoHud log. In particular, a
+        // FIFO named *.csv would otherwise make a blocking reader open hang
+        // collection indefinitely.
+        .filter(|p| {
+            p.extension().and_then(|e| e.to_str()) == Some("csv")
+                && std::fs::symlink_metadata(p)
+                    .map(|metadata| metadata.file_type().is_file())
+                    .unwrap_or(false)
+        })
         .max_by_key(|p| {
             p.metadata()
                 .and_then(|m| m.modified())
@@ -85,9 +95,13 @@ pub struct MangoHudCollector {
 
 impl MangoHudCollector {
     pub fn new(game_pid: Option<u32>) -> Self {
+        Self::with_log_dir(game_pid, find_log_dir())
+    }
+
+    pub(crate) fn with_log_dir(game_pid: Option<u32>, log_dir: PathBuf) -> Self {
         MangoHudCollector {
             game_pid,
-            log_dir: find_log_dir(),
+            log_dir,
             log_path: None,
             file_pos: 0,
             fps_col: None,
@@ -142,7 +156,14 @@ impl MangoHudCollector {
             }
         }
 
-        let chunk = match std::fs::File::open(&path) {
+        // The selection check above excludes special files, but the path can
+        // still be replaced between discovery and open. O_NONBLOCK keeps that
+        // race harmless if it becomes a FIFO.
+        let chunk = match OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NONBLOCK)
+            .open(&path)
+        {
             Err(_) => return vec![],
             Ok(mut f) => {
                 if f.seek(SeekFrom::Start(self.file_pos)).is_err() {
@@ -268,5 +289,77 @@ impl Collector for MangoHudCollector {
         fps_map.insert("stutter_count".to_string(), Value::from(stutter_count));
 
         Ok(Some(serde_json::json!({ "rigsignal": { "fps": fps_map } })))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use std::os::unix::ffi::OsStrExt;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    fn make_fifo(path: &std::path::Path) {
+        let path = std::ffi::CString::new(path.as_os_str().as_bytes()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(path.as_ptr(), 0o600) }, 0);
+    }
+
+    fn temp_log_dir() -> PathBuf {
+        static NEXT: AtomicUsize = AtomicUsize::new(0);
+        let id = NEXT.fetch_add(1, Ordering::Relaxed);
+        let nonce = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "rigsignal-mangohud-{}-{nonce}-{id}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    #[test]
+    fn fifo_named_csv_is_skipped_without_parking_collection() {
+        let dir = temp_log_dir();
+        let log = dir.join("mangohud.csv");
+        std::fs::File::create(&log)
+            .unwrap()
+            .write_all(b"os,cpu\nLinux,test\nfps,frametime\n60,16.0\n")
+            .unwrap();
+        // Ensure the FIFO would win the old mtime-only selection.
+        std::thread::sleep(Duration::from_millis(20));
+        make_fifo(&dir.join("newest.csv"));
+
+        let (done, result) = mpsc::channel();
+        let log_dir = dir.clone();
+        std::thread::spawn(move || {
+            let mut collector = MangoHudCollector::with_log_dir(None, log_dir);
+            done.send(collector.collect()).unwrap();
+        });
+
+        let document = result
+            .recv_timeout(Duration::from_millis(500))
+            .expect("a FIFO named *.csv must not park MangoHud collection")
+            .unwrap()
+            .expect("the regular CSV should still be selected");
+        assert_eq!(document["rigsignal"]["fps"]["current"], 60);
+        assert_eq!(latest_log(&dir), Some(log.clone()));
+
+        // Exercise the discovery-to-open race too: selection saw a regular
+        // CSV, then the path was replaced by a FIFO before the collector
+        // opened it. This must also return under the timeout.
+        let mut collector = MangoHudCollector::with_log_dir(None, dir);
+        collector.maybe_switch_log();
+        std::fs::remove_file(&log).unwrap();
+        make_fifo(&log);
+        let (done, result) = mpsc::channel();
+        std::thread::spawn(move || done.send(collector.read_new_rows()).unwrap());
+        assert!(result
+            .recv_timeout(Duration::from_millis(500))
+            .expect("a selected CSV replaced by a FIFO must not park MangoHud open")
+            .is_empty());
     }
 }
