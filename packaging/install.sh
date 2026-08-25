@@ -318,7 +318,7 @@ case ":${PATH}:" in
         # Fish shell (SteamOS default in Desktop Mode)
         FISH_CONFIG="${HOME}/.config/fish/config.fish"
         if [ -d "${HOME}/.config/fish" ] || command -v fish >/dev/null 2>&1; then
-            if ! grep -qF "fish_add_path.*\.local/bin\|set.*PATH.*\.local/bin" "$FISH_CONFIG" 2>/dev/null; then
+            if ! grep -q 'fish_add_path.*\.local/bin\|set.*PATH.*\.local/bin' "$FISH_CONFIG" 2>/dev/null; then
                 mkdir -p "$(dirname "$FISH_CONFIG")"
                 printf '\nfish_add_path "%s"\n' "$INSTALL_BIN" >> "$FISH_CONFIG"
                 ok "Added to fish PATH ($FISH_CONFIG)"

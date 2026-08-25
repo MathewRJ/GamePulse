@@ -13,7 +13,7 @@
 #   PKGVER=0.2.0 REPOROOT=/path/to/repo makepkg --nodeps --noextract --nosign
 
 pkgname=rigsignal
-pkgver="${PKGVER:-0.2.4}"
+pkgver="${PKGVER:?PKGVER must be set by the release workflow}"
 pkgrel=1
 pkgdesc="RigSignal gaming performance telemetry agent — ships CPU/GPU/memory/frame metrics to Elasticsearch"
 arch=('x86_64')

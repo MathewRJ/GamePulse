@@ -7,7 +7,7 @@
 #   cargo install bpf-linker
 #
 pkgname=rigsignal-git
-pkgver=0.2.4.r0.gaf0f187
+pkgver=0.3.3.r1.g93053f7
 pkgrel=1
 pkgdesc="Gaming performance telemetry agent -- ships CPU/GPU/memory/frame metrics to Elasticsearch"
 arch=('x86_64')
