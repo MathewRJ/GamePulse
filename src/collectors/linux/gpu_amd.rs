@@ -1,7 +1,7 @@
 /// AMD GPU collector — mirrors collector/rigsignal/collectors/gpu/amd_linux.py exactly.
 ///
-/// Discovers the best AMD DRM card at construction time using the same scoring
-/// heuristic as the Python collector. Candidates are scanned from
+/// Discovers the best AMD DRM card using the same scoring heuristic as the
+/// Python collector. Candidates are scanned from
 /// /sys/class/drm/card[0-9] in sorted order; the highest-scoring card wins
 /// (first card wins on a tie, matching Python's `>` not `>=` update rule):
 ///
@@ -65,8 +65,8 @@ fn find_hwmon(device: &Path) -> Option<PathBuf> {
 ///
 /// Ties are broken by first-in-sorted-order (matching Python's `if score >
 /// best_score` strict-greater update, which keeps the first card on a tie).
-fn find_amd_card() -> (Option<PathBuf>, Option<PathBuf>) {
-    let mut cards: Vec<PathBuf> = std::fs::read_dir("/sys/class/drm")
+fn find_amd_card(drm_path: &Path) -> (Option<PathBuf>, Option<PathBuf>) {
+    let mut cards: Vec<PathBuf> = std::fs::read_dir(drm_path)
         .into_iter()
         .flatten()
         .filter_map(|e| e.ok())
@@ -158,13 +158,19 @@ fn parse_current_clock_mhz(device: &Path) -> Option<i64> {
 
 pub struct GpuAmdCollector {
     pub game_pid: Option<u32>,
-    card_path: Option<PathBuf>,  // {card}/device — discovered once at init
-    hwmon_path: Option<PathBuf>, // {card}/device/hwmon/hwmonN — discovered once
+    card_path: Option<PathBuf>, // {card}/device — discovered at init or collect
+    hwmon_path: Option<PathBuf>, // {card}/device/hwmon/hwmonN — discovered at init or collect
+    drm_path: PathBuf,
+    undiscovered_ticks: u64,
 }
 
 impl GpuAmdCollector {
     pub fn new(game_pid: Option<u32>) -> Self {
-        let (card_path, hwmon_path) = find_amd_card();
+        Self::with_drm_path(game_pid, PathBuf::from("/sys/class/drm"))
+    }
+
+    fn with_drm_path(game_pid: Option<u32>, drm_path: PathBuf) -> Self {
+        let (card_path, hwmon_path) = find_amd_card(&drm_path);
         // Log discovered paths at startup so operators can confirm the heuristic.
         match &card_path {
             Some(p) => tracing::info!("GPU card path: {}", p.display()),
@@ -177,6 +183,8 @@ impl GpuAmdCollector {
             game_pid,
             card_path,
             hwmon_path,
+            drm_path,
+            undiscovered_ticks: 0,
         }
     }
 
@@ -195,10 +203,37 @@ impl Collector for GpuAmdCollector {
     }
 
     fn collect(&mut self) -> Result<Option<Value>> {
-        let device = match &self.card_path {
-            Some(p) => p.clone(),
-            None => return Ok(None),
-        };
+        if self.card_path.is_none() {
+            let (card_path, hwmon_path) = find_amd_card(&self.drm_path);
+            if let Some(card_path) = card_path {
+                tracing::info!(
+                    "GPU found after {} undiscovered collection ticks: {}",
+                    self.undiscovered_ticks,
+                    card_path.display()
+                );
+                self.card_path = Some(card_path);
+                self.hwmon_path = hwmon_path;
+            } else {
+                self.undiscovered_ticks += 1;
+                return Ok(None);
+            }
+        }
+
+        let device = self
+            .card_path
+            .as_ref()
+            .expect("AMD card path must be set after discovery")
+            .clone();
+
+        if self.hwmon_path.is_none() {
+            if let Some(hwmon_path) = find_hwmon(&device) {
+                tracing::info!(
+                    "GPU hwmon found after card discovery: {}",
+                    hwmon_path.display()
+                );
+                self.hwmon_path = Some(hwmon_path);
+            }
+        }
 
         let mut gpu = serde_json::Map::new();
 
@@ -272,5 +307,129 @@ impl Collector for GpuAmdCollector {
         }
 
         Ok(Some(json!({ "rigsignal": { "gpu": gpu } })))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static NEXT_TEMP_DIR: AtomicUsize = AtomicUsize::new(0);
+
+    struct TestDirectory {
+        path: PathBuf,
+    }
+
+    impl TestDirectory {
+        fn new() -> Self {
+            let id = NEXT_TEMP_DIR.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "rigsignal-gpu-amd-test-{}-{id}",
+                std::process::id()
+            ));
+            std::fs::create_dir_all(&path).expect("test DRM directory should be created");
+            Self { path }
+        }
+    }
+
+    impl Drop for TestDirectory {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.path);
+        }
+    }
+
+    fn add_amd_card(drm_path: &Path, utilisation_pct: i64) {
+        let device = drm_path.join("card0/device");
+        std::fs::create_dir_all(&device).expect("test AMD device directory should be created");
+        std::fs::write(device.join("vendor"), "0x1002\n")
+            .expect("test AMD vendor should be written");
+        std::fs::write(
+            device.join("gpu_busy_percent"),
+            format!("{utilisation_pct}\n"),
+        )
+        .expect("test GPU utilisation should be written");
+    }
+
+    fn add_hwmon(device: &Path) {
+        let hwmon = device.join("hwmon/hwmon0");
+        std::fs::create_dir_all(&hwmon).expect("test hwmon directory should be created");
+        std::fs::write(hwmon.join("temp1_input"), "63500\n")
+            .expect("test GPU temperature should be written");
+        std::fs::write(hwmon.join("power1_average"), "123456789\n")
+            .expect("test GPU power should be written");
+    }
+
+    #[test]
+    fn late_discovery_emits_documents_from_the_discovery_tick_onward() {
+        let drm = TestDirectory::new();
+        let mut collector = GpuAmdCollector::with_drm_path(None, drm.path.clone());
+
+        assert_eq!(collector.collect().unwrap(), None);
+
+        add_amd_card(&drm.path, 73);
+
+        let doc = collector
+            .collect()
+            .expect("late-discovery collection should succeed")
+            .expect("late-discovered AMD card should emit a document");
+        assert_eq!(doc["rigsignal"]["gpu"]["utilisation_pct"], 73.0);
+
+        let next_doc = collector
+            .collect()
+            .expect("subsequent collection should succeed")
+            .expect("late-discovered AMD card should keep emitting documents");
+        assert_eq!(next_doc["rigsignal"]["gpu"]["utilisation_pct"], 73.0);
+    }
+
+    #[test]
+    fn persistent_absence_emits_nothing_without_panicking() {
+        let drm = TestDirectory::new();
+        let mut collector = GpuAmdCollector::with_drm_path(None, drm.path.clone());
+
+        assert_eq!(collector.collect().unwrap(), None);
+        assert_eq!(collector.collect().unwrap(), None);
+    }
+
+    #[test]
+    fn card_present_at_init_emits_the_existing_metrics() {
+        let drm = TestDirectory::new();
+        add_amd_card(&drm.path, 42);
+        let mut collector = GpuAmdCollector::with_drm_path(None, drm.path.clone());
+
+        std::fs::remove_file(drm.path.join("card0/device/vendor"))
+            .expect("AMD vendor discovery marker should be removed");
+
+        let doc = collector
+            .collect()
+            .expect("collection should succeed")
+            .expect("AMD card present at init should emit a document");
+        assert_eq!(doc["rigsignal"]["gpu"]["utilisation_pct"], 42.0);
+    }
+
+    #[test]
+    fn late_hwmon_discovery_emits_hwmon_metrics_from_the_discovery_tick_onward() {
+        let drm = TestDirectory::new();
+        add_amd_card(&drm.path, 42);
+        let device = drm.path.join("card0/device");
+        let mut collector = GpuAmdCollector::with_drm_path(None, drm.path.clone());
+
+        let initial_doc = collector
+            .collect()
+            .expect("collection without hwmon should succeed")
+            .expect("device-level AMD metrics should emit without hwmon");
+        assert_eq!(initial_doc["rigsignal"]["gpu"]["utilisation_pct"], 42.0);
+        assert!(initial_doc["rigsignal"]["gpu"]
+            .get("temperature_c")
+            .is_none());
+
+        add_hwmon(&device);
+
+        let late_hwmon_doc = collector
+            .collect()
+            .expect("collection after hwmon discovery should succeed")
+            .expect("AMD metrics should emit after hwmon discovery");
+        assert_eq!(late_hwmon_doc["rigsignal"]["gpu"]["temperature_c"], 63.5);
+        assert_eq!(late_hwmon_doc["rigsignal"]["gpu"]["power_w"], 123.5);
     }
 }
