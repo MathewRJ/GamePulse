@@ -40,7 +40,9 @@ fs2 = "0.4"
 sysinfo = { version = "0.38.4", default-features = false, features = ["system"] }
 
 [target.'cfg(unix)'.dependencies]
-# Used only by the handshake probe's protected-source opener (O_NOFOLLOW + fstat).
+# Used by the handshake protected-source opener (O_NOFOLLOW + O_NONBLOCK + fstat),
+# Gamescope FIFO reader (O_NOFOLLOW + O_NONBLOCK + fstat), and MangoHud log reader
+# (O_NOFOLLOW + O_NONBLOCK + fstat).
 libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]

@@ -9,9 +9,12 @@ use crate::collectors::Collector;
 use anyhow::Result;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
-use std::fs::OpenOptions;
+use std::ffi::{CString, OsStr, OsString};
+use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader};
-use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
+use std::os::fd::{AsRawFd, FromRawFd};
+use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
@@ -29,6 +32,7 @@ const NO_CANDIDATE_WAIT: Duration = Duration::from_secs(1);
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct StatsPipeCandidate {
     kind: &'static str,
+    session: OsString,
     path: PathBuf,
 }
 
@@ -50,10 +54,123 @@ fn runtime_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(format!("/run/user/{}", uid())))
 }
 
-fn is_fifo(path: &Path) -> bool {
-    path.metadata()
-        .map(|metadata| metadata.file_type().is_fifo())
-        .unwrap_or(false)
+fn valid_session_name(name: &OsStr) -> bool {
+    name.to_str()
+        .is_some_and(|name| name.starts_with("gamescope."))
+}
+
+fn valid_preferred_session_target(target: &Path) -> bool {
+    // `Path::components` normalizes a trailing slash, so inspect the original
+    // link text too: even `gamescope.live/` is not the one component contract.
+    !target.as_os_str().as_bytes().contains(&b'/') && valid_session_name(target.as_os_str())
+}
+
+/// Open an untrusted direct child without permitting the kernel to follow it.
+fn openat(dir: &File, name: &OsStr, flags: libc::c_int) -> std::io::Result<File> {
+    let name = CString::new(name.as_bytes())
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "NUL in file name"))?;
+    // SAFETY: `dir` remains live for the call, `name` is NUL-terminated, and
+    // `openat` has no additional Rust-side preconditions.
+    let fd = unsafe { libc::openat(dir.as_raw_fd(), name.as_ptr(), flags | libc::O_CLOEXEC) };
+    if fd < 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        // SAFETY: `openat` returned a newly owned file descriptor.
+        Ok(unsafe { File::from_raw_fd(fd) })
+    }
+}
+
+/// `lstat` a direct child of a trusted directory descriptor. This is used for
+/// ranking only; final acceptance is still based on the opened pipe fd.
+fn lstatat(dir: &File, name: &OsStr) -> std::io::Result<libc::stat> {
+    let name = CString::new(name.as_bytes())
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "NUL in file name"))?;
+    // SAFETY: `dir` remains live for the call, `name` is NUL-terminated, and
+    // `metadata` points to valid writable storage.
+    let mut metadata = unsafe { std::mem::zeroed::<libc::stat>() };
+    // SAFETY: see above; fstatat has no additional Rust-side preconditions.
+    if unsafe {
+        libc::fstatat(
+            dir.as_raw_fd(),
+            name.as_ptr(),
+            &mut metadata,
+            libc::AT_SYMLINK_NOFOLLOW,
+        )
+    } < 0
+    {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(metadata)
+    }
+}
+
+fn open_runtime_dir(run_dir: &Path, expected_uid: u32) -> std::io::Result<File> {
+    let file = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_DIRECTORY | libc::O_CLOEXEC)
+        .open(run_dir)?;
+    let metadata = file.metadata()?;
+    if !metadata.file_type().is_dir() || metadata.uid() != expected_uid {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "Gamescope runtime directory is not an owned directory",
+        ));
+    }
+    Ok(file)
+}
+
+/// Definitively open one Gamescope FIFO through owned, non-symlinked parents.
+///
+/// Candidate discovery is only a ranking hint. This is the security boundary:
+/// every pathname component after the runtime directory is entered by fd.
+fn open_stats_pipe(run_dir: &Path, session: &OsStr, expected_uid: u32) -> std::io::Result<File> {
+    if !valid_session_name(session) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "invalid Gamescope session name",
+        ));
+    }
+    let runtime = open_runtime_dir(run_dir, expected_uid)?;
+    let session = openat(
+        &runtime,
+        session,
+        libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_DIRECTORY,
+    )?;
+    let pipe = openat(
+        &session,
+        OsStr::new("stats.pipe"),
+        libc::O_RDONLY | libc::O_NONBLOCK | libc::O_NOFOLLOW,
+    )?;
+    let metadata = pipe.metadata()?;
+    if !metadata.file_type().is_fifo() || metadata.uid() != expected_uid {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "Gamescope stats pipe is not an owned FIFO",
+        ));
+    }
+    Ok(pipe)
+}
+
+/// Cheap, non-following probe used only to decide candidate ranking. The
+/// reader repeats the full descriptor-relative validation before every open.
+fn rankable_stats_pipe(runtime: &File, session: &OsStr) -> Option<SystemTime> {
+    // A symlinked session directory is never a candidate. `openat` would
+    // reject it later, but excluding it from ranking avoids hiding MangoHud
+    // while a malicious or stale link is being retried.
+    let session = openat(
+        runtime,
+        session,
+        libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_DIRECTORY,
+    )
+    .ok()?;
+    let metadata = lstatat(&session, OsStr::new("stats.pipe")).ok()?;
+    ((metadata.st_mode & libc::S_IFMT) == libc::S_IFIFO).then(|| {
+        if metadata.st_mtime >= 0 {
+            SystemTime::UNIX_EPOCH + Duration::from_secs(metadata.st_mtime as u64)
+        } else {
+            SystemTime::UNIX_EPOCH - Duration::from_secs(metadata.st_mtime.unsigned_abs())
+        }
+    })
 }
 
 /// Discover Gamescope stats FIFOs in preference order.
@@ -61,61 +178,70 @@ fn is_fifo(path: &Path) -> bool {
 /// `gamescope-stats` is authoritative when present. Remaining candidates are
 /// ranked only as a heuristic; the reader demotes an instant-EOF FIFO and moves
 /// on, so a stale newest directory cannot pin collection indefinitely.
-fn stats_pipe_candidates(run_dir: &Path) -> Vec<StatsPipeCandidate> {
+fn stats_pipe_candidates_for_uid(run_dir: &Path, expected_uid: u32) -> Vec<StatsPipeCandidate> {
+    // Reject a symlinked, foreign-owned, or non-directory runtime root before
+    // even using it for discovery. The descriptor is intentionally not used
+    // for ranking; the definitive open below reacquires and validates it.
+    let Ok(runtime) = open_runtime_dir(run_dir, expected_uid) else {
+        return Vec::new();
+    };
     let mut candidates = Vec::new();
     let mut seen = HashSet::new();
     let symlink = run_dir.join("gamescope-stats");
     if let Ok(target) = std::fs::read_link(&symlink) {
-        let target = if target.is_absolute() {
-            target
-        } else {
-            run_dir.join(target)
-        };
-        let pipe = target.join("stats.pipe");
-        if is_fifo(&pipe) {
-            seen.insert(pipe.clone());
-            candidates.push(StatsPipeCandidate {
-                kind: "gamescope-stats symlink",
-                path: pipe,
-            });
+        if valid_preferred_session_target(&target) {
+            let session = target.into_os_string();
+            if rankable_stats_pipe(&runtime, &session).is_some() {
+                let pipe = run_dir.join(&session).join("stats.pipe");
+                seen.insert(session.clone());
+                candidates.push(StatsPipeCandidate {
+                    kind: "gamescope-stats symlink",
+                    session,
+                    path: pipe,
+                });
+            }
         }
     }
 
-    let mut directory_candidates: Vec<(SystemTime, PathBuf)> = std::fs::read_dir(run_dir)
+    let mut directory_candidates: Vec<(SystemTime, OsString)> = std::fs::read_dir(run_dir)
         .ok()
         .into_iter()
         .flatten()
         .filter_map(|entry| entry.ok())
         .filter(|entry| {
-            entry
-                .file_name()
-                .to_string_lossy()
-                .starts_with("gamescope.")
+            valid_session_name(&entry.file_name())
+                // Do not rank a symlinked session directory. In all cases it
+                // would fail the descriptor-relative open; excluding it here
+                // prevents it from suppressing MangoHud fallback meanwhile.
+                && entry.file_type().map(|type_| type_.is_dir()).unwrap_or(false)
         })
         .filter_map(|entry| {
-            let pipe = entry.path().join("stats.pipe");
-            if !is_fifo(&pipe) || seen.contains(&pipe) {
+            let session = entry.file_name();
+            if seen.contains(&session) {
                 return None;
             }
-            let modified = pipe
-                .metadata()
-                .and_then(|metadata| metadata.modified())
-                .unwrap_or(SystemTime::UNIX_EPOCH);
-            Some((modified, pipe))
+            let modified = rankable_stats_pipe(&runtime, &session)?;
+            Some((modified, session))
         })
-        .collect();
-    directory_candidates.sort_by(|(a_time, a_path), (b_time, b_path)| {
-        b_time.cmp(a_time).then_with(|| a_path.cmp(b_path))
+        .collect::<Vec<_>>();
+    directory_candidates.sort_by(|(a_time, a_session), (b_time, b_session)| {
+        b_time.cmp(a_time).then_with(|| a_session.cmp(b_session))
     });
     candidates.extend(
         directory_candidates
             .into_iter()
-            .map(|(_, path)| StatsPipeCandidate {
+            .map(|(_, session)| StatsPipeCandidate {
                 kind: "gamescope directory",
-                path,
+                path: run_dir.join(&session).join("stats.pipe"),
+                session,
             }),
     );
     candidates
+}
+
+fn stats_pipe_candidates(run_dir: &Path) -> Vec<StatsPipeCandidate> {
+    // SAFETY: geteuid has no preconditions and returns the effective uid of this process.
+    stats_pipe_candidates_for_uid(run_dir, unsafe { libc::geteuid() })
 }
 
 /// Retained for callers that only need discovery. The dynamic collector uses
@@ -393,11 +519,11 @@ fn read_gamescope_loop(
 
         // O_NONBLOCK is essential: opening a reader on a writer-less FIFO must
         // succeed immediately, so all retry and rotation logic remains reachable.
-        let file = match OpenOptions::new()
-            .read(true)
-            .custom_flags(libc::O_NONBLOCK)
-            .open(&candidate.path)
-        {
+        // `open_stats_pipe` walks every parent by directory fd and validates the
+        // resulting fd, so no path replacement can redirect this reader.
+        let file = match open_stats_pipe(&runtime_dir, &candidate.session, unsafe {
+            libc::geteuid()
+        }) {
             Ok(file) => file,
             Err(error) => {
                 if failed_candidates.insert(candidate.path.clone()) {
@@ -609,17 +735,101 @@ mod tests {
     #[test]
     fn t2_symlink_target_is_preferred_over_directory_ranking() {
         let run_dir = temp_run_dir();
-        let preferred = run_dir.join("preferred");
+        let preferred = run_dir.join("gamescope.preferred");
         let other = run_dir.join("gamescope.other");
         create_dir(&preferred).unwrap();
         create_dir(&other).unwrap();
         make_fifo(&preferred.join("stats.pipe"));
         make_fifo(&other.join("stats.pipe"));
-        symlink(&preferred, run_dir.join("gamescope-stats")).unwrap();
+        symlink("gamescope.preferred", run_dir.join("gamescope-stats")).unwrap();
 
         let candidates = stats_pipe_candidates(&run_dir);
         assert_eq!(candidates[0].kind, "gamescope-stats symlink");
         assert_eq!(candidates[0].path, preferred.join("stats.pipe"));
+    }
+
+    #[test]
+    fn preferred_symlink_with_absolute_target_is_rejected() {
+        let run_dir = temp_run_dir();
+        let target = run_dir.join("gamescope.live");
+        create_dir(&target).unwrap();
+        make_fifo(&target.join("stats.pipe"));
+
+        symlink(&target, run_dir.join("gamescope-stats")).unwrap();
+        assert!(stats_pipe_candidates(&run_dir)
+            .iter()
+            .all(|candidate| candidate.kind != "gamescope-stats symlink"));
+    }
+
+    #[test]
+    fn symlink_escaping_runtime_dir_is_rejected() {
+        let run_dir = temp_run_dir();
+        let escaped = temp_run_dir();
+        let target = escaped.join("gamescope.outside");
+        create_dir(&target).unwrap();
+        make_fifo(&target.join("stats.pipe"));
+
+        symlink(
+            Path::new("..")
+                .join(escaped.file_name().unwrap())
+                .join("gamescope.outside"),
+            run_dir.join("gamescope-stats"),
+        )
+        .unwrap();
+        assert!(stats_pipe_candidates(&run_dir)
+            .iter()
+            .all(|candidate| candidate.kind != "gamescope-stats symlink"));
+    }
+
+    #[test]
+    fn intermediate_symlink_escape_is_rejected_by_dirfd_walk() {
+        let run_dir = temp_run_dir();
+        let escaped = temp_run_dir();
+        let escaped_session = escaped.join("gamescope.outside");
+        create_dir(&escaped_session).unwrap();
+        make_fifo(&escaped_session.join("stats.pipe"));
+        symlink(&escaped_session, run_dir.join("gamescope.via-link")).unwrap();
+        symlink("gamescope.via-link", run_dir.join("gamescope-stats")).unwrap();
+
+        assert!(stats_pipe_candidates(&run_dir).is_empty());
+        assert!(
+            open_stats_pipe(&run_dir, OsStr::new("gamescope.via-link"), unsafe {
+                libc::geteuid()
+            },)
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn symlinked_session_dir_is_rejected() {
+        let run_dir = temp_run_dir();
+        let target_root = temp_run_dir();
+        let target = target_root.join("gamescope.real");
+        create_dir(&target).unwrap();
+        make_fifo(&target.join("stats.pipe"));
+        symlink(&target, run_dir.join("gamescope.linked")).unwrap();
+
+        assert!(stats_pipe_candidates(&run_dir).is_empty());
+        assert!(
+            open_stats_pipe(&run_dir, OsStr::new("gamescope.linked"), unsafe {
+                libc::geteuid()
+            },)
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn foreign_owned_runtime_dir_is_rejected() {
+        let run_dir = temp_run_dir();
+        let session = run_dir.join("gamescope.live");
+        create_dir(&session).unwrap();
+        make_fifo(&session.join("stats.pipe"));
+        let foreign_uid = unsafe { libc::geteuid() } + 1;
+
+        // The fixture is owned by this process. Checking as another uid
+        // exercises the fstat ownership rejection without privileged chown.
+        assert!(stats_pipe_candidates_for_uid(&run_dir, foreign_uid).is_empty());
+        assert!(open_stats_pipe(&run_dir, OsStr::new("gamescope.live"), foreign_uid).is_err());
     }
 
     #[test]
@@ -677,6 +887,9 @@ mod tests {
     #[test]
     fn t5_no_gamescope_delegates_to_mangohud() {
         let run_dir = temp_run_dir();
+        // A gamescope-looking directory without a FIFO is not a candidate and
+        // must not suppress the non-Gamescope source.
+        create_dir(run_dir.join("gamescope.pipe-less")).unwrap();
         let log_dir = temp_run_dir();
         let log = log_dir.join("mangohud.csv");
         File::create(&log)
@@ -721,6 +934,12 @@ mod tests {
         let dead_dir = run_dir.join("gamescope.dead");
         create_dir(&dead_dir).unwrap();
         make_fifo(&dead_dir.join("stats.pipe"));
+        // This newer directory must not displace the real FIFO candidate.
+        create_dir(run_dir.join("gamescope.pipe-less")).unwrap();
+        assert_eq!(
+            stats_pipe_candidates(&run_dir)[0].path,
+            dead_dir.join("stats.pipe")
+        );
         let mut collector = FrameCollector::with_runtime_dir(None, run_dir);
         activate(&mut collector, "42");
         let started = Instant::now();

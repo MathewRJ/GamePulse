@@ -21,7 +21,7 @@ use anyhow::Result;
 use serde_json::Value;
 use std::fs::OpenOptions;
 use std::io::{Read, Seek, SeekFrom};
-use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::PathBuf;
 use std::time::{Instant, SystemTime};
 
@@ -140,32 +140,37 @@ impl MangoHudCollector {
     /// Read new CSV rows since the last file offset. Returns raw string rows.
     fn read_new_rows(&mut self) -> Vec<Vec<String>> {
         let path = match &self.log_path {
-            Some(p) if p.exists() => p.clone(),
+            Some(p) => p.clone(),
             _ => return vec![],
         };
 
-        // Stale check: same mtime and nothing new to read.
-        match std::fs::metadata(&path) {
-            Err(_) => return vec![],
-            Ok(meta) => {
-                let mtime = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
-                if Some(mtime) == self.last_mtime && self.file_pos >= meta.len() {
-                    return vec![];
-                }
-                self.last_mtime = Some(mtime);
-            }
-        }
-
-        // The selection check above excludes special files, but the path can
-        // still be replaced between discovery and open. O_NONBLOCK keeps that
-        // race harmless if it becomes a FIFO.
+        // Discovery is ranking only: do not trust the path's pre-open
+        // metadata. O_NOFOLLOW rejects a replacement symlink, O_NONBLOCK
+        // prevents a replacement FIFO from parking collection, and the fd is
+        // validated below before it is read.
         let chunk = match OpenOptions::new()
             .read(true)
-            .custom_flags(libc::O_NONBLOCK)
+            .custom_flags(libc::O_NONBLOCK | libc::O_NOFOLLOW)
             .open(&path)
         {
             Err(_) => return vec![],
             Ok(mut f) => {
+                let metadata = match f.metadata() {
+                    Ok(metadata)
+                        if metadata.file_type().is_file()
+                            && metadata.uid() == unsafe { libc::geteuid() } =>
+                    {
+                        metadata
+                    }
+                    _ => return vec![],
+                };
+                // The metadata that controls the read comes from the opened
+                // descriptor, not from the pathname inspected during ranking.
+                let mtime = metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+                if Some(mtime) == self.last_mtime && self.file_pos >= metadata.len() {
+                    return vec![];
+                }
+                self.last_mtime = Some(mtime);
                 if f.seek(SeekFrom::Start(self.file_pos)).is_err() {
                     return vec![];
                 }
@@ -297,6 +302,7 @@ mod tests {
     use super::*;
     use std::io::Write;
     use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::fs::symlink;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::mpsc;
     use std::time::Duration;
@@ -348,18 +354,24 @@ mod tests {
         assert_eq!(document["rigsignal"]["fps"]["current"], 60);
         assert_eq!(latest_log(&dir), Some(log.clone()));
 
-        // Exercise the discovery-to-open race too: selection saw a regular
-        // CSV, then the path was replaced by a FIFO before the collector
-        // opened it. This must also return under the timeout.
+        // Exercise the discovery-to-open race: selection saw a regular CSV,
+        // then the path was replaced by a symlink to another regular file
+        // before open. O_NOFOLLOW must reject it rather than trusting either
+        // the discovery metadata or the destination file.
         let mut collector = MangoHudCollector::with_log_dir(None, dir);
         collector.maybe_switch_log();
         std::fs::remove_file(&log).unwrap();
-        make_fifo(&log);
+        let replacement = temp_log_dir().join("replacement.csv");
+        std::fs::File::create(&replacement)
+            .unwrap()
+            .write_all(b"os,cpu\nLinux,test\nfps,frametime\n99,10.0\n")
+            .unwrap();
+        symlink(&replacement, &log).unwrap();
         let (done, result) = mpsc::channel();
         std::thread::spawn(move || done.send(collector.read_new_rows()).unwrap());
         assert!(result
             .recv_timeout(Duration::from_millis(500))
-            .expect("a selected CSV replaced by a FIFO must not park MangoHud open")
+            .expect("a selected CSV replaced by a symlink must not be followed")
             .is_empty());
     }
 }

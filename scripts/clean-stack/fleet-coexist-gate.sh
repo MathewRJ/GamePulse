@@ -21,7 +21,17 @@ while (($#)); do case "$1" in
 version "$ES_VERSION" && version "$KB_VERSION" && [[ "$ES_VERSION" == "$KB_VERSION" ]] || { usage; exit 2; }
 ((${#LEGS[@]})) || { usage; exit 2; }; [[ -z "$BUNDLE" || -f "$BUNDLE" ]] || { fail '--bundle is not a file'; exit 2; }
 [[ -z "$PREDECESSOR_MANIFEST" || -f "$PREDECESSOR_MANIFEST" ]] || { fail '--predecessor-manifest is not a file'; exit 2; }
-: "${ELASTIC_PASSWORD:?ELASTIC_PASSWORD must be set}"; : "${ELASTICSEARCH_PASSWORD:?ELASTICSEARCH_PASSWORD must be set}"; : "${CLEAN_STACK_AGENT_BINARY:?CLEAN_STACK_AGENT_BINARY must be set}"
+cluster_free_leg() { case "$1" in z) return 0 ;; *) return 1 ;; esac; }
+needs_cluster_env=0
+for leg in "${LEGS[@]}"; do
+  if ! cluster_free_leg "$leg"; then
+    needs_cluster_env=1
+    break
+  fi
+done
+if ((needs_cluster_env)); then
+  : "${ELASTIC_PASSWORD:?ELASTIC_PASSWORD must be set}"; : "${ELASTICSEARCH_PASSWORD:?ELASTICSEARCH_PASSWORD must be set}"; : "${CLEAN_STACK_AGENT_BINARY:?CLEAN_STACK_AGENT_BINARY must be set}"
+fi
 cs_require_tools bash curl docker jq openssl python3 sha256sum
 RUN_DIR="$(mktemp -d)"
 cleanup() { local rc="$?"; if [[ "$KEEP" != 1 ]]; then cs_cleanup || true; rm -rf "$RUN_DIR"; else printf 'KEEP: stack alive, RUN_DIR=%s\n' "$RUN_DIR" >&2; fi; return "$rc"; }
@@ -690,20 +700,23 @@ leg_x() {
 # TERMINAL ownership branch BEFORE its ancestor call, so the negative case is
 # end-to-end. The full-path positive control runs OUTSIDE the namespace; an in-ns
 # predicate control binds the refusal to foreignness rather than the environment.
-# Cluster-free: does not call setup. NOTE: the shared preamble still validates
-# the cluster env vars/tools; for a standalone `--leg z` run, dummy values for
-# ELASTIC_PASSWORD / ELASTICSEARCH_PASSWORD / CLEAN_STACK_AGENT_BINARY suffice —
-# this leg never uses them.
+# Cluster-free: does not call setup. The preamble recognizes this allowlisted
+# leg as cluster-free, so a standalone `--leg z` run needs no cluster secrets
+# or agent-binary setting.
 leg_z() {
   local target=''
   if ! unshare -Ur true 2>/dev/null; then
-    printf 'LEG-Z SKIP: unprivileged user namespaces unavailable on this host — foreign-uid coverage NOT exercised here\n' >&2
+    printf 'LEG-Z: SKIPPED (user namespaces unavailable)\n'
     return 0
   fi
-  for target in /root /var/lib /etc; do [[ -d "$target" ]] && break; done
-  # The refusal must bind to OWNERSHIP: the target must be mode-safe root-owned.
-  python3 -c 'import os,sys; st=os.lstat(sys.argv[1]); sys.exit(0 if (st.st_mode & 0o022)==0 and st.st_uid==0 else 1)' "$target" \
-    || fail "Leg-Z target $target is not a mode-safe root-owned directory"
+  # The refusal must bind to OWNERSHIP: the target must be mode-safe and foreign-owned.
+  for target in /root /var/lib /etc; do
+    if [[ -d "$target" ]] && python3 -c 'import os,sys; st=os.lstat(sys.argv[1]); sys.exit(0 if (st.st_mode & 0o022)==0 and st.st_uid != os.geteuid() else 1)' "$target"; then
+      break
+    fi
+    target=''
+  done
+  [[ -n "$target" ]] || fail 'Leg-Z found no mode-safe foreign-owned target directory'
   cat >"$RUN_DIR/leg-z-check.py" <<'PY'
 import importlib.util, os, pathlib, sys, tempfile
 repo, target, mode = sys.argv[1], sys.argv[2], sys.argv[3]
@@ -720,10 +733,10 @@ if mode == "positive":
 st = os.lstat(target)
 print(f"leg-z observation: st_uid={st.st_uid} geteuid={os.geteuid()}")
 assert st.st_uid not in (os.geteuid(), 0), "target does not observe foreign here"
-own = tempfile.mkdtemp()
-os.chmod(own, 0o700)
-assert mod._enrollment_parent_safe(os.lstat(own)), \
-    "in-ns predicate control failed: euid-owned dir rejected"
+with tempfile.TemporaryDirectory() as own:
+    os.chmod(own, 0o700)
+    assert mod._enrollment_parent_safe(os.lstat(own)), \
+        "in-ns predicate control failed: euid-owned dir rejected"
 try:
     mod.check_outbox_root(pathlib.Path(target))
 except mod.ProvisionError as err:

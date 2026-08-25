@@ -407,8 +407,7 @@ jobs:
           PKGVER="${PKGVER//-/_}"
           su builder -c "
             cd '$WORKSPACE/.github/packaging'
-            sed -i 's/^pkgver=.*/pkgver=$PKGVER/' PKGBUILD
-            REPOROOT='$WORKSPACE' makepkg --nodeps --noextract --nosign
+            PKGVER='$PKGVER' REPOROOT='$WORKSPACE' makepkg --nodeps --noextract --nosign
           "
 
       - name: Upload .pkg.tar.zst artefact
