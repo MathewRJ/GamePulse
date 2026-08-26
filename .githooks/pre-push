@@ -18,6 +18,60 @@
 
 set -e
 
+# Read every ref being pushed FIRST (stdin is delivered once). Collected here so
+# the tag-binding gate below runs even when gpx is absent (that branch is
+# deliberately fail-open for AUDITS, and must not swallow the tag check).
+audit_main=0
+main_range=""
+main_new_sha=""
+vtag_refs=()
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "${remote_ref}" in
+    refs/heads/main)
+      audit_main=1
+      main_range="${remote_sha} ${local_sha}"
+      main_new_sha="${local_sha}"
+      ;;
+    refs/tags/v*)
+      vtag_refs+=("${remote_ref} ${local_sha}")
+      ;;
+  esac
+done
+
+# Tag-binding gate (2026-08-26): a v* tag names a release. The audit machinery
+# only covers main pushes, so an arbitrary v* tag would publish an unaudited
+# commit through the release workflow's tag trigger. Bind every pushed v* tag
+# to the main tip: either the main sha pushed alongside it, or (tag-only push)
+# the local origin/main tracking ref. DELIBERATELY STRICT: a hotfix tag on a
+# non-tip commit is refused — that is the documented `git push --no-verify`
+# case. Tag deletions are allowed (removing a tag publishes nothing).
+ZERO40="0000000000000000000000000000000000000000"
+for entry in ${vtag_refs[@]+"${vtag_refs[@]}"}; do
+  tag_ref="${entry%% *}"
+  tag_sha="${entry##* }"
+  if [[ "${tag_sha}" == "${ZERO40}" ]]; then
+    continue
+  fi
+  peeled="$(git rev-parse --verify --quiet "${tag_sha}^{commit}" || true)"
+  if [[ -z "${peeled}" ]]; then
+    echo "[pre-push] REFUSED: ${tag_ref} does not peel to a commit." >&2
+    exit 1
+  fi
+  if [[ -n "${main_new_sha}" && "${main_new_sha}" != "${ZERO40}" ]]; then
+    bind_target="${main_new_sha}"
+    bind_desc="the main tip pushed alongside it"
+  else
+    bind_target="$(git rev-parse --verify --quiet 'origin/main^{commit}' || true)"
+    bind_desc="local origin/main (run 'git fetch' first if stale)"
+  fi
+  if [[ -z "${bind_target}" || "${peeled}" != "${bind_target}" ]]; then
+    echo "[pre-push] REFUSED: ${tag_ref} peels to ${peeled}, not ${bind_target:-<absent>} (${bind_desc})." >&2
+    echo "[pre-push] Release tags must point at the audited main tip. Push main first (sequential main-then-tag), or bypass deliberately with: git push --no-verify" >&2
+    exit 1
+  fi
+  echo "[pre-push] tag-binding: ${tag_ref} peels to ${bind_desc} — allowed"
+done
+
 # Always use the Workflow repo's gpx (not a project-local copy)
 GPX="${HOME}/coding/Workflow/bin/gpx"
 
@@ -25,18 +79,6 @@ if [[ ! -x "${GPX}" ]]; then
   echo "[pre-push] gpx not found at ${GPX} — skipping audit" >&2
   exit 0
 fi
-
-# Read each ref being pushed; only audit when 'main' is among them.
-audit_main=0
-main_range=""
-while read -r local_ref local_sha remote_ref remote_sha; do
-  case "${remote_ref}" in
-    refs/heads/main)
-      audit_main=1
-      main_range="${remote_sha} ${local_sha}"
-      ;;
-  esac
-done
 
 if [[ "${audit_main}" -eq 0 ]]; then
   exit 0
