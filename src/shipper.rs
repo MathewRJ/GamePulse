@@ -800,7 +800,7 @@ fn pad_spool_final(path: &Path) -> Result<u64> {
     file.seek(SeekFrom::Start(size - 1))?;
     let mut trailing = [0u8; 1];
     file.read_exact(&mut trailing)?;
-    if trailing != [b'\n'] {
+    if trailing != *b"\n" {
         anyhow::bail!("spool file does not end in a newline: {}", path.display());
     }
 

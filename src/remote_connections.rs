@@ -563,7 +563,7 @@ fn sha256_hex(input: &[u8]) -> String {
         0x1f83d9ab,
         0x5be0cd19,
     ];
-    for chunk in bytes.chunks_exact(64) {
+    for chunk in bytes.as_chunks::<64>().0 {
         let mut w = [0_u32; 64];
         for (i, word) in w[..16].iter_mut().enumerate() {
             *word = u32::from_be_bytes(chunk[i * 4..i * 4 + 4].try_into().unwrap());

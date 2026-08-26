@@ -71,7 +71,7 @@ impl TargetGeneration {
             return None;
         }
         let mut bytes = [0; 32];
-        for (index, pair) in value.as_bytes().chunks_exact(2).enumerate() {
+        for (index, pair) in value.as_bytes().as_chunks::<2>().0.iter().enumerate() {
             bytes[index] = (hex(pair[0])? << 4) | hex(pair[1])?;
         }
         Some(Self(bytes))
@@ -1271,10 +1271,10 @@ fn sha256_hex(data: &[u8]) -> String {
         0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
         0x5be0cd19,
     ];
-    for block in message.chunks_exact(64) {
+    for block in message.as_chunks::<64>().0 {
         let mut w = [0u32; 64];
-        for (i, word) in block.chunks_exact(4).enumerate() {
-            w[i] = u32::from_be_bytes(word.try_into().unwrap());
+        for (i, word) in block.as_chunks::<4>().0.iter().enumerate() {
+            w[i] = u32::from_be_bytes(*word);
         }
         for i in 16..64 {
             w[i] = w[i - 16]

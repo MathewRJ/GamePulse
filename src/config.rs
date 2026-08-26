@@ -387,7 +387,6 @@ mod tests {
     use super::*;
     use std::sync::atomic::AtomicUsize;
     use std::sync::Arc;
-    #[cfg(not(windows))]
     use std::sync::Mutex;
     use tracing::{Event, Level, Subscriber};
     use tracing_subscriber::{layer::Context, prelude::*, Layer};
