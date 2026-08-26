@@ -4,6 +4,49 @@ All notable changes to RigSignal will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+#### Fixed
+
+- **Frame telemetry no longer dies silently.** The gamescope frame source is
+  resolved at collect time (symlink-preferred, FIFO-validated) instead of once
+  at startup in arbitrary directory order; the reader survives writer-less
+  FIFOs (non-blocking open both paths) and recovers from EOF via bounded
+  demotion/rotation instead of dying permanently. Root cause of the
+  Jul-21→Aug-25 fleet-wide frame outage (a decoy pipe or gamescope restart
+  could wedge or kill the one-shot reader forever). Attach/detach transitions
+  are logged at INFO (`Gamescope frame source attached`).
+- Frame-source discovery is containment-hardened: dirfd walk with
+  `O_NOFOLLOW` at every component, `fstat` on the opened fd, and uid checks
+  (security-audit notes N3/N5–N8).
+- GPU discovery retries at collect time for both the drm card and hwmon paths,
+  so losing the boot race no longer silences GPU metrics until restart.
+- Installer fish PATH-guard matches populated `config.fish` correctly
+  (previous fixed-string guard could append a duplicate PATH block).
+
+#### Changed
+
+- Release and publish workflows validate `workflow_dispatch` version inputs
+  through the repository's single SemVer contract and pass all values to
+  shell steps via environment indirection; the Arch packaging step runs under
+  a static `runuser` command string. The dead pre-split `integration-audit`
+  workflow was removed.
+- The `rigsignal_viewer` Kibana role is now source-pinned (JCS-SHA256) beside
+  the existing shipper-role pin; a mutated viewer role refuses installation.
+- Full-suite test discovery is isolated and order-independent
+  (`tools/tests/run_shuffled.py`); suite currently 350 tests.
+
+#### Removed
+
+- **The eBPF daemon, probes, and systemd unit are no longer built, shipped,
+  or installed** (owner ruling 2026-08-26). The shipped unit's capability
+  grants contradicted SCOPE, `/usr/local` does not survive SteamOS OTAs, and
+  the daemon is disabled fleet-wide. Existing installed units are left
+  untouched; `restore-after-steamos-update.sh` still restores legacy
+  installs that retain the unit file and cleanly reports the shelved state
+  otherwise. Re-enablement is pre-registered as a design stub with hard
+  preconditions (capability proof on SteamOS, persistent-path install).
+
 ## [0.3.3] — 2026-08-06
 
 #### Added
