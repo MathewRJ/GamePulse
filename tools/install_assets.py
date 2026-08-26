@@ -4683,7 +4683,17 @@ def _remove_old_enrollment_generation_fd(root_fd: int, parent_fd: int, stage_nam
     if not _private_directory(os.fstat(root_fd)):
         raise InputError("old enrollment generation is invalid")
     allowed = set(_PUBLICATION_REQUIRED_MEMBERS) | set(_PUBLICATION_OPTIONAL_MEMBERS) | {b"candidate"}
-    entries = {os.fsencode(name) for name in os.listdir(root_fd)}
+    # Fresh "."-anchored description for the listing: the pre-exchange abort
+    # caller passes the stage fd, which was opened on the EMPTY stage — btrfs
+    # freezes a dir fd's readdir cutoff at open time, so listing through it
+    # would miss every member written afterwards (same class as
+    # _assert_publication_members' fix; safe for both callers).
+    list_fd = os.open(b".", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
+                      dir_fd=root_fd)
+    try:
+        entries = {os.fsencode(name) for name in os.listdir(list_fd)}
+    finally:
+        os.close(list_fd)
     if not all(name in allowed or name.startswith(b"fleet-coexist-body-") for name in entries):
         raise InputError("old enrollment generation is invalid")
     for name in entries:
