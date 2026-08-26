@@ -75,7 +75,8 @@ fi
 # latency fix, not a bypass — every pushed range is still audited.
 STAMP="$(git rev-parse --git-dir)/rigsignal-audit-approved"
 if [[ -f "${STAMP}" ]]; then
-  stamp_age=$(( $(date +%s) - $(stat -c %Y "${STAMP}") ))
+  stamp_mtime="$(stat -c %Y "${STAMP}" 2>/dev/null || stat -f %m "${STAMP}")"
+  stamp_age=$(( $(date +%s) - stamp_mtime ))
   if [[ "${stamp_age}" -lt 1800 ]] && [[ "$(cat "${STAMP}")" == "${main_range}" ]]; then
     echo "[pre-push] fresh audit approval stamp matches this exact range (${stamp_age}s old) — gate satisfied"
     exit 0
