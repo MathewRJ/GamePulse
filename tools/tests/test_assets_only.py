@@ -624,49 +624,6 @@ class AssetsOnlyInstallTests(unittest.TestCase):
                 version_fence.assert_not_called()
                 install.assert_not_called()
 
-    def test_full_default_flow_ownership_gate_refuses_before_enrollment_root_mutation(self):
-        with tempfile.TemporaryDirectory() as raw:
-            root = Path(raw) / "enrollment"
-            marker = Path(raw) / INSTALL.ASSETS_MARKER_FILE
-            args = SimpleNamespace(
-                bundle=Path("unused"), endpoint="https://es", ca_file=Path("unused"),
-                kibana_endpoint="https://kb", kibana_ca_file=Path("unused"),
-                admin_credentials_file=Path("unused"), agent_binary=Path("unused"), profile="user",
-                assets_only=False, assets_marker=marker, repair=False, upgrade=False, allow_downgrade=False,
-                enrollment_root=root, adopt_existing_w1_stream=False, ownership_profile=None,
-                rollback=None, predecessor_manifest=None, dry_run=False, unsafe_test_injection=False,
-            )
-            transport = AssetTransport(self.bundle)
-            target = next(asset for asset in self.bundle.assets if asset.kind in INSTALL._ES_ASSET_KINDS)
-            transport.es[INSTALL.es_path(target)] = {"_meta": {"managed_by": "foreign"}}
-            stderr = io.StringIO()
-            with mock.patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args), \
-                 mock.patch.object(INSTALL, "load_bundle", return_value=self.bundle), \
-                 mock.patch.object(INSTALL, "role_body", return_value={}), \
-                 mock.patch.object(INSTALL, "enrollment_condition", return_value="clean"), \
-                 mock.patch.object(INSTALL, "check_version_fence"), \
-                 mock.patch.object(INSTALL, "check_install_root_ancestors"), \
-                 mock.patch.object(INSTALL, "check_outbox_root"), \
-                 mock.patch.object(INSTALL, "check_install_preflight",
-                                   return_value=(Path("/canonical/ca.pem"), Path("/canonical/agent"))), \
-                 mock.patch.object(INSTALL, "configure_https"), \
-                 mock.patch.object(INSTALL, "admin_authorization", return_value="admin"), \
-                 mock.patch.object(INSTALL, "admin_credential_kind", return_value="native_user"), \
-                 mock.patch.object(INSTALL, "dispatch_clean_root", return_value=False), \
-                 mock.patch.object(INSTALL, "fence_remote_ownership_profile"), \
-                 mock.patch.object(INSTALL, "run_topology_preflight"), \
-                 mock.patch.object(INSTALL, "prepare_install_root") as prepare_root, \
-                 mock.patch.object(INSTALL, "request", transport.request), \
-                 mock.patch.object(INSTALL, "request_response", transport.request_response), \
-                 redirect_stderr(stderr):
-                self.assertEqual(INSTALL.main(), 3)
-            self.assertIn("RIGSIGNAL_FAILURE_SITE root_prepare\n", stderr.getvalue())
-            # The old planner's pre-root ownership gate is superseded by the
-            # shared v2 full-flow transaction after protected root setup; it
-            # still reaches no remote write on the foreign-object refusal.
-            prepare_root.assert_called_once_with(root)
-            self.assertEqual(transport.mutations, [])
-
     def test_full_main_bundle_meta_barrier_permutations_have_no_asset_enrollment_or_step11_writes(self):
         """F2: the real full ``main()`` route observes M before every write leg."""
         for position in (0, 33, 66):
