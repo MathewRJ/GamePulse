@@ -245,3 +245,45 @@ jobs:
             done
           done
           exit $fail
+
+  # Single aggregate check for branch protection to require. Deliberately an
+  # ALLOWLIST ("every result must be exactly success"), not a denylist of
+  # failure/cancelled -- the deleted pr-gate job denylisted, so a `skipped`
+  # upstream job reported "all required jobs passed". It also asserts the
+  # expected COUNT, so removing a job from `needs` fails the gate instead of
+  # silently shrinking it.
+  # stable-canary is intentionally NOT a dependency: it is schedule-only and
+  # would be `skipped` on every push.
+  ci-gate:
+    name: ci-gate
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - packaging-tests
+      - ebpf-workspace
+      - enrollment-tail-root
+      - python-discovery
+      - check
+      - fmt
+      - smoke-test
+      - dashboard-hygiene
+    steps:
+      - name: Verify every required job succeeded
+        env:
+          RESULTS: ${{ join(needs.*.result, ',') }}
+          EXPECTED: "8"
+        run: |
+          set -euo pipefail
+          echo "upstream results: ${RESULTS}"
+          IFS=',' read -ra got <<< "${RESULTS}"
+          if [[ "${#got[@]}" -ne "${EXPECTED}" ]]; then
+            echo "::error::expected ${EXPECTED} upstream results, got ${#got[@]} -- a required job was removed from needs"
+            exit 1
+          fi
+          for r in "${got[@]}"; do
+            if [[ "$r" != "success" ]]; then
+              echo "::error::upstream job result '${r}' is not success"
+              exit 1
+            fi
+          done
+          echo "all ${EXPECTED} required jobs succeeded"
