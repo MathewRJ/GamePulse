@@ -447,11 +447,12 @@ class PublicationProbeMatrixTests(unittest.TestCase):
             with patch.object(INSTALL.os, "open", side_effect=recorder):
                 INSTALL._probe_rename_exchange_capability(root, parent)
             self.assertEqual(opened[0], os.fspath(parent))
-            root.mkdir(mode=0o700); root.chmod(0o700)
+            fallback_root = Path(raw) / "missing-parent" / "root"
             opened.clear()
             with patch.object(INSTALL.os, "open", side_effect=recorder):
-                INSTALL._probe_rename_exchange_capability(root, Path(raw))
-            self.assertEqual(opened[0], os.fspath(parent))
+                INSTALL._probe_rename_exchange_capability(fallback_root, Path(raw))
+            self.assertEqual(opened[0], os.fspath(Path(raw)))
+            root.mkdir(mode=0o700); root.chmod(0o700)
             litter = parent / ".rigsignal-publication-probe-deadbeefdeadbeef-a"
             litter.mkdir(mode=0o700); litter.chmod(0o700)
             self.assertEqual(INSTALL.enrollment_condition(root), "clean")

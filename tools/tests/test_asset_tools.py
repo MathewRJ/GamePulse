@@ -10,12 +10,17 @@ import sys
 import tarfile
 import tempfile
 import unittest
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import ExitStack, redirect_stderr, redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from tools.tests.transaction_transport import ScriptedTransactionTransport
+
 TEST_SOURCE_COMMIT = "a" * 40
 
 
@@ -481,22 +486,32 @@ i.atomic_publication(r, {n: ('new-' + n).encode() for n in ('credentials.toml','
                 with self.subTest(position=position):
                     tracker = INSTALL.FailureSiteTracker()
                     journal = MagicMock(); tracker.attach_journal(journal)
-                    with patch.object(INSTALL, "_name_has_identity", side_effect=identities), \
-                         patch.object(INSTALL, "_remove_old_enrollment_generation_fd") as cleanup:
-                        with self.assertRaisesRegex(INSTALL.InputError, "identity changed"):
-                            INSTALL.atomic_publication(root, files, tracker)
+                    cleanup = None
+                    with patch.object(INSTALL, "_name_has_identity", side_effect=identities):
+                        if position == "post":
+                            with patch.object(INSTALL, "_remove_old_enrollment_generation_fd") as cleanup:
+                                with self.assertRaisesRegex(INSTALL.InputError, "identity changed"):
+                                    INSTALL.atomic_publication(root, files, tracker)
+                        else:
+                            with self.assertRaisesRegex(INSTALL.InputError, "identity changed"):
+                                INSTALL.atomic_publication(root, files, tracker)
                     self.assertIs(tracker.site, INSTALL.FailureSite.PUBLICATION_IDENTITY)
                     self.assertIsNone(tracker.journal)
                     if position == "post":
                         # Once names have exchanged an identity mismatch is
                         # terminal: it must not delete, swap back, or retry.
+                        assert cleanup is not None
                         cleanup.assert_not_called()
                     # A named, private stage remains Bundle-A remediation evidence.
                     self.assertEqual(INSTALL.enrollment_condition(root), "remediation")
-                    for entry in root.parent.iterdir():
-                        if INSTALL._is_publication_stage_name(root, os.fsencode(entry.name)):
-                            for child in entry.iterdir(): child.unlink()
-                            entry.rmdir()
+                    stages = [entry for entry in root.parent.iterdir()
+                              if INSTALL._is_publication_stage_name(root, os.fsencode(entry.name))]
+                    self.assertEqual(len(stages), 1)
+                    if position == "pre":
+                        self.assertEqual({child.name: child.read_bytes() for child in stages[0].iterdir()}, files)
+                    for child in stages[0].iterdir():
+                        child.unlink()
+                    stages[0].rmdir()
 
     def test_publication_restored_name_aba_writes_only_held_stage_fd(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -561,7 +576,7 @@ i.atomic_publication(r, {n: ('new-' + n).encode() for n in ('credentials.toml','
             self.assertTrue(unlinks and rmdirs)
             self.assertTrue(all(call[1].get("dir_fd") is not None for call in unlinks + rmdirs))
 
-    def test_anchor_and_cleanup_failures_mark_distinct_sites_and_identity_never_persists_journal(self):
+    def test_anchor_and_cleanup_failures_mark_distinct_sites(self):
         with tempfile.TemporaryDirectory() as raw:
             parent = Path(raw) / "parent"; parent.mkdir(mode=0o775); parent.chmod(0o775)
             unsafe_root = INSTALL.secure_root(parent / "enrollment")
@@ -575,15 +590,75 @@ i.atomic_publication(r, {n: ('new-' + n).encode() for n in ('credentials.toml','
                               side_effect=INSTALL.InputError("old enrollment generation is invalid")):
                 with self.assertRaises(INSTALL.InputError): INSTALL.atomic_publication(root, files, cleanup_tracker)
             self.assertIs(cleanup_tracker.site, INSTALL.FailureSite.PUBLICATION_CLEANUP)
-            journal = MagicMock(); identity_tracker = INSTALL.FailureSiteTracker(); identity_tracker.attach_journal(journal)
-            identity_values = iter((True, True, False))
-            with patch.object(INSTALL, "_name_has_identity",
-                              side_effect=lambda *_args: next(identity_values, True)):
-                with self.assertRaises(INSTALL.InputError): INSTALL.atomic_publication(root, files, identity_tracker)
-            with redirect_stderr(io.StringIO()):
-                INSTALL.finalize_failure("install failed: enrollment output:", identity_tracker,
-                                         INSTALL.MutationTracker())
-            journal.failure_site.assert_not_called()
+
+    def test_main_fleet_identity_mismatch_never_persists_journal(self):
+        """The actual main() finalizer must not write via a disputed journal name."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "enrollment"
+            bundle = INSTALL.Bundle("test", "test", [])
+            transport = ScriptedTransactionTransport(INSTALL, bundle)
+            args = SimpleNamespace(
+                bundle=Path("unused"), endpoint="https://es.invalid", ca_file=Path("ca"),
+                kibana_endpoint="https://kb.invalid", kibana_ca_file=Path("kb"),
+                admin_credentials_file=Path("admin"), agent_binary=Path("agent"), profile="user",
+                dry_run=False, assets_only=False, rollback=None, ownership_profile="fleet-coexist",
+                enrollment_root=root, adopt_existing_w1_stream=False, unsafe_test_injection=True,
+                repair=False, upgrade=False, allow_downgrade=False, predecessor_manifest=None,
+                assets_marker=root.parent / "marker",
+            )
+            root_name_checks = 0
+
+            def identity(_fd, name, _expected):
+                nonlocal root_name_checks
+                if name == os.fsencode(root.name):
+                    root_name_checks += 1
+                    return root_name_checks != 2
+                return True
+
+            patches = (
+                patch.object(INSTALL.argparse.ArgumentParser, "parse_args", return_value=args),
+                patch.object(INSTALL, "load_bundle", return_value=bundle),
+                patch.object(INSTALL, "role_body", return_value={}),
+                patch.object(INSTALL, "ownership_for_assets", return_value={}),
+                patch.object(INSTALL, "check_version_fence"),
+                patch.object(INSTALL, "check_install_root_ancestors"),
+                patch.object(INSTALL, "check_outbox_root"),
+                patch.object(INSTALL, "check_install_preflight", return_value=(Path("/ca"), Path("/agent"))),
+                patch.object(INSTALL, "configure_https"),
+                patch.object(INSTALL, "admin_authorization", return_value="admin"),
+                patch.object(INSTALL, "admin_credential_kind", return_value="native_user"),
+                patch.object(INSTALL, "dispatch_clean_root", return_value=False),
+                patch.object(INSTALL, "fence_remote_ownership_profile"),
+                patch.object(INSTALL, "run_topology_preflight"),
+                patch.object(INSTALL, "fence"),
+                patch.object(INSTALL, "cluster_health_gate"),
+                patch.object(INSTALL, "remote_stream_condition", return_value=("compatible", {})),
+                patch.object(INSTALL, "fleet_stream_snapshot", return_value={}),
+                patch.object(INSTALL, "m1_anchor_pins", return_value={}),
+                patch.object(INSTALL, "plan_fleet_fence", return_value={}),
+                patch.object(INSTALL, "verify_fleet_stream_overrides"),
+                patch.object(INSTALL, "verify_fleet_fence"),
+                patch.object(INSTALL, "verify_fleet_winner_proofs"),
+                patch.object(INSTALL, "verify_late_fleet_fence"),
+                patch.object(INSTALL, "verify_m1_anchors"),
+                patch.object(INSTALL, "ensure_stream"),
+                patch.object(INSTALL, "simulate"),
+                patch.object(INSTALL, "recompute_target_generation", return_value="0" * 64),
+                patch.object(INSTALL, "verify_stream_behavior"),
+                patch.object(INSTALL, "verify_role_matrix"),
+                patch.object(INSTALL, "prepublication_asset_fence"),
+                patch.object(INSTALL, "bundle_sha256", return_value="bundle-sha"),
+                patch.object(INSTALL, "mint_key", side_effect=lambda *_args: (INSTALL.mark_mutation_issued(), ("candidate", "encoded"))[1]),
+                patch.object(INSTALL, "_name_has_identity", side_effect=identity),
+                patch.object(INSTALL.urllib.request, "urlopen", side_effect=transport.urlopen),
+            )
+            with ExitStack() as stack:
+                for patcher in patches:
+                    stack.enter_context(patcher)
+                with redirect_stderr(io.StringIO()):
+                    self.assertEqual(INSTALL.main(), 4)
+            journal = INSTALL.parse_json((root / INSTALL.JOURNAL_FILE).read_bytes(), INSTALL.JOURNAL_FILE)
+            self.assertNotIn("failure_site", journal)
 
     def test_publication_sigkill_cut_matrix_keeps_a_complete_generation(self):
         """Exercise the four durable cut points in children, never in-process.

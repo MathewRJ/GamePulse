@@ -4729,6 +4729,7 @@ def atomic_publication(root: Path, files: dict[str, bytes],
     stage_name = None
     root_identity = stage_identity = None
     exchanged = False
+    preserve_stage = False
     try:
         for attempt in range(2):
             try:
@@ -4792,6 +4793,10 @@ def atomic_publication(root: Path, files: dict[str, bytes],
         fault("publication-before-exchange")
         if (not _name_has_identity(parent_fd, root_name, root_identity)
                 or not _name_has_identity(parent_fd, stage_name, stage_identity)):
+            # This is a terminal, pre-exchange identity dispute.  Preserve the
+            # complete private stage as Bundle-A remediation evidence; a later
+            # run must refuse for operator inspection rather than deleting it.
+            preserve_stage = True
             if failure_tracker is not None:
                 failure_tracker.mark(FailureSite.PUBLICATION_IDENTITY)
                 failure_tracker.detach_journal()
@@ -4832,7 +4837,8 @@ def atomic_publication(root: Path, files: dict[str, bytes],
     except OSError as error:
         raise InputError("cannot publish enrollment output") from error
     finally:
-        if not exchanged and stage_fd is not None and stage_name is not None and stage_identity is not None:
+        if (not exchanged and not preserve_stage and stage_fd is not None
+                and stage_name is not None and stage_identity is not None):
             try:
                 _remove_old_enrollment_generation_fd(stage_fd, parent_fd, stage_name, stage_identity)
             except (InputError, OSError):
