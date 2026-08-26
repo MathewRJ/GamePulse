@@ -28,10 +28,12 @@ fi
 
 # Read each ref being pushed; only audit when 'main' is among them.
 audit_main=0
+main_range=""
 while read -r local_ref local_sha remote_ref remote_sha; do
   case "${remote_ref}" in
     refs/heads/main)
       audit_main=1
+      main_range="${remote_sha} ${local_sha}"
       ;;
   esac
 done
@@ -40,6 +42,36 @@ if [[ "${audit_main}" -eq 0 ]]; then
   exit 0
 fi
 
+# Binding check (2026-08-26 review finding): `gpx audit security` audits the
+# CHECKOUT's origin/main...HEAD, so the gate is only meaningful when the sha
+# being pushed to main IS that HEAD. Refuse anything else (e.g.
+# `git push origin other-ref:main`) instead of approving an unaudited ref.
+# This gap predates the stamp; the stamp just made it visible.
+head_sha="$(git rev-parse HEAD)"
+pushed_sha="${main_range##* }"
+if [[ "${pushed_sha}" != "${head_sha}" ]]; then
+  echo "[pre-push] REFUSED: pushing ${pushed_sha} to main, but the audit covers the checkout HEAD (${head_sha})." >&2
+  echo "[pre-push] Check out the ref you are pushing (so HEAD == pushed sha) and push again." >&2
+  exit 1
+fi
+
+# Range-bound approval stamp (2026-08-25): git opens the ssh transport BEFORE
+# running this hook, so a multi-minute audit lets the connection die and the
+# pack send fails with SIGPIPE AFTER an APPROVE. The stamp records the exact
+# audited range; a retry push of the SAME range within 30 min passes the gate
+# instantly (inside the transport window). Any new range re-audits. This is a
+# latency fix, not a bypass — every pushed range is still audited.
+STAMP="$(git rev-parse --git-dir)/rigsignal-audit-approved"
+if [[ -f "${STAMP}" ]]; then
+  stamp_age=$(( $(date +%s) - $(stat -c %Y "${STAMP}") ))
+  if [[ "${stamp_age}" -lt 1800 ]] && [[ "$(cat "${STAMP}")" == "${main_range}" ]]; then
+    echo "[pre-push] fresh audit approval stamp matches this exact range (${stamp_age}s old) — gate satisfied"
+    exit 0
+  fi
+fi
+
 echo "[pre-push] push to main detected — running gpx audit security"
 echo "[pre-push] (bypass with: git push --no-verify)"
 "${GPX}" audit security
+printf '%s' "${main_range}" > "${STAMP}"
+echo "[pre-push] audit passed — approval stamped for range: ${main_range}"
