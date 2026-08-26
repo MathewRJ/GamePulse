@@ -55,6 +55,18 @@ if [[ "${pushed_sha}" != "${head_sha}" ]]; then
   exit 1
 fi
 
+# Drift check (audit note N2, 2026-08-26): the audit diffs origin/main...HEAD
+# (the local TRACKING ref) while ${main_range} carries the REAL remote tip from
+# transport negotiation. If they diverge (stale tracking ref after a remote
+# rewind/force-push) the audit could cover a subset of what lands. Fail closed;
+# with this check the stamp really does record the audited range.
+tracking_sha="$(git rev-parse --verify --quiet 'origin/main^{commit}' || true)"
+remote_tip="${main_range%% *}"
+if [[ "${remote_tip}" != "${tracking_sha}" ]]; then
+  echo "[pre-push] REFUSED: local origin/main (${tracking_sha:-absent}) does not match the remote tip (${remote_tip}) — run 'git fetch' and retry." >&2
+  exit 1
+fi
+
 # Range-bound approval stamp (2026-08-25): git opens the ssh transport BEFORE
 # running this hook, so a multi-minute audit lets the connection die and the
 # pack send fails with SIGPIPE AFTER an APPROVE. The stamp records the exact
@@ -72,6 +84,10 @@ fi
 
 echo "[pre-push] push to main detected — running gpx audit security"
 echo "[pre-push] (bypass with: git push --no-verify)"
-"${GPX}" audit security
+# Pin the audit target to THIS repo (audit note N1, 2026-08-26): GPX_PROJECT is
+# a documented user-settable env var — if exported in the pushing shell, gpx
+# would silently audit a DIFFERENT project's diff and this hook would stamp
+# this repo's range as approved.
+GPX_PROJECT="$(git rev-parse --show-toplevel)" "${GPX}" audit security
 printf '%s' "${main_range}" > "${STAMP}"
 echo "[pre-push] audit passed — approval stamped for range: ${main_range}"
