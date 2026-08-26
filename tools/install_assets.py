@@ -4628,7 +4628,17 @@ def _write_publication_member(stage_fd: int, name: bytes, data: bytes) -> None:
 
 
 def _assert_publication_members(stage_fd: int, intended: set[bytes]) -> None:
-    actual = {os.fsencode(name) for name in os.listdir(stage_fd)}
+    # btrfs (kernel >= 6.5, commit 357950361cbc) freezes a directory fd's
+    # readdir cutoff at open time: stage_fd was opened on the EMPTY stage, so
+    # listing through it never returns the members written afterwards.  List
+    # through a fresh description anchored at the held fd instead — "." cannot
+    # resolve anywhere else, so this stays fd-anchored on every filesystem.
+    list_fd = os.open(b".", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
+                      dir_fd=stage_fd)
+    try:
+        actual = {os.fsencode(name) for name in os.listdir(list_fd)}
+    finally:
+        os.close(list_fd)
     if actual != intended or not all(_publication_member_name(name) for name in actual):
         raise InputError("enrollment publication stage membership is invalid")
     for name in actual:
