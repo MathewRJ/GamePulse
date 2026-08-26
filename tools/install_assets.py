@@ -3192,7 +3192,7 @@ def _publication_debris(root: Path) -> bool:
     try:
         parent_fd = os.open(root.parent, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
                             | getattr(os, "O_CLOEXEC", 0))
-    except (FileNotFoundError, NotADirectoryError, PermissionError, OSError):
+    except OSError:
         return False
     try:
         for entry in os.listdir(parent_fd):
@@ -3485,10 +3485,10 @@ def _check_publication_stage_path(root: Path, ancestor: Path) -> None:
     try:
         canonical_root = Path(os.path.realpath(os.fspath(root)))
         stage_name = _publication_stage_prefix(canonical_root) + b"-" + b"f" * 16
-        stage = canonical_root.parent / os.fsdecode(stage_name)
+        stage_path = os.path.join(os.fsencode(canonical_root.parent), stage_name)
         if len(stage_name) > os.pathconf(ancestor, "PC_NAME_MAX"):
             raise ProvisionError("install refused: enrollment_publication_path_too_long")
-        if len(os.fsencode(os.fspath(stage))) >= os.pathconf(ancestor, "PC_PATH_MAX"):
+        if len(stage_path) >= os.pathconf(ancestor, "PC_PATH_MAX"):
             raise ProvisionError("install refused: enrollment_publication_path_too_long")
     except ProvisionError:
         raise
