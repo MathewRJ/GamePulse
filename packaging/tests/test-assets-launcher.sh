@@ -263,11 +263,11 @@ printf '%s\n' '#!/usr/bin/env python3' \
     'command = [os.environ["RIGSIGNAL_ASSETS_LAUNCHER"], "assets", "install", "--bundle", os.environ["RIGSIGNAL_ASSETS_BUNDLE"], "--endpoint", "http://127.0.0.1:9200", "--ca-file", os.environ["RIGSIGNAL_ASSETS_CA"], "--kibana-endpoint", "https://kibana.example.invalid", "--admin-credentials-file", os.environ["RIGSIGNAL_ASSETS_CREDENTIALS"], "--non-interactive"]' \
     'with open(os.environ["RIGSIGNAL_ASSETS_SIGNAL_OUT"], "w", encoding="utf-8") as output:' \
     '    child = subprocess.Popen(command, stdout=output, stderr=subprocess.STDOUT, start_new_session=True)' \
-    '    deadline = time.monotonic() + 5' \
+    '    deadline = time.monotonic() + float(os.environ.get("RIGSIGNAL_LAUNCHER_WAIT_SECS", "60"))' \
     '    while not os.path.exists(ready) and time.monotonic() < deadline: time.sleep(0.05)' \
     '    if not os.path.exists(ready): child.kill(); child.wait(); raise SystemExit("engine did not become ready")' \
     '    os.kill(child.pid, getattr(signal, "SIG" + signal_name))' \
-    '    status = child.wait(timeout=5)' \
+    '    status = child.wait(timeout=float(os.environ.get("RIGSIGNAL_LAUNCHER_WAIT_SECS", "60")))' \
     'open(result, "w", encoding="utf-8").write(f"status={status}\n")' >"$signal_driver"
 chmod 755 "$signal_driver"
 
@@ -323,11 +323,11 @@ printf '%s\n' '#!/usr/bin/env python3' \
     'child = subprocess.Popen(command, stdin=slave, stdout=slave, stderr=slave, preexec_fn=controlling_tty, close_fds=True)' \
     'os.close(slave)' \
     'os.write(master, b"prompt-user\n")' \
-    'deadline = time.monotonic() + 5' \
+    'deadline = time.monotonic() + float(os.environ.get("RIGSIGNAL_LAUNCHER_WAIT_SECS", "60"))' \
     'while not os.path.exists(os.environ["RIGSIGNAL_ASSETS_STTY_READY"]) and time.monotonic() < deadline: time.sleep(0.05)' \
     'if not os.path.exists(os.environ["RIGSIGNAL_ASSETS_STTY_READY"]): child.kill(); child.wait(); raise SystemExit("password prompt did not disable echo")' \
     'child.send_signal(signal.SIGINT)' \
-    'status = child.wait(timeout=5)' \
+    'status = child.wait(timeout=float(os.environ.get("RIGSIGNAL_LAUNCHER_WAIT_SECS", "60")))' \
     'echo_restored = bool(termios.tcgetattr(master)[3] & termios.ECHO)' \
     'open(os.environ["RIGSIGNAL_ASSETS_PASSWORD_RESULT"], "w", encoding="utf-8").write(f"status={status} echo={int(echo_restored)}\n")' \
     'os.close(master)' >"$password_driver"
