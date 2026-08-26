@@ -1,6 +1,6 @@
 # RigSignal — Project Status
 
-Last updated: 2026-08-06 (0.3.3 release)
+Last updated: 2026-08-26 (0.3.4 release)
 Active streams: main (local ElasticHome deployment) + offline (air-gapped, not yet forked)
 
 ## Decision record — supported stack range (TK-4, 2026-07-22)
@@ -42,6 +42,7 @@ turnkey bar (bundled local stack pins inside this range).
 | 0.2.5 release | 🟢 Released + deployed 2026-07-19 (both hosts) | ▓▓▓▓▓▓▓▓▓▓ |
 | 0.3.2 release — packaging and asset-install hardening | 🟢 Published 2026-08-04 | ▓▓▓▓▓▓▓▓▓▓ |
 | 0.3.3 release — idempotency and DL2 recovery carries | 🟢 Published 2026-08-06 | ▓▓▓▓▓▓▓▓▓▓ |
+| 0.3.4 release — frame-source fix, input hardening, eBPF unship | 🟢 Published 2026-08-26 | ▓▓▓▓▓▓▓▓▓▓ |
 
 ## At a glance — offline branch (not yet forked)
 
@@ -82,9 +83,12 @@ turnkey bar (bundled local stack pins inside this range).
 
 ## Active work package
 
-**0.3.3 is published** (tag `v0.3.3`, 2026-08-06). It includes the
-assets-install idempotency engine and DL2 fixes: final spool files are padded
-to the filestream fingerprint floor and the shipper no longer deletes finals.
+**0.3.4 is published** (tag `v0.3.4`, 2026-08-26). It includes the
+frame-source lifecycle fix with containment hardening, GPU collect-time
+retry, workflow-input validation, the viewer-role source pin, and stops
+shipping the eBPF daemon/unit (shelved pending the re-enable design).
+Historical: 0.3.3 (2026-08-06) shipped the assets-install idempotency engine
+and the DL2 padding/retention fixes.
 
 **Retention caveat (R1).** A final is pruned only when the discovered
 elastic-agent is HEALTHY, its registry is readable, the matching
