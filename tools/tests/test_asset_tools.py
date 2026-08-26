@@ -1,8 +1,10 @@
 import importlib.util
+import inspect
 import hashlib
 import io
 import json
 import os
+import stat
 import subprocess
 import sys
 import tarfile
@@ -11,7 +13,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 ROOT = Path(__file__).resolve().parents[2]
 TEST_SOURCE_COMMIT = "a" * 40
@@ -358,7 +360,71 @@ class AssetToolsTests(unittest.TestCase):
             INSTALL.atomic_publication(root, new)
             self.assertEqual({name: (root / name).read_bytes() for name in new}, new)
             self.assertFalse((root / "candidate").exists())
-            self.assertFalse((root.parent / ".rigsignal-publication-enrollment").exists())
+            self.assertFalse(any(INSTALL._is_publication_stage_name(root, os.fsencode(path.name))
+                                 for path in root.parent.iterdir()))
+
+    def test_publication_stage_forms_and_owned_debris_classifier(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "enrollment"; root.mkdir(mode=0o700); root.chmod(0o700)
+            legacy = root.parent / os.fsdecode(INSTALL._publication_stage_legacy_name(root))
+            random_name = INSTALL._publication_stage_prefix(root) + b"-0123456789abcdef"
+            self.assertTrue(INSTALL._is_publication_stage_name(root, os.fsencode(legacy.name)))
+            self.assertTrue(INSTALL._is_publication_stage_name(root, random_name))
+            self.assertFalse(INSTALL._is_publication_stage_name(root, random_name[:-1]))
+            self.assertFalse(INSTALL._is_publication_stage_name(root, random_name.upper()))
+            legacy.mkdir(mode=0o700); legacy.chmod(0o700)
+            self.assertEqual(INSTALL.enrollment_condition(root), "remediation")
+            legacy.rmdir()
+            lookalike = root.parent / os.fsdecode(random_name)
+            lookalike.write_bytes(b"not a directory")
+            self.assertEqual(INSTALL.enrollment_condition(root), "clean")
+            self.assertTrue(lookalike.exists())
+
+    def test_debris_classifier_random_owned_and_foreign_directory_symlink_non_utf8_are_safe(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "enrollment"; root.mkdir(mode=0o700); root.chmod(0o700)
+            random_name = INSTALL._publication_stage_prefix(root) + b"-0123456789abcdef"
+            candidate = root.parent / os.fsdecode(random_name)
+            candidate.mkdir(mode=0o700); candidate.chmod(0o700)
+            self.assertEqual(INSTALL.enrollment_condition(root), "remediation")
+            candidate.rmdir()
+            candidate.mkdir(mode=0o700); candidate.chmod(0o700)
+            real_stat = os.stat
+            def foreign(name, *args, **kwargs):
+                value = real_stat(name, *args, **kwargs)
+                if name == random_name:
+                    fields = list(value); fields[4] = os.geteuid() + 1
+                    return os.stat_result(fields)
+                return value
+            with patch.object(INSTALL.os, "stat", side_effect=foreign):
+                self.assertEqual(INSTALL.enrollment_condition(root), "clean")
+            self.assertTrue(candidate.is_dir())
+            candidate.rmdir()
+            target = root.parent / "safe-target"; target.mkdir(mode=0o700)
+            candidate.symlink_to(target, target_is_directory=True)
+            self.assertEqual(INSTALL.enrollment_condition(root), "clean")
+            self.assertTrue(candidate.is_symlink())
+            candidate.unlink()
+            os.mkdir(os.fsencode(root.parent) + b"/non-utf8-\xff", 0o700)
+            self.assertEqual(INSTALL.enrollment_condition(root), "clean")
+
+    def test_single_instance_per_root_residual_is_documented(self):
+        contract = (ROOT / "docs/assets-install-exit-contract.md").read_text()
+        self.assertIn("one installer instance per enrollment root", contract)
+        self.assertIn("not a publication mutex", contract)
+
+    def test_publication_writer_is_final_name_exclusive_and_private(self):
+        with tempfile.TemporaryDirectory() as raw:
+            stage = Path(raw) / "stage"; stage.mkdir(mode=0o700); stage.chmod(0o700)
+            fd = os.open(stage, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                INSTALL._write_publication_member(fd, b"credentials.toml", b"secret")
+                with self.assertRaises(FileExistsError):
+                    INSTALL._write_publication_member(fd, b"credentials.toml", b"replacement")
+                self.assertEqual((stage / "credentials.toml").read_bytes(), b"secret")
+                self.assertEqual(stat.S_IMODE((stage / "credentials.toml").stat().st_mode), 0o600)
+            finally:
+                os.close(fd)
 
     def test_publication_fault_leaves_the_previous_generation_visible(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -376,6 +442,211 @@ i.atomic_publication(r, {n: ('new-' + n).encode() for n in ('credentials.toml','
                                     env=environment, capture_output=True, check=False)
             self.assertEqual(result.returncode, -9)
             self.assertEqual({name: (root / name).read_bytes() for name in names}, old)
+
+    def test_publication_copies_every_optional_member_with_fd_writer_and_fsyncs(self):
+        """The private writer is also used for coexistence-only publication files."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "enrollment"; root.mkdir(mode=0o700); root.chmod(0o700)
+            required = ("credentials.toml", "handshake.toml", "shipping-policy-v1.toml", "state.json")
+            old = {name: ("old-" + name).encode() for name in required}
+            new = {name: ("new-" + name).encode() for name in required}
+            for name, value in old.items(): INSTALL.atomic_write(root, name, value)
+            optional = {
+                INSTALL.OWNERSHIP_PROFILE_FILE: b'{"ownership_profile":"fleet-coexist"}',
+                "fleet-coexist-journal.json": b'{"journal":true}',
+                "fleet-coexist-body-first": b"first body",
+                "fleet-coexist-body-second": b"second body",
+            }
+            for name, value in optional.items(): INSTALL.atomic_write(root, name, value)
+            real_fsync = os.fsync
+            fsyncs = []
+            with patch.object(INSTALL, "atomic_write", side_effect=AssertionError("publication used atomic_write")), \
+                 patch.object(INSTALL.os, "fsync", side_effect=lambda fd: (fsyncs.append(fd), real_fsync(fd))[1]):
+                INSTALL.atomic_publication(root, new)
+            self.assertEqual({name: (root / name).read_bytes() for name in new}, new)
+            self.assertEqual({name: (root / name).read_bytes() for name in optional}, optional)
+            self.assertGreaterEqual(len(fsyncs), len(required) + len(optional) + 3)
+            self.assertTrue(all(stat.S_IMODE((root / name).stat().st_mode) == 0o600
+                                for name in (*required, *optional)))
+
+    def test_publication_identity_sites_pre_and_post_exchange_are_terminal(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "enrollment"; root.mkdir(mode=0o700); root.chmod(0o700)
+            files = {name: b"new" for name in INSTALL._PUBLICATION_REQUIRED_MEMBERS}
+            files = {os.fsdecode(name): value for name, value in files.items()}
+            # The first two checks bind root/stage while anchoring.  The
+            # following values drive the pre- or post-exchange comparison.
+            for position, identities in (("pre", (True, True, False)),
+                                         ("post", (True, True, True, True, False))):
+                with self.subTest(position=position):
+                    tracker = INSTALL.FailureSiteTracker()
+                    journal = MagicMock(); tracker.attach_journal(journal)
+                    with patch.object(INSTALL, "_name_has_identity", side_effect=identities), \
+                         patch.object(INSTALL, "_remove_old_enrollment_generation_fd") as cleanup:
+                        with self.assertRaisesRegex(INSTALL.InputError, "identity changed"):
+                            INSTALL.atomic_publication(root, files, tracker)
+                    self.assertIs(tracker.site, INSTALL.FailureSite.PUBLICATION_IDENTITY)
+                    self.assertIsNone(tracker.journal)
+                    if position == "post":
+                        # Once names have exchanged an identity mismatch is
+                        # terminal: it must not delete, swap back, or retry.
+                        cleanup.assert_not_called()
+                    # A named, private stage remains Bundle-A remediation evidence.
+                    self.assertEqual(INSTALL.enrollment_condition(root), "remediation")
+                    for entry in root.parent.iterdir():
+                        if INSTALL._is_publication_stage_name(root, os.fsencode(entry.name)):
+                            for child in entry.iterdir(): child.unlink()
+                            entry.rmdir()
+
+    def test_publication_restored_name_aba_writes_only_held_stage_fd(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "enrollment"; root.mkdir(mode=0o700); root.chmod(0o700)
+            required = {os.fsdecode(name): b"new-" + name for name in INSTALL._PUBLICATION_REQUIRED_MEMBERS}
+            original = INSTALL._write_publication_member
+            moved = []
+            def aba(stage_fd, name, data):
+                if not moved:
+                    stage = next(item for item in root.parent.iterdir()
+                                 if INSTALL._is_publication_stage_name(root, os.fsencode(item.name)))
+                    parked = root.parent / (stage.name + ".parked")
+                    os.rename(stage, parked); stage.mkdir(mode=0o700); stage.rmdir(); os.rename(parked, stage)
+                    moved.append(stage)
+                return original(stage_fd, name, data)
+            with patch.object(INSTALL, "_write_publication_member", side_effect=aba):
+                INSTALL.atomic_publication(root, required)
+            self.assertEqual({name: (root / name).read_bytes() for name in required}, required)
+            self.assertTrue(moved)
+
+    def test_optional_source_identity_binding_rejects_each_source_kind(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "root"; root.mkdir(mode=0o700); root.chmod(0o700)
+            fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                for name in (*INSTALL._PUBLICATION_OPTIONAL_MEMBERS,
+                             b"fleet-coexist-body-one"):
+                    with self.subTest(name=name):
+                        path = root / os.fsdecode(name); path.write_bytes(b"private"); path.chmod(0o600)
+                        with patch.object(INSTALL, "_name_has_identity", return_value=False):
+                            with self.assertRaisesRegex(INSTALL.InputError, "source is invalid"):
+                                INSTALL._read_publication_member(fd, name)
+                        path.unlink()
+            finally:
+                os.close(fd)
+
+    def test_cleanup_is_descriptor_confined_and_has_no_path_fallbacks(self):
+        source = inspect.getsource(INSTALL._remove_candidate_root_fd) + inspect.getsource(
+            INSTALL._remove_old_enrollment_generation_fd)
+        self.assertNotIn("glob", source)
+        self.assertNotIn(".exists(", source)
+        self.assertNotIn("remove_candidate_root(", source)
+        self.assertIn("dir_fd=", source)
+
+    def test_cleanup_syscalls_and_candidate_recursion_are_dirfd_anchored(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "enrollment"; root.mkdir(mode=0o700); root.chmod(0o700)
+            for name in INSTALL._PUBLICATION_REQUIRED_MEMBERS:
+                INSTALL.atomic_write(root, os.fsdecode(name), b"old")
+            candidate = INSTALL.secure_candidate_root(root)
+            INSTALL.atomic_write(candidate, "credentials.toml", b"candidate")
+            files = {os.fsdecode(name): b"new" for name in INSTALL._PUBLICATION_REQUIRED_MEMBERS}
+            real_unlink, real_rmdir = os.unlink, os.rmdir
+            unlinks, rmdirs = [], []
+            def unlink(name, *args, **kwargs):
+                unlinks.append((name, kwargs)); return real_unlink(name, *args, **kwargs)
+            def rmdir(name, *args, **kwargs):
+                rmdirs.append((name, kwargs)); return real_rmdir(name, *args, **kwargs)
+            with patch.object(INSTALL.os, "unlink", side_effect=unlink), \
+                 patch.object(INSTALL.os, "rmdir", side_effect=rmdir):
+                INSTALL.atomic_publication(root, files)
+            self.assertTrue(unlinks and rmdirs)
+            self.assertTrue(all(call[1].get("dir_fd") is not None for call in unlinks + rmdirs))
+
+    def test_anchor_and_cleanup_failures_mark_distinct_sites_and_identity_never_persists_journal(self):
+        with tempfile.TemporaryDirectory() as raw:
+            parent = Path(raw) / "parent"; parent.mkdir(mode=0o775); parent.chmod(0o775)
+            unsafe_root = INSTALL.secure_root(parent / "enrollment")
+            files = {os.fsdecode(name): b"new" for name in INSTALL._PUBLICATION_REQUIRED_MEMBERS}
+            tracker = INSTALL.FailureSiteTracker()
+            with self.assertRaises(INSTALL.InputError): INSTALL.atomic_publication(unsafe_root, files, tracker)
+            self.assertIs(tracker.site, INSTALL.FailureSite.PUBLICATION_ANCHOR)
+            root = Path(raw) / "root"; root.mkdir(mode=0o700); root.chmod(0o700)
+            cleanup_tracker = INSTALL.FailureSiteTracker()
+            with patch.object(INSTALL, "_remove_old_enrollment_generation_fd",
+                              side_effect=INSTALL.InputError("old enrollment generation is invalid")):
+                with self.assertRaises(INSTALL.InputError): INSTALL.atomic_publication(root, files, cleanup_tracker)
+            self.assertIs(cleanup_tracker.site, INSTALL.FailureSite.PUBLICATION_CLEANUP)
+            journal = MagicMock(); identity_tracker = INSTALL.FailureSiteTracker(); identity_tracker.attach_journal(journal)
+            identity_values = iter((True, True, False))
+            with patch.object(INSTALL, "_name_has_identity",
+                              side_effect=lambda *_args: next(identity_values, True)):
+                with self.assertRaises(INSTALL.InputError): INSTALL.atomic_publication(root, files, identity_tracker)
+            with redirect_stderr(io.StringIO()):
+                INSTALL.finalize_failure("install failed: enrollment output:", identity_tracker,
+                                         INSTALL.MutationTracker())
+            journal.failure_site.assert_not_called()
+
+    def test_publication_sigkill_cut_matrix_keeps_a_complete_generation(self):
+        """Exercise the four durable cut points in children, never in-process.
+
+        The wrapper installs the scripted transport at the child's urllib seam
+        before calling ``main()`` (dry-run is enough to prove that process
+        boundary), then drives the real publication helper to its SIGKILL hook.
+        """
+        names = ("credentials.toml", "handshake.toml", "shipping-policy-v1.toml", "state.json")
+        wrapper = r'''
+import os, sys
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+from tools import install_assets as install
+from tools.tests.transaction_transport import ScriptedTransactionTransport
+root = Path(sys.argv[1])
+bundle = install.Bundle("child", "child", [])
+transport = ScriptedTransactionTransport(install, bundle)
+args = SimpleNamespace(bundle=Path("unused"), endpoint="https://es.invalid", ca_file=Path("ca"),
+    kibana_endpoint="https://kb.invalid", kibana_ca_file=Path("kb"), admin_credentials_file=Path("admin"),
+    agent_binary=Path("agent"), profile="user", dry_run=True, assets_only=False, rollback=None,
+    ownership_profile=None, enrollment_root=root, adopt_existing_w1_stream=False,
+    unsafe_test_injection=True, repair=False, upgrade=False, allow_downgrade=False,
+    predecessor_manifest=None, assets_marker=root.parent / "marker")
+with patch.object(install.argparse.ArgumentParser, "parse_args", return_value=args), \
+     patch.object(install, "load_bundle", return_value=bundle), \
+     patch.object(install, "role_body", return_value={}), \
+     patch.object(install.urllib.request, "urlopen", side_effect=transport.urlopen):
+    assert install.main() == 0
+files = {name: ("new-" + name).encode() for name in
+         ("credentials.toml", "handshake.toml", "shipping-policy-v1.toml", "state.json")}
+files["state.json"] = install.jcs(install.state_template("KUrXRgwRRQu-RikmIJhm0Q", "1" * 64,
+    "new", str(root))) + b"\n"
+install.atomic_publication(root, files)
+'''
+        # The fourth hook is intentionally after old-generation removal; it
+        # proves the final-barrier state and is clean rather than a false
+        # Bundle-A debris refusal.  The first three leave recognized debris.
+        cases = (("publication-before-exchange", "old", "remediation"),
+                 ("publication-post-exchange-pre-parent-fsync", "new", "remediation"),
+                 ("publication-post-parent-fsync-pre-cleanup", "new", "remediation"),
+                 ("publication-cleanup-before-final-parent-fsync", "new", "committed"))
+        for point, visible, condition in cases:
+            with self.subTest(point=point):
+                with tempfile.TemporaryDirectory() as raw:
+                    root = Path(raw) / "enrollment"; root.mkdir(mode=0o700); root.chmod(0o700)
+                    for name in names:
+                        data = ("old-" + name).encode()
+                        if name == "state.json":
+                            data = INSTALL.jcs(INSTALL.state_template(
+                                "KUrXRgwRRQu-RikmIJhm0Q", "0" * 64, "old", str(root))) + b"\n"
+                        INSTALL.atomic_write(root, name, data)
+                    result = subprocess.run([sys.executable, "-c", wrapper, str(root)], cwd=ROOT,
+                                            env=os.environ | {"RIGSIGNAL_TEST_CRASH_AT": point},
+                                            capture_output=True, text=True, check=False)
+                    self.assertEqual(result.returncode, -9, result.stderr)
+                    expected = {name: (visible + "-" + name).encode() for name in names}
+                    expected["state.json"] = INSTALL.jcs(INSTALL.state_template(
+                        "KUrXRgwRRQu-RikmIJhm0Q", ("0" if visible == "old" else "1") * 64,
+                        visible, str(root))) + b"\n"
+                    self.assertEqual({name: (root / name).read_bytes() for name in names}, expected)
+                    self.assertEqual(INSTALL.enrollment_condition(root), condition)
 
     def test_canonical_get_requires_exact_single_projection(self):
         asset = INSTALL.Asset("security_roles", "rigsignal_shipper", "x", (ROOT / "elastic/security-roles/rigsignal_shipper.json").read_bytes())

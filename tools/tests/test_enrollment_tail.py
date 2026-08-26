@@ -1,6 +1,8 @@
 import importlib.util
 import inspect
 import io
+import ctypes
+import errno
 import os
 import stat
 import tempfile
@@ -247,6 +249,7 @@ class SameClassPreflightTests(unittest.TestCase):
              patch.object(INSTALL, "_check_agent_binary", return_value=Path("/resolved/agent")), \
              patch.object(INSTALL, "_rename_exchange_symbol_available", return_value=True), \
              patch.object(INSTALL, "_mount_filesystem_type", return_value="ext4"), \
+             patch.object(INSTALL, "_probe_rename_exchange_capability"), \
              patch.object(INSTALL, "_check_publication_stage_path"), \
              patch.object(INSTALL, "_check_parent_fsync"), \
              patch.object(INSTALL, "_check_local_transaction_readiness"), \
@@ -262,10 +265,13 @@ class SameClassPreflightTests(unittest.TestCase):
              patch.object(INSTALL, "_check_agent_binary", return_value=Path("/resolved/agent")), \
              patch.object(INSTALL, "_rename_exchange_symbol_available", return_value=True), \
              patch.object(INSTALL, "_mount_filesystem_type", return_value="nfs"), \
-             patch.object(INSTALL, "_check_publication_stage_path") as stage:
-            with self.assertRaisesRegex(INSTALL.ProvisionError, "atomic_publication_filesystem_unsupported"):
-                INSTALL.check_install_preflight(Path("/sandbox/root"), Path("agent"), Path("ca"))
-            stage.assert_not_called()
+             patch.object(INSTALL, "_probe_rename_exchange_capability"), \
+             patch.object(INSTALL, "_check_publication_stage_path"), \
+             patch.object(INSTALL, "_check_parent_fsync"), \
+             patch.object(INSTALL, "_check_local_transaction_readiness"), \
+             patch.object(INSTALL, "resolve_enrollment_ca_file", return_value=Path("/ca")):
+            self.assertEqual(INSTALL.check_install_preflight(Path("/sandbox/root"), Path("agent"), Path("ca")),
+                             (Path("/ca"), Path("/resolved/agent")))
 
     def test_stage_path_length_has_positive_and_negative_controls(self):
         root = Path("/sandbox") / ("x" * 20)
@@ -280,7 +286,8 @@ class SameClassPreflightTests(unittest.TestCase):
 
     def test_stage_path_uses_canonical_root_and_refuses_exact_path_max(self):
         canonical_root = Path("/canonical/deep/enrollment")
-        canonical_stage = INSTALL._publication_stage(canonical_root)
+        canonical_stage = canonical_root.parent / os.fsdecode(
+            INSTALL._publication_stage_prefix(canonical_root) + b"-" + b"f" * 16)
         with patch.object(INSTALL.os.path, "realpath", return_value=str(canonical_root)), \
              patch.object(INSTALL.os, "pathconf",
                           side_effect=(255, len(os.fsencode(os.fspath(canonical_stage))))):
@@ -335,6 +342,121 @@ class SameClassPreflightTests(unittest.TestCase):
                 INSTALL._mount_filesystem_type(Path("/sandbox/root"))
 
 
+class PublicationProbeMatrixTests(unittest.TestCase):
+    def test_real_exchange_probe_leaves_no_debris_and_swaps_real_directory_names(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "root"; root.mkdir(mode=0o700); root.chmod(0o700)
+            left, right = root / "left", root / "right"
+            left.mkdir(mode=0o700); right.mkdir(mode=0o700)
+            (left / "which").write_text("left"); (right / "which").write_text("right")
+            parent_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                INSTALL._rename_exchange(parent_fd, b"left", parent_fd, b"right")
+            finally:
+                os.close(parent_fd)
+            self.assertEqual((left / "which").read_text(), "right")
+            self.assertEqual((right / "which").read_text(), "left")
+            INSTALL._probe_rename_exchange_capability(root / "enrollment", root)
+            self.assertFalse(any(item.name.startswith(".rigsignal-publication-probe-")
+                                 for item in root.iterdir()))
+
+    def test_probe_mkdir_failures_and_collision_cleanup_are_refusals(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "root"; root.mkdir(mode=0o700); root.chmod(0o700)
+            for failure_at in (1, 2):
+                calls = []
+                real_mkdir = os.mkdir
+                def mkdir(name, mode=0o777, *, dir_fd=None):
+                    calls.append(name)
+                    if len(calls) == failure_at: raise OSError(errno.EACCES, "blocked")
+                    return real_mkdir(name, mode, dir_fd=dir_fd)
+                with self.subTest(failure_at=failure_at), patch.object(INSTALL.os, "mkdir", side_effect=mkdir):
+                    with self.assertRaisesRegex(INSTALL.ProvisionError, "atomic_publication_filesystem_unsupported"):
+                        INSTALL._probe_rename_exchange_capability(root / "enrollment", root)
+                self.assertFalse(any(item.name.startswith(".rigsignal-publication-probe-")
+                                     for item in root.iterdir()))
+
+    def test_stage_collision_retries_then_exhausts_without_touching_existing_debris(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "root"; root.mkdir(mode=0o700); root.chmod(0o700)
+            files = {os.fsdecode(name): b"new" for name in INSTALL._PUBLICATION_REQUIRED_MEMBERS}
+            occupied = INSTALL._publication_stage_prefix(root) + b"-0000000000000000"
+            parent_fd = os.open(root.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try: os.mkdir(occupied, 0o700, dir_fd=parent_fd)
+            finally: os.close(parent_fd)
+            fresh = INSTALL._publication_stage_prefix(root) + b"-1111111111111111"
+            with patch.object(INSTALL, "_publication_stage_name", side_effect=(occupied, fresh)):
+                INSTALL.atomic_publication(root, files)
+            self.assertTrue((root.parent / os.fsdecode(occupied)).is_dir())
+            # A fresh root cannot be published twice, so use a second root for
+            # the exhaustion case and pin the eight bounded attempts.
+            root2 = Path(raw) / "root2"; root2.mkdir(mode=0o700); root2.chmod(0o700)
+            occupied2 = INSTALL._publication_stage_prefix(root2) + b"-2222222222222222"
+            parent_fd = os.open(root2.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try: os.mkdir(occupied2, 0o700, dir_fd=parent_fd)
+            finally: os.close(parent_fd)
+            with patch.object(INSTALL, "_publication_stage_name", return_value=occupied2):
+                with self.assertRaisesRegex(INSTALL.InputError, "cannot create enrollment publication stage"):
+                    INSTALL.atomic_publication(root2, files)
+
+    def test_errno_return_from_libc_is_preserved_and_probe_maps_both_refusals(self):
+        class FakeRename:
+            def __init__(self, number): self.number = number
+            def __call__(self, *_args): ctypes.set_errno(self.number); return -1
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "root"; root.mkdir(mode=0o700); root.chmod(0o700)
+            for number, refusal in ((errno.EROFS, "local_transaction_storage_unavailable"),
+                                    (errno.EINVAL, "atomic_publication_filesystem_unsupported")):
+                fake = FakeRename(number)
+                library = type("Library", (), {"renameat2": fake})()
+                with self.subTest(errno=number), patch.object(INSTALL.ctypes, "CDLL", return_value=library):
+                    parent_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+                    try:
+                        with self.assertRaises(OSError) as raised:
+                            INSTALL._rename_exchange(parent_fd, b"missing-a", parent_fd, b"missing-b")
+                        self.assertEqual(raised.exception.errno, number)
+                    finally:
+                        os.close(parent_fd)
+                with self.subTest(probe_errno=number), patch.object(INSTALL, "_rename_exchange",
+                                                                      side_effect=OSError(number, "fake")):
+                    with self.assertRaisesRegex(INSTALL.ProvisionError, refusal):
+                        INSTALL._probe_rename_exchange_capability(root / "enrollment", root)
+
+    def test_probe_precedes_later_preflight_checks_and_never_reaches_http(self):
+        events = []
+        with patch.object(INSTALL, "_nearest_existing_ancestor", return_value=Path("/sandbox")), \
+             patch.object(INSTALL, "_check_agent_binary", return_value=Path("/agent")), \
+             patch.object(INSTALL, "_rename_exchange_symbol_available", return_value=True), \
+             patch.object(INSTALL, "_probe_rename_exchange_capability",
+                          side_effect=lambda *_args: (events.append("probe"),
+                                                       (_ for _ in ()).throw(INSTALL.ProvisionError(
+                                                           "install refused: atomic_publication_filesystem_unsupported")))[1]), \
+             patch.object(INSTALL, "_check_publication_stage_path", side_effect=lambda *_args: events.append("stage")):
+            with self.assertRaisesRegex(INSTALL.ProvisionError, "atomic_publication_filesystem_unsupported"):
+                INSTALL.check_install_preflight(Path("/sandbox/root"), Path("agent"), Path("ca"))
+        self.assertEqual(events, ["probe"])
+
+    def test_probe_uses_parent_then_fallback_ancestor_and_crash_litter_is_inert(self):
+        with tempfile.TemporaryDirectory() as raw:
+            parent = Path(raw) / "parent"; parent.mkdir(mode=0o700); parent.chmod(0o700)
+            root = parent / "root"
+            opened = []
+            real_open = os.open
+            def recorder(path, *args, **kwargs):
+                opened.append(os.fspath(path)); return real_open(path, *args, **kwargs)
+            with patch.object(INSTALL.os, "open", side_effect=recorder):
+                INSTALL._probe_rename_exchange_capability(root, parent)
+            self.assertEqual(opened[0], os.fspath(parent))
+            root.mkdir(mode=0o700); root.chmod(0o700)
+            opened.clear()
+            with patch.object(INSTALL.os, "open", side_effect=recorder):
+                INSTALL._probe_rename_exchange_capability(root, Path(raw))
+            self.assertEqual(opened[0], os.fspath(parent))
+            litter = parent / ".rigsignal-publication-probe-deadbeefdeadbeef-a"
+            litter.mkdir(mode=0o700); litter.chmod(0o700)
+            self.assertEqual(INSTALL.enrollment_condition(root), "clean")
+
+
 class FailureSiteTests(unittest.TestCase):
     @staticmethod
     def args(root: Path) -> SimpleNamespace:
@@ -366,7 +488,6 @@ class FailureSiteTests(unittest.TestCase):
         patches.enter_context(patch.object(INSTALL, "load_state", return_value=None))
         patches.enter_context(patch.object(INSTALL, "bind_ownership_profile"))
         patches.enter_context(patch.object(INSTALL, "cluster_uuid", return_value="KUrXRgwRRQu-RikmIJhm0Q"))
-        patches.enter_context(patch.object(INSTALL, "remove_stale_publication_stage"))
         patches.enter_context(patch.object(INSTALL, "prerequisites"))
         patches.enter_context(patch.object(INSTALL, "cluster_health_gate"))
         patches.enter_context(patch.object(INSTALL, "fence"))
@@ -426,7 +547,6 @@ class FailureSiteTests(unittest.TestCase):
                 patches.enter_context(patch.object(INSTALL, "prepare_install_root", return_value=root))
                 patches.enter_context(patch.object(INSTALL, "load_state", return_value=None))
                 patches.enter_context(patch.object(INSTALL, "cluster_uuid", return_value="KUrXRgwRRQu-RikmIJhm0Q"))
-                patches.enter_context(patch.object(INSTALL, "remove_stale_publication_stage"))
                 patches.enter_context(patch.object(INSTALL, "prerequisites"))
                 patches.enter_context(patch.object(INSTALL, "cluster_health_gate"))
                 patches.enter_context(patch.object(INSTALL, "fence"))
@@ -790,7 +910,6 @@ class MainPreflightRecoveryTests(unittest.TestCase):
                  patch.object(INSTALL, "fence_remote_ownership_profile"), \
                  patch.object(INSTALL, "run_topology_preflight"), \
                  patch.object(INSTALL, "cluster_uuid", return_value=state["expected_cluster_uuid"]), \
-                 patch.object(INSTALL, "remove_stale_publication_stage"), \
                  patch.object(INSTALL, "check_install_root_ancestors"), \
                  patch.object(INSTALL, "check_install_preflight",
                               return_value=(Path("/canonical/ca.pem"), resolved_agent)) as preflight, \

@@ -62,6 +62,21 @@ jobs:
           sudo python3 tools/tests/test_enrollment_tail.py -v 2>&1 | tee enrollment-tail-root.log
           grep -E 'test_foreign_owned_outbox_refuses.* \.\.\. ok$' enrollment-tail-root.log
 
+  python-discovery:
+    name: Python enrollment discovery
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run full Python discovery
+        run: python3 -m unittest discover -s tools/tests
+
+      - name: Run shuffled Python discovery
+        run: python3 tools/tests/run_shuffled.py --seed 20260826
+
+      - name: Run fd publication tests directly
+        run: python3 tools/tests/test_asset_tools.py
+
   check:
     name: check (${{ matrix.os }})
     strategy:

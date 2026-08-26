@@ -15,6 +15,7 @@ import os
 import re
 import shutil
 import signal
+import secrets
 import socket
 import ssl
 import stat
@@ -93,7 +94,6 @@ ASSETS_MARKER_FILE = "assets-marker.json"
 RIGSIGNAL_MANAGED_BY = "rigsignal-asset-bundle"
 _ES_ASSET_KINDS = frozenset(("component_templates", "index_templates", "pipelines",
                              "transforms", "security_roles"))
-RENAME_EXCHANGE_FILESYSTEMS = frozenset(("btrfs", "ext4", "overlay", "tmpfs", "xfs"))
 LOCAL_TRANSACTION_MIN_AVAILABLE_BLOCKS = 16
 
 # This is deliberately an identity table, rather than a live `_meta` heuristic.
@@ -200,6 +200,9 @@ class FailureSite(Enum):
     CANDIDATE_STAGE = "candidate_stage"
     PUBLICATION_STAGE = "publication_stage"
     PUBLICATION_EXCHANGE = "publication_exchange"
+    PUBLICATION_ANCHOR = "publication_anchor"
+    PUBLICATION_IDENTITY = "publication_identity"
+    PUBLICATION_CLEANUP = "publication_cleanup"
     PUBLISHED_PROBE = "published_probe"
     LOCAL_COMMIT = "local_commit"
 
@@ -227,6 +230,10 @@ class FailureSiteTracker:
                 # Failure-site persistence is diagnostic only.  In particular,
                 # a broken journal must never mask the original failure.
                 pass
+
+    def detach_journal(self) -> None:
+        """Prevent a terminal identity failure from writing via a disputed name."""
+        self.journal = None
 
 
 def report_failure_site(site: FailureSite) -> None:
@@ -3138,6 +3145,74 @@ def fence_remote_ownership_profile(es_url: str, authorization: str, requested: s
         raise ProvisionError("install refused: ownership_table_version_mismatch")
 
 
+_PUBLICATION_STAGE_PREFIX = b".rigsignal-publication-"
+_PUBLICATION_STAGE_SUFFIX_RE = re.compile(br"[0-9a-f]{16}\Z")
+_PUBLICATION_PROBE_PREFIX = b".rigsignal-publication-probe-"
+_PUBLICATION_REQUIRED_MEMBERS = (b"credentials.toml", b"handshake.toml",
+                                 b"shipping-policy-v1.toml", b"state.json")
+_PUBLICATION_OPTIONAL_MEMBERS = (os.fsencode(OWNERSHIP_PROFILE_FILE), os.fsencode("fleet-coexist-journal.json"))
+
+
+def _publication_stage_prefix(root: Path) -> bytes:
+    """Return the bytes-safe sibling prefix for this canonical root leaf."""
+    return _PUBLICATION_STAGE_PREFIX + os.fsencode(root.name)
+
+
+def _publication_stage_legacy_name(root: Path) -> bytes:
+    return _publication_stage_prefix(root)
+
+
+def _publication_stage_name(root: Path) -> bytes:
+    return _publication_stage_prefix(root) + b"-" + secrets.token_hex(8).encode("ascii")
+
+
+def _is_publication_stage_name(root: Path, name: bytes) -> bool:
+    """Recognize only the legacy exact or new random exact stage forms."""
+    legacy = _publication_stage_legacy_name(root)
+    if name == legacy:
+        return True
+    prefix = legacy + b"-"
+    return name.startswith(prefix) and _PUBLICATION_STAGE_SUFFIX_RE.fullmatch(name[len(prefix):]) is not None
+
+
+def _private_directory(st: os.stat_result) -> bool:
+    return bool(stat.S_ISDIR(st.st_mode) and not stat.S_ISLNK(st.st_mode)
+                and st.st_uid == os.geteuid() and (st.st_mode & 0o077) == 0)
+
+
+def _publication_member_name(name: bytes) -> bool:
+    """The one publication membership predicate, shared by writer and assertion."""
+    return (name not in (b"", b".", b"..") and b"/" not in name
+            and (name in _PUBLICATION_REQUIRED_MEMBERS or name in _PUBLICATION_OPTIONAL_MEMBERS
+                 or name.startswith(b"fleet-coexist-body-")))
+
+
+def _publication_debris(root: Path) -> bool:
+    """Report inert lookalikes and return only owned, exact-shape private debris."""
+    try:
+        parent_fd = os.open(root.parent, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+                            | getattr(os, "O_CLOEXEC", 0))
+    except (FileNotFoundError, NotADirectoryError, PermissionError, OSError):
+        return False
+    try:
+        for entry in os.listdir(parent_fd):
+            name = os.fsencode(entry)
+            if not _is_publication_stage_name(root, name):
+                continue
+            try:
+                candidate = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+            except OSError:
+                print("inert enrollment publication lookalike could not be inspected", file=sys.stderr)
+                continue
+            if (stat.S_ISDIR(candidate.st_mode) and not stat.S_ISLNK(candidate.st_mode)
+                    and candidate.st_uid == os.geteuid() and stat.S_IMODE(candidate.st_mode) == 0o700):
+                return True
+            print("inert enrollment publication lookalike is not owned private debris", file=sys.stderr)
+        return False
+    finally:
+        os.close(parent_fd)
+
+
 def enrollment_condition(root: Path) -> str:
     """Classify local enrollment ownership without creating or repairing it.
 
@@ -3152,8 +3227,9 @@ def enrollment_condition(root: Path) -> str:
         if (not stat.S_ISDIR(st.st_mode) or stat.S_ISLNK(st.st_mode) or st.st_uid != os.geteuid()
                 or st.st_mode & 0o077):
             return "remediation"
-        stage = _publication_stage(root)
-        if stage.exists():
+        # Keep this after the missing-root guard: a first install with an absent
+        # parent is clean, not an OSError-driven remediation refusal.
+        if _publication_debris(root):
             return "remediation"
         entries = {entry.name for entry in root.iterdir()}
         allowed = {"state.json", "credentials.toml", "handshake.toml", "shipping-policy-v1.toml",
@@ -3248,6 +3324,8 @@ def _ancestor_component_safe(st: os.stat_result) -> bool:
 def _enrollment_parent_safe(st: os.stat_result) -> bool:
     """Return whether the directory that will contain the root is protected."""
     mode = st.st_mode
+    # For an fd opened with O_NOFOLLOW|O_DIRECTORY the symlink limb is
+    # unreachable; retain it here so the predicate is also safe for lstat users.
     return bool(stat.S_ISDIR(mode) and not stat.S_ISLNK(mode)
                 and st.st_uid == os.geteuid() and (mode & 0o022) == 0)
 
@@ -3354,6 +3432,34 @@ def _rename_exchange_symbol_available() -> bool:
     return True
 
 
+def _probe_rename_exchange_capability(root: Path, ancestor: Path) -> None:
+    """Perform one disposable, fd-anchored rename-exchange capability probe."""
+    anchor = root.parent if root.parent.is_dir() else ancestor
+    parent_fd = None
+    names: list[bytes] = []
+    try:
+        parent_fd = os.open(anchor, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+                            | getattr(os, "O_CLOEXEC", 0))
+        token = secrets.token_hex(8).encode("ascii")
+        names = [_PUBLICATION_PROBE_PREFIX + token + b"-a",
+                 _PUBLICATION_PROBE_PREFIX + token + b"-b"]
+        for name in names:
+            os.mkdir(name, 0o700, dir_fd=parent_fd)
+        _rename_exchange(parent_fd, names[0], parent_fd, names[1])
+    except OSError as error:
+        if error.errno in (errno.EROFS, errno.ENOSPC):
+            raise ProvisionError("install refused: local_transaction_storage_unavailable") from error
+        raise ProvisionError("install refused: atomic_publication_filesystem_unsupported") from error
+    finally:
+        if parent_fd is not None:
+            for name in names:
+                try:
+                    os.rmdir(name, dir_fd=parent_fd)
+                except OSError:
+                    pass
+            os.close(parent_fd)
+
+
 def _check_agent_binary(agent: Path) -> Path:
     try:
         raw_agent = os.fspath(agent)
@@ -3378,8 +3484,9 @@ def _check_publication_stage_path(root: Path, ancestor: Path) -> None:
     """Reject a stage path that mkdir(2) would reject after remote mutation."""
     try:
         canonical_root = Path(os.path.realpath(os.fspath(root)))
-        stage = _publication_stage(canonical_root)
-        if len(os.fsencode(stage.name)) > os.pathconf(ancestor, "PC_NAME_MAX"):
+        stage_name = _publication_stage_prefix(canonical_root) + b"-" + b"f" * 16
+        stage = canonical_root.parent / os.fsdecode(stage_name)
+        if len(stage_name) > os.pathconf(ancestor, "PC_NAME_MAX"):
             raise ProvisionError("install refused: enrollment_publication_path_too_long")
         if len(os.fsencode(os.fspath(stage))) >= os.pathconf(ancestor, "PC_PATH_MAX"):
             raise ProvisionError("install refused: enrollment_publication_path_too_long")
@@ -3438,14 +3545,18 @@ def resolve_enrollment_ca_file(ca_file: Path) -> Path:
 
 
 def check_install_preflight(root: Path, agent: Path, ca_file: Path) -> tuple[Path, Path]:
-    """Run every non-mutating enrollment precondition before the first HTTP call."""
+    """Run local bounded preflight before HTTP; it may probe private filesystem capability."""
     canonical_root = Path(os.path.realpath(os.fspath(root)))
     ancestor = _nearest_existing_ancestor(canonical_root.parent)
     resolved_agent = _check_agent_binary(agent)
     if not _rename_exchange_symbol_available():
         raise ProvisionError("install refused: atomic_publication_filesystem_unsupported")
-    if _mount_filesystem_type(ancestor) not in RENAME_EXCHANGE_FILESYSTEMS:
-        raise ProvisionError("install refused: atomic_publication_filesystem_unsupported")
+    try:
+        _mount_filesystem_type(ancestor)
+    except ProvisionError:
+        # Mount type is diagnostic enrichment only; a real exchange decides.
+        pass
+    _probe_rename_exchange_capability(canonical_root, ancestor)
     _check_publication_stage_path(canonical_root, ancestor)
     _check_parent_fsync(ancestor, canonical_root.parent)
     _check_local_transaction_readiness(ancestor)
@@ -4465,117 +4576,273 @@ def rollback_transaction(es_url: str, kb_url: str, authorization: str, root: Pat
     return operations
 
 
+def _fd_identity(st: os.stat_result) -> tuple[int, int]:
+    return st.st_dev, st.st_ino
+
+
+def _name_has_identity(parent_fd: int, name: bytes, identity: tuple[int, int]) -> bool:
+    try:
+        return _fd_identity(os.stat(name, dir_fd=parent_fd, follow_symlinks=False)) == identity
+    except OSError:
+        return False
+
+
+def _read_publication_member(root_fd: int, name: bytes) -> bytes | None:
+    """Read an optional source through its held root fd, never a pathname."""
+    try:
+        fd = os.open(name, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0),
+                     dir_fd=root_fd)
+    except FileNotFoundError:
+        return None
+    try:
+        member = os.fstat(fd)
+        if (not stat.S_ISREG(member.st_mode) or member.st_uid != os.geteuid()
+                or member.st_mode & 0o077 or not _name_has_identity(root_fd, name, _fd_identity(member))):
+            raise InputError("enrollment publication source is invalid")
+        chunks = []
+        while True:
+            chunk = os.read(fd, 65536)
+            if not chunk:
+                return b"".join(chunks)
+            chunks.append(chunk)
+    finally:
+        os.close(fd)
+
+
+def _write_publication_member(stage_fd: int, name: bytes, data: bytes) -> None:
+    """Write one final stage member directly beneath the held private fd."""
+    if not _publication_member_name(name):
+        raise InputError("invalid enrollment publication member")
+    fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+                 | getattr(os, "O_CLOEXEC", 0), 0o600, dir_fd=stage_fd)
+    try:
+        view = memoryview(data)
+        while view:
+            written = os.write(fd, view)
+            if written <= 0:
+                raise OSError(errno.EIO, "short enrollment publication write")
+            view = view[written:]
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _assert_publication_members(stage_fd: int, intended: set[bytes]) -> None:
+    actual = {os.fsencode(name) for name in os.listdir(stage_fd)}
+    if actual != intended or not all(_publication_member_name(name) for name in actual):
+        raise InputError("enrollment publication stage membership is invalid")
+    for name in actual:
+        member = os.stat(name, dir_fd=stage_fd, follow_symlinks=False)
+        if (not stat.S_ISREG(member.st_mode) or stat.S_ISLNK(member.st_mode)
+                or member.st_uid != os.geteuid() or stat.S_IMODE(member.st_mode) != 0o600):
+            raise InputError("enrollment publication stage member is invalid")
+    os.fsync(stage_fd)
+
+
+def _remove_candidate_root_fd(root_fd: int) -> None:
+    """Remove a validated old-generation candidate through its parent fd."""
+    try:
+        candidate_fd = os.open(b"candidate", os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+                               | getattr(os, "O_CLOEXEC", 0), dir_fd=root_fd)
+    except FileNotFoundError:
+        return
+    try:
+        candidate_st = os.fstat(candidate_fd)
+        if not _private_directory(candidate_st):
+            raise InputError("old enrollment generation is invalid")
+        allowed = set(_PUBLICATION_REQUIRED_MEMBERS)
+        entries = {os.fsencode(name) for name in os.listdir(candidate_fd)}
+        if not entries.issubset(allowed):
+            raise InputError("old enrollment generation is invalid")
+        for name in entries:
+            entry = os.stat(name, dir_fd=candidate_fd, follow_symlinks=False)
+            if (not stat.S_ISREG(entry.st_mode) or stat.S_ISLNK(entry.st_mode)
+                    or entry.st_uid != os.geteuid() or entry.st_mode & 0o077):
+                raise InputError("old enrollment generation is invalid")
+            os.unlink(name, dir_fd=candidate_fd)
+        if not _name_has_identity(root_fd, b"candidate", _fd_identity(candidate_st)):
+            raise InputError("old enrollment generation is invalid")
+        os.rmdir(b"candidate", dir_fd=root_fd)
+    finally:
+        os.close(candidate_fd)
+
+
+def _remove_old_enrollment_generation_fd(root_fd: int, parent_fd: int, stage_name: bytes,
+                                         root_identity: tuple[int, int]) -> None:
+    """Confined old-generation cleanup using only held descriptors and dirfds."""
+    if not _private_directory(os.fstat(root_fd)):
+        raise InputError("old enrollment generation is invalid")
+    allowed = set(_PUBLICATION_REQUIRED_MEMBERS) | set(_PUBLICATION_OPTIONAL_MEMBERS) | {b"candidate"}
+    entries = {os.fsencode(name) for name in os.listdir(root_fd)}
+    if not all(name in allowed or name.startswith(b"fleet-coexist-body-") for name in entries):
+        raise InputError("old enrollment generation is invalid")
+    for name in entries:
+        if name == b"candidate":
+            continue
+        entry = os.stat(name, dir_fd=root_fd, follow_symlinks=False)
+        if (not stat.S_ISREG(entry.st_mode) or stat.S_ISLNK(entry.st_mode)
+                or entry.st_uid != os.geteuid() or entry.st_mode & 0o077):
+            raise InputError("old enrollment generation is invalid")
+        os.unlink(name, dir_fd=root_fd)
+    if b"candidate" in entries:
+        _remove_candidate_root_fd(root_fd)
+    if not _name_has_identity(parent_fd, stage_name, root_identity):
+        raise InputError("old enrollment generation changed before removal")
+    os.rmdir(stage_name, dir_fd=parent_fd)
+
+
+def _rename_exchange(old_dir_fd: int, old_name: bytes, new_dir_fd: int, new_name: bytes) -> None:
+    """Use renameat2(RENAME_EXCHANGE) exactly through the supplied directory fds."""
+    renameat2 = ctypes.CDLL(None, use_errno=True).renameat2
+    renameat2.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint)
+    renameat2.restype = ctypes.c_int
+    if renameat2(old_dir_fd, old_name, new_dir_fd, new_name, 2) != 0:
+        error_number = ctypes.get_errno()
+        raise OSError(error_number, os.strerror(error_number))
+
+
+def _publication_anchor(root: Path) -> tuple[Path, int, int, bytes, tuple[int, int]]:
+    """Open and bind parent/root descriptors without mutating filesystem paths."""
+    canonical = Path(os.path.abspath(os.fspath(root)))
+    parent_fd = os.open(canonical.parent, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+                        | getattr(os, "O_CLOEXEC", 0))
+    try:
+        if not _enrollment_parent_safe(os.fstat(parent_fd)):
+            raise InputError("enrollment parent is not protected")
+        root_name = os.fsencode(canonical.name)
+        root_fd = os.open(root_name, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+                          | getattr(os, "O_CLOEXEC", 0), dir_fd=parent_fd)
+        root_st = os.fstat(root_fd)
+        if not _private_directory(root_st) or not _name_has_identity(parent_fd, root_name, _fd_identity(root_st)):
+            os.close(root_fd)
+            raise InputError("enrollment root is not protected")
+        return canonical, parent_fd, root_fd, root_name, _fd_identity(root_st)
+    except Exception:
+        os.close(parent_fd)
+        raise
+
+
 def atomic_publication(root: Path, files: dict[str, bytes],
                        failure_tracker: FailureSiteTracker | None = None) -> None:
-    """Atomically exchange the whole consumer-visible enrollment generation.
-
-    Four independent ``rename`` calls still permit a reader to observe a mixed
-    credential/configuration generation.  Linux's same-parent rename exchange
-    gives the directory path one atomic old-or-new transition; all member files
-    are fsynced in a private sibling before that transition.
-    """
-    if failure_tracker is not None:
-        failure_tracker.mark(FailureSite.PUBLICATION_STAGE)
-    secure_root(root)
-    parent = root.parent
-    try:
-        parent_st = parent.lstat()
-    except OSError as error:
-        raise InputError("cannot publish enrollment output") from error
-    if not _enrollment_parent_safe(parent_st):
-        raise InputError("enrollment parent is not protected")
-    stage = _publication_stage(root)
-    try:
-        stage.mkdir(mode=0o700)
-    except FileExistsError as error:
-        raise InputError("stale enrollment publication exists") from error
+    """Publish one complete generation via fd-anchored same-parent exchange."""
+    parent_fd = root_fd = stage_fd = None
+    stage_name = None
+    root_identity = stage_identity = None
     exchanged = False
     try:
-        for name in ("credentials.toml", "handshake.toml", "shipping-policy-v1.toml", "state.json"):
-            atomic_write(stage, name, files[name])
-            fault("publication-" + name)
-        # Fleet coexistence makes profile selection a durable property of this
-        # enrollment root.  Preserve the protected fence through the directory
-        # exchange rather than leaving it behind in the old generation.
-        ownership = secure_read(root / OWNERSHIP_PROFILE_FILE, missing_ok=True)
-        if ownership is not None:
-            atomic_write(stage, OWNERSHIP_PROFILE_FILE, ownership)
-        journal = secure_read(root / JOURNAL_FILE, missing_ok=True)
-        if journal is not None:
-            atomic_write(stage, JOURNAL_FILE, journal)
-            for body in root.glob("fleet-coexist-body-*"):
-                if not body.is_file() or body.is_symlink():
+        for attempt in range(2):
+            try:
+                root, parent_fd, root_fd, root_name, root_identity = _publication_anchor(root)
+                break
+            except FileNotFoundError as error:
+                if attempt:
+                    if failure_tracker is not None:
+                        failure_tracker.mark(FailureSite.PUBLICATION_ANCHOR)
+                    raise InputError("enrollment publication anchor is unavailable") from error
+                # Existing root preparation is the sole narrowly-scoped fallback.
+                root = secure_root(root)
+            except (InputError, OSError) as error:
+                if failure_tracker is not None:
+                    failure_tracker.mark(FailureSite.PUBLICATION_ANCHOR)
+                if isinstance(error, InputError):
+                    raise
+                raise InputError("cannot publish enrollment output") from error
+        else:  # pragma: no cover - the loop either breaks or raises
+            raise AssertionError("publication anchor retry exhausted")
+
+        if failure_tracker is not None:
+            failure_tracker.mark(FailureSite.PUBLICATION_STAGE)
+        for _ in range(8):
+            candidate = _publication_stage_name(root)
+            try:
+                os.mkdir(candidate, 0o700, dir_fd=parent_fd)
+                stage_name = candidate
+                break
+            except FileExistsError:
+                continue
+        if stage_name is None:
+            raise InputError("cannot create enrollment publication stage")
+        stage_fd = os.open(stage_name, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+                           | getattr(os, "O_CLOEXEC", 0), dir_fd=parent_fd)
+        stage_st = os.fstat(stage_fd)
+        if not _private_directory(stage_st) or not _name_has_identity(parent_fd, stage_name, _fd_identity(stage_st)):
+            raise InputError("enrollment publication stage is not protected")
+        stage_identity = _fd_identity(stage_st)
+
+        intended: set[bytes] = set()
+        for name in _PUBLICATION_REQUIRED_MEMBERS:
+            key = os.fsdecode(name)
+            _write_publication_member(stage_fd, name, files[key])
+            intended.add(name)
+            fault("publication-" + key)
+        for name in _PUBLICATION_OPTIONAL_MEMBERS:
+            value = _read_publication_member(root_fd, name)
+            if value is not None:
+                _write_publication_member(stage_fd, name, value)
+                intended.add(name)
+        for entry in os.listdir(root_fd):
+            name = os.fsencode(entry)
+            if name.startswith(b"fleet-coexist-body-"):
+                value = _read_publication_member(root_fd, name)
+                if value is None:
                     raise InputError("transaction journal body is invalid")
-                atomic_write(stage, body.name, secure_read(body) or b"")
+                _write_publication_member(stage_fd, name, value)
+                intended.add(name)
+        _assert_publication_members(stage_fd, intended)
+        fault("publication-before-exchange")
+        if (not _name_has_identity(parent_fd, root_name, root_identity)
+                or not _name_has_identity(parent_fd, stage_name, stage_identity)):
+            if failure_tracker is not None:
+                failure_tracker.mark(FailureSite.PUBLICATION_IDENTITY)
+                failure_tracker.detach_journal()
+            raise InputError("enrollment publication identity changed")
         if failure_tracker is not None:
             failure_tracker.mark(FailureSite.PUBLICATION_EXCHANGE)
-        _rename_exchange(root, stage)
+        _rename_exchange(parent_fd, root_name, parent_fd, stage_name)
         exchanged = True
         fault("publication-exchange")
-        directory_fd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+        if (not _name_has_identity(parent_fd, root_name, stage_identity)
+                or not _name_has_identity(parent_fd, stage_name, root_identity)):
+            if failure_tracker is not None:
+                failure_tracker.mark(FailureSite.PUBLICATION_IDENTITY)
+                failure_tracker.detach_journal()
+            try:
+                os.fsync(parent_fd)
+            except OSError:
+                pass
+            raise InputError("enrollment publication identity changed")
+        fault("publication-post-exchange-pre-parent-fsync")
         try:
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
-        _remove_old_enrollment_generation(stage)
+            os.fsync(parent_fd)
+        except OSError as error:
+            if failure_tracker is not None:
+                failure_tracker.mark(FailureSite.PUBLICATION_CLEANUP)
+            raise InputError("enrollment publication cleanup failed") from error
+        fault("publication-post-parent-fsync-pre-cleanup")
+        try:
+            _remove_old_enrollment_generation_fd(root_fd, parent_fd, stage_name, root_identity)
+            fault("publication-cleanup-before-final-parent-fsync")
+            os.fsync(parent_fd)
+        except (InputError, OSError) as error:
+            if failure_tracker is not None:
+                failure_tracker.mark(FailureSite.PUBLICATION_CLEANUP)
+            if isinstance(error, InputError):
+                raise
+            raise InputError("enrollment publication cleanup failed") from error
     except OSError as error:
         raise InputError("cannot publish enrollment output") from error
     finally:
-        # Before an exchange this directory contains an uncommitted key.  A
-        # normal failure must not strand it outside the root's candidate tree;
-        # a power loss is handled by the deterministic cleanup on recovery.
-        if not exchanged and stage.exists():
+        if not exchanged and stage_fd is not None and stage_name is not None and stage_identity is not None:
             try:
-                _remove_old_enrollment_generation(stage)
+                _remove_old_enrollment_generation_fd(stage_fd, parent_fd, stage_name, stage_identity)
             except (InputError, OSError):
                 pass
-
-
-def _publication_stage(root: Path) -> Path:
-    return root.parent / (".rigsignal-publication-" + root.name)
-
-
-def remove_stale_publication_stage(root: Path) -> None:
-    stage = _publication_stage(root)
-    if stage.exists():
-        _remove_old_enrollment_generation(stage)
-
-
-def _rename_exchange(left: Path, right: Path) -> None:
-    """Use renameat2(RENAME_EXCHANGE), failing closed if unavailable."""
-    try:
-        renameat2 = ctypes.CDLL(None, use_errno=True).renameat2
-    except AttributeError as error:
-        raise InputError("atomic enrollment publication is unsupported") from error
-    renameat2.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint)
-    renameat2.restype = ctypes.c_int
-    if renameat2(-100, os.fsencode(left), -100, os.fsencode(right), 2) != 0:  # AT_FDCWD, RENAME_EXCHANGE
-        error = ctypes.get_errno()
-        raise InputError("atomic enrollment publication is unsupported") from OSError(error, os.strerror(error))
-
-
-def _remove_old_enrollment_generation(root: Path) -> None:
-    """Remove the exchange's old private tree without traversing unexpected files."""
-    secure_root(root)
-    allowed = {"credentials.toml", "handshake.toml", "shipping-policy-v1.toml", "state.json",
-               OWNERSHIP_PROFILE_FILE, JOURNAL_FILE, "candidate"}
-    entries = {entry.name for entry in root.iterdir()}
-    if not all(name in allowed or name.startswith("fleet-coexist-body-") for name in entries):
-        raise InputError("old enrollment generation is invalid")
-    for name in ("credentials.toml", "handshake.toml", "shipping-policy-v1.toml", "state.json",
-                 OWNERSHIP_PROFILE_FILE, JOURNAL_FILE):
-        path = root / name
-        if path.exists():
-            st = path.lstat()
-            if not stat.S_ISREG(st.st_mode) or stat.S_ISLNK(st.st_mode):
-                raise InputError("old enrollment generation is invalid")
-            path.unlink()
-    for path in root.glob("fleet-coexist-body-*"):
-        if not path.is_file() or path.is_symlink():
-            raise InputError("old enrollment generation is invalid")
-        path.unlink()
-    remove_candidate_root(root)
-    root.rmdir()
+        for descriptor in (stage_fd, root_fd, parent_fd):
+            if descriptor is not None:
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
 
 
 def fault(point: str, argument: str | None = None) -> None:
@@ -7114,10 +7381,10 @@ def main() -> int:
                     prior = state_template(uuid_value, prior["target_generation"], prior["active_key_id"],
                                            prior["enrollment_root"])
                     atomic_write(root, "state.json", jcs(prior) + b"\n")
-        # A pre-exchange crash leaves only this deterministic private staging
-        # path.  After phase recovery revokes/finishes its key lifecycle, it is
-        # safe to remove whichever old or unpublished generation remains here.
-        remove_stale_publication_stage(root)
+        # A crash before exchange or during old-generation cleanup leaves an
+        # owned private publication sibling.  Bundle-A deliberately refuses on
+        # the next invocation so an operator, rather than this recovery path,
+        # examines and removes the exact recognized debris.
 
         if condition == "incomplete" and prior is None:
             # A null-active recovery restores the clean-root condition.  Apply

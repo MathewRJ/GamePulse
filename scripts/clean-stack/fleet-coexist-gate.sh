@@ -12,6 +12,16 @@ declare -a LEGS=()
 usage() { printf '%s\n' 'Usage: fleet-coexist-gate.sh --es-version 9.4.3|9.4.4 [--kb-version VERSION] --leg a..z [--bundle PATH] [--predecessor-manifest PATH] [--all]' 'Solo-screen subset: fleet legs a/b/i/n/o/p/q/r/s plus adoption leg 1.' >&2; }
 version() { [[ "$1" =~ ^9\.4\.[34]$ ]]; }
 fail() { printf 'ASSERT FAIL %s\n' "$*" >&2; return 1; }
+publication_stage_residue() {
+  local parent="$1" leaf="$2" entry mode owner
+  for entry in "$parent"/.rigsignal-publication-"$leaf" "$parent"/.rigsignal-publication-"$leaf"-????????????????; do
+    [[ -d "$entry" ]] || continue
+    [[ "$(basename -- "$entry")" =~ ^\.rigsignal-publication-${leaf}(-[0-9a-f]{16})?$ ]] || continue
+    owner="$(stat -c '%u' "$entry")"; mode="$(stat -c '%a' "$entry")"
+    [[ "$owner" == "$(id -u)" && "$mode" == 700 ]] && return 0
+  done
+  return 1
+}
 while (($#)); do case "$1" in
   --es-version) ES_VERSION="${2:-}"; shift 2 ;; --kb-version) KB_VERSION="${2:-}"; shift 2 ;;
   --bundle) BUNDLE="${2:-}"; shift 2 ;; --predecessor-manifest) PREDECESSOR_MANIFEST="${2:-}"; shift 2 ;; --leg) LEGS+=("${2:-}"); shift 2 ;;
@@ -226,7 +236,7 @@ origin_export() { origin_seed export "$1" "$2"; }
 origin_assert_clean_refusal() {
   space_absent rigsignal || fail 'topology refusal created rigsignal space'
   [[ ! -e "$RUN_DIR/enrollment" ]] || fail 'topology refusal created any journal/profile/body root'
-  [[ ! -e "$RUN_DIR/.rigsignal-publication-enrollment" ]] || fail 'topology refusal created publication stage sibling'
+  ! publication_stage_residue "$RUN_DIR" enrollment || fail 'topology refusal created owned publication stage residue'
   if api GET '/_component_template/rigsignal-bundle-meta' >"$RUN_DIR/origin-marker.json" 2>&1; then fail 'topology refusal wrote remote marker'; fi
   origin_export default "$RUN_DIR/default-after-refusal.ndjson"
   cmp -s "$RUN_DIR/default-before-refusal.ndjson" "$RUN_DIR/default-after-refusal.ndjson" || fail 'topology refusal changed default objects'
@@ -526,7 +536,7 @@ leg_t() {
   grep -E '^install refused: enrollment ancestor is not protected(:|$)' "$RUN_DIR/leg-t-current.log" >/dev/null || { cat "$RUN_DIR/leg-t-current.log" >&2; fail 'Leg-T wrong refusal token'; }
   [[ ! -s "$RUN_DIR/leg-t-http.log" ]] || fail 'Leg-T refusal made an HTTP request'
   [[ ! -e "$root" ]] || fail 'Leg-T refusal created enrollment root'
-  [[ ! -e "$parent/.rigsignal-publication-enrollment" ]] || fail 'Leg-T refusal created publication stage sibling'
+  ! publication_stage_residue "$parent" enrollment || fail 'Leg-T refusal created owned publication stage residue'
 
   # Anti-vacuity: run exactly the pre-fix installer from its own temporary
   # source path.  It has no early ancestor check, so it must reach HTTP rather
@@ -608,7 +618,7 @@ leg_w() {
   for member in credentials.toml handshake.toml shipping-policy-v1.toml state.json; do
     [[ "$(stat -c '%a' "$RUN_DIR/enrollment/$member")" == 600 ]] || fail "Leg-W published member is not 0600: $member"
   done
-  [[ ! -e "$RUN_DIR/.rigsignal-publication-enrollment" ]] || fail 'Leg-W left publication stage residue'
+  ! publication_stage_residue "$RUN_DIR" enrollment || fail 'Leg-W left owned publication stage residue'
   # Recorded, non-load-bearing state assertion; the handshake below is the wire proof.
   jq -e '.phase == "committed"' "$RUN_DIR/enrollment/state.json" >/dev/null || fail 'Leg-W published state is not committed'
   env -u RIGSIGNAL_ENDPOINT -u RIGSIGNAL_CA_FILE -u RIGSIGNAL_EXPECTED_CLUSTER_UUID \

@@ -714,7 +714,6 @@ class AssetsOnlyInstallTests(unittest.TestCase):
                     mock.patch.object(INSTALL, "load_state", return_value=None),
                     mock.patch.object(INSTALL, "bind_ownership_profile"),
                     mock.patch.object(INSTALL, "cluster_uuid", return_value="0123456789ABCDEFGHIJKL"),
-                    mock.patch.object(INSTALL, "remove_stale_publication_stage"),
                     mock.patch.object(INSTALL, "prerequisites"),
                     mock.patch.object(INSTALL, "cluster_health_gate"),
                     mock.patch.object(INSTALL, "fence"),

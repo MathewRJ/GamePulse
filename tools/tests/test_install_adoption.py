@@ -98,7 +98,6 @@ class InstallAdoptionTests(unittest.TestCase):
                 patches.enter_context(patch.object(INSTALL, "cluster_uuid", return_value=state["expected_cluster_uuid"]))
                 invalidate_name = patches.enter_context(patch.object(INSTALL, "invalidate_mint_name"))
                 invalidate = patches.enter_context(patch.object(INSTALL, "invalidate"))
-                patches.enter_context(patch.object(INSTALL, "remove_stale_publication_stage"))
                 remote = patches.enter_context(patch.object(INSTALL, "remote_stream_condition",
                                                             return_value=("compatible", snapshot)))
                 stderr = io.StringIO()

@@ -828,7 +828,10 @@ class CompletionWaveTests(unittest.TestCase):
         # Direction is an input to the table row, not a shadow-policy
         # decision: provide a genuinely older predecessor for --upgrade and
         # a genuinely newer one for --allow-downgrade.
-        prior_version = "0.3.4" if "allow-downgrade" in flags and "upgrade" not in flags else "0.3.1"
+        # Keep allow-downgrade predecessors strictly newer than the current
+        # 0.3.4 bundle; this table fixture supplies the version-direction
+        # input rather than exercising a policy shortcut.
+        prior_version = "0.3.5" if "allow-downgrade" in flags and "upgrade" not in flags else "0.3.1"
         prior_binding = {**binding, "bundle_version": prior_version, "source_commit": "b" * 40}
         predecessor = self._table_installed(prior_binding, targets, full=full) if prior else None
         if label.startswith("S-"):
@@ -1289,7 +1292,6 @@ print(outcome)
                 mock.patch.object(INSTALL, "load_state", return_value=None),
                 mock.patch.object(INSTALL, "bind_ownership_profile"),
                 mock.patch.object(INSTALL, "cluster_uuid", return_value="0123456789ABCDEFGHIJKL"),
-                mock.patch.object(INSTALL, "remove_stale_publication_stage"),
                 mock.patch.object(INSTALL, "prerequisites"),
                 mock.patch.object(INSTALL, "cluster_health_gate"),
                 mock.patch.object(INSTALL, "fence"),
@@ -1583,7 +1585,9 @@ print(outcome)
         targets = INSTALL.transaction_targets(bundle)
         saved = next(item["key"] for item in targets if item["key"].startswith("kibana/"))
         old_saved = saved
-        for flag, old_version in (("upgrade", "0.3.1"), ("allow_downgrade", "0.3.4")):
+        # Keep the downgrade fixture strictly newer than the current release
+        # version; 0.3.4 is now the current bundle version.
+        for flag, old_version in (("upgrade", "0.3.1"), ("allow_downgrade", "0.3.5")):
             with self.subTest(direction=flag), tempfile.TemporaryDirectory() as raw:
                 root = Path(raw); root.chmod(0o700)
                 path = root / INSTALL.ASSETS_MARKER_FILE

@@ -296,6 +296,10 @@ leg_5() {
   root="$RUN_DIR/orphan-root"; mkdir -m 700 "$root"; printf x >"$root/credentials.toml"; chmod 600 "$root/credentials.toml"; expect_refusal flag-orphan "$root" 1 enrollment_remediation_required
   root="$RUN_DIR/candidate-root"; mkdir -m 700 "$root" "$root/candidate"; expect_refusal flag-candidate "$root" 1 enrollment_remediation_required
   root="$RUN_DIR/stage-root"; mkdir -m 700 "$root" "$RUN_DIR/.rigsignal-publication-stage-root"; expect_refusal flag-stage "$root" 1 enrollment_remediation_required
+  root="$RUN_DIR/random-stage-root"; mkdir -m 700 "$root" "$RUN_DIR/.rigsignal-publication-random-stage-root-0123456789abcdef"; expect_refusal flag-random-stage "$root" 1 enrollment_remediation_required
+  # A matching name that is not an owned private directory is inert: the
+  # classifier must not turn a lookalike into destructive recovery authority.
+  root="$RUN_DIR/foreign-stage-root"; mkdir -m 700 "$root" "$RUN_DIR/.rigsignal-publication-foreign-stage-root-0123456789abcdef"; chown 1:1 "$RUN_DIR/.rigsignal-publication-foreign-stage-root-0123456789abcdef"; _run_installer "$root" 1 >"$RUN_DIR/flag-foreign-stage.out" 2>&1 || true; ! grep -Fx 'install refused: enrollment_remediation_required' "$RUN_DIR/flag-foreign-stage.out" >/dev/null || fail 'foreign publication lookalike became remediation authority'
 }
 
 leg_6() {
