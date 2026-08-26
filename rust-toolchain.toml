@@ -1,0 +1,11 @@
+[toolchain]
+# Pinned exactly, not a floor: `stable` floated to 1.98.0 on 2026-08-20 and its new
+# clippy lints turned `-D warnings` into 4 hard errors on unchanged code, contributing
+# to an 18-run CI red streak. A floor would not have prevented that — only an exact pin
+# does. Bump deliberately (Renovate manages this file natively) so the update arrives as
+# a reviewable PR whose full CI must pass, rather than as a surprise on an unrelated push.
+#
+# `ebpf/` keeps its own nightly pin; rustup resolves toolchain files CWD-upward, so any
+# command that must use it MUST run with `working-directory: ebpf` — see ci.yml.
+channel = "1.98.0"
+components = ["clippy", "rustfmt"]

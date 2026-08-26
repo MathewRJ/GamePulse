@@ -58,7 +58,7 @@ jobs:
       - name: Install Rust toolchain (stable)
         uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master@2026-07-18
         with:
-          toolchain: stable
+          toolchain: 1.98.0
 
       - name: Run installer packaging tests
         run: bash tools/tests/test_installer.sh
@@ -66,8 +66,11 @@ jobs:
       - name: Run launcher packaging tests
         run: bash packaging/tests/test-rigsignal-launcher.sh
 
+      # `working-directory` is load-bearing: rustup resolves rust-toolchain.toml
+      # CWD-upward, so from the repo root this picked the root pin, never ebpf/'s.
       - name: Run eBPF workspace tests
-        run: cargo test --manifest-path ebpf/Cargo.toml --locked
+        working-directory: ebpf
+        run: cargo test --locked
 
       - name: Run workspace tests
         run: cargo test --workspace --locked
@@ -107,7 +110,7 @@ jobs:
       - name: Install Rust toolchain (stable)
         uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master@2026-07-18
         with:
-          toolchain: stable
+          toolchain: 1.98.0
 
       - name: Cache cargo registry + build artefacts
         uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
@@ -210,7 +213,7 @@ jobs:
       - name: Install Rust toolchain (stable)
         uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master@2026-07-18
         with:
-          toolchain: stable
+          toolchain: 1.98.0
 
       - name: Cache cargo registry + build artefacts
         uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
@@ -238,7 +241,7 @@ jobs:
       - name: Install Rust toolchain (stable)
         uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master@2026-07-18
         with:
-          toolchain: stable
+          toolchain: 1.98.0
 
       - name: Download release binary
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -285,7 +288,7 @@ jobs:
       - name: Install Rust toolchain (stable)
         uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master@2026-07-18
         with:
-          toolchain: stable
+          toolchain: 1.98.0
 
       - name: Download release binary
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -391,7 +394,7 @@ jobs:
       - name: Install Rust toolchain (stable)
         uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master@2026-07-18
         with:
-          toolchain: stable
+          toolchain: 1.98.0
 
       - name: Cache cargo registry + build artefacts
         uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8

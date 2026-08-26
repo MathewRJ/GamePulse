@@ -22,7 +22,7 @@ jobs:
     name: packaging tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
 
@@ -30,34 +30,51 @@ jobs:
         run: python3 tools/check-release-version
 
       - name: Test release version guard
+        if: '!cancelled()'
         run: python3 tools/tests/test_check_release_version.py
 
       - name: Test release manifest generator
+        if: '!cancelled()'
         run: python3 tools/tests/test_gen_release_manifest.py
 
       - name: Test release-verification window
+        if: '!cancelled()'
         run: bash tools/tests/test_verify_release_window.sh
 
       - name: Run installer packaging tests
+        if: '!cancelled()'
         run: bash tools/tests/test_installer.sh
 
       - name: Run launcher packaging tests
+        if: '!cancelled()'
         run: bash packaging/tests/test-rigsignal-launcher.sh
 
       - name: Run assets launcher packaging tests
+        if: '!cancelled()'
         run: bash packaging/tests/test-assets-launcher.sh
 
       - name: Run assets-only ownership tests
+        if: '!cancelled()'
         run: python3 tools/tests/test_assets_only.py
 
+  ebpf-workspace:
+    name: eBPF workspace tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      # `working-directory` is load-bearing: rustup resolves rust-toolchain.toml
+      # CWD-upward, so running this from the repo root would pick the root 1.98.0 pin
+      # instead of ebpf/'s nightly (which the probes crate needs for build-std).
       - name: Run eBPF workspace tests
-        run: cargo test --manifest-path ebpf/Cargo.toml --locked
+        working-directory: ebpf
+        run: cargo test --locked
 
   enrollment-tail-root:
     name: enrollment tail tests (root)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Run enrollment tail tests as root
         run: |
@@ -69,15 +86,17 @@ jobs:
     name: Python enrollment discovery
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Run full Python discovery
         run: python3 -m unittest discover -s tools/tests
 
       - name: Run shuffled Python discovery
+        if: '!cancelled()'
         run: python3 tools/tests/run_shuffled.py --seed 20260826
 
       - name: Run fd publication tests directly
+        if: '!cancelled()'
         run: python3 tools/tests/test_asset_tools.py
 
   check:
@@ -88,15 +107,16 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Install Rust toolchain (stable)
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust toolchain (pinned 1.98.0)
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master@2026-07-18
         with:
+          toolchain: 1.98.0
           components: clippy
 
       - name: Cache cargo registry + build artifacts
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
           workspaces: src -> target
           key: ${{ matrix.os }}
@@ -124,7 +144,7 @@ jobs:
 
       - name: Upload windows agent binary artifact
         if: matrix.os == 'windows-latest'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: rigsignal-agent-windows
           # Workspace root Cargo.toml puts binaries in the root target dir.
@@ -135,11 +155,12 @@ jobs:
     name: rustfmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Install Rust toolchain (stable, rustfmt)
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust toolchain (pinned 1.98.0, rustfmt)
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master@2026-07-18
         with:
+          toolchain: 1.98.0
           components: rustfmt
 
       - name: cargo fmt --check
@@ -150,13 +171,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Install Rust toolchain (stable)
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust toolchain (pinned 1.98.0)
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master@2026-07-18
+        with:
+          toolchain: 1.98.0
 
       - name: Cache cargo registry + build artifacts
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
           workspaces: src -> target
           key: ubuntu-smoke
