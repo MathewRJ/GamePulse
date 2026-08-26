@@ -14,8 +14,8 @@ import json
 import os
 import re
 import shutil
-import signal
 import secrets
+import signal
 import socket
 import ssl
 import stat
@@ -4590,8 +4590,11 @@ def _name_has_identity(parent_fd: int, name: bytes, identity: tuple[int, int]) -
 def _read_publication_member(root_fd: int, name: bytes) -> bytes | None:
     """Read an optional source through its held root fd, never a pathname."""
     try:
-        fd = os.open(name, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0),
-                     dir_fd=root_fd)
+        # O_NONBLOCK: a FIFO planted at an optional name must not block the
+        # open before the S_ISREG check below can reject it; harmless for
+        # regular files.
+        fd = os.open(name, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0)
+                     | getattr(os, "O_CLOEXEC", 0), dir_fd=root_fd)
     except FileNotFoundError:
         return None
     try:
@@ -4616,6 +4619,10 @@ def _write_publication_member(stage_fd: int, name: bytes, data: bytes) -> None:
     fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
                  | getattr(os, "O_CLOEXEC", 0), 0o600, dir_fd=stage_fd)
     try:
+        # open(2)'s mode is masked by the umask; the membership assert requires
+        # exactly 0600, so pin it explicitly (a 0277 umask would otherwise fail
+        # every install after the remote key mint).
+        os.fchmod(fd, 0o600)
         view = memoryview(data)
         while view:
             written = os.write(fd, view)
@@ -4713,7 +4720,13 @@ def _remove_old_enrollment_generation_fd(root_fd: int, parent_fd: int, stage_nam
 
 def _rename_exchange(old_dir_fd: int, old_name: bytes, new_dir_fd: int, new_name: bytes) -> None:
     """Use renameat2(RENAME_EXCHANGE) exactly through the supplied directory fds."""
-    renameat2 = ctypes.CDLL(None, use_errno=True).renameat2
+    try:
+        renameat2 = ctypes.CDLL(None, use_errno=True).renameat2
+    except AttributeError as error:
+        # Defence-in-depth: preflight's symbol gate makes this unreachable, but
+        # an AttributeError here must surface as the documented OSError path,
+        # never a raw traceback that skips finalize_failure.
+        raise OSError(errno.ENOSYS, "renameat2 symbol unavailable") from error
     renameat2.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint)
     renameat2.restype = ctypes.c_int
     if renameat2(old_dir_fd, old_name, new_dir_fd, new_name, 2) != 0:
@@ -4761,7 +4774,16 @@ def atomic_publication(root: Path, files: dict[str, bytes],
                         failure_tracker.mark(FailureSite.PUBLICATION_ANCHOR)
                     raise InputError("enrollment publication anchor is unavailable") from error
                 # Existing root preparation is the sole narrowly-scoped fallback.
-                root = secure_root(root)
+                # Its own failure must land on PUBLICATION_ANCHOR too — an
+                # exception raised here would bypass the sibling handler below.
+                try:
+                    root = secure_root(root)
+                except (InputError, OSError) as fallback_error:
+                    if failure_tracker is not None:
+                        failure_tracker.mark(FailureSite.PUBLICATION_ANCHOR)
+                    if isinstance(fallback_error, InputError):
+                        raise
+                    raise InputError("cannot publish enrollment output") from fallback_error
             except (InputError, OSError) as error:
                 if failure_tracker is not None:
                     failure_tracker.mark(FailureSite.PUBLICATION_ANCHOR)
@@ -4801,7 +4823,17 @@ def atomic_publication(root: Path, files: dict[str, bytes],
             if value is not None:
                 _write_publication_member(stage_fd, name, value)
                 intended.add(name)
-        for entry in os.listdir(root_fd):
+        # Same fresh-description idiom as the other listings (btrfs freezes a
+        # dir fd's readdir cutoff at open time; also keeps this safe if a body
+        # is ever created after anchoring, and avoids the shared-offset hazard
+        # of listing the same fd twice).
+        body_list_fd = os.open(b".", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
+                               dir_fd=root_fd)
+        try:
+            body_entries = os.listdir(body_list_fd)
+        finally:
+            os.close(body_list_fd)
+        for entry in body_entries:
             name = os.fsencode(entry)
             if name.startswith(b"fleet-coexist-body-"):
                 value = _read_publication_member(root_fd, name)
@@ -4816,6 +4848,10 @@ def atomic_publication(root: Path, files: dict[str, bytes],
             # This is a terminal, pre-exchange identity dispute.  Preserve the
             # complete private stage as Bundle-A remediation evidence; a later
             # run must refuse for operator inspection rather than deleting it.
+            # The stage holds an UNCOMMITTED minted credential: its lifecycle
+            # closes on the rerun, whose incomplete-recovery path revokes the
+            # pending mint by name from state.json — which is why remediation
+            # must remove only the debris, never the root's candidate record.
             preserve_stage = True
             if failure_tracker is not None:
                 failure_tracker.mark(FailureSite.PUBLICATION_IDENTITY)
