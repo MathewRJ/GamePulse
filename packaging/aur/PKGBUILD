@@ -1,13 +1,8 @@
 # Maintainer: MathewRJ <https://github.com/MathewRJ>
 # AUR: https://aur.archlinux.org/packages/rigsignal-git
-#
-# Prerequisites (not in official repos -- install once before makepkg):
-#   rustup install nightly
-#   rustup component add rust-src --toolchain nightly
-#   cargo install bpf-linker
-#
 pkgname=rigsignal-git
-pkgver=0.3.3.r1.g93053f7
+# Seed only; pkgver() recomputes this from the fetched VCS checkout at build time.
+pkgver=0.3.3.r11.g46ff46f
 pkgrel=1
 pkgdesc="Gaming performance telemetry agent -- ships CPU/GPU/memory/frame metrics to Elasticsearch"
 arch=('x86_64')
@@ -33,18 +28,6 @@ pkgver() {
 }
 
 prepare() {
-    if ! command -v bpf-linker &>/dev/null; then
-        echo "ERROR: bpf-linker not found -- see README for install instructions"
-        return 1
-    fi
-    if ! cargo +nightly --version &>/dev/null; then
-        echo "ERROR: nightly Rust toolchain not found; run: rustup install nightly"
-        return 1
-    fi
-    if ! rustup component list --toolchain nightly 2>/dev/null | grep -q "^rust-src (installed)"; then
-        echo "ERROR: rust-src not found for nightly; run: rustup component add rust-src --toolchain nightly"
-        return 1
-    fi
     local _repodir="${srcdir}/${pkgname}"
     python3 "${_repodir}/tools/build_asset_bundle.py" \
         --source-commit "$(git -C "${_repodir}" rev-parse HEAD)" \
@@ -60,19 +43,6 @@ build() {
     echo "=> Building rigsignal-agent (release)..."
     cargo build --release --manifest-path src/Cargo.toml
 
-    echo "=> Building eBPF probes (bpfel-unknown-none, release)..."
-    (cd ebpf && RUSTFLAGS="" cargo xtask build-ebpf --release 2>/dev/null) || \
-    RUSTFLAGS="" cargo +nightly build \
-        -p rigsignal-ebpf-probes \
-        --target bpfel-unknown-none \
-        -Z build-std=core \
-        --release \
-        --manifest-path ebpf/Cargo.toml
-
-    echo "=> Building rigsignal-ebpf daemon (release)..."
-    cargo build --release \
-        -p rigsignal-ebpf \
-        --manifest-path ebpf/Cargo.toml
 }
 
 package() {
@@ -82,21 +52,12 @@ package() {
         "${pkgdir}/usr/bin/rigsignal-agent"
     install -Dm755 "${_repodir}/packaging/rigsignal-spool-retention.py" \
         "${pkgdir}/usr/bin/rigsignal-spool-retention"
-    install -Dm755 "${_repodir}/ebpf/target/release/rigsignal-ebpf" \
-        "${pkgdir}/usr/bin/rigsignal-ebpf"
-
-    install -Dm755 "${_repodir}/ebpf/target/bpfel-unknown-none/release/rigsignal-ebpf-probes" \
-        "${pkgdir}/usr/lib/rigsignal/rigsignal-ebpf-probes"
-
     install -Dm644 "${_repodir}/packaging/systemd/rigsignal-agent.service" \
         "${pkgdir}/usr/lib/systemd/user/rigsignal-agent.service"
     install -Dm644 "${_repodir}/packaging/systemd/rigsignal-spool-retention.service" \
         "${pkgdir}/usr/lib/systemd/user/rigsignal-spool-retention.service"
     install -Dm644 "${_repodir}/packaging/systemd/rigsignal-spool-retention.timer" \
         "${pkgdir}/usr/lib/systemd/user/rigsignal-spool-retention.timer"
-
-    install -Dm644 "${_repodir}/packaging/systemd/rigsignal-ebpf.service" \
-        "${pkgdir}/usr/lib/systemd/system/rigsignal-ebpf.service"
 
     install -Dm755 "${_repodir}/packaging/rigsignal-launcher.sh" \
         "${pkgdir}/usr/bin/rigsignal"

@@ -765,10 +765,9 @@ test_package_paths_write_channel_markers() {
     # checking PKGBUILD text, has the marker required by assets resolution.
     local fixture="$TEST_TMP/channel-package-fixture"
     local spec path marker stage
-    mkdir -p "$fixture/target/release" "$fixture/ebpf/target/release" \
-        "$fixture/ebpf/target/bpfel-unknown-none/release" "$fixture/dist/engine" \
+    mkdir -p "$fixture/target/release" "$fixture/dist/engine" \
         "$fixture/packaging/systemd" "$fixture/packaging/config" "$fixture/profiles" "$fixture/packaging"
-    for file in target/release/rigsignal-agent ebpf/target/release/rigsignal-ebpf ebpf/target/bpfel-unknown-none/release/rigsignal-ebpf-probes; do
+    for file in target/release/rigsignal-agent; do
         install -Dm755 /bin/true "$fixture/$file" || return 1
     done
     for file in install_assets.py asset_adapters.py _version.py; do
@@ -776,7 +775,7 @@ test_package_paths_write_channel_markers() {
     done
     install -Dm755 "$REPO_ROOT/packaging/rigsignal-launcher.sh" "$fixture/packaging/rigsignal-launcher.sh" || return 1
     install -Dm755 "$REPO_ROOT/packaging/rigsignal-spool-retention.py" "$fixture/packaging/rigsignal-spool-retention.py" || return 1
-    for file in rigsignal-agent.service rigsignal-ebpf.service rigsignal-spool-retention.service rigsignal-spool-retention.timer; do
+    for file in rigsignal-agent.service rigsignal-spool-retention.service rigsignal-spool-retention.timer; do
         install -Dm644 "$REPO_ROOT/packaging/systemd/$file" "$fixture/packaging/systemd/$file" || return 1
     done
     install -Dm644 "$REPO_ROOT/packaging/config/rigsignal.toml.example" "$fixture/packaging/config/rigsignal.toml.example" || return 1
@@ -786,7 +785,7 @@ test_package_paths_write_channel_markers() {
         path=${spec%%:*}; marker=${spec#*:}; stage="$TEST_TMP/channel-stage-$(basename "$(dirname "$path")")"
         mkdir -p "$stage"
         if [[ "$path" == .github/* ]]; then
-            ( pkgdir="$stage"; REPOROOT="$fixture"; source "$REPO_ROOT/$path"; package ) || return 1
+            ( pkgdir="$stage"; PKGVER=1.2.4; REPOROOT="$fixture"; source "$REPO_ROOT/$path"; package ) || return 1
         elif [[ "$path" == packaging/aur/* ]]; then
             mkdir -p "$TEST_TMP/channel-aur-src"
             ln -sfn "$fixture" "$TEST_TMP/channel-aur-src/rigsignal-git"
@@ -880,7 +879,7 @@ test_setup_reauth_uses_persisted_ca_without_prompting() {
         && grep -q 'ca_cert = ".*" # retain me' "$cfg/rigsignal.toml"
 }
 
-test_package_user_unit_uses_user_config_and_detects_packaged_ebpf() {
+test_package_user_unit_uses_user_config_and_detects_legacy_ebpf() {
     local stage="$TEST_TMP/package-stage"
     local home="$TEST_TMP/package-home"
     local unit="$stage/usr/lib/systemd/user/rigsignal-agent.service"
@@ -891,6 +890,7 @@ test_package_user_unit_uses_user_config_and_detects_packaged_ebpf() {
     # on the tarball's user-local unit path.
     install -Dm644 "$REPO_ROOT/packaging/systemd/rigsignal-agent.service" "$unit" || return 1
     install -Dm644 "$REPO_ROOT/packaging/config/rigsignal.toml.example" "$example" || return 1
+    # This is a legacy-install fixture, deliberately not a package payload.
     install -Dm755 /bin/true "$stage/usr/bin/rigsignal-ebpf" || return 1
     printf '%s\n' \
         '#!/usr/bin/env bash' \
@@ -910,7 +910,6 @@ test_package_user_unit_uses_user_config_and_detects_packaged_ebpf() {
         '  *) exit 0 ;;' \
         'esac' >"$stage/usr/bin/sudo"
     chmod +x "$stage/usr/bin/sudo"
-
     grep -qx 'ExecStart=/usr/bin/rigsignal-agent' "$unit" || return 1
     ! grep -q -- '--config /etc/rigsignal/rigsignal.toml' "$unit" || return 1
     ! grep -q '^Environment=HOME=' "$unit" || return 1
@@ -925,6 +924,7 @@ test_package_user_unit_uses_user_config_and_detects_packaged_ebpf() {
         grep -qx 'install=rigsignal.install' "$pkgbuild" || return 1
         grep -q 'usr/share/rigsignal/examples/rigsignal.toml.example' "$pkgbuild" || return 1
         ! grep -q '^backup=' "$pkgbuild" || return 1
+        ! grep -q 'rigsignal-ebpf' "$pkgbuild" || return 1
     done
     grep -qx "depends=('python3')" "$REPO_ROOT/.github/packaging/PKGBUILD" || return 1
     ! grep -q 'rigsignal-ebpf.service' "$REPO_ROOT/.github/packaging/PKGBUILD" || return 1
@@ -961,8 +961,8 @@ test_package_user_unit_uses_user_config_and_detects_packaged_ebpf() {
     grep -qx 'operator eBPF config' "${hook_config}.pacsave" || return 1
     grep -q 'Preserved modified .*\.pacsave' "$TEST_TMP/package-hook-pacsave.out" || return 1
 
-    # setup writes the user config. A staged /usr/bin eBPF binary must be
-    # discovered through PATH and cause the existing privileged sync path.
+    # setup writes the user config. The legacy fixture on PATH must trigger
+    # the elevated eBPF synchronization path even though packages ship none.
     mkdir -p "$home"
     start_mock_es happy || return 1
     if ! printf 'https://127.0.0.1:%s\ntest-api-key\n' "$MOCK_PORT" | \
@@ -1133,7 +1133,7 @@ run_test sidecar_rejects_noncanonical_records test_sidecar_rejects_noncanonical_
 run_test package_dependencies_declare_python3 test_package_dependencies_declare_python3
 run_test package_paths_write_channel_markers test_package_paths_write_channel_markers
 run_test uninstall_removes_staged_install test_uninstall_removes_staged_install
-run_test package_user_unit_uses_user_config_and_detects_packaged_ebpf test_package_user_unit_uses_user_config_and_detects_packaged_ebpf
+run_test package_user_unit_uses_user_config_and_detects_legacy_ebpf test_package_user_unit_uses_user_config_and_detects_legacy_ebpf
 run_test elevated_install_failure_rolls_back_and_restores_readonly test_elevated_install_failure_rolls_back_and_restores_readonly
 run_test elevated_mv_failure_rolls_back_and_restores_readonly test_elevated_mv_failure_rolls_back_and_restores_readonly
 run_test elevated_restart_failure_rolls_back_and_restores_readonly test_elevated_restart_failure_rolls_back_and_restores_readonly

@@ -38,6 +38,13 @@ usage() {
 die() { printf 'restore: %s\n' "$1" >&2; exit 1; }
 target() { printf '%s%s' "$ROOT" "$1"; }
 
+# The unit survives on the durable /etc partition; a missing binary is the
+# expected post-OTA state for a legacy installation and must be restored.
+if [[ ! -f "$(target /etc/systemd/system/rigsignal-ebpf.service)" ]]; then
+  printf '%s\n' 'eBPF restore unsupported while eBPF is shelved (see EBPF-REENABLE-DESIGN-STUB)'
+  exit 0
+fi
+
 cleanup() {
   local status=$?
   [[ $CLEANING == 1 ]] && exit "$status"

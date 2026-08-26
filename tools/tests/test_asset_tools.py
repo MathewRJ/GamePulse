@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import io
 import json
 import os
@@ -128,6 +129,29 @@ class AssetToolsTests(unittest.TestCase):
         files = {path: (ROOT / path).read_bytes() for path in INSTALL.W1_RAW_SHA256}
         self.assertEqual(INSTALL.recompute_target_generation(files), INSTALL.TARGET_GENERATION_KAT)
         self.assertEqual(BUILD.target_generation(BUILD.read_assets())["value"], INSTALL.TARGET_GENERATION_KAT)
+
+    def test_canonical_shipper_and_viewer_role_source_pins(self):
+        shipper = INSTALL.Asset("security_roles", "rigsignal_shipper",
+                                "elastic/security-roles/rigsignal_shipper.json",
+                                (ROOT / "elastic/security-roles/rigsignal_shipper.json").read_bytes())
+        viewer = INSTALL.Asset("kibana_roles", "rigsignal_viewer",
+                               "elastic/kibana-roles/rigsignal_viewer.json",
+                               (ROOT / "elastic/kibana-roles/rigsignal_viewer.json").read_bytes())
+        bundle = INSTALL.Bundle("test", "test", [shipper, viewer])
+        self.assertEqual(hashlib.sha256(INSTALL.jcs(json.loads(shipper.data))).hexdigest(),
+                         INSTALL.ROLE_JCS_SHA256)
+        self.assertEqual(hashlib.sha256(INSTALL.jcs(json.loads(viewer.data))).hexdigest(),
+                         INSTALL.VIEWER_ROLE_JCS_SHA256)
+        self.assertEqual(INSTALL.role_body(bundle)["cluster"], ["monitor"])
+        self.assertEqual(INSTALL.viewer_role_body(bundle)["kibana"][0]["spaces"], ["rigsignal"])
+
+        mutated = json.loads(viewer.data)
+        mutated["description"] = "mutated"
+        bad_bundle = INSTALL.Bundle("test", "test", [shipper,
+                                  INSTALL.Asset("kibana_roles", "rigsignal_viewer", viewer.path,
+                                                json.dumps(mutated).encode())])
+        with self.assertRaises(INSTALL.InputError):
+            INSTALL.viewer_role_body(bad_bundle)
 
     def test_state_schema_and_phase_invariants_are_closed(self):
         state = INSTALL.state_template("KUrXRgwRRQu-RikmIJhm0Q", INSTALL.TARGET_GENERATION_KAT,

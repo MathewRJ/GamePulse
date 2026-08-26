@@ -4,12 +4,6 @@
 # For AUR submission, replace the local source= line below with:
 #   source=("${pkgname}-${pkgver}::git+https://github.com/MathewRJ/RigSignal.git#tag=v${pkgver}")
 #   sha256sums=('SKIP')
-#
-# Prerequisites (not in official repos — install once before makepkg):
-#   rustup install nightly
-#   rustup component add rust-src --toolchain nightly
-#   cargo install bpf-linker
-#
 pkgname=rigsignal
 pkgver=0.3.3
 pkgrel=1
@@ -34,20 +28,6 @@ sha256sums=()
 _repodir="$(realpath "$startdir/..")"
 
 prepare() {
-    # Verify the eBPF toolchain prerequisites are present. makepkg runs as a
-    # regular user; these tools must already be installed.
-    if ! command -v bpf-linker &>/dev/null; then
-        echo "ERROR: bpf-linker not found. Install with: cargo install bpf-linker"
-        return 1
-    fi
-    if ! cargo +nightly --version &>/dev/null; then
-        echo "ERROR: nightly Rust toolchain not found. Install with: rustup install nightly"
-        return 1
-    fi
-    if ! rustup component list --toolchain nightly 2>/dev/null | grep -q "^rust-src (installed)"; then
-        echo "ERROR: rust-src not found for nightly. Install with: rustup component add rust-src --toolchain nightly"
-        return 1
-    fi
     # The engine is a staged release payload, not a source-tree fallback.  Its
     # stamp must match the commit compiled into the agent below.
     python3 "${_repodir}/tools/build_asset_bundle.py" \
@@ -67,24 +47,6 @@ build() {
     echo "==> Building rigsignal-agent (release)..."
     cargo build --release --manifest-path src/Cargo.toml
 
-    # --- Build eBPF probes (requires nightly + bpf-linker + rust-src) ---
-    # eBPF target (bpfel-unknown-none) is cross-compiled; bpf-linker does not
-    # support -C target-cpu=native (host CPU flags make no sense for BPF bytecode).
-    # Clear RUSTFLAGS so only eBPF-appropriate flags apply.
-    echo "==> Building eBPF probes (bpfel-unknown-none, release)..."
-    (cd ebpf && RUSTFLAGS="" cargo xtask build-ebpf --release 2>/dev/null) || \
-    RUSTFLAGS="" cargo +nightly build \
-        -p rigsignal-ebpf-probes \
-        --target bpfel-unknown-none \
-        -Z build-std=core \
-        --release \
-        --manifest-path ebpf/Cargo.toml
-
-    # --- Build eBPF daemon (embeds probes at compile time) ---
-    echo "==> Building rigsignal-ebpf daemon (release)..."
-    cargo build --release \
-        -p rigsignal-ebpf \
-        --manifest-path ebpf/Cargo.toml
 }
 
 package() {
@@ -93,13 +55,6 @@ package() {
         "${pkgdir}/usr/bin/rigsignal-agent"
     install -Dm755 "${_repodir}/packaging/rigsignal-spool-retention.py" \
         "${pkgdir}/usr/bin/rigsignal-spool-retention"
-    install -Dm755 "${_repodir}/ebpf/target/release/rigsignal-ebpf" \
-        "${pkgdir}/usr/bin/rigsignal-ebpf"
-
-    # ---- eBPF probe ELF (kernel bytecode loaded by rigsignal-ebpf at runtime) ----
-    install -Dm755 "${_repodir}/ebpf/target/bpfel-unknown-none/release/rigsignal-ebpf-probes" \
-        "${pkgdir}/usr/lib/rigsignal/rigsignal-ebpf-probes"
-
     # ---- systemd user unit (rigsignal-agent runs as the gaming user) ----
     install -Dm644 "${startdir}/systemd/rigsignal-agent.service" \
         "${pkgdir}/usr/lib/systemd/user/rigsignal-agent.service"
@@ -107,10 +62,6 @@ package() {
         "${pkgdir}/usr/lib/systemd/user/rigsignal-spool-retention.service"
     install -Dm644 "${startdir}/systemd/rigsignal-spool-retention.timer" \
         "${pkgdir}/usr/lib/systemd/user/rigsignal-spool-retention.timer"
-
-    # ---- systemd system unit (rigsignal-ebpf needs CAP_BPF/PERFMON) ----
-    install -Dm644 "${startdir}/systemd/rigsignal-ebpf.service" \
-        "${pkgdir}/usr/lib/systemd/system/rigsignal-ebpf.service"
 
     # ---- Launcher CLI ----
     # Single entry-point for start/stop/run/setup subcommands.

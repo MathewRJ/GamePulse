@@ -14,8 +14,7 @@
 #   rigsignal setup    # configure Elasticsearch endpoint + API key
 #   rigsignal start    # start the agent
 #
-# eBPF is disabled by default. To explicitly install its privileged daemon, add
-# --with-ebpf. RIGSIGNAL_INSTALL_LOCAL_DIR and DESTDIR are test-only overrides.
+# RIGSIGNAL_INSTALL_LOCAL_DIR and DESTDIR are test-only overrides.
 
 set -e
 
@@ -31,7 +30,6 @@ RIGSIGNAL_INSTALL_LOCAL_DIR="${RIGSIGNAL_INSTALL_LOCAL_DIR:-}"
 # ── Argument parsing ─────────────────────────────────────────────────────────
 
 VERSION=""
-NO_EBPF=1
 i=0
 for arg in "$@"; do
     i=$((i + 1))
@@ -40,8 +38,6 @@ for arg in "$@"; do
         --version)
             eval "VERSION=\${$(( i + 1 ))}" 2>/dev/null || true
             ;;
-        --no-ebpf) NO_EBPF=1 ;;
-        --with-ebpf) NO_EBPF=0 ;;
     esac
 done
 
@@ -217,79 +213,6 @@ else
     add_skipped "enabling rigsignal-spool-retention.timer (systemctl not found)"
 fi
 
-# ── Install eBPF daemon (optional, requires sudo) ─────────────────────────────
-# The eBPF daemon captures kernel-level scheduler, I/O, and GPU fence events.
-# It is only present in the tarball when built with nightly Rust + bpf-linker.
-# If absent, the agent runs without kernel-level telemetry — all other streams
-# (CPU, GPU, memory, frame timing, etc.) are unaffected.
-
-EBPF_BIN="$TMP/rigsignal-ebpf"
-EBPF_PROBES="$TMP/rigsignal-ebpf-probes"
-
-if [ "$NO_EBPF" = "1" ]; then
-    info "Skipping eBPF daemon by default (opt in with --with-ebpf)"
-    add_skipped "rigsignal-ebpf (opt in with --with-ebpf)"
-elif [ -f "$EBPF_BIN" ]; then
-    if ! command -v sudo >/dev/null 2>&1; then
-        info "eBPF daemon found but sudo not available — skipping system install."
-        info "To install manually: sudo cp $EBPF_BIN /usr/local/bin/rigsignal-ebpf"
-        add_skipped "rigsignal-ebpf (sudo not available)"
-    else
-        info "Installing eBPF daemon (kernel tracing — requires sudo)..."
-
-        # On SteamOS the root filesystem is read-only; disable it briefly.
-        _steamos_ro=0
-        if [ "$IS_STEAMOS" = "1" ] && command -v steamos-readonly >/dev/null 2>&1; then
-            sudo steamos-readonly disable 2>/dev/null && _steamos_ro=1
-        fi
-
-        if sudo install -m 755 "$EBPF_BIN" /usr/local/bin/rigsignal-ebpf 2>/dev/null; then
-            add_installed "/usr/local/bin/rigsignal-ebpf  (eBPF kernel daemon)"
-
-            if [ -f "$EBPF_PROBES" ]; then
-                sudo mkdir -p /usr/local/lib/rigsignal
-                sudo install -m 644 "$EBPF_PROBES" /usr/local/lib/rigsignal/rigsignal-ebpf-probes
-                add_installed "/usr/local/lib/rigsignal/rigsignal-ebpf-probes  (eBPF probe bytecode)"
-            fi
-
-            if [ -f "$TMP/rigsignal-ebpf.service" ] && command -v systemctl >/dev/null 2>&1; then
-                sudo install -m 644 "$TMP/rigsignal-ebpf.service" /etc/systemd/system/rigsignal-ebpf.service
-                sudo systemctl daemon-reload 2>/dev/null || true
-                add_installed "/etc/systemd/system/rigsignal-ebpf.service  (system service)"
-            fi
-
-            # Write system config so the eBPF daemon can connect to ES immediately.
-            # If the user already ran 'rigsignal setup', copy their credentials.
-            # Otherwise write a placeholder; 'rigsignal setup' will update it.
-            sudo mkdir -p /etc/rigsignal
-            _user_cfg="${XDG_CONFIG_HOME:-$HOME/.config}/rigsignal/rigsignal.toml"
-            if [ -f "$_user_cfg" ]; then
-                sudo install -m 600 "$_user_cfg" /etc/rigsignal/rigsignal.toml
-                add_installed "/etc/rigsignal/rigsignal.toml  (eBPF daemon config — copied from user config)"
-            else
-                sudo install -m 600 "$TMP/rigsignal.toml" /etc/rigsignal/rigsignal.toml 2>/dev/null || \
-                    printf '[elasticsearch]\nendpoint = ""\n' | sudo tee /etc/rigsignal/rigsignal.toml >/dev/null
-                add_installed "/etc/rigsignal/rigsignal.toml  (eBPF daemon config — run 'rigsignal setup' to fill in credentials)"
-            fi
-
-            # Enable and start the eBPF service so kernel tracing is active immediately.
-            if command -v systemctl >/dev/null 2>&1; then
-                sudo systemctl enable --now rigsignal-ebpf 2>/dev/null || true
-                add_installed "rigsignal-ebpf.service  (enabled + started)"
-            fi
-        else
-            info "sudo install failed — eBPF skipped. Re-run with sudo access to enable kernel tracing."
-            add_skipped "rigsignal-ebpf (sudo install failed)"
-        fi
-
-        [ "$_steamos_ro" = "1" ] && sudo steamos-readonly enable 2>/dev/null || true
-    fi
-else
-    info "eBPF daemon not included in this release — kernel tracing unavailable."
-    info "Agent-only mode: FPS, CPU, GPU, memory, frame timing streams are unaffected."
-    add_skipped "rigsignal-ebpf (not included in this release)"
-fi
-
 # ── MangoHud config (frame timing CSV) ───────────────────────────────────────
 # Ensure MangoHud writes frame timing CSVs so the agent can read them.
 # We write only the two keys we need; if the file already exists we append
@@ -364,10 +287,4 @@ printf '    2. Add to Steam launch options:\n'
 printf '         rigsignal run %%command%%\n'
 printf '    3. To uninstall this user install:\n'
 printf '         rigsignal-uninstall\n'
-if printf '%b' "$INSTALLED" | grep -q "rigsignal-ebpf.service  (enabled"; then
-    printf '    4. eBPF kernel telemetry is active. To check status:\n'
-    printf '         sudo systemctl status rigsignal-ebpf\n'
-elif printf '%b' "$INSTALLED" | grep -q "rigsignal-ebpf"; then
-    printf '    4. To enable eBPF kernel telemetry, reinstall with --with-ebpf.\n'
-fi
 printf '\n'

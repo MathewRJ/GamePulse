@@ -1,5 +1,7 @@
 # eBPF Deep Telemetry Guide
 
+> **STATUS:** eBPF is not shipped since 0.3.4 (owner ruling 2026-08-26; N1 SCOPE contradiction unresolved; re-enable pre-registered in the Workflow hub stub). The capability contradiction between :9 (`CAP_BPF` + `CAP_PERFMON`, or root) and :30 (also `CAP_SYS_ADMIN` + `CAP_DAC_READ_SEARCH`) is RECORDED; resolution is deferred to the re-enable design.
+
 RigSignal's eBPF probes trace kernel-level behaviour to answer the question that FPS counters can't: *why* did performance drop?
 
 ## Requirements

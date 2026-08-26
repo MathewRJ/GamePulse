@@ -105,8 +105,9 @@ EOF
 }
 setup_case() {
   CASE=$TMP/case-$1; ROOT=$CASE/root; BIN=$CASE/bin; LOG=$CASE/log
-  mkdir -p "$ROOT"{,/usr/local/bin,/usr/local/lib/rigsignal,/etc/rigsignal,/etc/sysctl.d,/run,/proc/4242} "$CASE/input"
+  mkdir -p "$ROOT"{,/usr/local/bin,/usr/local/lib/rigsignal,/etc/rigsignal,/etc/systemd/system,/etc/sysctl.d,/run,/proc/4242} "$CASE/input"
   make_shims "$BIN"; : >"$LOG"
+  printf '[Service]\n' >"$ROOT/etc/systemd/system/rigsignal-ebpf.service"
   printf 'daemon bytes\n' >"$CASE/input/rigsignal-ebpf"; printf 'probe bytes\n' >"$CASE/input/rigsignal-ebpf-probes"; printf 'CA\n' >"$CASE/input/ca"; printf 'kernel.perf_event_paranoid = 1\n' >"$CASE/input/sysctl"
   printf '[elasticsearch]\nendpoint = "https://mock"\napi_key = "secret-never-logged"\n' >"$CASE/input/config"
   ln -s "$ROOT/usr/local/bin/rigsignal-ebpf" "$ROOT/proc/4242/exe"
@@ -120,6 +121,20 @@ run_restore_with_pin() {
   env RIGSIGNAL_RESTORE_ROOT="$ROOT" RIGSIGNAL_RESTORE_PROC_ROOT="$ROOT/proc" RIGSIGNAL_RESTORE_BIN="$BIN" MOCK_LOG="$LOG" RIGSIGNAL_RESTORE_DWELL=0 "$@" bash "$RESTORE" "${args[@]}" --ca-fingerprint "$pin"
 }
 run_restore() { run_restore_with_pin AABB "$@"; }
+
+setup_case shelved
+rm -f "$ROOT/usr/local/bin/rigsignal-ebpf" "$ROOT/etc/systemd/system/rigsignal-ebpf.service"
+run_restore >"$CASE/out" 2>&1 || fail shelved
+grep -qx 'eBPF restore unsupported while eBPF is shelved (see EBPF-REENABLE-DESIGN-STUB)' "$CASE/out" || fail 'shelved gate message'
+[[ ! -s $LOG ]] || fail 'shelved gate mutated state'
+ok 'shelved eBPF exits successfully without mutation'
+
+setup_case legacy-missing-binary
+rm -f "$ROOT/usr/local/bin/rigsignal-ebpf"
+run_restore >"$CASE/out" 2>&1 || fail 'legacy install with missing binary'
+! grep -q 'eBPF restore unsupported while eBPF is shelved' "$CASE/out" || fail 'legacy missing-binary gate'
+[[ -x $ROOT/usr/local/bin/rigsignal-ebpf && -f $ROOT/usr/local/lib/rigsignal/rigsignal-ebpf-probes ]] || fail 'legacy missing-binary restore did not install payloads'
+ok 'legacy unit with missing binary restores without shelved gate'
 
 setup_case happy
 run_restore >"$CASE/out" 2>&1 || fail happy

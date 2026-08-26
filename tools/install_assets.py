@@ -69,6 +69,7 @@ W1_RAW_SHA256 = {
 TARGET_GENERATION_SCHEME = "rigsignal:target-generation:w1-assets:v1"
 TARGET_GENERATION_KAT = "a7ed20a4b4bfe0b2e5597a065e8bdaa5161b0d962e1a502d3db3bbcc97e8ee7a"
 ROLE_JCS_SHA256 = "05b58b8369bc4212fcffa0ea81621ef10d6d57f1de464fbc3f562842a9cbafd7"
+VIEWER_ROLE_JCS_SHA256 = "895f2689e3641d7e7b80e3cbf3d09c7956d486367d78c63e3818a3d0e8509731"
 DIAGNOSIS_STREAM = "logs-rigsignal.diagnosis-default"
 W1_LIFECYCLE_POLICY = "logs@lifecycle"
 PROBE_FIXTURE_PATH = "fixtures/diagnosis_event/v1/positive/15-diagnosis-non-finding-conditional.expected.json"
@@ -2949,6 +2950,26 @@ def role_body(bundle: Bundle) -> dict:
             or value["indices"][0] != {"names": [DIAGNOSIS_STREAM],
                                         "privileges": ["view_index_metadata", "create_doc"]}):
         raise InputError("canonical shipper role is invalid")
+    viewer_role_body(bundle)
+    return value
+
+
+def viewer_role_body(bundle: Bundle) -> dict:
+    asset = next((item for item in bundle.assets if item.path ==
+                  "elastic/kibana-roles/rigsignal_viewer.json"), None)
+    if asset is None:
+        raise InputError("canonical viewer role is missing")
+    value = parse_json(asset.data, asset.path)
+    if not isinstance(value, dict) or hashlib.sha256(jcs(value)).hexdigest() != VIEWER_ROLE_JCS_SHA256:
+        raise InputError("canonical viewer role is invalid")
+    if (set(value) != {"description", "elasticsearch", "kibana"}
+            or value.get("description") != "RigSignal read-only dashboard viewer. Read + view_index_metadata on the rigsignal namespace only; feature reads scoped to the rigsignal space only. No cluster privileges, no write/delete, no other Kibana feature."
+            or value.get("elasticsearch") != {"cluster": [], "indices": [{
+                "names": ["logs-rigsignal.*", "metrics-rigsignal.*"],
+                "privileges": ["read", "view_index_metadata"]}]}
+            or value.get("kibana") != [{"base": [], "feature": {"dashboard_v2": ["read"]},
+                                         "spaces": ["rigsignal"]}]):
+        raise InputError("canonical viewer role is invalid")
     return value
 
 
