@@ -209,3 +209,39 @@ jobs:
 
       - name: Run smoke test
         run: bash scripts/smoke-test.sh ./target/debug/rigsignal-agent
+
+  # ---------------------------------------------------------------------------
+  # Dashboard NDJSON hygiene
+  # No instance tokens may leak into committed dashboards.
+  # ---------------------------------------------------------------------------
+  dashboard-hygiene:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Check for instance tokens in dashboards
+        run: |
+          fail=0
+          shopt -s nullglob
+          files=()
+          for dir in kibana/dashboard dashboards dashboards/archive; do
+            [[ -d "$dir" ]] || continue
+            for f in "$dir"/*.json "$dir"/*.ndjson; do
+              [[ -f "$f" ]] && files+=("$f")
+            done
+          done
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "no dashboard files found; skipping"
+            exit 0
+          fi
+          for f in "${files[@]}"; do
+            for field in '"version":' '"created_at":' '"updated_at":' \
+                         '"created_by":' '"updated_by":'; do
+              if grep -q "${field}" "${f}"; then
+                echo "::error file=${f}::contains instance token ${field}"
+                fail=1
+              fi
+            done
+          done
+          exit $fail
