@@ -27,6 +27,37 @@ class ReleaseVersionGuardTests(unittest.TestCase):
             capture_output=True,
         )
 
+    def validate_version(self, version: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(TOOL), "--validate-version-string", version],
+            text=True,
+            capture_output=True,
+        )
+
+    def test_validate_version_string_accepts_semver_tags(self):
+        for version in ("v0.3.4", "v0.3.4-rc.1", "v0.3.4+build.1"):
+            with self.subTest(version=version):
+                result = self.validate_version(version)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_validate_version_string_rejects_untrusted_values(self):
+        for version in (
+            "",
+            "0.3.4",
+            "0.3.4'; echo pwned",
+            "v0.3.4\nextra",
+            "v0.3.4`",
+            "v0.3.4$(echo pwned)",
+            "junkv0.3.4",
+            "v0.3.4junk",
+            " v0.3.4",
+            "v0.3.4 ",
+        ):
+            with self.subTest(version=version):
+                result = self.validate_version(version)
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn("version must be a nonempty v<semver> string", result.stderr)
+
     def test_skewed_lockfile_fails_without_rewriting_it(self):
         with tempfile.TemporaryDirectory() as temporary:
             repo = self.fixture_copy(temporary)

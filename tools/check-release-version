@@ -41,6 +41,11 @@ class GuardFailure(Exception):
     """A release source was missing or inconsistent."""
 
 
+def validate_version_string(version: str) -> None:
+    if not SEMVER_TAG.fullmatch(version):
+        raise GuardFailure(f"version must be a nonempty v<semver> string, got {version!r}")
+
+
 def metadata(repo_root: Path, manifest: Path) -> dict:
     command = [
         "cargo",
@@ -187,10 +192,17 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--tag", help="release tag to assert as v<semver>")
+    parser.add_argument(
+        "--validate-version-string",
+        metavar="VERSION",
+        help="validate a v<semver> string without inspecting the repository",
+    )
     args = parser.parse_args()
-    repo_root = args.repo_root.resolve()
     try:
-        check(repo_root, args.tag)
+        if args.validate_version_string is not None:
+            validate_version_string(args.validate_version_string)
+        else:
+            check(args.repo_root.resolve(), args.tag)
     except GuardFailure as error:
         print(f"release-version guard failed:\n{error}", file=sys.stderr)
         return 1
