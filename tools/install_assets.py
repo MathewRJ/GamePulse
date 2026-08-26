@@ -3449,6 +3449,13 @@ def _probe_rename_exchange_capability(root: Path, ancestor: Path) -> None:
     except OSError as error:
         if error.errno in (errno.EROFS, errno.ENOSPC):
             raise ProvisionError("install refused: local_transaction_storage_unavailable") from error
+        # Diagnostic enrichment only, computed on failure: name the filesystem
+        # in a separate stderr line so the stable refusal token stays pinned.
+        try:
+            print("enrollment preflight diagnostic: filesystem type "
+                  + _mount_filesystem_type(anchor), file=sys.stderr)
+        except ProvisionError:
+            pass
         raise ProvisionError("install refused: atomic_publication_filesystem_unsupported") from error
     finally:
         if parent_fd is not None:
@@ -3551,11 +3558,8 @@ def check_install_preflight(root: Path, agent: Path, ca_file: Path) -> tuple[Pat
     resolved_agent = _check_agent_binary(agent)
     if not _rename_exchange_symbol_available():
         raise ProvisionError("install refused: atomic_publication_filesystem_unsupported")
-    try:
-        _mount_filesystem_type(ancestor)
-    except ProvisionError:
-        # Mount type is diagnostic enrichment only; a real exchange decides.
-        pass
+    # Mount type is diagnostic enrichment only, emitted by the probe on
+    # failure; a real exchange decides.
     _probe_rename_exchange_capability(canonical_root, ancestor)
     _check_publication_stage_path(canonical_root, ancestor)
     _check_parent_fsync(ancestor, canonical_root.parent)
