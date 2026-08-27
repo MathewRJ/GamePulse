@@ -1,5 +1,7 @@
 # RigSignal — Roadmap
 
+> **Status:** SUPERSEDED. Last reviewed 2026-06-10; this document predates the entire 0.3.x line. The live planning surface is `STRATEGY-2026H2.md` (maintained outside this repo) and current state is `docs/STATUS.md`. Do not use this file to infer current plans.
+
 This file defines the milestones and work packages for RigSignal. It describes structure only — current status lives in `docs/STATUS.md`.
 
 ## Milestone structure

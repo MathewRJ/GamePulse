@@ -1,5 +1,7 @@
 # RigSignal — Kibana Dashboards
 
+> **Status:** Last reviewed 2026-06-10. This document predates the 0.3.x releases and is not actively maintained. For current project state see `docs/STATUS.md`.
+
 ## Current dashboards
 
 | Dashboard | File | Kibana ID |

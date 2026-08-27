@@ -121,12 +121,12 @@ The one-line installer performs the same checksum verification before unpacking.
 | | Elastic Cloud | Self-hosted (local) |
 |---|---|---|
 | Setup effort | Minutes | 15–30 min |
-| Cost | Free trial / free tier | Free (open source) |
+| Cost | 14-day free trial, then paid | Free (open source) |
 | Kibana | Included | Install separately (same version) |
 | Works offline | No (requires internet) | Yes |
 | Recommended for | Getting started fast | Privacy, air-gapped, no cloud |
 
-Both options are free. Elastic Cloud is the quickest path. Self-hosted gives you full control and works with no internet connection after setup.
+Self-hosted is free. Elastic Cloud is free for a 14-day trial and then becomes a paid subscription. Elastic Cloud is the quickest path to get started; self-hosted gives you full control and works with no internet connection after setup.
 
 ---
 
@@ -134,7 +134,7 @@ Both options are free. Elastic Cloud is the quickest path. Self-hosted gives you
 
 ### 1. Create a deployment
 
-Sign up at [cloud.elastic.co](https://cloud.elastic.co/). The free tier (8 GB) is sufficient for months of personal gaming data. Create a deployment in any region.
+Sign up at [cloud.elastic.co](https://cloud.elastic.co/) for a 14-day free trial (no credit card required; up to 8 GB RAM across two availability zones). The trial deployment is suspended at expiry and permanently deleted 30 days later, so it is meant for evaluation, not as a long-term home for your gaming telemetry. Create a deployment in any region.
 
 ### 2. Get an API key
 
@@ -182,7 +182,7 @@ docker run -d --name elasticsearch \
   -e "discovery.type=single-node" \
   -e "xpack.security.enabled=true" \
   -e "ELASTIC_PASSWORD=changeme" \
-  docker.elastic.co/elasticsearch/elasticsearch:8.18.0
+  docker.elastic.co/elasticsearch/elasticsearch:9.4.4
 ```
 
 On first start, Elasticsearch generates a `elastic` superuser password and a Kibana enrollment token — save both. It listens on `https://localhost:9200` (TLS is enabled by default since ES 8.0).
