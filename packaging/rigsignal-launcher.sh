@@ -2,7 +2,7 @@
 # rigsignal — unified launcher CLI for the RigSignal telemetry agent.
 #
 # Usage:
-#   rigsignal setup [--ca-file <path> [--ca-sha256 <hex>]]
+#   rigsignal setup [--ca-file <path> [--ca-sha256 <hex>]] [--allow-unknown-version]
 #                                  First-run: configure ES endpoint + API key
 #   rigsignal start              Start agent (+ eBPF if sudo available)
 #   rigsignal stop               Stop both services gracefully
@@ -341,8 +341,12 @@ validate_elasticsearch() {
     fi
     es_version=$(json_version_number "$ES_BODY")
     if [ -z "$es_version" ]; then
-        _warn "Could not determine Elasticsearch version; see docs/install.md for the supported floor ${ES_SUPPORTED_FLOOR_VERSION}."
-        return 0
+        if [ "${SETUP_ALLOW_UNKNOWN_VERSION:-0}" = "1" ]; then
+            _warn "Elasticsearch version could NOT be determined, so the supported floor ${ES_SUPPORTED_FLOOR_VERSION} could NOT be verified. By using --allow-unknown-version, you are accepting the compatibility risk."
+            return 0
+        fi
+        _err "Could not determine Elasticsearch version; RigSignal requires ${ES_SUPPORTED_FLOOR_VERSION} or newer and setup cannot verify that supported floor. Rerun with --allow-unknown-version only if you accept this risk."
+        return 1
     fi
     if ! version_at_least "$es_version" "$ES_SUPPORTED_FLOOR_VERSION"; then
         _err "Elasticsearch ${es_version} is unsupported; RigSignal requires ${ES_SUPPORTED_FLOOR_VERSION} or newer."
@@ -1429,6 +1433,7 @@ recheck_elasticsearch_delivery() {
 parse_setup_args() {
     SETUP_CA_FILE=""
     SETUP_CA_SHA256=""
+    SETUP_ALLOW_UNKNOWN_VERSION=0
     SETUP_ARG_ERROR="usage"
     while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -1438,6 +1443,8 @@ parse_setup_args() {
             --ca-sha256)
                 [ -z "$SETUP_CA_SHA256" ] && [ "$#" -ge 2 ] && [ -n "$2" ] || return 1
                 SETUP_CA_SHA256=$2; shift 2 ;;
+            --allow-unknown-version)
+                SETUP_ALLOW_UNKNOWN_VERSION=1; shift ;;
             *) return 1 ;;
         esac
     done
@@ -1459,7 +1466,7 @@ cmd_setup() {
     [ "${RIGSIGNAL_DEBUG:-0}" = "1" ] && set +x
 
     if ! parse_setup_args "$@"; then
-        [ "$SETUP_ARG_ERROR" = "pin" ] || _err "Usage: rigsignal setup [--ca-file <path> [--ca-sha256 <64-hex>]]"
+        [ "$SETUP_ARG_ERROR" = "pin" ] || _err "Usage: rigsignal setup [--ca-file <path> [--ca-sha256 <64-hex>]] [--allow-unknown-version]"
         exit 1
     fi
     CA_SNAPSHOT=""
@@ -1841,7 +1848,7 @@ usage() {
 RigSignal launcher
 
 Usage:
-  rigsignal setup [--ca-file <path> [--ca-sha256 <hex>]]
+  rigsignal setup [--ca-file <path> [--ca-sha256 <hex>]] [--allow-unknown-version]
                               Configure Elasticsearch endpoint, API key, and CA
   rigsignal start              Start agent (+ eBPF if sudo available)
   rigsignal stop               Stop both services gracefully

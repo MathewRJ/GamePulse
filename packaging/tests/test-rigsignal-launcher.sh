@@ -63,6 +63,7 @@ test_bin="$test_tmp/bin"
 mkdir -p "$test_home" "$test_bin"
 printf '%s\n' '#!/usr/bin/env bash' \
     'if [ "$1" = "-c" ]; then exec /usr/bin/python3 "$@"; fi' \
+    'if [ "${ES_TEST_VERSION:-}" = "__unknown__" ] && [ "$4" = "GET" ]; then printf '\''%s\n'\'' '\''200'\'' '\''{"name":"version-hidden"}'\''; exit; fi' \
     'case "$4" in' \
     "    GET) printf '%s\n' '200' \"{\\\"version\\\":{\\\"number\\\":\\\"\${ES_TEST_VERSION:-9.4.3}\\\"}}\" ;;" \
     "    POST) printf '%s\n' '200' '{\"has_all_requested\":true}' ;;" \
@@ -74,11 +75,12 @@ expect_setup_version() {
     local version expected_status output status version_home
     version="$1"
     expected_status="$2"
+    shift 2
     version_home="$test_tmp/version-$version"
     set +e
     output="$(printf 'http://127.0.0.1:9200\ntest-api-key\n' | \
         env SUDO_USER='' HOME="$version_home" XDG_CONFIG_HOME="$version_home/.config" \
-        ES_TEST_VERSION="$version" PATH="$test_bin:/usr/bin:/bin" "$launcher" setup 2>&1)"
+        ES_TEST_VERSION="$version" PATH="$test_bin:/usr/bin:/bin" "$launcher" setup "$@" 2>&1)"
     status=$?
     set -e
     if [ "$expected_status" = "accepted" ]; then
@@ -94,6 +96,36 @@ expect_setup_version() {
 expect_setup_version 9.4.2 refused
 expect_setup_version 9.4.3 accepted
 expect_setup_version 9.4.5 accepted
+
+# An unknown version is refused by default, can be accepted explicitly with a
+# prominent risk warning, and the escape hatch never rescues a known-old release.
+unknown_home="$test_tmp/version-unknown-default"
+set +e
+unknown_output="$(printf 'http://127.0.0.1:9200\ntest-api-key\n' | \
+    env SUDO_USER='' HOME="$unknown_home" XDG_CONFIG_HOME="$unknown_home/.config" \
+    ES_TEST_VERSION='__unknown__' PATH="$test_bin:/usr/bin:/bin" "$launcher" setup 2>&1)"
+unknown_status=$?
+set -e
+[ "$unknown_status" -ne 0 ] || { echo "unknown Elasticsearch version was accepted without an override" >&2; exit 1; }
+case "$unknown_output" in
+    *"requires 9.4.3 or newer"*) ;;
+    *) echo "unknown Elasticsearch version refusal did not name the supported floor: $unknown_output" >&2; exit 1 ;;
+esac
+
+unknown_override_home="$test_tmp/version-unknown-override"
+set +e
+unknown_override_output="$(printf 'http://127.0.0.1:9200\ntest-api-key\n' | \
+    env SUDO_USER='' HOME="$unknown_override_home" XDG_CONFIG_HOME="$unknown_override_home/.config" \
+    ES_TEST_VERSION='__unknown__' PATH="$test_bin:/usr/bin:/bin" "$launcher" setup --allow-unknown-version 2>&1)"
+unknown_override_status=$?
+set -e
+[ "$unknown_override_status" -eq 0 ] || { echo "unknown Elasticsearch version was refused despite the override: $unknown_override_output" >&2; exit 1; }
+case "$unknown_override_output" in
+    *"floor 9.4.3 could NOT be verified"*"accepting the compatibility risk"*) ;;
+    *) echo "unknown Elasticsearch version override did not emit the required risk warning: $unknown_override_output" >&2; exit 1 ;;
+esac
+
+expect_setup_version 9.4.2 refused --allow-unknown-version
 
 if ! (
     cd "$test_tmp"
