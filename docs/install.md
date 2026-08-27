@@ -162,7 +162,7 @@ This prompts for your ES endpoint and API key, verifies connectivity, and writes
 
 Download and install guide: [elastic.co/downloads/elasticsearch](https://www.elastic.co/downloads/elasticsearch) / [Installing Elasticsearch](https://www.elastic.co/docs/deploy-manage/deploy/self-managed/installing-elasticsearch)
 
-Requirements: Elasticsearch **9.4.3 – 9.4.4** with Kibana at the same version, and at least 2 GB RAM. This is the *tested supported range* (G4 gate, 2026-07-22): fresh install, asset upgrade, and in-place stack upgrade are all verified at both endpoints by the repeatable clean-stack matrix (`scripts/clean-stack/matrix.sh`, see `docs/QA-MATRIX.md`). Older 8.x/9.x versions may work (TSDS needs 8.10+) but are NOT tested or supported; the range widens only when the matrix passes at a new endpoint.
+Requirements: Elasticsearch **9.4.3 or newer** with Kibana at the same version, and at least 2 GB RAM. Versions older than 9.4.3 are not supported; newer Elasticsearch versions are supported.
 
 ### 1. Start Elasticsearch
 

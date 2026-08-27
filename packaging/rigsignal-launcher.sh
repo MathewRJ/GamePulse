@@ -16,11 +16,9 @@
 AGENT_UNIT="rigsignal-agent"
 EBPF_UNIT="rigsignal-ebpf"
 
-# Elasticsearch compatibility policy. The tested range is intentionally kept in
+# Elasticsearch compatibility policy. The supported floor is intentionally kept in
 # one place so setup messaging and the version gate cannot drift.
-ES_TESTED_MIN_VERSION="9.4.3"
-ES_TESTED_MAX_VERSION="9.4.4"
-ES_MIN_VERSION="8.13.0"
+ES_SUPPORTED_FLOOR_VERSION="9.4.3"
 
 # User config path — mirrors what the Rust agent's Config::load() searches first.
 # The agent also reads /etc/rigsignal/rigsignal.toml (system-wide), but setup
@@ -343,15 +341,12 @@ validate_elasticsearch() {
     fi
     es_version=$(json_version_number "$ES_BODY")
     if [ -z "$es_version" ]; then
-        _warn "Could not determine Elasticsearch version; see docs/install.md for the tested range ${ES_TESTED_MIN_VERSION}–${ES_TESTED_MAX_VERSION}."
+        _warn "Could not determine Elasticsearch version; see docs/install.md for the supported floor ${ES_SUPPORTED_FLOOR_VERSION}."
         return 0
     fi
-    if ! version_at_least "$es_version" "$ES_MIN_VERSION"; then
-        _err "Elasticsearch ${es_version} is unsupported; RigSignal requires ${ES_MIN_VERSION}+ (TSDS-era APIs)."
+    if ! version_at_least "$es_version" "$ES_SUPPORTED_FLOOR_VERSION"; then
+        _err "Elasticsearch ${es_version} is unsupported; RigSignal requires ${ES_SUPPORTED_FLOOR_VERSION} or newer."
         return 1
-    fi
-    if ! version_at_least "$es_version" "$ES_TESTED_MIN_VERSION" || ! version_at_least "$ES_TESTED_MAX_VERSION" "$es_version"; then
-        _warn "Elasticsearch ${es_version} is outside the tested ${ES_TESTED_MIN_VERSION}–${ES_TESTED_MAX_VERSION} range; see docs/install.md."
     fi
 }
 
@@ -1534,7 +1529,7 @@ cmd_setup() {
     printf '\n%sRigSignal Setup%s\n' "$_GRN" "$_NC"
     printf "===============\n"
     printf "RigSignal ships gaming metrics to Elasticsearch.\n"
-    printf "You need an Elastic Cloud deployment (or self-hosted ES 8.13+).\n\n"
+    printf "You need an Elastic Cloud deployment (or self-hosted ES %s or newer).\n\n" "$ES_SUPPORTED_FLOOR_VERSION"
     printf "You will need:\n"
     printf "  - Your Elasticsearch endpoint URL\n"
     printf "  - An API key with write access to metrics-rigsignal.* indices\n\n"
