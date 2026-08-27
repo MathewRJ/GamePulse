@@ -162,7 +162,7 @@ This prompts for your ES endpoint and API key, verifies connectivity, and writes
 
 Download and install guide: [elastic.co/downloads/elasticsearch](https://www.elastic.co/downloads/elasticsearch) / [Installing Elasticsearch](https://www.elastic.co/docs/deploy-manage/deploy/self-managed/installing-elasticsearch)
 
-Requirements: Elasticsearch **9.4.3 or newer** with Kibana at the same version, and at least 2 GB RAM. Versions older than 9.4.3 are not supported; newer Elasticsearch versions are supported.
+Requirements: Elasticsearch **9.4.3 or newer** with Kibana at the same version, and at least 2 GB RAM. Versions above 9.4.4 are not matrix-tested but are expected to work — please report any problems.
 
 ### 1. Start Elasticsearch
 
