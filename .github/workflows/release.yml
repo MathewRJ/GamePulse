@@ -37,6 +37,172 @@ env:
 
 jobs:
 
+  # ── Mandatory quality gate (mirrors ci.yml) ───────────────────────────────
+  ebpf-workspace:
+    name: eBPF workspace tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      # `working-directory` is load-bearing: rustup resolves rust-toolchain.toml
+      # CWD-upward, so running this from the repo root would pick the root 1.98.0 pin
+      # instead of ebpf/'s nightly (which the probes crate needs for build-std).
+      - name: Run eBPF workspace tests
+        working-directory: ebpf
+        run: cargo test --locked
+
+  enrollment-tail-root:
+    name: enrollment tail tests (root)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Run enrollment tail tests as root
+        run: |
+          set -o pipefail
+          sudo python3 tools/tests/test_enrollment_tail.py -v 2>&1 | tee enrollment-tail-root.log
+          grep -E 'test_foreign_owned_outbox_refuses.* \.\.\. ok$' enrollment-tail-root.log
+
+  python-discovery:
+    name: Python enrollment discovery
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Run full Python discovery
+        run: python3 -m unittest discover -s tools/tests
+
+      - name: Run shuffled Python discovery
+        if: '!cancelled()'
+        run: python3 tools/tests/run_shuffled.py --seed 20260826
+
+      - name: Run fd publication tests directly
+        if: '!cancelled()'
+        run: python3 tools/tests/test_asset_tools.py
+
+  check:
+    name: check (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Rust toolchain (pinned 1.98.0)
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master@2026-07-18
+        with:
+          toolchain: 1.98.0
+          components: clippy
+
+      - name: Cache cargo registry + build artifacts
+        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+        with:
+          workspaces: src -> target
+          key: ${{ matrix.os }}
+
+      - name: cargo check
+        run: cargo check --manifest-path src/Cargo.toml --locked
+
+      - name: cargo clippy
+        run: cargo clippy --manifest-path src/Cargo.toml --locked --all-targets -- -D warnings
+
+      - name: cargo test
+        run: cargo test --manifest-path src/Cargo.toml --locked
+
+      - name: cargo check --features ebpf (linux only)
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo check --manifest-path src/Cargo.toml --locked --features ebpf
+
+      - name: cargo clippy --features ebpf (linux only)
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo clippy --manifest-path src/Cargo.toml --locked --all-targets --features ebpf -- -D warnings
+
+      - name: Build release binary (windows only)
+        if: matrix.os == 'windows-latest'
+        run: cargo build --release --manifest-path src/Cargo.toml --locked
+
+      - name: Upload windows agent binary artifact
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rigsignal-agent-windows
+          # Workspace root Cargo.toml puts binaries in the root target dir.
+          path: target/release/rigsignal-agent.exe
+          if-no-files-found: error
+
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Rust toolchain (pinned 1.98.0, rustfmt)
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master@2026-07-18
+        with:
+          toolchain: 1.98.0
+          components: rustfmt
+
+      - name: cargo fmt --check
+        run: cargo fmt --manifest-path src/Cargo.toml -- --check
+
+  smoke-test:
+    name: smoke test (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Rust toolchain (pinned 1.98.0)
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master@2026-07-18
+        with:
+          toolchain: 1.98.0
+
+      - name: Cache cargo registry + build artifacts
+        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+        with:
+          workspaces: src -> target
+          key: ubuntu-smoke
+
+      - name: Build agent (debug)
+        run: cargo build --manifest-path src/Cargo.toml --locked
+
+      - name: Run smoke test
+        run: bash scripts/smoke-test.sh ./target/debug/rigsignal-agent
+
+  dashboard-hygiene:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Check for instance tokens in dashboards
+        run: |
+          fail=0
+          shopt -s nullglob
+          files=()
+          for dir in kibana/dashboard dashboards dashboards/archive; do
+            [[ -d "$dir" ]] || continue
+            for f in "$dir"/*.json "$dir"/*.ndjson; do
+              [[ -f "$f" ]] && files+=("$f")
+            done
+          done
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "no dashboard files found; skipping"
+            exit 0
+          fi
+          for f in "${files[@]}"; do
+            for field in '"version":' '"created_at":' '"updated_at":' \
+                         '"created_by":' '"updated_by":'; do
+              if grep -q "${field}" "${f}"; then
+                echo "::error file=${f}::contains instance token ${field}"
+                fail=1
+              fi
+            done
+          done
+          exit $fail
+
   # ── 0. Packaging regression gate ──────────────────────────────────────────
   packaging-tests:
     name: packaging tests
@@ -130,7 +296,7 @@ jobs:
   # ── 2a. Package Linux binary tarball (for install.sh / SteamOS) ─────────────
   package-tarball:
     name: package linux tarball
-    needs: [setup, build-linux]
+    needs: [setup, build-linux, packaging-tests, ebpf-workspace, enrollment-tail-root, python-discovery, check, fmt, smoke-test, dashboard-hygiene]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -233,7 +399,7 @@ jobs:
   # ── 3. .deb (Debian / Ubuntu) ───────────────────────────────────────────────
   package-deb:
     name: package .deb
-    needs: [setup, build-linux]
+    needs: [setup, build-linux, packaging-tests, ebpf-workspace, enrollment-tail-root, python-discovery, check, fmt, smoke-test, dashboard-hygiene]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -280,7 +446,7 @@ jobs:
   # ── 4. .rpm (Fedora / RHEL / openSUSE) ──────────────────────────────────────
   package-rpm:
     name: package .rpm
-    needs: [setup, build-linux]
+    needs: [setup, build-linux, packaging-tests, ebpf-workspace, enrollment-tail-root, python-discovery, check, fmt, smoke-test, dashboard-hygiene]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -327,7 +493,7 @@ jobs:
   # ── 5. .pkg.tar.zst (Arch Linux) ────────────────────────────────────────────
   package-arch:
     name: package .pkg.tar.zst
-    needs: [setup, build-linux]
+    needs: [setup, build-linux, packaging-tests, ebpf-workspace, enrollment-tail-root, python-discovery, check, fmt, smoke-test, dashboard-hygiene]
     runs-on: ubuntu-latest
     container: archlinux/archlinux@sha256:16191a338ed2338e17a3af7d164e9de871fbc2ae6b96f58a7bd3fedbb6e24dc2
     steps:
@@ -386,7 +552,7 @@ jobs:
   # and adds bin\ to the system PATH.
   package-windows:
     name: package .msi (windows)
-    needs: [setup, build-windows]
+    needs: [setup, build-windows, packaging-tests, ebpf-workspace, enrollment-tail-root, python-discovery, check, fmt, smoke-test, dashboard-hygiene]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -474,7 +640,7 @@ jobs:
   # build + package jobs run, but no release is published.
   release:
     name: create github release
-    needs: [setup, packaging-tests, package-tarball, package-deb, package-rpm, package-arch, package-windows]
+    needs: [setup, packaging-tests, ebpf-workspace, enrollment-tail-root, python-discovery, check, fmt, smoke-test, dashboard-hygiene, package-tarball, package-deb, package-rpm, package-arch, package-windows]
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
     permissions:
