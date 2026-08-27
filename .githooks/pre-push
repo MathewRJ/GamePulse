@@ -38,23 +38,6 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   esac
 done
 
-# CI visibility (2026-08-26). The `ci` workflow sat red for 18 consecutive runs
-# across 22 days -- including the released v0.3.4 commit -- because nothing ever
-# surfaced it at a moment anyone was looking. This is DETECTION ONLY and must
-# never block: the enforcing control is the `ci-gate` required status check.
-# Fail-open by construction -- no gh, no network, no auth, or any error at all
-# must leave the push completely unaffected.
-if command -v gh >/dev/null 2>&1; then
-  ci_state="$(timeout 10 gh run list --workflow=ci.yml --branch main --limit 1 \
-                --json conclusion --jq '.[0].conclusion' 2>/dev/null || true)"
-  case "${ci_state}" in
-    failure|timed_out|startup_failure)
-      echo "[pre-push] WARNING: the latest ci run on origin/main is '${ci_state}'."
-      echo "[pre-push]          Check the ci workflow before building on it."
-      ;;
-  esac
-fi
-
 # Tag-binding gate (2026-08-26): a v* tag names a release. The audit machinery
 # only covers main pushes, so an arbitrary v* tag would publish an unaudited
 # commit through the release workflow's tag trigger. Bind every pushed v* tag
@@ -142,6 +125,27 @@ if [[ -f "${STAMP}" ]]; then
   fi
 fi
 
+# CI visibility (2026-08-26, placement corrected the same day). The `ci` workflow sat red for 18 consecutive runs
+# across 22 days -- including the released v0.3.4 commit -- because nothing ever
+# surfaced it at a moment anyone was looking. This is DETECTION ONLY and must
+# never block: the enforcing control is the `ci-gate` required status check.
+# Fail-open by construction -- no gh, no network, no auth, or any error at all
+# must leave the push completely unaffected.
+if command -v gh >/dev/null 2>&1; then
+  ci_state="$(timeout 5 gh run list --workflow=ci.yml --branch main --limit 1 \
+                --json conclusion --jq '.[0].conclusion' 2>/dev/null || true)"
+  case "${ci_state}" in
+    failure|timed_out|startup_failure)
+      echo "[pre-push] WARNING: the latest ci run on origin/main is '${ci_state}'."
+      echo "[pre-push]          Check the ci workflow before building on it."
+      ;;
+  esac
+fi
+# Placed HERE, after the range-stamp fast-path exit and immediately before the
+# multi-minute audit, deliberately: git opens the ssh transport BEFORE this hook
+# runs, so every second spent here eats the transport budget. An unconditional
+# probe would have taxed the stamp fast-path that exists precisely to be
+# instant. On this path we are about to spend minutes anyway, so 5s is free.
 echo "[pre-push] push to main detected — running gpx audit security"
 echo "[pre-push] (bypass with: git push --no-verify)"
 # Pin the audit target to THIS repo (audit note N1, 2026-08-26): GPX_PROJECT is
