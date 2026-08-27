@@ -1,5 +1,7 @@
 # Architecture
 
+> **Status:** Last reviewed 2026-06-10. This document predates the 0.3.x releases and is not actively maintained. For current project state see `docs/STATUS.md`.
+
 ## Overview
 
 RigSignal is a single Rust binary that runs alongside games, collecting metrics from multiple sources and shipping them to Elasticsearch. It's designed for minimal overhead (< 0.5% CPU, < 30 MB RAM) and zero configuration beyond the ES endpoint.

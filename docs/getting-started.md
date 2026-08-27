@@ -5,7 +5,7 @@ This guide walks you through installing RigSignal, connecting it to Elasticsearc
 ## Prerequisites
 
 - A Linux gaming PC (Steam Deck, desktop, or laptop)
-- An Elasticsearch instance — [Elastic Cloud](https://cloud.elastic.co/) free tier works for personal use
+- An Elasticsearch instance — [Elastic Cloud](https://cloud.elastic.co/) offers a 14-day free trial (no credit card required) for evaluation; the trial deployment is suspended at expiry and its data is permanently deleted 30 days later, so it suits evaluation rather than ongoing personal use
 - Games installed via Steam, Lutris, Heroic (Epic/GOG), or Bottles — or specify any process manually
 
 ## Step 1: Install
