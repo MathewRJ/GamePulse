@@ -64,11 +64,37 @@ mkdir -p "$test_home" "$test_bin"
 printf '%s\n' '#!/usr/bin/env bash' \
     'if [ "$1" = "-c" ]; then exec /usr/bin/python3 "$@"; fi' \
     'case "$4" in' \
-    "    GET) printf '%s\n' '200' '{\"version\":{\"number\":\"9.4.3\"}}' ;;" \
+    "    GET) printf '%s\n' '200' \"{\\\"version\\\":{\\\"number\\\":\\\"\${ES_TEST_VERSION:-9.4.3}\\\"}}\" ;;" \
     "    POST) printf '%s\n' '200' '{\"has_all_requested\":true}' ;;" \
     "    *) printf '%s\n' '404' '{}' ;;" \
     'esac' >"$test_bin/python3"
 chmod +x "$test_bin/python3"
+
+expect_setup_version() {
+    local version expected_status output status version_home
+    version="$1"
+    expected_status="$2"
+    version_home="$test_tmp/version-$version"
+    set +e
+    output="$(printf 'http://127.0.0.1:9200\ntest-api-key\n' | \
+        env SUDO_USER='' HOME="$version_home" XDG_CONFIG_HOME="$version_home/.config" \
+        ES_TEST_VERSION="$version" PATH="$test_bin:/usr/bin:/bin" "$launcher" setup 2>&1)"
+    status=$?
+    set -e
+    if [ "$expected_status" = "accepted" ]; then
+        [ "$status" -eq 0 ] || { echo "Elasticsearch $version was unexpectedly refused: $output" >&2; exit 1; }
+    else
+        [ "$status" -ne 0 ] || { echo "Elasticsearch $version was unexpectedly accepted" >&2; exit 1; }
+        case "$output" in *"requires 9.4.3 or newer"*) ;; *) echo "Elasticsearch $version was not refused by the supported floor: $output" >&2; exit 1 ;; esac
+    fi
+}
+
+# The supported Elasticsearch floor rejects older releases while accepting the
+# floor itself and newer releases.
+expect_setup_version 9.4.2 refused
+expect_setup_version 9.4.3 accepted
+expect_setup_version 9.4.5 accepted
+
 if ! (
     cd "$test_tmp"
     printf 'http://127.0.0.1:9200\ntest-api-key\n' | \
