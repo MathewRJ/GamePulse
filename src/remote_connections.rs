@@ -18,6 +18,9 @@ use tracing::{debug, warn};
 const MAX_LINE_BYTES: usize = 64 * 1024;
 const MAX_BATCH_LINES: usize = 100;
 const MAX_BATCH_BYTES: usize = 256 * 1024;
+const PEER_KEY_FILE: &str = "remote-connections-peer-hmac.key";
+const PEER_ID_DOMAIN: &[u8] = b"rigsignal.peer.id\0";
+const PEER_NAME_DOMAIN: &[u8] = b"rigsignal.peer.name\0";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TailToken {
@@ -46,6 +49,7 @@ pub struct RemoteConnectionsTailer {
     log_path: PathBuf,
     state_path: PathBuf,
     hostname: String,
+    peer_key: Option<[u8; 32]>,
     state: Option<TailState>,
     inflight: Option<TailToken>,
     oversize_warned: bool,
@@ -63,6 +67,23 @@ impl RemoteConnectionsTailer {
     }
 
     fn with_paths(hostname: String, log_path: PathBuf, state_path: PathBuf) -> Result<Self> {
+        let peer_key_path = peer_key_path(&state_path);
+        let peer_key = match load_or_create_peer_key(&peer_key_path) {
+            Ok(key) => Some(key),
+            Err(error) => {
+                warn!(%error, "remote_connections peer pseudonymization key unavailable; peer fields will be omitted");
+                None
+            }
+        };
+        Self::with_paths_and_key(hostname, log_path, state_path, peer_key)
+    }
+
+    fn with_paths_and_key(
+        hostname: String,
+        log_path: PathBuf,
+        state_path: PathBuf,
+        peer_key: Option<[u8; 32]>,
+    ) -> Result<Self> {
         let state = match fs::read(&state_path) {
             Ok(bytes) => Some(serde_json::from_slice(&bytes).context("parsing stream tail state")?),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
@@ -74,6 +95,7 @@ impl RemoteConnectionsTailer {
             log_path,
             state_path,
             hostname,
+            peer_key,
             state,
             inflight: None,
             oversize_warned: false,
@@ -236,13 +258,16 @@ impl RemoteConnectionsTailer {
                     );
                     self.oversize_warned = true;
                 }
-            } else if let Some(document) = parse_document(raw, &self.hostname, session) {
+            } else if let Some(document) =
+                parse_document(raw, &self.hostname, session, self.peer_key.as_ref())
+            {
                 let id = line_identity(
                     &self.hostname,
                     source.dev,
                     source.ino,
                     state.offset + cursor as u64,
                     raw,
+                    self.peer_key.as_ref(),
                 );
                 envelopes.push(EventEnvelope {
                     document,
@@ -374,22 +399,146 @@ fn state_path(home: Option<&Path>) -> PathBuf {
     }
 }
 
-fn line_identity(host: &str, dev: u64, ino: u64, offset: u64, raw: &[u8]) -> String {
-    let mut source = Vec::with_capacity(host.len() + raw.len() + 32);
+fn peer_key_path(state_path: &Path) -> PathBuf {
+    state_path.with_file_name(PEER_KEY_FILE)
+}
+
+fn load_or_create_peer_key(path: &Path) -> Result<[u8; 32]> {
+    match read_peer_key(path) {
+        Ok(key) => return Ok(key),
+        Err(error)
+            if error
+                .downcast_ref::<std::io::Error>()
+                .is_some_and(|error| error.kind() == std::io::ErrorKind::NotFound) => {}
+        Err(error) => return Err(error),
+    }
+
+    let directory = path
+        .parent()
+        .context("peer pseudonymization key has no parent")?;
+    let parent = directory
+        .parent()
+        .context("peer pseudonymization key directory has no parent")?;
+    fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+    match fs::create_dir(directory) {
+        Ok(()) => fs::set_permissions(directory, fs::Permissions::from_mode(0o700))
+            .with_context(|| format!("restricting {}", directory.display()))?,
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(error) => {
+            return Err(error).with_context(|| format!("creating {}", directory.display()))
+        }
+    }
+
+    let mut key = [0_u8; 32];
+    File::open("/dev/urandom")
+        .context("opening system CSPRNG")?
+        .read_exact(&mut key)
+        .context("reading system CSPRNG")?;
+    let mut file = match OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(0o600)
+        .open(path)
+    {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            return read_peer_key(path)
+        }
+        Err(error) => return Err(error).with_context(|| format!("creating {}", path.display())),
+    };
+    file.write_all(&key)?;
+    file.sync_all()?;
+    fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+    read_peer_key(path)
+}
+
+fn read_peer_key(path: &Path) -> Result<[u8; 32]> {
+    let mut file = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(path)
+        .with_context(|| format!("opening {}", path.display()))?;
+    let metadata = file
+        .metadata()
+        .with_context(|| format!("stating open {}", path.display()))?;
+    if !key_metadata_is_acceptable(
+        metadata.is_file(),
+        metadata.mode(),
+        metadata.uid(),
+        unsafe { libc::geteuid() },
+    ) {
+        anyhow::bail!("peer pseudonymization key is not an owner-only regular file");
+    }
+    let mut key = [0_u8; 32];
+    file.read_exact(&mut key)?;
+    if file.read(&mut [0_u8; 1])? != 0 {
+        anyhow::bail!("peer pseudonymization key has invalid length");
+    }
+    Ok(key)
+}
+
+// The uid branch is tested at this predicate level because creating a
+// foreign-uid filesystem fixture requires privilege.
+fn key_metadata_is_acceptable(is_file: bool, mode: u32, uid: u32, euid: u32) -> bool {
+    is_file && mode & 0o777 == 0o600 && uid == euid
+}
+
+// This changes the document _id for these events. Lines ingested under the
+// prior scheme will therefore be re-ingested; that accepted consequence is
+// tracked separately and deliberately has no migration here.
+fn line_identity(
+    host: &str,
+    dev: u64,
+    ino: u64,
+    offset: u64,
+    raw: &[u8],
+    peer_key: Option<&[u8; 32]>,
+) -> String {
+    let sanitized = identity_line_source(raw, peer_key);
+    let mut source = Vec::with_capacity(host.len() + sanitized.len() + 32);
     source.extend_from_slice(host.as_bytes());
     source.extend_from_slice(&dev.to_ne_bytes());
     source.extend_from_slice(&ino.to_ne_bytes());
     source.extend_from_slice(&offset.to_ne_bytes());
-    source.extend_from_slice(raw);
+    source.extend_from_slice(&sanitized);
     sha256_hex(&source)
+}
+
+fn identity_line_source(raw: &[u8], peer_key: Option<&[u8; 32]>) -> Vec<u8> {
+    const REDACTED: &str = "[peer-redacted]";
+
+    let line = String::from_utf8_lossy(raw);
+    let Some(parsed) = parse_fields(&line) else {
+        return b"[unparseable-remote-connections-line]".to_vec();
+    };
+    let line_start = line.as_ptr() as usize;
+    let peer_id_start = parsed.peer_id.as_ptr() as usize - line_start;
+    let peer_name_start = parsed.peer_name.as_ptr() as usize - line_start;
+    let peer_id_end = peer_id_start + parsed.peer_id.len();
+    let peer_name_end = peer_name_start + parsed.peer_name.len();
+    let (peer_id, peer_name) = match peer_key {
+        Some(key) => (
+            peer_pseudonym(key, PEER_ID_DOMAIN, parsed.peer_id),
+            peer_pseudonym(key, PEER_NAME_DOMAIN, parsed.peer_name),
+        ),
+        None => (REDACTED.to_string(), REDACTED.to_string()),
+    };
+    let mut sanitized = String::with_capacity(line.len() + peer_id.len() + peer_name.len());
+    sanitized.push_str(&line[..peer_id_start]);
+    sanitized.push_str(&peer_id);
+    sanitized.push_str(&line[peer_id_end..peer_name_start]);
+    sanitized.push_str(&peer_name);
+    sanitized.push_str(&line[peer_name_end..]);
+    sanitized.into_bytes()
 }
 
 fn parse_document(
     raw: &[u8],
     hostname: &str,
     session: &crate::session::SessionManager,
+    peer_key: Option<&[u8; 32]>,
 ) -> Option<Value> {
-    parse_document_in_timezone(raw, hostname, session, &Local)
+    parse_document_in_timezone(raw, hostname, session, &Local, peer_key)
 }
 
 fn parse_document_in_timezone<Tz: TimeZone>(
@@ -397,6 +546,7 @@ fn parse_document_in_timezone<Tz: TimeZone>(
     hostname: &str,
     session: &crate::session::SessionManager,
     timezone: &Tz,
+    peer_key: Option<&[u8; 32]>,
 ) -> Option<Value>
 where
     Tz::Offset: std::fmt::Display,
@@ -447,10 +597,15 @@ where
             Value::String(transport.to_string()),
         );
     }
-    client.insert(
-        "peer".to_string(),
-        json!({"id": parsed.peer_id, "name": parsed.peer_name}),
-    );
+    if let Some(key) = peer_key {
+        client.insert(
+            "peer".to_string(),
+            json!({
+                "id": peer_pseudonym(key, PEER_ID_DOMAIN, parsed.peer_id),
+                "name": peer_pseudonym(key, PEER_NAME_DOMAIN, parsed.peer_name),
+            }),
+        );
+    }
     let mut rigsignal = serde_json::Map::new();
     rigsignal.insert("stream".to_string(), json!({"client": client}));
     if let Some(game) = session.current_game.as_ref() {
@@ -531,9 +686,35 @@ fn earlier_utc<Tz: TimeZone>(first: DateTime<Tz>, second: DateTime<Tz>) -> DateT
     }
 }
 
-/// Small self-contained SHA-256 implementation so the agent's durable identity
-/// path does not add a network-fetched dependency to this packaged binary.
+/// HMAC-SHA256 peer pseudonym, hex-encoded and truncated to 32 characters.
+fn peer_pseudonym(key: &[u8; 32], domain: &[u8], value: &str) -> String {
+    let mut inner = Vec::with_capacity(64 + domain.len() + value.len());
+    inner.resize(64, 0x36);
+    for (index, byte) in key.iter().enumerate() {
+        inner[index] ^= byte;
+    }
+    inner.extend_from_slice(domain);
+    inner.extend_from_slice(value.as_bytes());
+    let inner_digest = sha256(&inner);
+    let mut outer = Vec::with_capacity(64 + inner_digest.len());
+    outer.resize(64, 0x5c);
+    for (index, byte) in key.iter().enumerate() {
+        outer[index] ^= byte;
+    }
+    outer.extend_from_slice(&inner_digest);
+    sha256_hex(&outer)[..32].to_string()
+}
+
 fn sha256_hex(input: &[u8]) -> String {
+    sha256(input)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+/// Small self-contained SHA-256 implementation so peer pseudonymization does
+/// not add a network-fetched dependency to this packaged binary.
+fn sha256(input: &[u8]) -> [u8; 32] {
     const K: [u32; 64] = [
         0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4,
         0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe,
@@ -607,14 +788,21 @@ fn sha256_hex(input: &[u8]) -> String {
         h[6] = h[6].wrapping_add(g);
         h[7] = h[7].wrapping_add(hh);
     }
-    h.iter().map(|word| format!("{word:08x}")).collect()
+    let mut digest = [0_u8; 32];
+    for (index, word) in h.iter().enumerate() {
+        digest[index * 4..index * 4 + 4].copy_from_slice(&word.to_be_bytes());
+    }
+    digest
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use chrono::FixedOffset;
+    use std::os::unix::fs::symlink;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    const TEST_PEER_KEY: [u8; 32] = [0x42; 32];
 
     fn temp(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!(
@@ -641,6 +829,7 @@ mod tests {
             "StreamClient",
             &session(),
             &Utc,
+            Some(&TEST_PEER_KEY),
         )
         .unwrap();
         assert_eq!(doc["event"]["type"], json!(["connection", "end"]));
@@ -655,7 +844,14 @@ mod tests {
 
     #[test]
     fn parser_matches_contract_shape() {
-        let doc = parse_document_in_timezone(line(), "StreamClient", &session(), &Utc).unwrap();
+        let doc = parse_document_in_timezone(
+            line(),
+            "StreamClient",
+            &session(),
+            &Utc,
+            Some(&TEST_PEER_KEY),
+        )
+        .unwrap();
         assert_eq!(doc["@timestamp"], "2026-07-17T09:09:44.000Z");
         assert_eq!(doc["event"]["category"], json!(["network"]));
         assert_eq!(doc["event"]["type"], json!(["connection", "start"]));
@@ -666,7 +862,9 @@ mod tests {
 
     #[test]
     fn parser_normalizes_host_name() {
-        let doc = parse_document_in_timezone(line(), "GamingPC", &session(), &Utc).unwrap();
+        let doc =
+            parse_document_in_timezone(line(), "GamingPC", &session(), &Utc, Some(&TEST_PEER_KEY))
+                .unwrap();
         assert_eq!(doc["host"]["name"], "gamingpc");
     }
 
@@ -678,6 +876,7 @@ mod tests {
             "h",
             &s,
             &Utc,
+            Some(&TEST_PEER_KEY),
         )
         .unwrap();
         assert_eq!(relay["event"]["type"], json!(["connection", "end"]));
@@ -687,6 +886,7 @@ mod tests {
             "h",
             &s,
             &Utc,
+            Some(&TEST_PEER_KEY),
         )
         .unwrap();
         assert!(no_via["rigsignal"]["stream"]["client"]
@@ -891,6 +1091,204 @@ mod tests {
             sha256_hex(b"abc"),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         );
+    }
+
+    #[test]
+    fn sha256_identity_matches_multi_block_and_padding_boundary_digests() {
+        assert_eq!(
+            sha256_hex(&[b'a'; 55]),
+            "9f4390f8d30c2dd92ec9f095b65e2b9ae9b0a925a5258e241c9f1e910f734318"
+        );
+        assert_eq!(
+            sha256_hex(&[b'a'; 56]),
+            "b35439a4ac6f0948b6d6f9e3c6af0f5f590ce20f1bde7090ef7970686ec6738a"
+        );
+        assert_eq!(
+            sha256_hex(&[b'a'; 64]),
+            "ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb"
+        );
+        let multi_block = concat!(
+            "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmn",
+            "hijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu"
+        );
+        assert_eq!(multi_block.len(), 112);
+        assert_eq!(
+            sha256_hex(multi_block.as_bytes()),
+            "cf5b16a778af8380036ce59e7b0492370b249b11e8f07a51afac45037afee9d1"
+        );
+    }
+
+    #[test]
+    fn constructed_document_never_contains_raw_peer_values() {
+        let raw_id = "10364467328988576325";
+        let raw_name = "GamingPC";
+        let document = parse_document_in_timezone(
+            line(),
+            "StreamClient",
+            &session(),
+            &Utc,
+            Some(&TEST_PEER_KEY),
+        )
+        .unwrap();
+        let serialized = document.to_string();
+
+        assert!(!has_17_digit_run(&serialized));
+        assert!(!serialized.contains(raw_id));
+        assert!(!serialized.contains(raw_name));
+        assert_eq!(
+            document["rigsignal"]["stream"]["client"]["peer"]["id"]
+                .as_str()
+                .unwrap()
+                .len(),
+            32
+        );
+    }
+
+    #[test]
+    fn peer_pseudonym_is_deterministic_for_same_key() {
+        assert_eq!(
+            peer_pseudonym(&TEST_PEER_KEY, PEER_ID_DOMAIN, "10364467328988576325"),
+            peer_pseudonym(&TEST_PEER_KEY, PEER_ID_DOMAIN, "10364467328988576325")
+        );
+    }
+
+    #[test]
+    fn peer_pseudonym_separates_different_keys() {
+        assert_ne!(
+            peer_pseudonym(&[0x11; 32], PEER_ID_DOMAIN, "10364467328988576325"),
+            peer_pseudonym(&[0x22; 32], PEER_ID_DOMAIN, "10364467328988576325")
+        );
+    }
+
+    #[test]
+    fn peer_pseudonym_separates_id_and_name_domains() {
+        assert_ne!(
+            peer_pseudonym(&TEST_PEER_KEY, PEER_ID_DOMAIN, "same-value"),
+            peer_pseudonym(&TEST_PEER_KEY, PEER_NAME_DOMAIN, "same-value")
+        );
+    }
+
+    #[test]
+    fn unavailable_peer_key_omits_peer_object_without_raw_values() {
+        let raw_id = "10364467328988576325";
+        let raw_name = "GamingPC";
+        let document =
+            parse_document_in_timezone(line(), "StreamClient", &session(), &Utc, None).unwrap();
+        let serialized = document.to_string();
+
+        assert!(document["rigsignal"]["stream"]["client"]
+            .get("peer")
+            .is_none());
+        assert!(!serialized.contains(raw_id));
+        assert!(!serialized.contains(raw_name));
+    }
+
+    #[test]
+    fn peer_key_is_persisted_owner_only() -> Result<()> {
+        let root = temp("peer-key");
+        let path = root.join(PEER_KEY_FILE);
+        let first = load_or_create_peer_key(&path)?;
+        let second = load_or_create_peer_key(&path)?;
+
+        assert_eq!(first, second);
+        assert_eq!(fs::metadata(&path)?.permissions().mode() & 0o777, 0o600);
+        fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn symlinked_key_path_is_refused() -> Result<()> {
+        let root = temp("peer-key-symlink");
+        fs::create_dir_all(&root)?;
+        let target = root.join("attacker-key");
+        fs::write(&target, [0x33_u8; 32])?;
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o600))?;
+        let link = root.join(PEER_KEY_FILE);
+        symlink(&target, &link)?;
+
+        assert!(read_peer_key(&link).is_err());
+        fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn non_owner_only_regular_key_is_refused() -> Result<()> {
+        let root = temp("peer-key-mode");
+        fs::create_dir_all(&root)?;
+        let path = root.join(PEER_KEY_FILE);
+        fs::write(&path, [0x33_u8; 32])?;
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o644))?;
+
+        assert!(read_peer_key(&path).is_err());
+        fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn key_metadata_predicate_rejects_foreign_uid() {
+        assert!(key_metadata_is_acceptable(true, 0o600, 1000, 1000));
+        assert!(!key_metadata_is_acceptable(true, 0o600, 1001, 1000));
+    }
+
+    #[test]
+    fn existing_peer_key_directory_mode_is_unchanged() -> Result<()> {
+        let root = temp("peer-key-existing-directory");
+        fs::create_dir_all(&root)?;
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o755))?;
+        let path = root.join(PEER_KEY_FILE);
+
+        load_or_create_peer_key(&path)?;
+        assert_eq!(fs::metadata(&root)?.permissions().mode() & 0o777, 0o755);
+        fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn line_identity_hashes_sanitized_source_with_and_without_key() {
+        let raw_id = "10364467328988576325";
+        let raw_name = "GamingPC";
+        for peer_key in [Some(&TEST_PEER_KEY), None] {
+            let input = identity_line_source(line(), peer_key);
+            let input = String::from_utf8(input).unwrap();
+            let output = line_identity("StreamClient", 11, 22, 33, line(), peer_key);
+            let raw_identity = raw_line_identity("StreamClient", 11, 22, 33, line());
+
+            assert!(!input.contains(raw_id));
+            assert!(!input.contains(raw_name));
+            assert_ne!(output, raw_identity);
+            assert_eq!(
+                output,
+                line_identity("StreamClient", 11, 22, 33, line(), peer_key)
+            );
+            if peer_key.is_none() {
+                assert!(input.contains("[peer-redacted]"));
+            }
+        }
+    }
+
+    fn raw_line_identity(host: &str, dev: u64, ino: u64, offset: u64, raw: &[u8]) -> String {
+        let mut source = Vec::with_capacity(host.len() + raw.len() + 32);
+        source.extend_from_slice(host.as_bytes());
+        source.extend_from_slice(&dev.to_ne_bytes());
+        source.extend_from_slice(&ino.to_ne_bytes());
+        source.extend_from_slice(&offset.to_ne_bytes());
+        source.extend_from_slice(raw);
+        sha256_hex(&source)
+    }
+
+    fn has_17_digit_run(value: &str) -> bool {
+        let mut run = 0;
+        for byte in value.bytes() {
+            if byte.is_ascii_digit() {
+                run += 1;
+                if run >= 17 {
+                    return true;
+                }
+            } else {
+                run = 0;
+            }
+        }
+        false
     }
 
     fn state_contents(path: &Path) -> String {
