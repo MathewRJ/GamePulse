@@ -1,6 +1,9 @@
 [Unit]
 Description=RigSignal eBPF kernel daemon
 After=network.target
+# Post-OTA the eBPF binary is wiped from disk; this makes systemd cleanly SKIP
+# the unit (condition-failed, not failed) until the manual restore lands — no crash-loop.
+ConditionPathExists=/usr/bin/rigsignal-ebpf
 
 [Service]
 Type=simple
