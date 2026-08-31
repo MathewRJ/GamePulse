@@ -1,18 +1,27 @@
 # RigSignal — Project Status
 
-Last updated: 2026-08-26 (0.3.4 release)
+Last updated: 2026-08-28 (ES floor policy corrected; supersedes TK-4)
 Active streams: main (local ElasticHome deployment) + offline (air-gapped, not yet forked)
 
-## Decision record — supported stack range (TK-4, 2026-07-22)
+## Decision record — supported stack floor (supersedes TK-4, 2026-08-27)
 
-Supported Elasticsearch/Kibana range: **9.4.3 – 9.4.4** (exact patch tags; image digests in
-Workflow `projects/Workflow/evidence/pilot-readiness-2026-07-22/`). Proven by the G4
-clean-stack matrix (5 legs, 162 asserts): fresh install + previous-state→bundle upgrade at
-both endpoints + in-place 9.4.3→9.4.4 stack upgrade. Rationale: min = owner's production
-stack (proven daily), max = newest GA at test time. "Newest" is a selection policy, never an
-acceptance criterion — the published range only moves when the matrix passes at a new
-endpoint. Per STRATEGY-2026H2.md Amendment 1: G3 pilot deferred; this range serves the
-turnkey bar (bundled local stack pins inside this range).
+Supported Elasticsearch/Kibana: **9.4.3 or newer**, Kibana at the same version — a **floor with no
+upper bound**, enforced in the launcher as `ES_SUPPORTED_FLOOR_VERSION`. Versions above 9.4.4 are
+not matrix-tested but are expected to work. An **undeterminable** ES version is **refused** by
+default; `setup --allow-unknown-version` is the explicit operator opt-out, and it gates *only* the
+undeterminable branch — a version that is determinable and below the floor stays refused either
+way (`b5e68f7`, PR #15).
+
+This **supersedes the TK-4 exact-patch range (9.4.3 – 9.4.4, 2026-07-22)**, which is retained only
+as history. The matrix evidence is unchanged and still bounds what is *tested*: the G4 clean-stack
+matrix (5 legs, 162 asserts) proved fresh install + previous-state→bundle upgrade at both
+endpoints + in-place 9.4.3→9.4.4 stack upgrade; image digests in Workflow
+`projects/Workflow/evidence/pilot-readiness-2026-07-22/`. The distinction that changed: *tested
+range* and *supported range* are no longer the same thing — "newest" was never an acceptance
+criterion, and the floor now moves independently of the test endpoints.
+
+Per STRATEGY-2026H2.md Amendment 1: G3 pilot deferred; the floor serves the turnkey bar (the
+bundled local stack pins to a tested version).
 
 ## For AI agents reading this file
 
