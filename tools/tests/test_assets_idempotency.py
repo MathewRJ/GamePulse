@@ -25,15 +25,12 @@ from tools.tests.transaction_transport import HttpReply, ScriptedTransactionTran
 
 
 ROOT = Path(__file__).resolve().parents[2]
-# Private idempotency oracle (spec drafts + row-table generator) lives OUTSIDE
-# this repository. It is resolved ONLY from the environment — no default — so
-# public CI and external contributors skip the oracle-bound assertions instead
-# of executing unpinned out-of-tree code or leaking private paths into logs.
+# The checked-in idempotency oracle provides the frozen spec, manifest, and
+# row-table generator.  An explicit environment override supports validation
+# against a replacement oracle without making public CI depend on one.
 _ORACLE_ENV = os.environ.get("RIGSIGNAL_IDEMPOTENCY_ORACLE_DIR")
-ORACLE_DIR = Path(_ORACLE_ENV) if _ORACLE_ENV else None
-_ORACLE_SKIP = unittest.skipUnless(
-    ORACLE_DIR is not None and ORACLE_DIR.is_dir(),
-    "private idempotency oracle unavailable (set RIGSIGNAL_IDEMPOTENCY_ORACLE_DIR)")
+ORACLE_DIR = (Path(_ORACLE_ENV) if _ORACLE_ENV else
+              ROOT / "tools/tests/fixtures/idempotency-oracle")
 TEST_RELEASE_COMMIT = "a" * 40
 _WORKER_TERM_REAP_SECONDS = 5
 _WORKER_KILL_REAP_SECONDS = 5
@@ -1744,12 +1741,11 @@ time.sleep(60)
         self.assertEqual((stdout, stderr), ("", ""))
         self.assertIsNotNone(child.returncode)
 
-    @_ORACLE_SKIP
     def test_t_flag_1_through_4_generated_5992_row_oracle(self):
         """T-FLAG-1..4: the checked-in corrected table is byte-pinned."""
         raw = self.FLAG_FIXTURE.read_bytes()
         generated = subprocess.run(
-            ["python3", os.fspath(ORACLE_DIR / "gen_flag_table.py")],
+            [sys.executable, os.fspath(ORACLE_DIR / "gen_flag_table.py")],
             text=True, capture_output=True, check=True, timeout=600).stdout
         self.assertEqual(raw.decode("utf-8").strip(), generated.strip())
         rows = []
@@ -2086,7 +2082,6 @@ time.sleep(60)
                 with self.subTest(path=path, phrase=phrase):
                     self.assertIn(phrase, text)
 
-    @_ORACLE_SKIP
     def test_t_doc_1_oracle_spec_and_manifest_are_frozen(self):
         frozen = ORACLE_DIR / "SPEC-DRAFT-2.md"
         self.assertEqual(hashlib.sha256(frozen.read_bytes()).hexdigest(),
