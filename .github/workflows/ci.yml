@@ -101,6 +101,8 @@ jobs:
           set -o pipefail
           sudo python3 tools/tests/test_enrollment_tail.py -v 2>&1 | tee enrollment-tail-root.log
           grep -E 'test_foreign_owned_outbox_refuses.* \.\.\. ok$' enrollment-tail-root.log
+          sudo env RIGSIGNAL_FD1_TMPDIR="${{ runner.temp }}" python3 -m unittest tools.tests.test_fd1_packaged_main -v 2>&1 | tee fd1-packaged-main-root.log
+          grep -E 'test_s7_fd2a_real_foreign_root_refuses_at_preflight_before_any_root_mutation.* \.\.\. ok$' fd1-packaged-main-root.log
 
   python-discovery:
     name: Python enrollment discovery
