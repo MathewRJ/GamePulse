@@ -4,6 +4,41 @@ All notable changes to RigSignal will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+#### Security
+
+- **Stream-client peer identities are pseudonymised before collection.** Peer
+  SteamID64s and hostnames never leave the host in the clear; they are replaced
+  with per-install, keyed pseudonyms, and peer fields are omitted if the key
+  cannot be safely used.
+- **Asset publication resists unsafe local filesystem inputs.** Optional FIFO
+  sources cannot block installation, publication files retain owner-only
+  permissions despite a restrictive umask, and publication-anchor failures
+  follow the documented safe failure path.
+
+#### Fixed
+
+- **Post-SteamOS-OTA eBPF units skip cleanly when their binary was wiped.** The
+  units no longer enter a crash loop when the OTA removes the binary.
+- **Setup refuses an Elasticsearch version it cannot determine by default.**
+  Operators behind a proxy or hardened cluster can proceed deliberately with
+  `setup --allow-unknown-version`; known versions below the supported floor
+  remain refused.
+- **Enrollment publication works reliably on btrfs and preserves recovery
+  evidence.** Stage membership is read through fresh, fd-anchored directory
+  descriptions, avoiding btrfs's readdir cutoff after files are written; an
+  identity mismatch before exchange keeps the private stage for safe recovery,
+  while unsupported filesystem refusals identify the filesystem when possible.
+
+#### Changed
+
+- **Elasticsearch support is now an enforced 9.4.3 floor, not an exact-patch
+  pin.** Newer versions are allowed, while versions below 9.4.3 are refused.
+- **Installation guidance now accurately describes Elastic Cloud and the
+  self-hosted example.** It distinguishes the 14-day Cloud trial from a free
+  tier and uses a compatible Elasticsearch image.
+
 ## [0.3.4] — 2026-08-26
 
 #### Fixed
