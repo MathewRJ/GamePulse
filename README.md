@@ -62,9 +62,9 @@ yay -S rigsignal-git
 ### Distro packages (agent only, no eBPF)
 
 ```bash
-sudo pacman -U rigsignal-0.3.4-1-x86_64.pkg.tar.zst   # Arch, pre-built
-sudo dpkg -i rigsignal_0.3.4-1_amd64.deb               # Debian / Ubuntu 24.04+
-sudo rpm -i rigsignal-0.3.4-1.x86_64.rpm               # Fedora / RHEL / openSUSE
+sudo pacman -U rigsignal-0.3.5-1-x86_64.pkg.tar.zst   # Arch, pre-built
+sudo dpkg -i rigsignal_0.3.5-1_amd64.deb               # Debian / Ubuntu 24.04+
+sudo rpm -i rigsignal-0.3.5-1.x86_64.rpm               # Fedora / RHEL / openSUSE
 ```
 
 Download these from the [Releases page](https://github.com/MathewRJ/RigSignal/releases).
@@ -77,7 +77,7 @@ Download the `.msi` from the [Releases page](https://github.com/MathewRJ/RigSign
 and run it, or install silently from an admin PowerShell:
 
 ```powershell
-msiexec /i rigsignal-0.3.4-x86_64.msi /qb!
+msiexec /i rigsignal-0.3.5-x86_64.msi /qb!
 ```
 
 This installs `rigsignal-agent.exe` to `C:\Program Files\RigSignal\bin\` and
