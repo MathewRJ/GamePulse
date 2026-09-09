@@ -1,6 +1,6 @@
 # RigSignal — Project Status
 
-Last updated: 2026-08-28 (ES floor policy corrected; supersedes TK-4)
+Last updated: 2026-09-09 (0.3.5 release)
 Active streams: main (local ElasticHome deployment) + offline (air-gapped, not yet forked)
 
 ## Decision record — supported stack floor (supersedes TK-4, 2026-08-27)
@@ -52,6 +52,7 @@ bundled local stack pins to a tested version).
 | 0.3.2 release — packaging and asset-install hardening | 🟢 Published 2026-08-04 | ▓▓▓▓▓▓▓▓▓▓ |
 | 0.3.3 release — idempotency and DL2 recovery carries | 🟢 Published 2026-08-06 | ▓▓▓▓▓▓▓▓▓▓ |
 | 0.3.4 release — frame-source fix, input hardening, eBPF unship | 🟢 Published 2026-08-26 | ▓▓▓▓▓▓▓▓▓▓ |
+| 0.3.5 release — security hardening, packaging guards, fd-anchored publication | 🟢 Published 2026-09-09 | ▓▓▓▓▓▓▓▓▓▓ |
 
 ## At a glance — offline branch (not yet forked)
 
@@ -92,12 +93,12 @@ bundled local stack pins to a tested version).
 
 ## Active work package
 
-**0.3.4 is published** (tag `v0.3.4`, 2026-08-26). It includes the
-frame-source lifecycle fix with containment hardening, GPU collect-time
-retry, workflow-input validation, the viewer-role source pin, and stops
-shipping the eBPF daemon/unit (shelved pending the re-enable design).
-Historical: 0.3.3 (2026-08-06) shipped the assets-install idempotency engine
-and the DL2 padding/retention fixes.
+**0.3.5 is published** (tag `v0.3.5`, 2026-09-09). It includes peer-identity
+pseudonymisation, safe asset-publication hardening, the eBPF post-OTA unit
+guard, and fd-anchored publication/idempotency coverage.
+Historical: 0.3.4 (2026-08-26) shipped the frame-source lifecycle fix,
+containment hardening, GPU collect-time retry, workflow-input validation, the
+viewer-role source pin, and the eBPF daemon/unit unship.
 
 **Retention caveat (R1).** A final is pruned only when the discovered
 elastic-agent is HEALTHY, its registry is readable, the matching
