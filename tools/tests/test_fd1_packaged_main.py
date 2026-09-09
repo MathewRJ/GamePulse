@@ -40,6 +40,7 @@ class ProductResult:
 CHILD = r'''
 import importlib.util
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -52,8 +53,25 @@ from tools.tests.transaction_transport import ScriptedTransactionTransport
 print("FD1_ENGINE " + str(install.__spec__.origin), file=sys.stderr, flush=True)
 print("FD1_TRANSPORT installed", file=sys.stderr, flush=True)
 agent = root.parent / "fd1-agent"
-agent.write_text("#!/bin/sh\nif [ \"$1\" = --version ]; then echo 0.3.4; fi\nexit 0\n")
+# The stub must report the version the fence will read, not a literal: a release commit moves
+# the engine stamp and a hardcoded version would make fence_versions() refuse every release
+# candidate.  Two deliberate choices keep the stub and the fence in agreement by construction:
+#   * .resolve() mirrors install_assets.TOOLS_DIR = Path(__file__).resolve().parent, so both
+#     read the same stamp file even if the engine is reached through a symlink;
+#   * the pattern below is install_assets.engine_version()'s pattern verbatim, so the two
+#     cannot disagree on a quoting or escaping edge that one parser accepts and the other does not.
+stamp = engine.resolve().parent / "_version.py"
+stamp_match = re.search(r'^ENGINE_VERSION = (["\'])([^"\']+)\1$',
+                        stamp.read_text(encoding="utf-8"), re.MULTILINE)
+if stamp_match is None:
+    raise SystemExit("fd1: no readable ENGINE_VERSION stamp at " + str(stamp))
+agent_version = stamp_match.group(2)
+agent.write_text("#!/bin/sh\nif [ \"$1\" = --version ]; then echo " + agent_version + "; fi\nexit 0\n")
 agent.chmod(0o700)
+# Emitted only after the stub exists and is executable, so the line attests a usable stub.
+# unittest surfaces captured child stderr only on failure, so the parent ASSERTS on this line
+# rather than relying on it reaching a green log.
+print("FD1_AGENT_VERSION " + agent_version, file=sys.stderr, flush=True)
 admin = root.parent / "fd1-admin.toml"
 admin.write_text("[elasticsearch]\nusername = \"fd1\"\npassword = \"fd1\"\n")
 admin.chmod(0o600)
@@ -166,6 +184,8 @@ class PackagedMainTests(unittest.TestCase):
         # --engine-output is the builder's release staging/extraction surface.
         with tarfile.open(self.archive, "r:gz") as bundle:
             self.assertIn("manifest.json", bundle.getnames())
+            self.bundle_version = json.loads(
+                bundle.extractfile("manifest.json").read().decode("utf-8"))["bundle_version"]
 
     def _mutate_engine(self):
         mutant = os.environ.get("RIGSIGNAL_FD1_MUTANT")
@@ -238,6 +258,12 @@ class PackagedMainTests(unittest.TestCase):
         self.assertIn("FD1_ENGINE " + str(self.engine), result.stderr)
         self.assertNotIn(str(ROOT / "tools") + "/install_assets.py", result.stderr)
         self.assertIn("FD1_TRANSPORT installed", result.stderr)
+        # ADDED: the stub agent was built from the staged engine stamp and reports the version the
+        # bundle records.  Additive and strictly stricter -- it cannot turn a red run green.  It
+        # compares two separately written artefacts (stage_engine's _version.py, read with the
+        # fence's own pattern, against the archive manifest), so a staging inconsistency fails
+        # here instead of surfacing later as an unexplained version_skew.
+        self.assertIn("FD1_AGENT_VERSION " + self.bundle_version, result.stderr)
         return result
 
     def _assert_published(self, root):
