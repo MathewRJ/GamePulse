@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -1355,6 +1356,22 @@ sys.exit(module.main())
             with self.assertRaisesRegex(INSTALL.ProvisionError, "agent_version_unparseable"):
                 INSTALL.agent_version(agent)
 
+    def test_fd1_stub_parser_stays_identical_to_the_engine_version_fence(self):
+        # FD-1 builds its stub agent by parsing the staged engine's version stamp with a
+        # copy of engine_version()'s pattern, so that the stub reports what the fence will
+        # read.  A copy that drifts silently reintroduces the hardcoded-version defect the
+        # derivation was written to remove.  This test is what makes the copy safe: it pins
+        # the two literals to each other, and it is the reason the duplication is allowed.
+        pattern = re.compile(r"r'\^ENGINE_VERSION[^\n]*?\$'")
+        fence = pattern.findall((ROOT / "tools" / "install_assets.py").read_text(encoding="utf-8"))
+        stub = pattern.findall(
+            (ROOT / "tools" / "tests" / "test_fd1_packaged_main.py").read_text(encoding="utf-8"))
+        self.assertEqual(len(fence), 1, "expected exactly one ENGINE_VERSION pattern in install_assets.py")
+        self.assertEqual(len(stub), 1, "expected exactly one ENGINE_VERSION pattern in test_fd1_packaged_main.py")
+        self.assertEqual(
+            stub[0], fence[0],
+            "FD-1's stub parser has drifted from install_assets.engine_version(): the stub "
+            "would no longer read the version stamp the way the fence reads it")
 
 if __name__ == "__main__":
     unittest.main()
