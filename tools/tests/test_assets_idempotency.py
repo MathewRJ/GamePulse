@@ -88,10 +88,49 @@ def _communicate_worker(child, timeout):
         return "", "", "timed out; descendant kept worker output pipes open"
 
 
+def strictly_newer_version(version):
+    """Return a version strictly greater than `version`.
+
+    The allow-downgrade fixtures need a predecessor NEWER than the bundle under
+    test.  Writing that as a literal is only correct until the next release bumps
+    the bundle past it -- which is exactly how `0.3.5` stopped being newer than a
+    0.3.5 bundle and refused every candidate at `version flags require a
+    validated predecessor`.  Derive it instead, from the version in hand.
+    """
+    parts = [int(part) for part in version.split(".")]
+    parts[-1] += 1
+    return ".".join(str(part) for part in parts)
+
+
 def release_bundle():
     """Return source fixtures with the manifest pin used by release callers."""
     source = INSTALL.load_source()
     return INSTALL.Bundle(source.version, TEST_RELEASE_COMMIT, source.assets, source.files)
+
+
+class VersionDerivationTests(unittest.TestCase):
+    """Pin the allow-downgrade predecessor to the bundle it must be newer than.
+
+    This is the control that makes the derivation safe.  The literal it replaced
+    was correct for four releases and then silently stopped being a *newer*
+    version the moment the bundle reached it, which failed the release gate on
+    the released commit rather than in review.
+    """
+
+    def test_derived_downgrade_predecessor_is_strictly_newer_than_the_bundle(self):
+        current = release_bundle().version
+        derived = strictly_newer_version(current)
+        to_tuple = lambda v: tuple(int(part) for part in v.split("."))
+        self.assertGreater(
+            to_tuple(derived), to_tuple(current),
+            "allow-downgrade predecessor %s is not newer than the bundle %s; a "
+            "downgrade fixture that is not a downgrade refuses at the version flags"
+            % (derived, current))
+
+    def test_strictly_newer_version_bumps_only_the_last_component(self):
+        self.assertEqual(strictly_newer_version("0.3.5"), "0.3.6")
+        self.assertEqual(strictly_newer_version("1.0.0"), "1.0.1")
+        self.assertEqual(strictly_newer_version("0.3.9"), "0.3.10")
 
 
 class RecordFixtures(unittest.TestCase):
@@ -834,10 +873,12 @@ class CompletionWaveTests(unittest.TestCase):
         # Direction is an input to the table row, not a shadow-policy
         # decision: provide a genuinely older predecessor for --upgrade and
         # a genuinely newer one for --allow-downgrade.
-        # Keep allow-downgrade predecessors strictly newer than the current
-        # 0.3.4 bundle; this table fixture supplies the version-direction
-        # input rather than exercising a policy shortcut.
-        prior_version = "0.3.5" if "allow-downgrade" in flags and "upgrade" not in flags else "0.3.1"
+        # Keep allow-downgrade predecessors strictly newer than the bundle under
+        # test, DERIVED from it rather than named: a literal here is correct only
+        # until the next bump reaches it.  This table fixture supplies the
+        # version-direction input rather than exercising a policy shortcut.
+        prior_version = (strictly_newer_version(binding["bundle_version"])
+                         if "allow-downgrade" in flags and "upgrade" not in flags else "0.3.1")
         prior_binding = {**binding, "bundle_version": prior_version, "source_commit": "b" * 40}
         predecessor = self._table_installed(prior_binding, targets, full=full) if prior else None
         if label.startswith("S-"):
@@ -1591,9 +1632,11 @@ print(outcome)
         targets = INSTALL.transaction_targets(bundle)
         saved = next(item["key"] for item in targets if item["key"].startswith("kibana/"))
         old_saved = saved
-        # Keep the downgrade fixture strictly newer than the current release
-        # version; 0.3.4 is now the current bundle version.
-        for flag, old_version in (("upgrade", "0.3.1"), ("allow_downgrade", "0.3.5")):
+        # Keep the downgrade fixture strictly newer than the bundle under test,
+        # DERIVED from it rather than named -- see strictly_newer_version().
+        for flag, old_version in (("upgrade", "0.3.1"),
+                                  ("allow_downgrade",
+                                   strictly_newer_version(bundle.version))):
             with self.subTest(direction=flag), tempfile.TemporaryDirectory() as raw:
                 root = Path(raw); root.chmod(0o700)
                 path = root / INSTALL.ASSETS_MARKER_FILE
